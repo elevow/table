@@ -10,16 +10,17 @@ import Settings from "./pages/settings";
 
 const app = document.getElementById('app');
 
-export default class App extends React.Component {
+export default class Client extends React.Component {
         render(){
             return(
             <Router history={browserHistory}>
+                <Route path='/' component={Layout}>
                 <IndexRoute component={Home}/>
-                <Route path='/' component={Layout}></Route>
                 <Route path='/settings' component={Settings}></Route>
+                </Route>
             </Router>
             );
         }
 }
 
-ReactDOM.render(<App />, app);
+ReactDOM.render(<Client />, app);

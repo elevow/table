@@ -12,7 +12,7 @@ export default class Layout extends React.Component {
                 <Header />
                 <Body />
                 <Footer/>
-                 {this.props.children}
+                {this.props.children}
             </div>
         );
     }

@@ -25,7 +25,10 @@ module.exports = {
     ]
   },
   output: {
-    path: __dirname + "/build/",
+    path: __dirname + "/src/",
     filename: "client.min.js"
-  }
+  },
+  devServer: {
+    contentBase: path.resolve(__dirname, './src'),  // New
+  },
 };

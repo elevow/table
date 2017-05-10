@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { Router, Route, browserHistory, IndexRoute } from 'react-router';
+import { Router, Route, IndexRoute } from 'react-router';
+import { createBrowserHistory } from 'history';
 
 import Archives from "./pages/archives";
 import Featured from "./pages/featured";
@@ -13,11 +14,11 @@ const app = document.getElementById('app');
 export default class Client extends React.Component {
         render(){
             return(
-            <Router history={browserHistory}>
-                <Route path='/' component={Layout}>
-                <IndexRoute component={Home}/>
+            <Router history={createBrowserHistory()}>
+                <div>
+                <Route path='/' component={Layout}></Route>
                 <Route path='/settings' component={Settings}></Route>
-                </Route>
+                </div>
             </Router>
             );
         }

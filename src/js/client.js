@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { Router, Route, IndexRoute } from 'react-router';
+import { BrowserRouter as Router, Link, Route, Switch } from 'react-router-dom';
 import { createBrowserHistory } from 'history';
 
 import Archives from "./pages/archives";
@@ -15,10 +15,14 @@ export default class Client extends React.Component {
         render(){
             return(
             <Router history={createBrowserHistory()}>
-                <div>
-                <Route path='/' component={Layout}></Route>
-                <Route path='/settings' component={Settings}></Route>
-                </div>
+                <Switch>
+            <Route exact={true} path='/' render={() => (
+            <Layout />
+            )}/>
+            <Route path='/archives' component={Archives}/>
+            <Route path='/featured' component={Featured}/>
+            <Route path='/settings' component={Settings}/>
+            </Switch>
             </Router>
             );
         }

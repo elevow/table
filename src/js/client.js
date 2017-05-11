@@ -4,8 +4,6 @@ import { BrowserRouter as Router, Link, Route, Switch } from 'react-router-dom';
 import { createBrowserHistory } from 'history';
 
 import Archives from "./pages/archives";
-import Featured from "./pages/featured";
-import Home from './pages/home'
 import Layout from "./pages/layout";
 import Settings from "./pages/settings";
 
@@ -20,7 +18,6 @@ export default class Client extends React.Component {
             <Layout />
             )}/>
             <Route path='/archives' component={Archives}/>
-            <Route path='/featured' component={Featured}/>
             <Route path='/settings' component={Settings}/>
             </Switch>
             </Router>

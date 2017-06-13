@@ -5,22 +5,16 @@ import {
 
 describe('math.js', () => {
     describe('randomInt function', () => {
-        it('will return exact value - 0', () => {
+        it('will return null if values are same', () => {
             const actualValue = math.randomInt(0, 0);
             // console.log('actualValue', actualValue);
-            expect(actualValue).equal(0);
+            expect(actualValue).equal(null);
         });
 
-        it('will return exact value - 0 - no min value', () => {
+        it('will return null if max is 0 - no min value', () => {
             const actualValue = math.randomInt(0);
             // console.log('actualValue', actualValue);
-            expect(actualValue).equal(0);
-        });
-
-        it('will return exact value - 1', () => {
-            const actualValue = math.randomInt(1, 1);
-            // console.log('actualValue', actualValue);
-            expect(actualValue).equal(1);
+            expect(actualValue).equal(null);
         });
 
         it('will not equal the high value', () => {
@@ -29,6 +23,7 @@ describe('math.js', () => {
             const actualValue = math.randomInt(maxValue, minValue);
             // console.log('actualValue', actualValue);
             expect(actualValue).not.equal(maxValue);
+            expect(actualValue).to.be.below(maxValue);
         });
 
         it('will not equal the high value - no min value', () => {
@@ -36,12 +31,13 @@ describe('math.js', () => {
             const actualValue = math.randomInt(maxValue);
             // console.log('actualValue', actualValue);
             expect(actualValue).not.equal(maxValue);
+            expect(actualValue).to.be.below(maxValue);
         });
 
-        it('will return null when no value is provided', () => {
+        it('will return random number when no value is provided', () => {
             const actualValue = math.randomInt();
             // console.log('actualValue', actualValue);
-            expect(actualValue).equal(null);
+            expect(actualValue).to.be.above(0);
         });
     });
 

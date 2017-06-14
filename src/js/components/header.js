@@ -1,5 +1,4 @@
 import React from 'react'; 
-import Logo from '../../images/table.png';
 
 export default class Header extends React.Component { 
     render() { 
@@ -23,7 +22,8 @@ export default class Header extends React.Component {
                 <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
                     <ul class="nav navbar-nav">
                         <li class="active"><a href="/">Home <span class="sr-only">(current)</span></a></li>
-                        <li><a href="/archives">Archives</a></li>
+                        <li><a href="/about">About</a></li>
+                        <li><a href="/setup">Setup</a></li>
                         <li><a href="/settings">Settings</a></li>
                     </ul>
                 </div>

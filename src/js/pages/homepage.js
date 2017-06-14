@@ -1,16 +1,16 @@
 import React from 'react';
 
 
-import Body from '../components/body';
+import Home from '../components/home';
 import Footer from '../components/footer';
 import Header from '../components/header';
 
-export default class Layout extends React.Component {
+export default class Homepage extends React.Component {
     render() {
         return (
             <div>
                 <Header />
-                <Body />
+                <Home />
                 <Footer/>
                 {this.props.children}
             </div>

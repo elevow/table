@@ -4,9 +4,10 @@
   "description": "",
   "main": "webpack.config.js",
   "scripts": {
+    "cover": "nyc mocha --require babel-core/register ./test/**",
     "dev": "webpack-dev-server --content-base src --inline --hot --history-api-fallback",
     "table": "webpack -w",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha --require babel-core/register ./test/**"
   },
   "author": "",
   "license": "ISC",
@@ -32,8 +33,18 @@
     "webpack": "^2.4.1"
   },
   "devDependencies": {
+    "babel-plugin-istanbul": "^4.1.4",
+    "babel-register": "^6.24.1",
+    "chai": "^3.5.0",
     "eslint": "3.19.0",
+    "mocha": "^3.3.0",
     "nodemon": "1.11.0",
+    "nyc": "^10.3.2",
     "webpack-dev-server": "^2.4.3"
+  },
+  "nyc": {
+    "reporter": ["text", "text-summary", "lcov", "html"],
+    "include": ["src/**/*.js"],
+    "require": ["babel-register"]
   }
 }

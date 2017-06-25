@@ -24,7 +24,7 @@ export default class Header extends React.Component {
                         <li class="active"><a href="/">Home <span class="sr-only">(current)</span></a></li>
                         <li><a href="/about">About</a></li>
                         <li><a href="/setup">Setup</a></li>
-                        <li><a href="/settings">Settings</a></li>
+                        <li><a href="/game">Game</a></li>
                     </ul>
                 </div>
             </div>

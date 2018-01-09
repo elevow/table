@@ -15,7 +15,7 @@ export default class Header extends React.Component {
         <span class="icon-bar"></span>
       </button>
                     <a class="navbar-brand" href="/">
-                        <img id="logo" src="../../../images/table.png" width="45px" alt="Table Icon"></img>
+                        <img id="logo" src="../../../images/table_sm.png" width="45px" alt="Table Icon"></img>
                     </a>
                 </div>
 

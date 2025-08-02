@@ -18,6 +18,10 @@
 1. User Authentication and Profile Management
    - User registration and login
    - Profile customization
+     - Custom avatar upload and management
+     - Avatar moderation system
+     - Multiple size variants (32x32, 64x64, 128x128)
+     - Default avatar fallbacks
    - Friend list management
    - Game history tracking
 
@@ -69,6 +73,19 @@
    - Time bank system
    - Auto-muck losing hands option
    - Hand history recording
+   - Special Features
+     - Run it Twice
+       - All-in situation detection
+       - Multiple board dealing
+       - Split pot calculations
+       - Player preference settings
+       - Multiple winner resolution
+     - Rabbit Hunting
+       - Post-hand card reveal
+       - Remaining deck preservation
+       - Street selection options
+       - Cooldown management
+       - Historical tracking
 
 3. Betting System
    - Minimum/maximum bet limits
@@ -98,6 +115,11 @@
 ### Database Schema
 1. User Management
    - Users table (profile, settings, statistics)
+   - Avatar management system
+     - Avatar storage and variants
+     - Moderation queue
+     - Processing jobs tracking
+     - Version history
    - Friend relationships
    - User achievements and rankings
    - Session tracking
@@ -106,8 +128,16 @@
    - Active games table
    - Game history
    - Hand history
+     - Standard hand recording
+     - Run it Twice outcomes
+     - Rabbit Hunt revelations
+     - Multiple board results
    - Player actions log
    - Chat history
+   - Feature usage tracking
+     - Run it Twice statistics
+     - Rabbit Hunt usage metrics
+     - Player preferences
 
 3. Tournament/Room Management
    - Room configurations
@@ -128,7 +158,28 @@
 - 99.9% uptime leveraging Vercel's SLA
 - Automatic game state recovery in case of disconnection
 - Global CDN distribution for static assets
+  - Avatar delivery optimization
+  - Thumbnail caching strategies
+  - Regional edge caching
+  - Automatic image optimization
+  - Cache invalidation on updates
 - Automatic scaling based on user demand
+- Image processing performance
+  - Parallel processing for multiple sizes
+  - Background job queuing
+  - Efficient format conversion
+  - Progressive loading support
+- Special Feature Performance
+  - Run it Twice
+    - Multiple board state handling
+    - Parallel pot calculations
+    - Simultaneous outcome processing
+    - Real-time UI updates
+  - Rabbit Hunting
+    - Deck state preservation
+    - Efficient card retrieval
+    - Memory optimization
+    - Cleanup procedures
 
 ## Security Requirements
 ### Authentication and Authorization
@@ -145,6 +196,17 @@
   - Game room access control
   - Friend list privacy
   - Game history protection
+  - Avatar access control and moderation
+- File upload security
+  - Image file validation
+  - Size restrictions (max 5MB)
+  - Format validation (JPEG, PNG, WebP)
+  - Metadata stripping
+  - Malware scanning
+  - NSFW content detection
+- Rate limiting for uploads
+  - Hourly limits (5 uploads, 20MB total)
+  - Daily limits (20 uploads, 50MB total)
 - Encrypted WebSocket connections
 - Secure data storage and transmission
 
@@ -155,6 +217,17 @@
   - Multi-device detection and prevention
   - Collusion detection systems
   - Suspicious behavior monitoring
+- Special Feature Integrity
+  - Run it Twice
+    - Random seed preservation
+    - Multiple board integrity
+    - Result verification
+    - State consistency checks
+  - Rabbit Hunting
+    - Deck state verification
+    - Access control timing
+    - Reveal limit enforcement
+    - Historical accuracy validation
 
 ### System Security
 - Rate limiting to prevent abuse
@@ -196,11 +269,22 @@
 - Socket.io for complex real-time game actions
 - React Query for client-state management
 - Custom card game logic implementation
+  - Core poker engine
+  - Run it Twice logic module
+  - Rabbit Hunt controller
+  - Multiple board evaluator
 - Tailwind CSS for UI components
+  - Animation system
+  - Transition effects
+  - Responsive layouts
 - Jest and React Testing Library for testing
 - Vercel for production deployment
 - Vercel Edge Functions for low-latency operations
 - Vercel CDN for static asset delivery
+- Redis for feature state management
+  - Deck state preservation
+  - Multiple board tracking
+  - Feature cooldown management
 
 ## Constraints
 - No real-money gambling functionality
@@ -214,6 +298,17 @@
 - Achieve less than 100ms latency for 95% of game actions
 - Maintain 99.9% uptime during peak hours
 - Zero critical security incidents in first 6 months
+- Special Feature Success Metrics
+  - Run it Twice
+    - Process multiple boards within 200ms
+    - 100% accuracy in pot splitting
+    - Support up to 4 simultaneous boards
+    - Zero state inconsistencies
+  - Rabbit Hunting
+    - Card reveal response < 50ms
+    - Support 100 concurrent reveals
+    - 100% deck state accuracy
+    - Efficient memory cleanup
 
 ---
 Last Updated: August 1, 2025

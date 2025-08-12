@@ -4,6 +4,11 @@ import { Card, HandResult } from '../types/poker';
 // Using require for pokersolver as it doesn't support ES modules
 const pokersolver = require('pokersolver').Hand;
 
+export interface SidePot {
+  amount: number;
+  eligiblePlayers: string[];
+}
+
 export class HandEvaluator {
   private static readonly suitMap: { [key: string]: string } = {
     'hearts': 'h',
@@ -45,34 +50,106 @@ export class HandEvaluator {
     return { hand, cards: winningCards };
   }
 
-  static determineWinners(players: { id: string; holeCards: Card[] }[], communityCards: Card[]): HandResult[] {
-    // Get all player hands
-    const playerHands = players
-      .filter(p => p.holeCards && p.holeCards.length === 2)
-      .map(player => {
-        const { hand, cards } = this.evaluateHand(player.holeCards, communityCards);
-        return {
-          playerId: player.id,
-          hand: cards,
-          solverHand: hand,
-          description: hand.name,
-          strength: hand.rank
-        };
+  static calculateSidePots(players: { id: string; stack: number; currentBet: number; isFolded: boolean }[]): SidePot[] {
+    const sidePots: SidePot[] = [];
+    const bets = players
+      .filter(p => !p.isFolded || p.currentBet > 0)
+      .map(p => ({ playerId: p.id, amount: p.currentBet }))
+      .sort((a, b) => a.amount - b.amount);
+
+    let processedAmount = 0;
+
+    bets.forEach((bet, index) => {
+      const amount = bet.amount - processedAmount;
+      if (amount > 0) {
+        const eligiblePlayers = players
+          .filter(p => p.currentBet >= bet.amount && (!p.isFolded || p.currentBet > 0))
+          .map(p => p.id);
+
+        sidePots.push({
+          amount: amount * eligiblePlayers.length,
+          eligiblePlayers
+        });
+
+        processedAmount = bet.amount;
+      }
+    });
+
+    return sidePots;
+  }
+
+  static determineWinners(
+    players: { 
+      id: string; 
+      holeCards: Card[]; 
+      stack: number; 
+      currentBet: number; 
+      isFolded: boolean 
+    }[], 
+    communityCards: Card[]
+  ): HandResult[] {
+    // Calculate side pots first
+    const sidePots = this.calculateSidePots(players);
+    const results: HandResult[] = [];
+
+    // Process each side pot
+    sidePots.forEach(pot => {
+      // Get all eligible player hands for this pot
+      const eligibleHands = players
+        .filter(p => pot.eligiblePlayers.includes(p.id) && !p.isFolded)
+        .map(player => {
+          const { hand, cards } = this.evaluateHand(player.holeCards, communityCards);
+          return {
+            playerId: player.id,
+            hand: cards,
+            solverHand: hand,
+            description: hand.name,
+            strength: hand.rank
+          };
+        });
+
+      if (eligibleHands.length === 0) {
+        // If no eligible hands (everyone folded), pot goes to last player to fold
+        const lastToFold = players
+          .filter(p => pot.eligiblePlayers.includes(p.id))
+          .sort((a, b) => b.currentBet - a.currentBet)[0];
+          
+        results.push({
+          playerId: lastToFold.id,
+          hand: lastToFold.holeCards,
+          description: 'Win by fold',
+          strength: 0,
+          winAmount: pot.amount
+        });
+        return;
+      }
+
+      // Find the highest rank in this pot
+      const maxRank = Math.max(...eligibleHands.map(h => h.strength));
+      
+      // Get all players with the highest rank
+      const potWinners = eligibleHands.filter(h => h.strength === maxRank);
+
+      // Split pot amount among winners
+      const winAmount = Math.floor(pot.amount / potWinners.length);
+      
+      // Add results for each winner
+      potWinners.forEach(winner => {
+        const existingResult = results.find(r => r.playerId === winner.playerId);
+        if (existingResult) {
+          existingResult.winAmount += winAmount;
+        } else {
+          results.push({
+            playerId: winner.playerId,
+            hand: winner.hand,
+            description: winner.description,
+            strength: winner.strength,
+            winAmount
+          });
+        }
       });
+    });
 
-    // Find the highest rank
-    const maxRank = Math.max(...playerHands.map(h => h.strength));
-    
-    // Get all players with the highest rank
-    const winners = playerHands.filter(h => h.strength === maxRank);
-
-    // Convert to HandResult format
-    return winners.map(winner => ({
-      playerId: winner.playerId,
-      hand: winner.hand,
-      description: winner.description,
-      strength: winner.strength,
-      winAmount: 0 // This will be set by the pot distribution logic
-    }));
+    return results;
   }
 }

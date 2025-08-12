@@ -43,8 +43,9 @@ export interface BettingRound {
 }
 
 export interface PlayerAction {
-  type: 'bet' | 'call' | 'raise' | 'fold' | 'check';
+  type: 'bet' | 'call' | 'raise' | 'fold';
   playerId: string;
+  tableId: string;
   amount?: number;
   timestamp: number;
 }

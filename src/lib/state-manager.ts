@@ -1,5 +1,5 @@
 import { Server as SocketServer } from 'socket.io';
-import { TableState } from '../types/poker';
+import { TableState, PlayerAction } from '../types/poker';
 import { StateUpdate, StateUpdateResponse, StateReconciliation } from '../types/state-update';
 
 export class StateManager {
@@ -115,5 +115,12 @@ export class StateManager {
 
   public getSequence(tableId: string): number {
     return this.sequences.get(tableId) || 0;
+  }
+
+  public handleAction(tableId: string, action: PlayerAction): void {
+    // Process the action and update state
+    // This will be called by the action manager and timer manager
+    this.io.to(tableId).emit('action', action);
+    // TODO: Implement full action handling logic
   }
 }

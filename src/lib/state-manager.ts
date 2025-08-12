@@ -1,6 +1,7 @@
 import { Server as SocketServer } from 'socket.io';
 import { TableState, PlayerAction } from '../types/poker';
 import { StateUpdate, StateUpdateResponse, StateReconciliation } from '../types/state-update';
+import { StateRecovery } from './state-recovery';
 
 export class StateManager {
   private states: Map<string, TableState> = new Map();
@@ -9,11 +10,14 @@ export class StateManager {
   private readonly MAX_UPDATES_PER_SECOND = 20; // Rate limit
   private readonly UPDATE_WINDOW_MS = 1000;
   private io: SocketServer;
+  private recovery: StateRecovery;
 
   constructor(io: SocketServer) {
     this.io = io;
+    this.recovery = new StateRecovery();
     this.setupSocketHandlers();
     this.startCleanupInterval();
+    this.startTimeoutCheck();
   }
 
   private startCleanupInterval(): void {
@@ -32,18 +36,56 @@ export class StateManager {
 
   private setupSocketHandlers(): void {
     this.io.on('connection', (socket) => {
-      socket.on('join_table', (tableId: string) => {
+      let playerId: string | null = null;
+
+      socket.on('join_table', ({ tableId, playerId: pid }: { tableId: string; playerId: string }) => {
+        playerId = pid;
         socket.join(tableId);
+        
         const state = this.states.get(tableId);
         if (state) {
-          this.sendReconciliation(socket.id, tableId);
+          // Check if this is a reconnection
+          const reconciliation = this.recovery.handleReconnect(playerId, state);
+          if (reconciliation) {
+            socket.emit('reconcile', reconciliation);
+          } else {
+            this.sendReconciliation(socket.id, tableId);
+          }
         }
       });
 
       socket.on('leave_table', (tableId: string) => {
         socket.leave(tableId);
       });
+
+      socket.on('disconnect', () => {
+        if (playerId) {
+          // Find the table this player was in
+          for (const [tableId, state] of this.states.entries()) {
+            if (state.players.some(p => p.id === playerId)) {
+              this.recovery.handleDisconnect(playerId, tableId);
+              break;
+            }
+          }
+        }
+      });
     });
+  }
+
+  private startTimeoutCheck(): void {
+    setInterval(() => {
+      const timeouts = this.recovery.checkTimeouts();
+      timeouts.forEach(({ playerId, tableId }) => {
+        // Create an auto-fold action for timed out players
+        const autoAction: PlayerAction = {
+          type: 'fold',
+          playerId,
+          tableId,
+          timestamp: Date.now()
+        };
+        this.handleAction(tableId, autoAction);
+      });
+    }, 1000); // Check every second
   }
 
   public updateState(tableId: string, update: Partial<TableState>): boolean {
@@ -118,9 +160,30 @@ export class StateManager {
   }
 
   public handleAction(tableId: string, action: PlayerAction): void {
+    // Record action in recovery system
+    this.recovery.recordAction(tableId, action);
+
     // Process the action and update state
     // This will be called by the action manager and timer manager
     this.io.to(tableId).emit('action', action);
-    // TODO: Implement full action handling logic
+    
+    // Get the current state
+    const state = this.states.get(tableId);
+    if (!state) return;
+
+    // Find the player
+    const player = state.players.find(p => p.id === action.playerId);
+    if (!player) return;
+
+    // Apply action effects
+    switch (action.type) {
+      case 'fold':
+        player.isFolded = true;
+        break;
+      // Add other action types as needed
+    }
+
+    // Broadcast state update
+    this.updateState(tableId, { players: state.players });
   }
 }

@@ -51,30 +51,57 @@ export class HandEvaluator {
   }
 
   static calculateSidePots(players: { id: string; stack: number; currentBet: number; isFolded: boolean }[]): SidePot[] {
+    console.log('Calculating side pots for players:', players);
+
+    // First handle the simple case with no bets
+    const bettingPlayers = players.filter(p => p.currentBet > 0);
+    console.log('Betting players:', bettingPlayers);
+
+    if (bettingPlayers.length === 0) return [];
+
+    // Get all unique bet amounts in ascending order
+    const bets = bettingPlayers.map(p => p.currentBet);
+    const uniqueBets = Array.from(new Set(bets));
+    uniqueBets.sort((a, b) => a - b);
+    console.log('Unique bet amounts:', uniqueBets);
+
+    // Handle case with single pot
+    if (uniqueBets.length === 1) {
+      const bet = uniqueBets[0];
+      return [{
+        amount: bet * bettingPlayers.length,
+        eligiblePlayers: bettingPlayers.map(p => p.id)
+      }];
+    }
+
+    // Calculate side pots
     const sidePots: SidePot[] = [];
-    const bets = players
-      .filter(p => !p.isFolded || p.currentBet > 0)
-      .map(p => ({ playerId: p.id, amount: p.currentBet }))
-      .sort((a, b) => a.amount - b.amount);
+    let previousBet = 0;
+    
+    // Handle each bet level
+    uniqueBets.forEach(currentBet => {
+      const eligiblePlayers = bettingPlayers
+        .filter(p => p.currentBet >= currentBet)
+        .map(p => p.id);
+      
+      console.log(`Processing bet level ${currentBet}, prev bet ${previousBet}`);
+      console.log(`Eligible players for bet ${currentBet}:`, eligiblePlayers);
 
-    let processedAmount = 0;
+      // Calculate pot amount
+      const amount = (currentBet - previousBet) * eligiblePlayers.length;
+      console.log(`Adding side pot: amount=${amount} ((${currentBet} - ${previousBet}) × ${eligiblePlayers.length})`);
 
-    bets.forEach((bet, index) => {
-      const amount = bet.amount - processedAmount;
       if (amount > 0) {
-        const eligiblePlayers = players
-          .filter(p => p.currentBet >= bet.amount && (!p.isFolded || p.currentBet > 0))
-          .map(p => p.id);
-
         sidePots.push({
-          amount: amount * eligiblePlayers.length,
+          amount,
           eligiblePlayers
         });
-
-        processedAmount = bet.amount;
       }
+      
+      previousBet = currentBet;
     });
 
+    console.log('Final side pots:', sidePots);
     return sidePots;
   }
 
@@ -88,68 +115,118 @@ export class HandEvaluator {
     }[], 
     communityCards: Card[]
   ): HandResult[] {
-    // Calculate side pots first
-    const sidePots = this.calculateSidePots(players);
-    const results: HandResult[] = [];
+    console.log('Determining winners for', players.length, 'players');
+    // Handle all-fold scenario
+    const activePlayers = players.filter(p => !p.isFolded);
+    if (activePlayers.length === 1) {
+      const winner = activePlayers[0];
+      const totalPot = players.reduce((sum, p) => sum + p.currentBet, 0);
+      return [{
+        playerId: winner.id,
+        hand: winner.holeCards,
+        description: 'Win by fold',
+        strength: 0,
+        winAmount: totalPot
+      }];
+    }
+
+    // Calculate side pots
+    const pots = this.calculateSidePots(players);
+    console.log('Calculated pots for winner determination:', pots);
+    
+    if (pots.length === 0) return [];
+
+    // Pre-evaluate all hands
+    const playerHands = new Map<string, { hand: Hand; cards: Card[] }>();
+    const results = new Map<string, HandResult>();
 
     // Process each side pot
-    sidePots.forEach(pot => {
-      // Get all eligible player hands for this pot
+    pots.forEach((pot, index) => {
+      console.log(`Processing pot ${index}:`, pot);
+      // Get or calculate player hands for this pot
       const eligibleHands = players
         .filter(p => pot.eligiblePlayers.includes(p.id) && !p.isFolded)
         .map(player => {
-          const { hand, cards } = this.evaluateHand(player.holeCards, communityCards);
+          let handInfo = playerHands.get(player.id);
+          if (!handInfo) {
+            handInfo = this.evaluateHand(player.holeCards, communityCards);
+            playerHands.set(player.id, handInfo);
+          }
+
           return {
             playerId: player.id,
-            hand: cards,
-            solverHand: hand,
-            description: hand.name,
-            strength: hand.rank
+            hand: handInfo.cards,
+            description: handInfo.hand.name,
+            strength: handInfo.hand.rank
           };
         });
 
+      // Handle all fold case for this pot
       if (eligibleHands.length === 0) {
-        // If no eligible hands (everyone folded), pot goes to last player to fold
-        const lastToFold = players
+        const lastBettor = players
           .filter(p => pot.eligiblePlayers.includes(p.id))
           .sort((a, b) => b.currentBet - a.currentBet)[0];
-          
-        results.push({
-          playerId: lastToFold.id,
-          hand: lastToFold.holeCards,
+
+        const existingResult = results.get(lastBettor.id) || {
+          playerId: lastBettor.id,
+          hand: lastBettor.holeCards,
           description: 'Win by fold',
           strength: 0,
-          winAmount: pot.amount
-        });
+          winAmount: 0
+        };
+
+        existingResult.winAmount += pot.amount;
+        results.set(lastBettor.id, existingResult);
         return;
       }
 
-      // Find the highest rank in this pot
-      const maxRank = Math.max(...eligibleHands.map(h => h.strength));
-      
-      // Get all players with the highest rank
-      const potWinners = eligibleHands.filter(h => h.strength === maxRank);
+      // Let pokersolver compare hands to get winners
+      const solvedHands = players
+        .filter(p => pot.eligiblePlayers.includes(p.id) && !p.isFolded)
+        .map(p => {
+          let handInfo = playerHands.get(p.id);
+          if (!handInfo) {
+            handInfo = this.evaluateHand(p.holeCards, communityCards);
+            playerHands.set(p.id, handInfo);
+          }
+          // Associate player id with the hand for winner determination
+          (handInfo.hand as any).playerId = p.id;
+          return handInfo.hand;
+        });
 
-      // Split pot amount among winners
-      const winAmount = Math.floor(pot.amount / potWinners.length);
+      const winningHands = pokersolver.winners(solvedHands);
+      console.log(`Found ${winningHands.length} winners with hand type ${winningHands[0].name}`);
       
-      // Add results for each winner
-      potWinners.forEach(winner => {
-        const existingResult = results.find(r => r.playerId === winner.playerId);
-        if (existingResult) {
-          existingResult.winAmount += winAmount;
-        } else {
-          results.push({
-            playerId: winner.playerId,
-            hand: winner.hand,
-            description: winner.description,
-            strength: winner.strength,
-            winAmount
-          });
+      // Calculate base amount and remainder
+      const winAmount = Math.floor(pot.amount / winningHands.length);
+      const remainder = pot.amount - (winAmount * winningHands.length);
+      console.log(`Splitting pot ${pot.amount} among ${winningHands.length} winners. Each gets ${winAmount} + ${remainder} remainder`);
+
+      // Award pot to winners
+      winningHands.forEach((winningHand, idx) => {
+        const playerId = winningHand.playerId;
+        const handInfo = playerHands.get(playerId)!;
+        console.log(`Processing winner ${playerId} with ${winningHand.descr}`);
+        
+        let existingResult = results.get(playerId);
+        if (!existingResult) {
+          existingResult = {
+            playerId,
+            hand: handInfo.cards,
+            description: winningHand.name,
+            strength: winningHand.rank,
+            winAmount: 0
+          };
+          results.set(playerId, existingResult);
         }
+
+        // First winner gets any remainder chips
+        const extraChips = idx === 0 ? remainder : 0;
+        existingResult.winAmount += winAmount + extraChips;
+        results.set(playerId, existingResult);
       });
     });
 
-    return results;
+    return Array.from(results.values());
   }
 }

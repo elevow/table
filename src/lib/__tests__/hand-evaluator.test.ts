@@ -76,7 +76,7 @@ describe('HandEvaluator', () => {
       expect(sidePots[1].eligiblePlayers).toHaveLength(2);
       
       // Third pot (only p3 eligible)
-      expect(sidePots[2].amount).toBe(100); // (150-100) * 1
+      expect(sidePots[2].amount).toBe(50); // (150-100) * 1 - only the excess bet amount goes here
       expect(sidePots[2].eligiblePlayers).toHaveLength(1);
     });
   });

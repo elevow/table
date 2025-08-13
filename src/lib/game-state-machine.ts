@@ -99,7 +99,7 @@ export class PokerGameStateMachine implements GameStateMachine {
   private determineTargetState(action: GameAction): GameState | null {
     switch (action.type) {
       case 'initialize':
-        return 'initializing';
+        return this.currentState === 'error' || this.currentState === 'idle' ? 'initializing' : null;
       case 'join':
         return this.currentState === 'initializing' ? 'waitingForPlayers' : null;
       case 'start':
@@ -108,8 +108,6 @@ export class PokerGameStateMachine implements GameStateMachine {
         return this.currentState === 'starting' ? 'dealingCards' : null;
       case 'error':
         return 'error';
-      case 'initialize':
-        return this.currentState === 'error' ? 'initializing' : this.currentState === 'idle' ? 'initializing' : null;
       default:
         return this.determineGameplayState(action);
     }

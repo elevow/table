@@ -1,5 +1,5 @@
 import { TableState, PlayerAction } from '../types/poker';
-import { StateReconciliation } from '../types/state-update';
+import { StateReconciliation, RecoveryState } from '../types/state-update';
 
 interface RecoveryOptions {
   graceTimeout: number;  // Time allowed for reconnection before auto-actions
@@ -11,42 +11,79 @@ export class StateRecovery {
   private disconnectedPlayers: Map<string, { timestamp: number; tableId: string }> = new Map(); // playerId -> info
   private readonly options: RecoveryOptions;
 
+  private reconnectTokens: Map<string, string> = new Map(); // playerId -> token
+
   constructor(options: RecoveryOptions = { graceTimeout: 30000, maxHistorySize: 100 }) {
     this.options = options;
   }
 
   /**
-   * Record a player disconnection
+   * Record a player disconnection and generate a reconnect token
    */
-  public handleDisconnect(playerId: string, tableId: string): void {
+  public handleDisconnect(playerId: string, tableId: string): string {
+    const timestamp = Date.now();
+    const token = this.generateReconnectToken(playerId, timestamp);
+    
     this.disconnectedPlayers.set(playerId, {
-      timestamp: Date.now(),
+      timestamp,
       tableId
     });
+
+    this.reconnectTokens.set(playerId, token);
+    return token;
+  }
+
+  /**
+   * Generate a unique reconnection token
+   */
+  private generateReconnectToken(playerId: string, timestamp: number): string {
+    // Simple token generation - in production use a proper secure token generator
+    return `${playerId}-${timestamp}-${Math.random().toString(36).substring(2)}`;
   }
 
   /**
    * Handle player reconnection and return reconciliation data
    */
-  public handleReconnect(playerId: string, currentState: TableState): StateReconciliation | null {
+  public handleReconnect(playerId: string, currentState: TableState, reconnectToken?: string): StateReconciliation | null {
     const disconnectInfo = this.disconnectedPlayers.get(playerId);
     if (!disconnectInfo) {
       return null;
     }
 
+    // Validate reconnect token if provided
+    const storedToken = this.reconnectTokens.get(playerId);
+    if (reconnectToken && storedToken !== reconnectToken) {
+      return null; // Invalid token
+    }
+
     const { tableId, timestamp } = disconnectInfo;
-    const gracePeriodExpired = Date.now() - timestamp > this.options.graceTimeout;
+    const now = Date.now();
+    const gracePeriodRemaining = Math.max(0, this.options.graceTimeout - (now - timestamp));
     const missedActions = this.actionHistory.get(tableId)?.filter(
       action => action.timestamp > timestamp
     ) || [];
 
-    this.disconnectedPlayers.delete(playerId);
+    // Only clear disconnect info if grace period expired or valid token provided
+    if (gracePeriodRemaining === 0 || reconnectToken === storedToken) {
+      this.disconnectedPlayers.delete(playerId);
+      this.reconnectTokens.delete(playerId);
+    }
+
+    const recoveryState: RecoveryState = {
+      tableId,
+      lastSequence: missedActions.length,
+      missedActions,
+      currentState,
+      reconnectToken: storedToken,
+      gracePeriodRemaining
+    };
 
     return {
       tableId,
       clientSequence: 0, // Will be updated by client state manager
       serverSequence: missedActions.length,
-      fullState: currentState
+      fullState: currentState,
+      recoveryState
     };
   }
 
@@ -118,14 +155,37 @@ export class StateRecovery {
   }
 
   /**
-   * Check if a player is in grace period
+   * Check if a player is in grace period and get remaining time
    */
-  public isInGracePeriod(playerId: string): boolean {
+  public getGracePeriodStatus(playerId: string): { inGracePeriod: boolean; remainingTime: number } {
     const disconnectInfo = this.disconnectedPlayers.get(playerId);
     if (!disconnectInfo) {
-      return false;
+      return { inGracePeriod: false, remainingTime: 0 };
     }
 
-    return Date.now() - disconnectInfo.timestamp <= this.options.graceTimeout;
+    const remainingTime = Math.max(0, 
+      this.options.graceTimeout - (Date.now() - disconnectInfo.timestamp)
+    );
+    
+    return {
+      inGracePeriod: remainingTime > 0,
+      remainingTime
+    };
+  }
+
+  /**
+   * Check if a reconnect token is valid for a player
+   */
+  public validateReconnectToken(playerId: string, token: string): boolean {
+    return this.reconnectTokens.get(playerId) === token;
+  }
+
+  /**
+   * Replay missed actions to catch up a reconnected player
+   */
+  public replayMissedActions(playerId: string): PlayerAction[] {
+    const missedActions = this.getMissedActions(playerId);
+    const sortedActions = missedActions.sort((a, b) => a.timestamp - b.timestamp);
+    return sortedActions;
   }
 }

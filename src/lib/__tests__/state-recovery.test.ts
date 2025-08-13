@@ -26,92 +26,132 @@ describe('StateRecovery', () => {
     };
   });
 
-  it('should handle player disconnection', () => {
-    recovery.handleDisconnect('player1', 'table1');
-    expect(recovery.isInGracePeriod('player1')).toBe(true);
+  describe('Disconnection and Reconnection', () => {
+    it('should generate valid reconnect token on disconnect', () => {
+      const token = recovery.handleDisconnect('player1', 'table1');
+      const status = recovery.getGracePeriodStatus('player1');
+      
+      expect(token).toBeDefined();
+      expect(typeof token).toBe('string');
+      expect(token.length).toBeGreaterThan(0);
+      expect(recovery.validateReconnectToken('player1', token)).toBe(true);
+    });
+
+    it('should track grace period status', () => {
+      recovery.handleDisconnect('player1', 'table1');
+      const status = recovery.getGracePeriodStatus('player1');
+      
+      expect(status.inGracePeriod).toBe(true);
+      expect(status.remainingTime).toBeGreaterThan(0);
+      expect(status.remainingTime).toBeLessThanOrEqual(1000);
+    });
+
+    it('should handle reconnection with valid token', () => {
+      const token = recovery.handleDisconnect('player1', 'table1');
+      const reconciliation = recovery.handleReconnect('player1', mockState, token);
+      
+      expect(reconciliation).toBeDefined();
+      expect(reconciliation?.tableId).toBe('table1');
+      expect(reconciliation?.fullState).toEqual(mockState);
+      expect(reconciliation?.recoveryState).toBeDefined();
+      expect(reconciliation?.recoveryState.reconnectToken).toBe(token);
+    });
+
+    it('should reject reconnection with invalid token', () => {
+      recovery.handleDisconnect('player1', 'table1');
+      const reconciliation = recovery.handleReconnect('player1', mockState, 'invalid-token');
+      
+      expect(reconciliation).toBeNull();
+    });
   });
 
-  it('should handle player reconnection within grace period', () => {
-    recovery.handleDisconnect('player1', 'table1');
-    const reconciliation = recovery.handleReconnect('player1', mockState);
-    
-    expect(reconciliation).toBeDefined();
-    expect(reconciliation?.tableId).toBe('table1');
-    expect(reconciliation?.fullState).toEqual(mockState);
-  });
+  describe('Action History and Recovery', () => {
+    it('should record and replay missed actions in order', () => {
+      recovery.handleDisconnect('player1', 'table1');
+      
+      const actions: PlayerAction[] = [
+        {
+          type: 'bet',
+          playerId: 'player2',
+          tableId: 'table1',
+          amount: 50,
+          timestamp: Date.now() + 1
+        },
+        {
+          type: 'call',
+          playerId: 'player3',
+          tableId: 'table1',
+          amount: 50,
+          timestamp: Date.now() + 2
+        }
+      ];
 
-  it('should record and retrieve missed actions', () => {
-    recovery.handleDisconnect('player1', 'table1');
-    
-    // Add a delay to ensure timestamp is after disconnect
-    const action: PlayerAction = {
-      type: 'bet',
-      playerId: 'player2',
-      tableId: 'table1',
-      amount: 50,
-      timestamp: Date.now() + 1 // ensure timestamp is after disconnect
-    };
+      actions.forEach(action => recovery.recordAction('table1', action));
+      const replayedActions = recovery.replayMissedActions('player1');
 
-    recovery.recordAction('table1', action);
+      expect(replayedActions).toHaveLength(2);
+      expect(replayedActions[0].timestamp).toBeLessThan(replayedActions[1].timestamp);
+      expect(replayedActions.map(a => a.type)).toEqual(['bet', 'call']);
+    });
 
-    const missedActions = recovery.getMissedActions('player1');
+    it('should maintain action history size limit', () => {
+      for (let i = 0; i < 15; i++) {
+        recovery.recordAction('table1', {
+          type: 'bet',
+          playerId: 'player1',
+          tableId: 'table1',
+          amount: 10,
+          timestamp: Date.now() + i
+        });
+      }
 
-    expect(missedActions).toHaveLength(1);
-    expect(missedActions[0]).toEqual({ ...action, tableId: 'table1' });
-  });
+      const actions = recovery.getMissedActions('player1');
+      expect(actions.length).toBeLessThanOrEqual(10);
+    });
 
-  it('should identify timed out players', () => {
-    jest.useFakeTimers();
-
-    recovery.handleDisconnect('player1', 'table1');
-    
-    // Advance time past grace period
-    jest.advanceTimersByTime(2000);
-
-    const timeouts = recovery.checkTimeouts();
-    expect(timeouts).toHaveLength(1);
-    expect(timeouts[0]).toEqual({ playerId: 'player1', tableId: 'table1' });
-
-    jest.useRealTimers();
-  });
-
-  it('should maintain action history size limit', () => {
-    for (let i = 0; i < 15; i++) {
+    it('should clear history when table completes', () => {
       recovery.recordAction('table1', {
         type: 'bet',
         playerId: 'player1',
         tableId: 'table1',
         amount: 10,
-        timestamp: Date.now() + i
+        timestamp: Date.now()
       });
-    }
 
-    const actions = recovery.getMissedActions('somePlayer');
-    expect(actions.length).toBeLessThanOrEqual(10);
+      recovery.clearTableHistory('table1');
+      expect(recovery.getMissedActions('player1')).toHaveLength(0);
+    });
   });
 
-  it('should clear table history', () => {
-    recovery.recordAction('table1', {
-      type: 'bet',
-      playerId: 'player1',
-      tableId: 'table1',
-      amount: 10,
-      timestamp: Date.now()
+  describe('Grace Period and Timeouts', () => {
+    it('should track grace period expiration', () => {
+      jest.useFakeTimers();
+      recovery.handleDisconnect('player1', 'table1');
+
+      const initialStatus = recovery.getGracePeriodStatus('player1');
+      expect(initialStatus.inGracePeriod).toBe(true);
+      expect(initialStatus.remainingTime).toBeGreaterThan(0);
+
+      jest.advanceTimersByTime(2000);
+      
+      const expiredStatus = recovery.getGracePeriodStatus('player1');
+      expect(expiredStatus.inGracePeriod).toBe(false);
+      expect(expiredStatus.remainingTime).toBe(0);
+
+      jest.useRealTimers();
     });
 
-    recovery.clearTableHistory('table1');
-    expect(recovery.getMissedActions('player1')).toHaveLength(0);
-  });
+    it('should identify timed out players', () => {
+      jest.useFakeTimers();
+      recovery.handleDisconnect('player1', 'table1');
+      
+      jest.advanceTimersByTime(2000);
 
-  it('should handle grace period expiration', () => {
-    jest.useFakeTimers();
+      const timeouts = recovery.checkTimeouts();
+      expect(timeouts).toHaveLength(1);
+      expect(timeouts[0]).toEqual({ playerId: 'player1', tableId: 'table1' });
 
-    recovery.handleDisconnect('player1', 'table1');
-    expect(recovery.isInGracePeriod('player1')).toBe(true);
-
-    jest.advanceTimersByTime(2000);
-    expect(recovery.isInGracePeriod('player1')).toBe(false);
-
-    jest.useRealTimers();
+      jest.useRealTimers();
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { TableState } from './poker';
+import { TableState, PlayerAction } from './poker';
 
 export interface StateUpdate {
   type: 'state_update';
@@ -14,11 +14,21 @@ export interface StateUpdateResponse {
   error?: string;
 }
 
+export interface RecoveryState {
+  tableId: string;
+  lastSequence: number;
+  missedActions: PlayerAction[];
+  currentState: TableState;
+  reconnectToken?: string;
+  gracePeriodRemaining: number;
+}
+
 export interface StateReconciliation {
   tableId: string;
   clientSequence: number;
   serverSequence: number;
   fullState: TableState;
+  recoveryState: RecoveryState;
 }
 
 export type StateUpdateEvent = 

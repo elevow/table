@@ -6,6 +6,8 @@ export class SystemMonitor {
   private metrics: SystemMetrics;
   private tables: Map<string, TableMetrics>;
   private messageHistory: number[];
+  private connections: Map<string, number>;
+  private errors: Map<string, number>;
   private readonly maxHistorySize = 60; // 1 minute of history at 1 sample/sec
   private alertHandlers: ((alert: SystemAlert) => void)[] = [];
 
@@ -48,6 +50,8 @@ export class SystemMonitor {
     };
     this.tables = new Map();
     this.messageHistory = [];
+    this.connections = new Map();
+    this.errors = new Map();
     this.alertHandlers = [];
     
     if (!this.testMode) {
@@ -246,6 +250,36 @@ export class SystemMonitor {
 
   private emitAlert(alert: SystemAlert): void {
     this.alertHandlers.forEach(handler => handler(alert));
+  }
+
+  // WebSocket monitoring
+  public recordConnection(socketId: string): void {
+    this.connections.set(socketId, Date.now());
+    this.updateMetrics();
+  }
+
+  public recordError(type: string, error: any): void {
+    const count = this.errors.get(type) ?? 0;
+    this.errors.set(type, count + 1);
+    
+    this.emitAlert({
+      type: 'warning',
+      metric: 'errors',
+      current: this.errors.size,
+      threshold: 100,
+      timestamp: Date.now()
+    });
+  }
+
+  public getConnectionCount(): number {
+    return this.connections.size;
+  }
+
+  public getErrorCount(type?: string): number {
+    if (type) {
+      return this.errors.get(type) ?? 0;
+    }
+    return Array.from(this.errors.values()).reduce((sum, count) => sum + count, 0);
   }
 
   // Public API

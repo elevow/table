@@ -5,6 +5,15 @@ export interface Card {
   rank: '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A';
 }
 
+export type GameAction = {
+  type: 'initialize' | 'join' | 'leave' | 'start' | 'deal' | 'bet' | 'call' | 'raise' | 'fold' | 'timeout' | 'error';
+  playerId?: string;
+  tableId: string;
+  amount?: number;
+  timestamp: number;
+  metadata?: any;
+}
+
 export interface Player {
   id: string;
   name: string;

@@ -64,6 +64,14 @@ export class StateManager {
           for (const [tableId, state] of this.states.entries()) {
             if (state.players.some(p => p.id === playerId)) {
               this.recovery.handleDisconnect(playerId, tableId);
+              // Create an auto-fold action for disconnected players
+              const autoAction: PlayerAction = {
+                type: 'fold',
+                playerId,
+                tableId,
+                timestamp: Date.now()
+              };
+              this.handleAction(tableId, autoAction);
               break;
             }
           }
@@ -144,7 +152,14 @@ export class StateManager {
         tableId,
         clientSequence: 0, // Client will send their sequence
         serverSequence: sequence,
-        fullState: state
+        fullState: state,
+        recoveryState: {
+          tableId,
+          lastSequence: sequence,
+          currentState: state,
+          gracePeriodRemaining: 30000,
+          missedActions: []
+        }
       };
 
       this.io.to(socketId).emit('reconcile', reconciliation);
@@ -160,30 +175,39 @@ export class StateManager {
   }
 
   public handleAction(tableId: string, action: PlayerAction): void {
-    // Record action in recovery system
-    this.recovery.recordAction(tableId, action);
-
-    // Process the action and update state
-    // This will be called by the action manager and timer manager
-    this.io.to(tableId).emit('action', action);
-    
-    // Get the current state
+    // Get the current state first
     const state = this.states.get(tableId);
     if (!state) return;
 
-    // Find the player
-    const player = state.players.find(p => p.id === action.playerId);
-    if (!player) return;
+    // Record action in recovery system
+    this.recovery.recordAction(tableId, action);
 
-    // Apply action effects
-    switch (action.type) {
-      case 'fold':
-        player.isFolded = true;
-        break;
-      // Add other action types as needed
-    }
+    // Find and update the player
+    const playerIndex = state.players.findIndex(p => p.id === action.playerId);
+    if (playerIndex === -1) return;
 
-    // Broadcast state update
-    this.updateState(tableId, { players: state.players });
+    // Make a new copy of players with the updated player state
+    const updatedPlayers = [...state.players];
+    updatedPlayers[playerIndex] = {
+      ...updatedPlayers[playerIndex],
+      isFolded: action.type === 'fold'
+    };
+
+    // Update state immediately
+    this.states.set(tableId, {
+      ...state,
+      players: updatedPlayers,
+      activePlayer: action.type === 'fold' ? '' : state.activePlayer
+    });
+
+    // Then broadcast the state update
+    const stateUpdate = {
+      players: updatedPlayers,
+      activePlayer: action.type === 'fold' ? '' : state.activePlayer
+    };
+    this.updateState(tableId, stateUpdate);
+
+    // Finally broadcast the action
+    this.io.to(tableId).emit('action', action);
   }
 }

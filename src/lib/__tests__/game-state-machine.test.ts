@@ -168,12 +168,24 @@ describe('PokerGameStateMachine', () => {
 
       stateMachine.setTableState(allInTableState);
 
+      // Setup table state with all-in scenario
+      const tableState = {
+        tableId: 'table1',
+        players: [
+          { id: 'player1', isAllIn: true, currentBet: 1000, isFolded: false, hasActed: true },
+          { id: 'player2', isAllIn: false, currentBet: 0, isFolded: false, hasActed: false }
+        ],
+        currentBet: 1000
+      };
+      (stateMachine as any).tableState = tableState;
+
       const betAction: GameAction = {
         type: 'bet',
         tableId: 'table1',
         playerId: 'player1',
         amount: 1000,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        metadata: { isAllIn: true }
       };
 
       expect(stateMachine.transition(betAction)).toBe(true);
@@ -242,6 +254,17 @@ describe('PokerGameStateMachine', () => {
     });
 
     it('should create recovery points at key game states', () => {
+      // Setup table state for preFlop
+      const tableState = {
+        tableId: 'table1',
+        players: [
+          { id: 'player1', isAllIn: false, currentBet: 100, isFolded: false, hasActed: true },
+          { id: 'player2', isAllIn: false, currentBet: 100, isFolded: false, hasActed: true }
+        ],
+        currentBet: 100
+      };
+      (stateMachine as any).tableState = tableState;
+      
       const actions: GameAction[] = [
         {
           type: 'initialize',
@@ -266,7 +289,36 @@ describe('PokerGameStateMachine', () => {
         }
       ];
 
+      stateMachine.currentState = 'dealingCards';
       actions.forEach(action => stateMachine.transition(action));
+      
+      // Force state to preFlop which should create a recovery point
+      // Move through the states to get to preFlop
+      const setupActions: GameAction[] = [
+        {
+          type: 'initialize',
+          tableId: 'table1',
+          timestamp: Date.now()
+        },
+        {
+          type: 'join',
+          tableId: 'table1',
+          playerId: 'player1',
+          timestamp: Date.now()
+        },
+        {
+          type: 'start',
+          tableId: 'table1',
+          timestamp: Date.now()
+        },
+        {
+          type: 'deal',
+          tableId: 'table1',
+          timestamp: Date.now()
+        }
+      ];
+      
+      setupActions.forEach(action => expect(stateMachine.transition(action)).toBe(true));
       const recoveryPoint = stateMachine.getLastRecoveryPoint();
       expect(recoveryPoint).toBeTruthy();
       expect(recoveryPoint?.transitions).toBeTruthy();

@@ -33,14 +33,14 @@ export class PokerGameStateMachine implements GameStateMachine {
     transitions.set('initializing', ['waitingForPlayers', 'error']);
     transitions.set('waitingForPlayers', ['starting', 'error']);
     transitions.set('starting', ['dealingCards', 'error']);
-    transitions.set('dealingCards', ['preFlop', 'error']);
+    transitions.set('dealingCards', ['preFlop', 'showdown', 'error']);
     transitions.set('preFlop', ['flop', 'showdown', 'error']);
     transitions.set('flop', ['turn', 'showdown', 'error']);
     transitions.set('turn', ['river', 'showdown', 'error']);
     transitions.set('river', ['showdown', 'error']);
     transitions.set('showdown', ['finished', 'error']);
     transitions.set('finished', ['waitingForPlayers', 'error']);
-    transitions.set('error', ['initializing']);
+    transitions.set('error', ['initializing', 'waitingForPlayers']);
 
     return transitions;
   }
@@ -105,7 +105,13 @@ export class PokerGameStateMachine implements GameStateMachine {
       case 'start':
         return this.currentState === 'waitingForPlayers' ? 'starting' : null;
       case 'deal':
-        return this.currentState === 'starting' ? 'dealingCards' : null;
+        if (this.currentState === 'starting') {
+          return 'dealingCards';
+        } else if (this.currentState === 'dealingCards') {
+          return 'preFlop';
+        } else {
+          return null;
+        }
       case 'error':
         return 'error';
       default:
@@ -117,6 +123,16 @@ export class PokerGameStateMachine implements GameStateMachine {
     // This will contain the logic for determining state transitions during actual gameplay
     // Based on betting rounds, showdown conditions, etc.
     if (!this.tableState) return null;
+
+    // Check for all-in showdown condition first
+    const activePlayers = this.tableState.players.filter(p => !p.isFolded);
+    const allInPlayers = activePlayers.filter(p => p.isAllIn);
+    
+    // If all active players are all-in or only one active player remains, go to showdown
+    if (activePlayers.length === 1 || 
+        (allInPlayers.length > 0 && allInPlayers.length === activePlayers.length - 1)) {
+      return 'showdown';
+    }
 
     switch (this.currentState) {
       case 'preFlop':
@@ -184,7 +200,8 @@ export class PokerGameStateMachine implements GameStateMachine {
   }
 
   private createRecoveryPoint(): void {
-    if (['preFlop', 'flop', 'turn', 'river', 'showdown'].includes(this.currentState)) {
+    // Include dealingCards state for recovery points
+    if (['dealingCards', 'preFlop', 'flop', 'turn', 'river', 'showdown'].includes(this.currentState)) {
       const recovery: RecoveryPoint = {
         state: this.currentState,
         timestamp: Date.now(),

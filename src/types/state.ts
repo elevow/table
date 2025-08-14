@@ -40,3 +40,30 @@ export interface GameStateMachine {
   history: StateTransition[];
   recovery: RecoveryPoint[];
 }
+
+export interface StateDelta {
+  changes: any;
+  from: number;
+  to: number;
+}
+
+export interface StateConflict {
+  clientVersion: number;
+  serverVersion: number;
+  conflictType: 'merge' | 'override';
+  resolution: 'client' | 'server' | 'merge';
+  path: string;
+  clientValue: any;
+  serverValue: any;
+  resolvedValue: any;
+}
+
+export interface StateSynchronization {
+  version: number;
+  timestamp: number;
+  checksum: string;
+  delta: StateDelta;
+  conflicts: StateConflict[];
+}
+
+export type ConflictResolution = 'client' | 'server' | 'merge';

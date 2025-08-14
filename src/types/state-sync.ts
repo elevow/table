@@ -1,12 +1,14 @@
+export interface StateChange {
+  path: string;
+  oldValue: any;
+  newValue: any;
+  timestamp: number;
+}
+
 export interface StateDelta {
-  changes: {
-    path: string;
-    oldValue: any;
-    newValue: any;
-    timestamp: number;
-  }[];
-  baseVersion: number;
-  deltaId: string;
+  changes: StateChange[];
+  from: number;
+  to: number;
 }
 
 export interface StateConflict {

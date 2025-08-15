@@ -1,8 +1,13 @@
 export interface StateChange {
-  path: string;
-  oldValue: any;
-  newValue: any;
+  id: string;
+  type: 'update' | 'delete' | 'create';
+  path: string[];
+  value: any;
   timestamp: number;
+  source: 'client' | 'server';
+  oldValue?: any;
+  newValue?: any;
+  optimisticKey?: string;  // Key that identifies which optimistic update this change belongs to
 }
 
 export interface StateDelta {

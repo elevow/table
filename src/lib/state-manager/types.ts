@@ -16,18 +16,12 @@ export interface StateSyncOptions {
   conflictResolution: 'client' | 'server' | 'merge';
 }
 
-export interface StateChange<T> {
-  id: string;
-  type: 'update' | 'delete' | 'create';
-  path: string[];
-  value: T;
-  timestamp: number;
-  source: 'client' | 'server';
-}
+import { StateChange } from '../../types/state-sync';
+// Remove duplicate StateChange definition and use the one from state-sync.ts
 
 export interface VersionedState<T> extends StateVersioning {
   data: T;
-  changes: StateChange<any>[];
+  changes: StateChange[];
   lastSync: number;
 }
 

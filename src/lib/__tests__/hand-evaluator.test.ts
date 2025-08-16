@@ -40,6 +40,59 @@ describe('HandEvaluator', () => {
 
       const { hand } = HandEvaluator.evaluateHand(holeCards, communityCards);
       expect(hand.name).toBe('Straight');
+      // @ts-ignore - pokersolver types are incomplete
+      expect(hand.descr).toBe('Straight, 9 High');
+    });
+
+    it('should correctly identify three of a kind', () => {
+      const holeCards: Card[] = [
+        createCard('A', 'hearts'),
+        createCard('A', 'diamonds')
+      ];
+      const communityCards: Card[] = [
+        createCard('A', 'spades'),
+        createCard('2', 'clubs'),
+        createCard('7', 'hearts'),
+        createCard('5', 'diamonds'),
+        createCard('9', 'clubs')
+      ];
+
+      const { hand } = HandEvaluator.evaluateHand(holeCards, communityCards);
+      expect(hand.name).toBe('Three of a Kind');
+      // @ts-ignore - pokersolver types are incomplete
+      expect(hand.descr).toBe('Three of a Kind, A\'s');
+    });
+
+    it('should correctly identify a full house', () => {
+      const holeCards: Card[] = [
+        createCard('A', 'hearts'),
+        createCard('A', 'diamonds')
+      ];
+      const communityCards: Card[] = [
+        createCard('A', 'spades'),
+        createCard('K', 'clubs'),
+        createCard('K', 'hearts'),
+        createCard('5', 'diamonds'),
+        createCard('9', 'clubs')
+      ];
+
+      const { hand } = HandEvaluator.evaluateHand(holeCards, communityCards);
+      expect(hand.name).toBe('Full House');
+      // @ts-ignore - pokersolver types are incomplete
+      expect(hand.descr).toBe('Full House, A\'s over K\'s');
+    });
+
+    it('should work with only hole cards (preflop)', () => {
+      const holeCards: Card[] = [
+        createCard('A', 'hearts'),
+        createCard('A', 'diamonds')
+      ];
+      const communityCards: Card[] = [];
+
+      const { hand } = HandEvaluator.evaluateHand(holeCards, communityCards);
+      expect(hand.name).toBe('Pair');
+      // @ts-ignore - pokersolver types are incomplete
+      expect(hand.descr).toBe('Pair, A\'s');
     });
   });
 
@@ -235,6 +288,143 @@ describe('HandEvaluator', () => {
       expect(winners[0].playerId).toBe('player2');
       expect(winners[0].description).toBe('Win by fold');
       expect(winners[0].winAmount).toBe(40);
+    });
+
+    it('should handle complex side pot scenario with multiple all-ins and split pots', () => {
+      const players = [
+        // Player 1 - all in for 50
+        {
+          id: 'p1',
+          stack: 0,
+          currentBet: 50,
+          isFolded: false,
+          holeCards: [
+            createCard('A', 'hearts'),
+            createCard('A', 'diamonds')
+          ]
+        },
+        // Player 2 - all in for 100
+        {
+          id: 'p2',
+          stack: 0,
+          currentBet: 100,
+          isFolded: false,
+          holeCards: [
+            createCard('A', 'clubs'),
+            createCard('A', 'spades')
+          ]
+        },
+        // Player 3 - called 150
+        {
+          id: 'p3',
+          stack: 850,
+          currentBet: 150,
+          isFolded: false,
+          holeCards: [
+            createCard('K', 'hearts'),
+            createCard('K', 'diamonds')
+          ]
+        }
+      ];
+
+      const communityCards: Card[] = [
+        createCard('2', 'spades'),
+        createCard('3', 'hearts'),
+        createCard('7', 'hearts'),
+        createCard('5', 'diamonds'),
+        createCard('9', 'clubs')
+      ];
+
+      const winners = HandEvaluator.determineWinners(players, communityCards);
+      const totalPot = players.reduce((sum, p) => sum + p.currentBet, 0);
+      const totalWinnings = winners.reduce((sum, w) => sum + w.winAmount, 0);
+
+      expect(totalWinnings).toBe(totalPot); // All money should be distributed
+      
+      // P1 and P2 should split the first pot since they have equal hands
+      const p1Winnings = winners.find(w => w.playerId === 'p1')?.winAmount;
+      const p2Winnings = winners.find(w => w.playerId === 'p2')?.winAmount;
+      expect(p1Winnings).toBe(75); // (50 * 3) / 2 = 75 from main pot
+      expect(p2Winnings).toBe(175); // 75 from main pot + 100 from first side pot
+    });
+
+    it('should handle edge case with single player not folded', () => {
+      const players = [
+        {
+          id: 'p1',
+          stack: 950,
+          currentBet: 50,
+          isFolded: true,
+          holeCards: [
+            createCard('2', 'hearts'),
+            createCard('3', 'diamonds')
+          ]
+        },
+        {
+          id: 'p2',
+          stack: 950,
+          currentBet: 50,
+          isFolded: true,
+          holeCards: [
+            createCard('4', 'hearts'),
+            createCard('5', 'diamonds')
+          ]
+        },
+        {
+          id: 'p3',
+          stack: 950,
+          currentBet: 50,
+          isFolded: false,
+          holeCards: [
+            createCard('6', 'hearts'),
+            createCard('7', 'diamonds')
+          ]
+        }
+      ];
+
+      const communityCards: Card[] = [];
+      const winners = HandEvaluator.determineWinners(players, communityCards);
+
+      expect(winners).toHaveLength(1);
+      expect(winners[0].playerId).toBe('p3');
+      expect(winners[0].description).toBe('Win by fold');
+      expect(winners[0].winAmount).toBe(150); // All bets go to p3
+    });
+
+    it('should handle edge case with zero pot amount', () => {
+      const players = [
+        {
+          id: 'p1',
+          stack: 1000,
+          currentBet: 0,
+          isFolded: false,
+          holeCards: [
+            createCard('A', 'hearts'),
+            createCard('K', 'diamonds')
+          ]
+        },
+        {
+          id: 'p2',
+          stack: 1000,
+          currentBet: 0,
+          isFolded: false,
+          holeCards: [
+            createCard('Q', 'hearts'),
+            createCard('J', 'diamonds')
+          ]
+        }
+      ];
+
+      const communityCards: Card[] = [
+        createCard('2', 'spades'),
+        createCard('3', 'hearts'),
+        createCard('7', 'hearts'),
+        createCard('5', 'diamonds'),
+        createCard('9', 'clubs')
+      ];
+
+      const winners = HandEvaluator.determineWinners(players, communityCards);
+      expect(winners).toHaveLength(0); // No pot, no winners
     });
   });
 });

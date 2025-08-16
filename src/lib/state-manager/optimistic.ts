@@ -17,7 +17,7 @@ export class OptimisticManager implements IOptimisticManager {
   public applyOptimisticUpdate(delta: StateDelta): void {
     const newState = this.deltaManager.applyDelta(this.state.data, delta);
     const timestamp = Date.now();
-    const key = `opt_${timestamp}`;
+    const key = `opt_${timestamp}_${Math.random().toString(36).substr(2, 9)}`;  // Add random component
     
     // Store the original state for potential rollback
     this.optimisticUpdates.set(key, {

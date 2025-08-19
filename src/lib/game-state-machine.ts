@@ -181,7 +181,10 @@ export class PokerGameStateMachine implements GameStateMachine {
   }
 
   private handleError(error: Error, isErrorTransition: boolean = false): void {
-    console.error(`State Machine Error: ${error.message}`);
+    // Only log in non-CI environments
+    if (!process.env.CI) {
+      console.error(`State Machine Error: ${error.message}`);
+    }
     if (!isErrorTransition) {
       const prevState = this.currentState;
       this.currentState = 'error';

@@ -10,8 +10,10 @@ export class PokerEngine {
   private deckManager: DeckManager;
   private bettingManager: BettingManager;
   private gameStateManager: GameStateManager;
+  private debugEnabled: boolean;
 
   constructor(tableId: string, players: Player[], smallBlind: number, bigBlind: number) {
+    this.debugEnabled = process.env.DEBUG_POKER === 'true';
     this.state = {
       tableId,
       stage: 'preflop',
@@ -32,10 +34,24 @@ export class PokerEngine {
     this.gameStateManager = new GameStateManager(this.state);
   }
 
+  // Private logging methods that respect environment variables
+  private log(message: string, ...args: any[]): void {
+    if (this.debugEnabled) {
+      console.log(`[DEBUG] ${message}`, ...args);
+    }
+  }
+  
+  private error(message: string, ...args: any[]): void {
+    // Only log errors in non-CI environments or when DEBUG_POKER is set
+    if (!process.env.CI || this.debugEnabled) {
+      console.error(`[ERROR] ${message}`, ...args);
+    }
+  }
+
   private addToPot(amount: number): void {
-    console.log(`[DEBUG] Adding ${amount} to pot (current: ${this.state.pot})`);
+    this.log(`Adding ${amount} to pot (current: ${this.state.pot})`);
     this.state.pot += amount;
-    console.log(`[DEBUG] New pot total: ${this.state.pot}`);
+    this.log(`New pot total: ${this.state.pot}`);
   }
 
   public startNewHand(): void {
@@ -66,15 +82,15 @@ export class PokerEngine {
   }
 
   private postBlinds(): void {
-    console.log(`[DEBUG] -------- Posting Blinds --------`);
-    console.log(`[DEBUG] Before blinds:`, this.state.players.map(p => ({
+    this.log(`-------- Posting Blinds --------`);
+    this.log(`Before blinds:`, this.state.players.map(p => ({
       id: p.id,
       stack: p.stack,
       bet: p.currentBet
     })));
     
     const { pot, currentBet } = this.bettingManager.postBlinds(this.state.players);
-    console.log(`[DEBUG] Blind amounts: pot=${pot}, currentBet=${currentBet}`);
+    this.log(`Blind amounts: pot=${pot}, currentBet=${currentBet}`);
     
     // Add blind bets to pot
     if (pot > 0) {
@@ -83,18 +99,18 @@ export class PokerEngine {
     this.state.currentBet = currentBet;
     this.state.minRaise = currentBet;
     
-    console.log(`[DEBUG] After blinds:`, this.state.players.map(p => ({
+    this.log(`After blinds:`, this.state.players.map(p => ({
       id: p.id,
       stack: p.stack,
       bet: p.currentBet
     })));
-    console.log(`[DEBUG] Pot: ${this.state.pot}, Current bet: ${this.state.currentBet}, Min raise: ${this.state.minRaise}`);
+    this.log(`Pot: ${this.state.pot}, Current bet: ${this.state.currentBet}, Min raise: ${this.state.minRaise}`);
   }
 
   public handleAction(action: PlayerAction): void {
-    console.log(`[DEBUG] Handling action ${action.type} from ${action.playerId} for amount ${action.amount}`);
-    console.log(`[DEBUG] Before action - pot: ${this.state.pot}, currentBet: ${this.state.currentBet}, minRaise: ${this.state.minRaise}`);
-    console.log(`[DEBUG] Player states:`, this.state.players.map(p => ({
+    this.log(`Handling action ${action.type} from ${action.playerId} for amount ${action.amount}`);
+    this.log(`Before action - pot: ${this.state.pot}, currentBet: ${this.state.currentBet}, minRaise: ${this.state.minRaise}`);
+    this.log(`Player states:`, this.state.players.map(p => ({
       id: p.id,
       stack: p.stack,
       bet: p.currentBet,
@@ -124,14 +140,14 @@ export class PokerEngine {
     // Update state and add new contribution to pot if any
     if ((action.type === 'call' || action.type === 'raise') && pot > 0) {
       // Only add the difference between new bet and old bet
-      console.log(`[DEBUG] Processing bet: oldBet=${oldBet}, newBet=${player.currentBet}, potContribution=${pot}`);
+      this.log(`Processing bet: oldBet=${oldBet}, newBet=${player.currentBet}, potContribution=${pot}`);
       if (pot > 0) {
         this.addToPot(pot);
-        console.log(`[DEBUG] Added ${pot} to pot from player ${player.id} (old bet: ${oldBet}, new bet: ${player.currentBet}, new total pot: ${this.state.pot})`);
+        this.log(`Added ${pot} to pot from player ${player.id} (old bet: ${oldBet}, new bet: ${player.currentBet}, new total pot: ${this.state.pot})`);
       }
     } else if (action.type === 'fold') {
       // When folding, current bet stays in place (doesn't go to pot yet)
-      console.log(`[DEBUG] Player ${player.id} folded with current bet of ${player.currentBet}`);
+      this.log(`Player ${player.id} folded with current bet of ${player.currentBet}`);
     }
 
     this.state.currentBet = currentBet;
@@ -180,24 +196,24 @@ export class PokerEngine {
     // If only one player remains, they win
     if (activePlayers.length === 1) {
       const winner = activePlayers[0];
-      console.log(`[DEBUG] -------- Win by Fold --------`);
-      console.log(`[DEBUG] Initial state:`);
-      console.log(`[DEBUG] - Pot: ${this.state.pot}`);
-      console.log(`[DEBUG] - Current bets:`, this.state.players.map(p => `${p.id}: ${p.currentBet}`).join(', '));
-      console.log(`[DEBUG] - Player stacks:`, this.state.players.map(p => `${p.id}: ${p.stack}`).join(', '));
+      this.log(`-------- Win by Fold --------`);
+      this.log(`Initial state:`);
+      this.log(`- Pot: ${this.state.pot}`);
+      this.log(`- Current bets: ${this.state.players.map(p => `${p.id}: ${p.currentBet}`).join(', ')}`);
+      this.log(`- Player stacks: ${this.state.players.map(p => `${p.id}: ${p.stack}`).join(', ')}`);
 
       // Winner gets the entire pot plus their own bet back
       const totalWinnings = this.state.pot;
-      console.log(`[DEBUG] Stack before winnings: ${winner.id} had ${winner.stack}`);
+      this.log(`Stack before winnings: ${winner.id} had ${winner.stack}`);
       winner.stack += totalWinnings;
-      console.log(`[DEBUG] Stack after winnings: ${winner.id} now has ${winner.stack}`);
+      this.log(`Stack after winnings: ${winner.id} now has ${winner.stack}`);
 
       // Clear current bets and pot
       this.state.players.forEach(p => {
-        console.log(`[DEBUG] Clearing bet for player ${p.id}: ${p.currentBet} -> 0`);
+        this.log(`Clearing bet for player ${p.id}: ${p.currentBet} -> 0`);
         p.currentBet = 0;
       });
-      console.log(`[DEBUG] Clearing pot: ${this.state.pot} -> 0`);
+      this.log(`Clearing pot: ${this.state.pot} -> 0`);
       this.state.pot = 0;
 
       // Set stage to indicate hand is over
@@ -206,8 +222,8 @@ export class PokerEngine {
 
       // Debug: verify total chips
       const totalChips = this.state.players.reduce((sum, p) => sum + p.stack, 0);
-      console.log(`[DEBUG] Win by fold - Awarded pot to winner ${winner.id} (final stack: ${winner.stack})`);
-      console.log(`[DEBUG] Total chips after win by fold: ${totalChips}`);
+      this.log(`Win by fold - Awarded pot to winner ${winner.id} (final stack: ${winner.stack})`);
+      this.log(`Total chips after win by fold: ${totalChips}`);
       return;
     }
 
@@ -217,11 +233,11 @@ export class PokerEngine {
       evaluation: HandEvaluator.evaluateHand(player.holeCards || [], this.state.communityCards)
     }));
 
-    console.log(`[DEBUG] Player hands evaluated:`, playerHands.map(ph => ({
+    this.log(`Player hands evaluated: ${JSON.stringify(playerHands.map(ph => ({
       playerId: ph.playerId,
       description: ph.evaluation.hand.description,
       rank: ph.evaluation.hand.rank
-    })));
+    })))}`);
 
     // Find the winning hand(s)
     const winners = playerHands.filter(ph => 
@@ -230,7 +246,7 @@ export class PokerEngine {
       )
     );
 
-    console.log(`[DEBUG] Winners determined:`, winners.map(w => w.playerId));
+    this.log(`Winners determined: ${JSON.stringify(winners.map(w => w.playerId))}`);
 
     // Calculate winnings using pot calculator
     const results: HandResult[] = winners.map(w => ({
@@ -241,23 +257,23 @@ export class PokerEngine {
       winAmount: 0
     }));
 
-      console.log(`[DEBUG] -------- Showdown --------`);
-      console.log(`[DEBUG] Initial state:`);
-      console.log(`[DEBUG] - Pot: ${this.state.pot}`);
-      console.log(`[DEBUG] - Current bets:`, this.state.players.map(p => `${p.id}: ${p.currentBet}`).join(', '));
-      console.log(`[DEBUG] - Player stacks:`, this.state.players.map(p => `${p.id}: ${p.stack}`).join(', '));
+    this.log(`-------- Showdown --------`);
+    this.log(`Initial state:`);
+    this.log(`- Pot: ${this.state.pot}`);
+    this.log(`- Current bets: ${this.state.players.map(p => `${p.id}: ${p.currentBet}`).join(', ')}`);
+    this.log(`- Player stacks: ${this.state.players.map(p => `${p.id}: ${p.stack}`).join(', ')}`);
 
-      // First verify total chips in play (pot already includes all bets, so only count stacks + pot)
-      const initialTotal = this.state.players.reduce((sum, p) => sum + p.stack, 0) + this.state.pot;
-      console.log(`[DEBUG] Total chips before distribution: ${initialTotal}`);
+    // First verify total chips in play (pot already includes all bets, so only count stacks + pot)
+    const initialTotal = this.state.players.reduce((sum, p) => sum + p.stack, 0) + this.state.pot;
+    this.log(`Total chips before distribution: ${initialTotal}`);
 
-      // The pot already contains all bets, so we just need to distribute it
-      const totalPrizePool = this.state.pot;
-      console.log(`[DEBUG] Total prize pool: ${totalPrizePool}`);
+    // The pot already contains all bets, so we just need to distribute it
+    const totalPrizePool = this.state.pot;
+    this.log(`Total prize pool: ${totalPrizePool}`);
 
-      // Clear all current bets and pot
-      this.state.players.forEach(p => {
-        console.log(`[DEBUG] Clearing bet for player ${p.id}: ${p.currentBet} -> 0`);
+    // Clear all current bets and pot
+    this.state.players.forEach(p => {
+        this.log(`Clearing bet for player ${p.id}: ${p.currentBet} -> 0`);
         p.currentBet = 0;
       });
       this.state.pot = 0;
@@ -266,8 +282,8 @@ export class PokerEngine {
       const prizePerWinner = Math.floor(totalPrizePool / winners.length);
       const remainder = totalPrizePool % winners.length;  // Handle any remainder chips
 
-      console.log(`[DEBUG] Total prize pool: ${totalPrizePool}, Winners: ${winners.length}`);
-      console.log(`[DEBUG] Each winner gets: ${prizePerWinner} + ${remainder} remainder to last winner`);
+      this.log(`Total prize pool: ${totalPrizePool}, Winners: ${winners.length}`);
+      this.log(`Each winner gets: ${prizePerWinner} + ${remainder} remainder to last winner`);
 
       results.forEach((result, index) => {
         const player = this.state.players.find(p => p.id === result.playerId);
@@ -276,22 +292,22 @@ export class PokerEngine {
           const winAmount = index === winners.length - 1 ? prizePerWinner + remainder : prizePerWinner;
           player.stack += winAmount;
           result.winAmount = winAmount;
-          console.log(`[DEBUG] Awarded ${winAmount} to winner ${player.id} (stack now: ${player.stack})`);
+          this.log(`Awarded ${winAmount} to winner ${player.id} (stack now: ${player.stack})`);
         }
       });
 
       // Check that pot was properly distributed
       const finalTotal = this.state.players.reduce((sum, p) => sum + p.stack, 0);
-      console.log(`[DEBUG] Total chips after distribution: ${finalTotal} (should equal initial ${initialTotal})`);
+      this.log(`Total chips after distribution: ${finalTotal} (should equal initial ${initialTotal})`);
 
       if (finalTotal !== initialTotal) {
-        console.error(`[ERROR] Chip count mismatch! Lost ${initialTotal - finalTotal} chips in distribution.`);
+        this.error(`Chip count mismatch! Lost ${initialTotal - finalTotal} chips in distribution.`);
         // Fix: If there are no winners, give the pot to one player to maintain chip conservation
         if (winners.length === 0 && totalPrizePool > 0) {
           const firstActivePlayer = this.state.players.find(p => !p.isFolded);
           if (firstActivePlayer) {
             firstActivePlayer.stack += totalPrizePool;
-            console.log(`[DEBUG] No hand winner detected. Giving pot to player ${firstActivePlayer.id} to maintain chip count.`);
+            this.log(`No hand winner detected. Giving pot to player ${firstActivePlayer.id} to maintain chip count.`);
           }
         }
       }

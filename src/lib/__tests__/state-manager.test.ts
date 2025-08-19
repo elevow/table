@@ -206,12 +206,9 @@ describe('StateManager', () => {
 
       // Set up initial state
       stateManager.updateState(tableId, initialState);
-
-      console.log('Initial state:', initialState);
       
       // Mock handleDisconnect to simulate state updates on disconnect
       jest.spyOn(stateManager['recovery'], 'handleDisconnect').mockImplementation((pid, tid) => {
-        console.log('handleDisconnect called with:', pid);
         stateManager.handleAction(tid, {
           type: 'fold',
           playerId: pid,
@@ -225,20 +222,13 @@ describe('StateManager', () => {
       const joinTableHandler = mockSocket.on.mock.calls.find(([event]: [string, Function]) => event === 'join_table')?.[1];
       const disconnectHandler = mockSocket.on.mock.calls.find(([event]: [string, Function]) => event === 'disconnect')?.[1];
       
-      console.log('Found handlers:', { 
-        hasJoinHandler: !!joinTableHandler, 
-        hasDisconnectHandler: !!disconnectHandler 
-      });
-
       // Join table first
       if (joinTableHandler) {
-        console.log('Player joining table');
         joinTableHandler({ tableId, playerId });
       }
 
       // Then trigger disconnect and action
       if (disconnectHandler) {
-        console.log('Player disconnecting');
         disconnectHandler();
         
         // Directly trigger the fold action
@@ -255,7 +245,6 @@ describe('StateManager', () => {
 
       // Check the state after disconnect
       const state = stateManager.getState(tableId);
-      console.log('Final state after disconnect:', state);
       
       // Check player state
       const player = state?.players.find(p => p.id === playerId);
@@ -310,17 +299,14 @@ describe('StateManager', () => {
         lastRaise: 0
       };
 
-      console.log('Setting up initial state for timeout test');
       stateManager.updateState(tableId, initialState);
 
       // Mock recovery handlers
       jest.spyOn(stateManager['recovery'], 'handleDisconnect').mockImplementation((pid) => {
-        console.log('Timeout test: handleDisconnect called with:', pid);
         return pid;
       });
       
       jest.spyOn(stateManager['recovery'], 'checkTimeouts').mockImplementation(() => {
-        console.log('Checking timeouts...');
         stateManager.handleAction(tableId, {
           type: 'fold',
           playerId,
@@ -333,11 +319,8 @@ describe('StateManager', () => {
       // Join table first
       const joinHandler = mockSocket.on.mock.calls.find(([event]: [string, Function]) => event === 'join_table')?.[1];
       if (joinHandler) {
-        console.log('Timeout test: Player joining table');
         joinHandler({ tableId, playerId });
       }
-      
-      console.log('State before timeout:', stateManager.getState(tableId));
       
       // Let timeout check run and trigger fold action
       jest.advanceTimersByTime(31000);
@@ -353,7 +336,6 @@ describe('StateManager', () => {
 
       // Get final state
       const finalState = stateManager.getState(tableId);
-      console.log('Final state after timeout:', finalState);
       
       // Verify player was folded
       const player = finalState?.players.find(p => p.id === playerId);
@@ -415,7 +397,6 @@ describe('StateManager', () => {
       const playerId = 'player1';
       const joinHandler = mockSocket.on.mock.calls.find((call: [string, Function]) => call[0] === 'join_table')?.[1];
 
-      console.log('Starting reconnection test');
       // Setup initial state with a disconnected player
       const initialState = {
         tableId,

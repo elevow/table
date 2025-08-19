@@ -16,6 +16,15 @@ export class HandEvaluator {
     'clubs': 'c',
     'spades': 's'
   };
+  
+  private static debugEnabled = process.env.DEBUG_POKER === 'true';
+  
+  // Static logging methods that respect environment variables
+  private static log(message: string, ...args: any[]): void {
+    if (this.debugEnabled) {
+      console.log(message, ...args);
+    }
+  }
 
   private static cardToString(card: Card): string {
     const rankMap: { [key: string]: string } = {
@@ -51,11 +60,11 @@ export class HandEvaluator {
   }
 
   static calculateSidePots(players: { id: string; stack: number; currentBet: number; isFolded: boolean }[]): SidePot[] {
-    console.log('Calculating side pots for players:', players);
+    this.log('Calculating side pots for players:', players);
 
     // First handle the simple case with no bets
     const bettingPlayers = players.filter(p => p.currentBet > 0);
-    console.log('Betting players:', bettingPlayers);
+    this.log('Betting players:', bettingPlayers);
 
     if (bettingPlayers.length === 0) return [];
 
@@ -63,7 +72,7 @@ export class HandEvaluator {
     const bets = bettingPlayers.map(p => p.currentBet);
     const uniqueBets = Array.from(new Set(bets));
     uniqueBets.sort((a, b) => a - b);
-    console.log('Unique bet amounts:', uniqueBets);
+    this.log('Unique bet amounts:', uniqueBets);
 
     // Handle case with single pot
     if (uniqueBets.length === 1) {
@@ -84,12 +93,12 @@ export class HandEvaluator {
         .filter(p => p.currentBet >= currentBet)
         .map(p => p.id);
       
-      console.log(`Processing bet level ${currentBet}, prev bet ${previousBet}`);
-      console.log(`Eligible players for bet ${currentBet}:`, eligiblePlayers);
+      this.log(`Processing bet level ${currentBet}, prev bet ${previousBet}`);
+      this.log(`Eligible players for bet ${currentBet}:`, eligiblePlayers);
 
       // Calculate pot amount
       const amount = (currentBet - previousBet) * eligiblePlayers.length;
-      console.log(`Adding side pot: amount=${amount} ((${currentBet} - ${previousBet}) × ${eligiblePlayers.length})`);
+      this.log(`Adding side pot: amount=${amount} ((${currentBet} - ${previousBet}) × ${eligiblePlayers.length})`);
 
       if (amount > 0) {
         sidePots.push({
@@ -101,7 +110,7 @@ export class HandEvaluator {
       previousBet = currentBet;
     });
 
-    console.log('Final side pots:', sidePots);
+    this.log('Final side pots:', sidePots);
     return sidePots;
   }
 
@@ -115,7 +124,7 @@ export class HandEvaluator {
     }[], 
     communityCards: Card[]
   ): HandResult[] {
-    console.log('Determining winners for', players.length, 'players');
+    this.log('Determining winners for ' + players.length + ' players');
     // Handle all-fold scenario
     const activePlayers = players.filter(p => !p.isFolded);
     if (activePlayers.length === 1) {
@@ -132,7 +141,7 @@ export class HandEvaluator {
 
     // Calculate side pots
     const pots = this.calculateSidePots(players);
-    console.log('Calculated pots for winner determination:', pots);
+    this.log('Calculated pots for winner determination:', pots);
     
     if (pots.length === 0) return [];
 
@@ -142,7 +151,7 @@ export class HandEvaluator {
 
     // Process each side pot
     pots.forEach((pot, index) => {
-      console.log(`Processing pot ${index}:`, pot);
+      this.log(`Processing pot ${index}:`, pot);
       // Get or calculate player hands for this pot
       const eligibleHands = players
         .filter(p => pot.eligiblePlayers.includes(p.id) && !p.isFolded)
@@ -195,18 +204,18 @@ export class HandEvaluator {
         });
 
       const winningHands = pokersolver.winners(solvedHands);
-      console.log(`Found ${winningHands.length} winners with hand type ${winningHands[0].name}`);
+      this.log(`Found ${winningHands.length} winners with hand type ${winningHands[0].name}`);
       
       // Calculate base amount and remainder
       const winAmount = Math.floor(pot.amount / winningHands.length);
       const remainder = pot.amount - (winAmount * winningHands.length);
-      console.log(`Splitting pot ${pot.amount} among ${winningHands.length} winners. Each gets ${winAmount} + ${remainder} remainder`);
+      this.log(`Splitting pot ${pot.amount} among ${winningHands.length} winners. Each gets ${winAmount} + ${remainder} remainder`);
 
       // Award pot to winners
-      winningHands.forEach((winningHand, idx) => {
+      winningHands.forEach((winningHand: any, idx: number) => {
         const playerId = winningHand.playerId;
         const handInfo = playerHands.get(playerId)!;
-        console.log(`Processing winner ${playerId} with ${winningHand.descr}`);
+        this.log(`Processing winner ${playerId} with ${winningHand.descr}`);
         
         let existingResult = results.get(playerId);
         if (!existingResult) {

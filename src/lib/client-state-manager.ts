@@ -41,7 +41,10 @@ export class ClientStateManager {
     });
 
     this.socket.on('connect_error', (error: Error) => {
-      console.error('Connection error:', error);
+      // Only log in non-CI environments
+      if (!process.env.CI) {
+        console.error('Connection error:', error);
+      }
       this.handleConnectionError();
     });
   }

@@ -29,6 +29,12 @@ export class EnhancedStateManager {
     this.startSyncInterval();
   }
 
+  private error(message: string, error?: any): void {
+    if (!process.env.CI) {
+      console.error(message, error);
+    }
+  }
+
   private setupSocketHandlers(): void {
     this.socket.on('state_update', (update: TableState) => {
       this.handleStateUpdate(update);
@@ -86,7 +92,7 @@ export class EnhancedStateManager {
         this.startSyncInterval();
       }
     } catch (error) {
-      console.error('Sync failed:', error);
+      this.error('Sync failed:', error);
       this.handleSyncError();
     }
   }  private syncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -214,7 +220,7 @@ export class EnhancedStateManager {
         this.handleUpdateRejection(delta, serverAck.conflicts);
       }
     } catch (error) {
-      console.error('State update failed:', error);
+      this.error('State update failed:', error);
       this.rollbackOptimisticUpdate(delta);
     }
   }

@@ -9,6 +9,21 @@ export class WebSocketManager {
   private connectionStates: Map<string, ConnectionState>;
   private systemMonitor: SystemMonitor;
   private static instance: WebSocketManager;
+  
+  // Private logging method that respects environment variables
+  private log(message: string): void {
+    // Only log in non-CI environments or when DEBUG_WEBSOCKET is set
+    if (!process.env.CI || process.env.DEBUG_WEBSOCKET) {
+      console.log(`[WebSocket] ${message}`);
+    }
+  }
+  
+  private error(message: string, error?: any): void {
+    // Only log in non-CI environments or when DEBUG_WEBSOCKET is set
+    if (!process.env.CI || process.env.DEBUG_WEBSOCKET) {
+      console.error(`[WebSocket] ${message}`, error || '');
+    }
+  }
 
   private constructor(server: HttpServer, config: Partial<WebSocketConfig> = {}) {
     this.config = {
@@ -49,13 +64,13 @@ export class WebSocketManager {
         latency: 0,
         transport: socket.conn.transport.name
       });
-      console.log(`[WebSocket] New connection established: ${socket.id} using ${socket.conn.transport.name}`);
+      this.log(`New connection established: ${socket.id} using ${socket.conn.transport.name}`);
 
       // Handle reconnection
       socket.on('reconnect_attempt', (attemptNumber) => {
-        console.log(`[WebSocket] Reconnection attempt ${attemptNumber} for socket ${socket.id}`);
+        this.log(`Reconnection attempt ${attemptNumber} for socket ${socket.id}`);
         if (attemptNumber > this.config.reconnectionAttempts) {
-          console.log(`[WebSocket] Max reconnection attempts (${this.config.reconnectionAttempts}) exceeded for ${socket.id}`);
+          this.log(`Max reconnection attempts (${this.config.reconnectionAttempts}) exceeded for ${socket.id}`);
           socket.disconnect(true);
           return;
         }
@@ -65,7 +80,7 @@ export class WebSocketManager {
 
       // Handle successful reconnection
       socket.on('reconnect', () => {
-        console.log(`[WebSocket] Successful reconnection for socket ${socket.id}`);
+        this.log(`Successful reconnection for socket ${socket.id}`);
         this.updateConnectionState(socket.id, 'connected');
         const state = this.connectionStates.get(socket.id);
         if (state) {
@@ -78,13 +93,13 @@ export class WebSocketManager {
 
       // Handle disconnection
       socket.on('disconnect', (reason) => {
-        console.log(`[WebSocket] Disconnect event for ${socket.id}, reason: ${reason}`);
+        this.log(`Disconnect event for ${socket.id}, reason: ${reason}`);
         const currentState = this.connectionStates.get(socket.id);
-        console.log(`[WebSocket] Current state before disconnect: ${JSON.stringify(currentState)}`);
+        this.log(`Current state before disconnect: ${JSON.stringify(currentState)}`);
         
         if (reason === 'transport close' || reason === 'ping timeout') {
           this.updateConnectionState(socket.id, 'reconnecting');
-          console.log(`[WebSocket] Setting state to reconnecting for ${socket.id}`);
+          this.log(`Setting state to reconnecting for ${socket.id}`);
           // Socket.IO will handle reconnection automatically
           this.systemMonitor.recordError('socket_reconnecting', {
             socketId: socket.id,
@@ -92,7 +107,7 @@ export class WebSocketManager {
           });
         } else {
           this.updateConnectionState(socket.id, 'disconnected');
-          console.log(`[WebSocket] Setting state to disconnected for ${socket.id}`);
+          this.log(`Setting state to disconnected for ${socket.id}`);
           this.systemMonitor.recordError('socket_disconnected', {
             socketId: socket.id,
             reason: reason
@@ -100,7 +115,7 @@ export class WebSocketManager {
         }
         
         const newState = this.connectionStates.get(socket.id);
-        console.log(`[WebSocket] New state after disconnect: ${JSON.stringify(newState)}`);
+        this.log(`New state after disconnect: ${JSON.stringify(newState)}`);
       });
 
       // Handle pings for latency tracking
@@ -123,7 +138,7 @@ export class WebSocketManager {
 
     // Setup error handling
     this.io.on('error', (error) => {
-      console.error('WebSocket error:', error);
+      this.error('WebSocket error:', error);
       this.systemMonitor.recordError('websocket', error);
     });
   }
@@ -190,17 +205,17 @@ export class WebSocketManager {
 
   // Helper methods
   private updateConnectionState(socketId: string, status: ConnectionState['status']): void {
-    console.log(`[WebSocket] Updating connection state for ${socketId} to ${status}`);
+    this.log(`Updating connection state for ${socketId} to ${status}`);
     const state = this.connectionStates.get(socketId);
     if (state) {
-      console.log(`[WebSocket] Previous state for ${socketId}: ${JSON.stringify(state)}`);
+      this.log(`Previous state for ${socketId}: ${JSON.stringify(state)}`);
       this.connectionStates.set(socketId, {
         ...state,
         status
       });
-      console.log(`[WebSocket] Updated state for ${socketId}: ${JSON.stringify(this.connectionStates.get(socketId))}`);
+      this.log(`Updated state for ${socketId}: ${JSON.stringify(this.connectionStates.get(socketId))}`);
     } else {
-      console.log(`[WebSocket] No existing state found for ${socketId}`);
+      this.log(`No existing state found for ${socketId}`);
     }
   }
 

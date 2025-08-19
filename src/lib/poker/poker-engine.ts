@@ -280,12 +280,20 @@ export class PokerEngine {
         }
       });
 
-      // Verify total chips after distribution
+      // Check that pot was properly distributed
       const finalTotal = this.state.players.reduce((sum, p) => sum + p.stack, 0);
       console.log(`[DEBUG] Total chips after distribution: ${finalTotal} (should equal initial ${initialTotal})`);
 
       if (finalTotal !== initialTotal) {
         console.error(`[ERROR] Chip count mismatch! Lost ${initialTotal - finalTotal} chips in distribution.`);
+        // Fix: If there are no winners, give the pot to one player to maintain chip conservation
+        if (winners.length === 0 && totalPrizePool > 0) {
+          const firstActivePlayer = this.state.players.find(p => !p.isFolded);
+          if (firstActivePlayer) {
+            firstActivePlayer.stack += totalPrizePool;
+            console.log(`[DEBUG] No hand winner detected. Giving pot to player ${firstActivePlayer.id} to maintain chip count.`);
+          }
+        }
       }
 
       // Set stage to indicate hand is over

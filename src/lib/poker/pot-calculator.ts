@@ -12,45 +12,61 @@ export interface SidePot {
 
 export class PotCalculator {
   static calculateSidePots(players: PlayerPot[]): SidePot[] {
-    // First handle the simple case with no bets
-    const bettingPlayers = players.filter(p => p.currentBet > 0);
-    if (bettingPlayers.length === 0) return [];
+    // Calculate total pot from all bets
+    const totalPot = players.reduce((sum, p) => sum + p.currentBet, 0);
+    
+    // If no bets, return empty array
+    if (totalPot === 0) return [];
+    
+    // For fold case, create a single pot with all bets
+    const nonFoldedPlayers = players.filter(p => !p.isFolded);
+    if (nonFoldedPlayers.length === 1) {
+      return [{
+        amount: totalPot,
+        eligiblePlayers: nonFoldedPlayers.map(p => p.id)
+      }];
+    }
 
     // Get all unique bet amounts in ascending order
+    const bettingPlayers = players.filter(p => p.currentBet > 0);
     const bets = bettingPlayers.map(p => p.currentBet);
     const uniqueBets = Array.from(new Set(bets));
     uniqueBets.sort((a, b) => a - b);
 
-    // Handle case with single pot
+    // Handle case with single pot - all bets form a single pot
     if (uniqueBets.length === 1) {
-      const bet = uniqueBets[0];
       return [{
-        amount: bet * bettingPlayers.length,
-        eligiblePlayers: bettingPlayers.map(p => p.id)
+        amount: bettingPlayers.reduce((sum, p) => sum + p.currentBet, 0),
+        eligiblePlayers: bettingPlayers.filter(p => !p.isFolded).map(p => p.id)
       }];
     }
 
     // Calculate side pots
     const sidePots: SidePot[] = [];
-    let previousBet = 0;
+    let processedBets: number[] = new Array(players.length).fill(0);
     
     // Handle each bet level
     uniqueBets.forEach(currentBet => {
-      const eligiblePlayers = bettingPlayers
-        .filter(p => p.currentBet >= currentBet)
-        .map(p => p.id);
+      const playersAtLevel = bettingPlayers.filter(p => p.currentBet >= currentBet);
+      let potAmount = 0;
+      
+      // Calculate pot by taking amount between current and previous level for each player
+      players.forEach((p, i) => {
+        const contribution = Math.min(p.currentBet, currentBet) - processedBets[i];
+        if (contribution > 0) {
+          potAmount += contribution;
+          processedBets[i] += contribution;
+        }
+      });
+      
+      const eligiblePlayers = playersAtLevel.filter(p => !p.isFolded).map(p => p.id);
 
-      // Calculate pot amount
-      const amount = (currentBet - previousBet) * eligiblePlayers.length;
-
-      if (amount > 0) {
+      if (potAmount > 0) {
         sidePots.push({
-          amount,
+          amount: potAmount,
           eligiblePlayers
         });
       }
-
-      previousBet = currentBet;
     });
 
     return sidePots;
@@ -58,18 +74,45 @@ export class PotCalculator {
 
   static distributePots(
     sidePots: SidePot[], 
-    winners: { playerId: string; winAmount: number }[]
+    winners: { playerId: string; winAmount: number; strength?: number }[]
   ): void {
+    // Initialize winAmount for all winners
+    winners.forEach(winner => {
+      winner.winAmount = 0;
+    });
+
+    // Distribute each pot
     sidePots.forEach(pot => {
       const eligibleWinners = winners.filter(w => 
         pot.eligiblePlayers.includes(w.playerId)
       );
 
       if (eligibleWinners.length > 0) {
-        const winAmount = Math.floor(pot.amount / eligibleWinners.length);
-        eligibleWinners.forEach(winner => {
-          winner.winAmount += winAmount;
-        });
+        // If hand strengths are provided, only highest strength wins the pot
+        if (eligibleWinners.some(w => w.strength !== undefined)) {
+          const winningStrength = Math.max(...eligibleWinners.map(w => w.strength || 0));
+          const equalWinners = eligibleWinners.filter(w => w.strength === winningStrength);
+          
+          // Split pot evenly
+          const winAmount = Math.floor(pot.amount / equalWinners.length);
+          const remainder = pot.amount % equalWinners.length;
+          equalWinners.forEach((w, i) => {
+            const winner = winners.find(winner => winner.playerId === w.playerId);
+            if (winner) {
+              winner.winAmount += winAmount + (i < remainder ? 1 : 0);
+            }
+          });
+        } else {
+          // Without strengths, split pot evenly among eligible winners
+          const winAmount = Math.floor(pot.amount / eligibleWinners.length);
+          const remainder = pot.amount % eligibleWinners.length;
+          eligibleWinners.forEach((w, i) => {
+            const winner = winners.find(winner => winner.playerId === w.playerId);
+            if (winner) {
+              winner.winAmount += winAmount + (i < remainder ? 1 : 0);
+            }
+          });
+        }
       }
     });
   }

@@ -10,7 +10,7 @@ export class BettingManager {
   public placeBet(player: Player, amount: number): number {
     const actualBet = Math.min(amount, player.stack);
     player.stack -= actualBet;
-    player.currentBet = actualBet; // Set exactly rather than incrementing
+    player.currentBet += actualBet;
 
     if (player.stack === 0) {
       player.isAllIn = true;
@@ -43,7 +43,6 @@ export class BettingManager {
     minRaise: number
   ): { pot: number; currentBet: number; minRaise: number } {
     let potIncrease = 0;
-    const previousBet = player.currentBet;
 
     switch (action.type) {
       case 'fold':
@@ -52,17 +51,9 @@ export class BettingManager {
         break;
 
       case 'call':
-        const neededAmount = currentBet - player.currentBet;
-        if (neededAmount > 0) {
-          // Only deduct the difference needed to call
-          const actualBet = Math.min(neededAmount, player.stack);
-          player.stack -= actualBet;
-          player.currentBet += actualBet; // Add to existing bet
-          potIncrease = actualBet; // Only add the new amount
-          
-          if (player.stack === 0) {
-            player.isAllIn = true;
-          }
+        const callAmount = currentBet - player.currentBet;
+        if (callAmount > 0) {
+          potIncrease = this.placeBet(player, callAmount);
         }
         player.hasActed = true;
         break;
@@ -73,10 +64,9 @@ export class BettingManager {
         }
         const raiseAmount = action.amount - currentBet;
         if (raiseAmount < minRaise) {
-          throw new Error('Invalid raise amount');
+          throw new Error('Raise amount must be at least minimum raise');
         }
-        this.placeBet(player, action.amount); // Place total bet amount
-        potIncrease = action.amount - previousBet; // Only add the difference
+        potIncrease = this.placeBet(player, action.amount - player.currentBet);
         currentBet = action.amount;
         minRaise = raiseAmount;
         player.hasActed = true;

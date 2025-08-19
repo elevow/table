@@ -51,7 +51,7 @@ export class HandEvaluator {
     return { 
       hand: {
         rank: hand.rank,
-        description: hand.name,
+        description: hand.descr,
         cards: hand.cards
       },
       cards: winningCards 

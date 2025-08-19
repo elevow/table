@@ -1,6 +1,7 @@
 import { VersionedState } from '../types';
 import { StateChange } from '../../../types/state-sync';
 import * as crypto from 'crypto';
+import { StateManagerConfig } from '../types';
 
 /**
  * NOTE: This test uses a MockVersionManager class instead of directly testing the actual VersionManager.
@@ -11,13 +12,10 @@ import * as crypto from 'crypto';
  * This approach allows us to test the core version management functionality without the
  * complexity of the parent class dependencies.
  * 
- * The functions being tested:
- * - generateChecksum
- * - createVersion
- * - addToHistory
- * - getVersion
- * - getVersionRange
- * - compareVersions
+ * Suggestions for improvement:
+ * - Refactor the VersionManager to accept dependency injection
+ * - Extract the core logic into a separate class that doesn't depend on StateManager
+ * - Create proper interfaces for all dependencies
  */
 
 // Mock the crypto module

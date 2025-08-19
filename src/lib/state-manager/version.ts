@@ -1,62 +1,72 @@
-import { VersionedState, StateChange, StateVersioning } from './types';
+import { VersionedState, StateManagerConfig } from './types';
+import { StateChange } from '../../types/state-sync';
 import { StateManager } from './core';
-import * as crypto from 'crypto';
+import { 
+  IVersionHistoryManager, 
+  IChecksumProvider, 
+  ITimeProvider, 
+  IVersionCounter 
+} from './version-interfaces';
+import { 
+  VersionHistoryManager, 
+  DefaultChecksumProvider, 
+  DefaultTimeProvider, 
+  DefaultVersionCounter 
+} from './version-history';
 
+/**
+ * Refactored VersionManager that uses dependency injection
+ * and delegates core version management to VersionHistoryManager
+ */
 export class VersionManager extends StateManager {
-  private stateHistory: VersionedState<any>[];
-  private maxHistoryLength: number;
+  private versionHistoryManager: IVersionHistoryManager;
 
-  constructor(maxHistoryLength: number = 100) {
-    super();
-    this.stateHistory = [];
-    this.maxHistoryLength = maxHistoryLength;
+  constructor(
+    config: StateManagerConfig,
+    maxHistoryLength: number = 100,
+    checksumProvider: IChecksumProvider = new DefaultChecksumProvider(),
+    timeProvider: ITimeProvider = new DefaultTimeProvider(),
+    versionCounter: IVersionCounter = new DefaultVersionCounter(),
+    versionHistoryManager?: IVersionHistoryManager
+  ) {
+    super(config);
+
+    // Either use the provided version history manager or create a new one
+    this.versionHistoryManager = versionHistoryManager || 
+      new VersionHistoryManager(
+        maxHistoryLength,
+        checksumProvider,
+        timeProvider,
+        versionCounter
+      );
   }
 
-  protected generateChecksum(data: any): string {
-    const hash = crypto.createHash('sha256');
-    hash.update(JSON.stringify(data));
-    return hash.digest('hex');
+  /**
+   * Creates a new versioned state
+   */
+  public createVersion<T>(data: T, changes: StateChange[] = []): VersionedState<T> {
+    return this.versionHistoryManager.createVersion(data, changes);
   }
 
-  public createVersion<T>(data: T, changes: StateChange<any>[] = []): VersionedState<T> {
-    const version: VersionedState<T> = {
-      version: this.version++,
-      timestamp: Date.now(),
-      checksum: this.generateChecksum(data),
-      data,
-      changes,
-      lastSync: Date.now()
-    };
-
-    this.addToHistory(version);
-    return version;
+  /**
+   * Retrieves a specific version by version number
+   * This is separate from getVersion() in StateManager which returns the current version number
+   */
+  public getVersionState(version: number): VersionedState<any> | null {
+    return this.versionHistoryManager.getVersion(version);
   }
 
-  private addToHistory<T>(version: VersionedState<T>): void {
-    this.stateHistory.push(version);
-    if (this.stateHistory.length > this.maxHistoryLength) {
-      this.stateHistory.shift();
-    }
-  }
-
-  public getVersion(version: number): VersionedState<any> | null {
-    return this.stateHistory.find(v => v.version === version) || null;
-  }
-
+  /**
+   * Retrieves versions within a specified range
+   */
   public getVersionRange(fromVersion: number, toVersion: number): VersionedState<any>[] {
-    return this.stateHistory.filter(v => 
-      v.version >= fromVersion && v.version <= toVersion
-    );
+    return this.versionHistoryManager.getVersionRange(fromVersion, toVersion);
   }
 
-  public compareVersions(v1: number, v2: number): StateChange<any>[] {
-    const version1 = this.getVersion(v1);
-    const version2 = this.getVersion(v2);
-    
-    if (!version1 || !version2) {
-      throw new Error('Version not found');
-    }
-
-    return version2.changes;
+  /**
+   * Compares two versions and returns the changes between them
+   */
+  public compareVersions(v1: number, v2: number): StateChange[] {
+    return this.versionHistoryManager.compareVersions(v1, v2);
   }
 }

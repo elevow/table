@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline - Poker App</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background-color: #121212;
+      color: #f5f5f5;
+      text-align: center;
+      padding: 2rem 1rem;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+      color: #7cb342;
+    }
+    
+    p {
+      margin-bottom: 1.5rem;
+      line-height: 1.6;
+    }
+    
+    .icon {
+      font-size: 5rem;
+      margin-bottom: 2rem;
+    }
+    
+    .retry-button {
+      background-color: #7cb342;
+      color: white;
+      border: none;
+      padding: 0.8rem 1.5rem;
+      font-size: 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    
+    .retry-button:hover {
+      background-color: #689f38;
+    }
+    
+    .cached-content {
+      margin-top: 2rem;
+      border-top: 1px solid #333;
+      padding-top: 1.5rem;
+    }
+    
+    .cached-list {
+      list-style: none;
+      padding: 0;
+      margin: 1rem 0;
+      text-align: left;
+    }
+    
+    .cached-list li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #333;
+    }
+    
+    .cached-list a {
+      color: #bbdefb;
+      text-decoration: none;
+    }
+    
+    .cached-list a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">📶</div>
+    <h1>You're offline</h1>
+    <p>It looks like you've lost your internet connection. Don't worry, you can still access previously visited pages and use some features offline.</p>
+    <button class="retry-button" onclick="window.location.reload()">Try Again</button>
+    
+    <div class="cached-content">
+      <h2>Available Offline</h2>
+      <p>Here are some pages you can access while offline:</p>
+      <ul class="cached-list" id="cached-pages">
+        <li><a href="/">Home</a></li>
+        <!-- Additional cached pages will be added here dynamically -->
+      </ul>
+    </div>
+  </div>
+  
+  <script>
+    // Check if we're back online
+    window.addEventListener('online', () => {
+      window.location.reload();
+    });
+    
+    // Populate available cached pages
+    if ('caches' in window) {
+      caches.open('poker-app-runtime').then(cache => {
+        cache.keys().then(requests => {
+          const htmlRequests = requests.filter(request => {
+            return request.url.endsWith('.html') || 
+                   request.url.endsWith('/') ||
+                   !request.url.includes('.');
+          });
+          
+          const cachedList = document.getElementById('cached-pages');
+          
+          if (htmlRequests.length > 1) { // More than just the home page
+            htmlRequests.forEach(request => {
+              // Skip if it's the offline page
+              if (request.url.includes('offline.html')) {
+                return;
+              }
+              
+              // Format the URL for display
+              let displayUrl = request.url;
+              
+              // Remove protocol and domain
+              const urlObj = new URL(request.url);
+              displayUrl = urlObj.pathname;
+              
+              // Skip if already in the list
+              if (cachedList.innerHTML.includes(`href="${displayUrl}"`)) {
+                return;
+              }
+              
+              // Create a friendly name
+              let pageName = displayUrl.split('/').filter(Boolean).pop() || 'Home';
+              pageName = pageName.charAt(0).toUpperCase() + pageName.slice(1);
+              
+              // Replace dashes and underscores
+              pageName = pageName.replace(/[-_]/g, ' ');
+              
+              // Add to the list
+              const li = document.createElement('li');
+              li.innerHTML = `<a href="${displayUrl}">${pageName}</a>`;
+              cachedList.appendChild(li);
+            });
+          } else {
+            // If only home is available
+            cachedList.innerHTML = '<li><a href="/">Home</a></li><li>No other pages available offline</li>';
+          }
+        });
+      });
+    }
+  </script>
+</body>
+</html>

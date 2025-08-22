@@ -1,0 +1,1348 @@
+import { 
+  registerServiceWorker, 
+  isOffline, 
+  sendToServiceWorker,
+  getCacheStatus,
+  clearAllCaches,
+  unregisterServiceWorker
+} from '../service-worker-registration';
+
+// Mock types
+interface MockServiceWorkerRegistration {
+  addEventListener: jest.Mock;
+  installing: {
+    addEventListener: jest.Mock;
+  };
+  unregister: jest.Mock;
+}
+
+describe('Service Worker Registration', () => {
+  // Mock console methods
+  const originalConsoleLog = console.log;
+  const originalConsoleError = console.error;
+  
+  // Mock navigator properties and methods
+  let mockNavigatorOnline = true;
+  const mockServiceWorkerRegister = jest.fn();
+  const mockServiceWorkerGetRegistration = jest.fn();
+  const mockControllerPostMessage = jest.fn();
+  const mockServiceWorkerAddEventListener = jest.fn();
+  
+  // Mock registration object
+  const mockRegistrationAddEventListener = jest.fn();
+  const mockInstallingAddEventListener = jest.fn();
+  const mockUnregister = jest.fn();
+  
+  // Mock window properties and methods
+  const mockWindowAddEventListener = jest.fn();
+  const mockWindowLocationReload = jest.fn();
+  
+  // Mock caches object
+  const mockCachesKeys = jest.fn();
+  const mockCachesOpen = jest.fn();
+  const mockCachesDelete = jest.fn();
+  
+  // Store original globals
+  const originalNavigator = global.navigator;
+  const originalWindow = global.window;
+  const originalCaches = global.caches;
+  
+  let mockRegistration: MockServiceWorkerRegistration;
+  
+  beforeAll(() => {
+    // Mock console
+    console.log = jest.fn();
+    console.error = jest.fn();
+  });
+  
+  afterAll(() => {
+    // Restore console
+    console.log = originalConsoleLog;
+    console.error = originalConsoleError;
+    
+    // Restore globals (if they existed)
+    if (originalNavigator) {
+      Object.defineProperty(global, 'navigator', {
+        value: originalNavigator,
+        writable: true,
+        configurable: true
+      });
+    }
+    
+    if (originalWindow) {
+      Object.defineProperty(global, 'window', {
+        value: originalWindow,
+        writable: true,
+        configurable: true
+      });
+    }
+    
+    if (originalCaches) {
+      Object.defineProperty(global, 'caches', {
+        value: originalCaches,
+        writable: true,
+        configurable: true
+      });
+    }
+  });
+  
+  beforeEach(() => {
+    // Reset all mocks
+    jest.clearAllMocks();
+    
+    // Setup mock registration object
+    mockRegistration = {
+      addEventListener: mockRegistrationAddEventListener,
+      installing: {
+        addEventListener: mockInstallingAddEventListener
+      },
+      unregister: mockUnregister
+    };
+    
+    // Setup navigator mock
+    Object.defineProperty(global, 'navigator', {
+      value: {
+        get onLine() { return mockNavigatorOnline; },
+        serviceWorker: {
+          register: mockServiceWorkerRegister,
+          getRegistration: mockServiceWorkerGetRegistration,
+          controller: {
+            postMessage: mockControllerPostMessage
+          },
+          addEventListener: mockServiceWorkerAddEventListener
+        }
+      },
+      writable: true,
+      configurable: true
+    });
+    
+    // Setup window mock
+    Object.defineProperty(global, 'window', {
+      value: {
+        addEventListener: mockWindowAddEventListener,
+        location: {
+          reload: mockWindowLocationReload
+        }
+      },
+      writable: true,
+      configurable: true
+    });
+    
+    // Setup caches mock
+    Object.defineProperty(global, 'caches', {
+      value: {
+        keys: mockCachesKeys,
+        open: mockCachesOpen,
+        delete: mockCachesDelete
+      },
+      writable: true,
+      configurable: true
+    });
+    
+    // Default mock implementations
+    mockServiceWorkerRegister.mockResolvedValue(mockRegistration);
+    mockServiceWorkerGetRegistration.mockResolvedValue(mockRegistration);
+    mockUnregister.mockResolvedValue(true);
+  });
+  
+  describe('registerServiceWorker', () => {
+    it('should register service worker when supported', () => {
+      // Execute
+      registerServiceWorker();
+      
+      // Verify load event listener is set
+      expect(mockWindowAddEventListener).toHaveBeenCalledWith('load', expect.any(Function));
+      
+      // Simulate load event
+      const loadCallback = mockWindowAddEventListener.mock.calls[0][1];
+      loadCallback();
+      
+      // Verify service worker registration
+      expect(mockServiceWorkerRegister).toHaveBeenCalledWith('/service-worker.js');
+    });
+    
+    it('should handle registration success and setup update listeners', async () => {
+      // Execute
+      registerServiceWorker();
+      
+      // Simulate load event
+      const loadCallback = mockWindowAddEventListener.mock.calls[0][1];
+      loadCallback();
+      
+      // Wait for registration promise to resolve
+      await Promise.resolve();
+      
+      // Verify
+      expect(mockRegistrationAddEventListener).toHaveBeenCalledWith('updatefound', expect.any(Function));
+      expect(console.log).toHaveBeenCalledWith('SW registered: ', expect.any(Object));
+      
+      // Test the updatefound listener
+      const updateFoundListener = mockRegistrationAddEventListener.mock.calls[0][1];
+      updateFoundListener();
+      
+      // Verify installing state change listener
+      expect(mockInstallingAddEventListener).toHaveBeenCalledWith('statechange', expect.any(Function));
+    });
+    
+    it('should handle registration error', async () => {
+      // Setup
+      const error = new Error('Registration failed');
+      mockServiceWorkerRegister.mockRejectedValueOnce(error);
+      
+      // Execute
+      registerServiceWorker();
+      
+      // Simulate load event
+      const loadCallback = mockWindowAddEventListener.mock.calls[0][1];
+      loadCallback();
+      
+      // Wait for registration promise to reject
+      await Promise.resolve().catch(() => {});
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Service worker registration failed:', error);
+    });
+    
+    it('should set up message event listener', () => {
+      // Execute
+      registerServiceWorker();
+      
+      // Simulate load event
+      const loadCallback = mockWindowAddEventListener.mock.calls[0][1];
+      loadCallback();
+      
+      // Verify
+      expect(mockServiceWorkerAddEventListener).toHaveBeenCalledWith('message', expect.any(Function));
+    });
+    
+    it('should handle different message types', () => {
+      // Execute
+      registerServiceWorker();
+      
+      // Simulate load event
+      const loadCallback = mockWindowAddEventListener.mock.calls[0][1];
+      loadCallback();
+      
+      // Get message handler
+      const messageHandler = mockServiceWorkerAddEventListener.mock.calls[0][1];
+      
+      // Test CACHE_UPDATED message
+      messageHandler({ data: { type: 'CACHE_UPDATED', payload: 'test-cache' } });
+      expect(console.log).toHaveBeenCalledWith('Cache updated:', 'test-cache');
+      
+      // Test OFFLINE_READY message
+      messageHandler({ data: { type: 'OFFLINE_READY' } });
+      expect(console.log).toHaveBeenCalledWith('App is ready for offline use');
+      
+      // Test CACHE_ERROR message
+      messageHandler({ data: { type: 'CACHE_ERROR', payload: 'test-error' } });
+      expect(console.error).toHaveBeenCalledWith('Cache error:', 'test-error');
+      
+      // Test unknown message
+      messageHandler({ data: { type: 'UNKNOWN', payload: 'test' } });
+      // No additional console calls should be made
+      expect(console.log).toHaveBeenCalledTimes(2);
+      expect(console.error).toHaveBeenCalledTimes(1);
+    });
+    
+    it('should handle controllerchange event', () => {
+      // Execute
+      registerServiceWorker();
+      
+      // Simulate load event
+      const loadCallback = mockWindowAddEventListener.mock.calls[0][1];
+      loadCallback();
+      
+      // Get controllerchange handler (should be second event listener)
+      const controllerChangeHandler = mockServiceWorkerAddEventListener.mock.calls[1][1];
+      
+      // Simulate controllerchange event
+      controllerChangeHandler();
+      
+      // Verify page reload
+      expect(mockWindowLocationReload).toHaveBeenCalled();
+      
+      // Second call should not trigger another reload
+      controllerChangeHandler();
+      expect(mockWindowLocationReload).toHaveBeenCalledTimes(1);
+    });
+    
+    it('should do nothing when service worker is not supported', () => {
+      // Setup a browser that doesn't support service workers
+      delete (global.navigator as any).serviceWorker;
+      
+      // Execute
+      registerServiceWorker();
+      
+      // Verify no service worker registration was attempted
+      expect(mockWindowAddEventListener).not.toHaveBeenCalled();
+    });
+  });
+  
+  describe('isOffline', () => {
+    it('should return true when navigator.onLine is false', () => {
+      // Setup
+      mockNavigatorOnline = false;
+      
+      // Execute & Verify
+      expect(isOffline()).toBe(true);
+    });
+    
+    it('should return false when navigator.onLine is true', () => {
+      // Setup
+      mockNavigatorOnline = true;
+      
+      // Execute & Verify
+      expect(isOffline()).toBe(false);
+    });
+    
+    it('should handle when navigator is undefined', () => {
+      // Setup
+      delete (global as any).navigator;
+      
+      // Execute & Verify
+      expect(isOffline()).toBe(false);
+    });
+  });
+  
+  describe('sendToServiceWorker', () => {
+    it('should send message to service worker when available', () => {
+      // Setup
+      const message = { type: 'TEST_MESSAGE', payload: { test: true } };
+      
+      // Execute
+      sendToServiceWorker(message);
+      
+      // Verify
+      expect(mockControllerPostMessage).toHaveBeenCalledWith(message);
+    });
+    
+    it('should not send message when service worker controller is not available', () => {
+      // Setup
+      delete (global.navigator as any).serviceWorker.controller;
+      const message = { type: 'TEST_MESSAGE' };
+      
+      // Execute
+      sendToServiceWorker(message);
+      
+      // Verify
+      expect(mockControllerPostMessage).not.toHaveBeenCalled();
+    });
+    
+    it('should handle when navigator is undefined', () => {
+      // Setup
+      delete (global as any).navigator;
+      const message = { type: 'TEST_MESSAGE' };
+      
+      // Execute & Verify (should not throw)
+      expect(() => sendToServiceWorker(message)).not.toThrow();
+    });
+  });
+  
+  describe('getCacheStatus', () => {
+    it('should return cache details when available', async () => {
+      // Setup
+      const mockCache1 = {
+        keys: jest.fn().mockResolvedValue([
+          { url: 'https://example.com/1' },
+          { url: 'https://example.com/2' }
+        ])
+      };
+      
+      const mockCache2 = {
+        keys: jest.fn().mockResolvedValue([
+          { url: 'https://example.com/3' }
+        ])
+      };
+      
+      mockCachesKeys.mockResolvedValue(['cache1', 'cache2']);
+      mockCachesOpen
+        .mockResolvedValueOnce(mockCache1)
+        .mockResolvedValueOnce(mockCache2);
+      
+      // Execute
+      const result = await getCacheStatus();
+      
+      // Verify
+      expect(mockCachesKeys).toHaveBeenCalled();
+      expect(mockCachesOpen).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        available: true,
+        caches: [
+          {
+            name: 'cache1',
+            size: 2,
+            urls: ['https://example.com/1', 'https://example.com/2']
+          },
+          {
+            name: 'cache2',
+            size: 1,
+            urls: ['https://example.com/3']
+          }
+        ],
+        totalCached: 3
+      });
+    });
+    
+    it('should handle when caches is undefined', async () => {
+      // Setup
+      delete (global as any).caches;
+      
+      // Execute
+      const result = await getCacheStatus();
+      
+      // Verify
+      expect(result).toEqual({ available: false });
+    });
+    
+    it('should handle errors when accessing caches', async () => {
+      // Setup
+      const error = new Error('Cache access error');
+      mockCachesKeys.mockRejectedValue(error);
+      
+      // Execute
+      const result = await getCacheStatus();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Failed to get cache status:', error);
+      expect(result).toEqual({ available: false, error: error.message });
+    });
+  });
+  
+  describe('clearAllCaches', () => {
+    it('should clear all caches when available', async () => {
+      // Setup
+      mockCachesKeys.mockResolvedValue(['cache1', 'cache2']);
+      mockCachesDelete.mockResolvedValue(true);
+      
+      // Execute
+      const result = await clearAllCaches();
+      
+      // Verify
+      expect(mockCachesKeys).toHaveBeenCalled();
+      expect(mockCachesDelete).toHaveBeenCalledTimes(2);
+      expect(mockControllerPostMessage).toHaveBeenCalledWith({ 
+        type: 'CLEAR_ALL_CACHES' 
+      });
+      expect(result).toBe(true);
+    });
+    
+    it('should handle when caches is undefined', async () => {
+      // Setup
+      delete (global as any).caches;
+      
+      // Execute
+      const result = await clearAllCaches();
+      
+      // Verify
+      expect(result).toBe(false);
+    });
+    
+    it('should handle errors when clearing caches', async () => {
+      // Setup
+      const error = new Error('Cache clearing error');
+      mockCachesKeys.mockRejectedValue(error);
+      
+      // Execute
+      const result = await clearAllCaches();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Failed to clear caches:', error);
+      expect(result).toBe(false);
+    });
+  });
+  
+  describe('unregisterServiceWorker', () => {
+    it('should unregister service worker when registered', async () => {
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(mockServiceWorkerGetRegistration).toHaveBeenCalled();
+      expect(mockUnregister).toHaveBeenCalled();
+      expect(result).toBe(true);
+    });
+    
+    it('should handle when service worker is not registered', async () => {
+      // Setup
+      mockServiceWorkerGetRegistration.mockResolvedValue(null);
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(mockServiceWorkerGetRegistration).toHaveBeenCalled();
+      expect(mockUnregister).not.toHaveBeenCalled();
+      expect(result).toBe(false);
+    });
+    
+    it('should handle when navigator is undefined', async () => {
+      // Setup
+      delete (global as any).navigator;
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(result).toBe(false);
+    });
+    
+    it('should handle when service worker is not supported', async () => {
+      // Setup
+      delete (global.navigator as any).serviceWorker;
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(result).toBe(false);
+    });
+    
+    it('should handle errors during unregistration', async () => {
+      // Setup
+      const error = new Error('Unregister error');
+      mockServiceWorkerGetRegistration.mockRejectedValue(error);
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Failed to unregister service worker:', error);
+      expect(result).toBe(false);
+    });
+  });
+});
+  
+  describe('sendToServiceWorker', () => {
+    it('should send message to service worker when available', () => {
+      // Setup
+      const message = { type: 'TEST_MESSAGE', payload: { test: true } };
+      
+      // Execute
+      sendToServiceWorker(message);
+      
+      // Verify
+      expect(mockControllerPostMessage).toHaveBeenCalledWith(message);
+    });
+    
+    it('should not send message when service worker controller is not available', () => {
+      // Setup
+      delete (global.navigator as any).serviceWorker.controller;
+      const message = { type: 'TEST_MESSAGE' };
+      
+      // Execute
+      sendToServiceWorker(message);
+      
+      // Verify
+      expect(mockControllerPostMessage).not.toHaveBeenCalled();
+    });
+    
+    it('should handle when navigator is undefined', () => {
+      // Setup
+      delete (global as any).navigator;
+      const message = { type: 'TEST_MESSAGE' };
+      
+      // Execute & Verify (should not throw)
+      expect(() => sendToServiceWorker(message)).not.toThrow();
+    });
+  });
+  
+  describe('getCacheStatus', () => {
+    it('should return cache details when available', async () => {
+      // Setup
+      const mockCache1 = {
+        keys: jest.fn().mockResolvedValue([
+          { url: 'https://example.com/1' },
+          { url: 'https://example.com/2' }
+        ])
+      };
+      
+      const mockCache2 = {
+        keys: jest.fn().mockResolvedValue([
+          { url: 'https://example.com/3' }
+        ])
+      };
+      
+      mockCachesKeys.mockResolvedValue(['cache1', 'cache2']);
+      mockCachesOpen
+        .mockResolvedValueOnce(mockCache1)
+        .mockResolvedValueOnce(mockCache2);
+      
+      // Execute
+      const result = await getCacheStatus();
+      
+      // Verify
+      expect(mockCachesKeys).toHaveBeenCalled();
+      expect(mockCachesOpen).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        available: true,
+        caches: [
+          {
+            name: 'cache1',
+            size: 2,
+            urls: ['https://example.com/1', 'https://example.com/2']
+          },
+          {
+            name: 'cache2',
+            size: 1,
+            urls: ['https://example.com/3']
+          }
+        ],
+        totalCached: 3
+      });
+    });
+    
+    it('should handle when caches is undefined', async () => {
+      // Setup
+      delete (global as any).caches;
+      
+      // Execute
+      const result = await getCacheStatus();
+      
+      // Verify
+      expect(result).toEqual({ available: false });
+    });
+    
+    it('should handle errors when accessing caches', async () => {
+      // Setup
+      const error = new Error('Cache access error');
+      mockCachesKeys.mockRejectedValue(error);
+      
+      // Execute
+      const result = await getCacheStatus();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Failed to get cache status:', error);
+      expect(result).toEqual({ available: false, error: error.message });
+    });
+  });
+  
+  describe('clearAllCaches', () => {
+    it('should clear all caches when available', async () => {
+      // Setup
+      mockCachesKeys.mockResolvedValue(['cache1', 'cache2']);
+      mockCachesDelete.mockResolvedValue(true);
+      
+      // Execute
+      const result = await clearAllCaches();
+      
+      // Verify
+      expect(mockCachesKeys).toHaveBeenCalled();
+      expect(mockCachesDelete).toHaveBeenCalledTimes(2);
+      expect(mockControllerPostMessage).toHaveBeenCalledWith({ 
+        type: 'CLEAR_ALL_CACHES' 
+      });
+      expect(result).toBe(true);
+    });
+    
+    it('should handle when caches is undefined', async () => {
+      // Setup
+      delete (global as any).caches;
+      
+      // Execute
+      const result = await clearAllCaches();
+      
+      // Verify
+      expect(result).toBe(false);
+    });
+    
+    it('should handle errors when clearing caches', async () => {
+      // Setup
+      const error = new Error('Cache clearing error');
+      mockCachesKeys.mockRejectedValue(error);
+      
+      // Execute
+      const result = await clearAllCaches();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Failed to clear caches:', error);
+      expect(result).toBe(false);
+    });
+  });
+  
+  describe('unregisterServiceWorker', () => {
+    it('should unregister service worker when registered', async () => {
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(mockServiceWorkerGetRegistration).toHaveBeenCalled();
+      expect(mockUnregister).toHaveBeenCalled();
+      expect(result).toBe(true);
+    });
+    
+    it('should handle when service worker is not registered', async () => {
+      // Setup
+      mockServiceWorkerGetRegistration.mockResolvedValue(null);
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(mockServiceWorkerGetRegistration).toHaveBeenCalled();
+      expect(mockUnregister).not.toHaveBeenCalled();
+      expect(result).toBe(false);
+    });
+    
+    it('should handle when navigator is undefined', async () => {
+      // Setup
+      delete (global as any).navigator;
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(result).toBe(false);
+    });
+    
+    it('should handle when service worker is not supported', async () => {
+      // Setup
+      delete (global.navigator as any).serviceWorker;
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(result).toBe(false);
+    });
+    
+    it('should handle errors during unregistration', async () => {
+      // Setup
+      const error = new Error('Unregister error');
+      mockServiceWorkerGetRegistration.mockRejectedValue(error);
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Failed to unregister service worker:', error);
+      expect(result).toBe(false);
+    });
+  });
+});
+  
+  describe('isOffline', () => {
+    it('should return true when navigator.onLine is false', () => {
+      // Setup
+      mockNavigatorOnline = false;
+      
+      // Execute & Verify
+      expect(isOffline()).toBe(true);
+    });
+    
+    it('should return false when navigator.onLine is true', () => {
+      // Setup
+      mockNavigatorOnline = true;
+      
+      // Execute & Verify
+      expect(isOffline()).toBe(false);
+    });
+    
+    it('should handle when navigator is undefined', () => {
+      // Setup
+      delete (global as any).navigator;
+      
+      // Execute & Verify
+      expect(isOffline()).toBe(false);
+    });
+  });
+  
+  describe('sendToServiceWorker', () => {
+    it('should send message to service worker when available', () => {
+      // Setup
+      const message = { type: 'TEST_MESSAGE', payload: { test: true } };
+      
+      // Execute
+      sendToServiceWorker(message);
+      
+      // Verify
+      expect(mockControllerPostMessage).toHaveBeenCalledWith(message);
+    });
+    
+    it('should not send message when service worker controller is not available', () => {
+      // Setup
+      delete (global.navigator as any).serviceWorker.controller;
+      const message = { type: 'TEST_MESSAGE' };
+      
+      // Execute
+      sendToServiceWorker(message);
+      
+      // Verify
+      expect(mockControllerPostMessage).not.toHaveBeenCalled();
+    });
+    
+    it('should handle when navigator is undefined', () => {
+      // Setup
+      delete (global as any).navigator;
+      const message = { type: 'TEST_MESSAGE' };
+      
+      // Execute & Verify (should not throw)
+      expect(() => sendToServiceWorker(message)).not.toThrow();
+    });
+  });
+  
+  describe('getCacheStatus', () => {
+    it('should return cache details when available', async () => {
+      // Setup
+      const mockCache1 = {
+        keys: jest.fn().mockResolvedValue([
+          { url: 'https://example.com/1' },
+          { url: 'https://example.com/2' }
+        ])
+      };
+      
+      const mockCache2 = {
+        keys: jest.fn().mockResolvedValue([
+          { url: 'https://example.com/3' }
+        ])
+      };
+      
+      mockCachesKeys.mockResolvedValue(['cache1', 'cache2']);
+      mockCachesOpen
+        .mockResolvedValueOnce(mockCache1)
+        .mockResolvedValueOnce(mockCache2);
+      
+      // Execute
+      const result = await getCacheStatus();
+      
+      // Verify
+      expect(mockCachesKeys).toHaveBeenCalled();
+      expect(mockCachesOpen).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        available: true,
+        caches: [
+          {
+            name: 'cache1',
+            size: 2,
+            urls: ['https://example.com/1', 'https://example.com/2']
+          },
+          {
+            name: 'cache2',
+            size: 1,
+            urls: ['https://example.com/3']
+          }
+        ],
+        totalCached: 3
+      });
+    });
+    
+    it('should handle when caches is undefined', async () => {
+      // Setup
+      delete (global as any).caches;
+      
+      // Execute
+      const result = await getCacheStatus();
+      
+      // Verify
+      expect(result).toEqual({ available: false });
+    });
+    
+    it('should handle errors when accessing caches', async () => {
+      // Setup
+      const error = new Error('Cache access error');
+      mockCachesKeys.mockRejectedValue(error);
+      
+      // Execute
+      const result = await getCacheStatus();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Failed to get cache status:', error);
+      expect(result).toEqual({ available: false, error: error.message });
+    });
+  });
+  
+  describe('clearAllCaches', () => {
+    it('should clear all caches when available', async () => {
+      // Setup
+      mockCachesKeys.mockResolvedValue(['cache1', 'cache2']);
+      mockCachesDelete.mockResolvedValue(true);
+      
+      // Execute
+      const result = await clearAllCaches();
+      
+      // Verify
+      expect(mockCachesKeys).toHaveBeenCalled();
+      expect(mockCachesDelete).toHaveBeenCalledTimes(2);
+      expect(mockControllerPostMessage).toHaveBeenCalledWith({ 
+        type: 'CLEAR_ALL_CACHES' 
+      });
+      expect(result).toBe(true);
+    });
+    
+    it('should handle when caches is undefined', async () => {
+      // Setup
+      delete (global as any).caches;
+      
+      // Execute
+      const result = await clearAllCaches();
+      
+      // Verify
+      expect(result).toBe(false);
+    });
+    
+    it('should handle errors when clearing caches', async () => {
+      // Setup
+      const error = new Error('Cache clearing error');
+      mockCachesKeys.mockRejectedValue(error);
+      
+      // Execute
+      const result = await clearAllCaches();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Failed to clear caches:', error);
+      expect(result).toBe(false);
+    });
+  });
+  
+  describe('unregisterServiceWorker', () => {
+    it('should unregister service worker when registered', async () => {
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(mockServiceWorkerGetRegistration).toHaveBeenCalled();
+      expect(mockUnregister).toHaveBeenCalled();
+      expect(result).toBe(true);
+    });
+    
+    it('should handle when service worker is not registered', async () => {
+      // Setup
+      mockServiceWorkerGetRegistration.mockResolvedValue(null);
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(mockServiceWorkerGetRegistration).toHaveBeenCalled();
+      expect(mockUnregister).not.toHaveBeenCalled();
+      expect(result).toBe(false);
+    });
+    
+    it('should handle when navigator is undefined', async () => {
+      // Setup
+      delete (global as any).navigator;
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(result).toBe(false);
+    });
+    
+    it('should handle when service worker is not supported', async () => {
+      // Setup
+      delete (global.navigator as any).serviceWorker;
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(result).toBe(false);
+    });
+    
+    it('should handle errors during unregistration', async () => {
+      // Setup
+      const error = new Error('Unregister error');
+      mockServiceWorkerGetRegistration.mockRejectedValue(error);
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Failed to unregister service worker:', error);
+      expect(result).toBe(false);
+    });
+  });
+});
+
+describe('Service Worker Registration', () => {
+  beforeAll(() => {
+    // Store original globals
+    originalWindow = global.window;
+    originalNavigator = global.navigator;
+    originalCaches = global.caches;
+    originalConsole = global.console;
+    
+    // Mock console methods
+    global.console = {
+      ...console,
+      log: jest.fn(),
+      error: jest.fn()
+    };
+  });
+
+  afterAll(() => {
+    // Restore original globals
+    global.window = originalWindow;
+    global.navigator = originalNavigator;
+    global.caches = originalCaches;
+    global.console = originalConsole;
+  });
+
+  beforeEach(() => {
+    // Reset all mocks before each test
+    jest.clearAllMocks();
+
+    // Setup mocks for each test
+    (global as any).window = mockWindow;
+    (global as any).navigator = mockNavigator;
+    (global as any).caches = mockCaches;
+  });
+
+  describe('registerServiceWorker', () => {
+    it('should register service worker when supported', () => {
+      // Setup
+      mockNavigator.serviceWorker.register.mockResolvedValueOnce(mockRegistration);
+      
+      // Execute
+      registerServiceWorker();
+      
+      // Simulate load event
+      const loadCallback = mockWindow.addEventListener.mock.calls[0][1];
+      loadCallback();
+      
+      // Verify
+      expect(mockWindow.addEventListener).toHaveBeenCalledWith('load', expect.any(Function));
+      expect(mockNavigator.serviceWorker.register).toHaveBeenCalledWith('/service-worker.js');
+    });
+
+    it('should handle registration success and setup update listeners', async () => {
+      // Setup
+      mockNavigator.serviceWorker.register.mockResolvedValueOnce(mockRegistration);
+      
+      // Execute
+      registerServiceWorker();
+      
+      // Simulate load event
+      const loadCallback = mockWindow.addEventListener.mock.calls[0][1];
+      await loadCallback();
+      
+      // Verify
+      expect(mockRegistration.addEventListener).toHaveBeenCalledWith('updatefound', expect.any(Function));
+      expect(console.log).toHaveBeenCalledWith('SW registered: ', mockRegistration);
+    });
+
+    it('should handle registration error', async () => {
+      // Setup
+      const error = new Error('Registration failed');
+      mockNavigator.serviceWorker.register.mockRejectedValueOnce(error);
+      
+      // Execute
+      registerServiceWorker();
+      
+      // Simulate load event
+      const loadCallback = mockWindow.addEventListener.mock.calls[0][1];
+      await loadCallback();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Service worker registration failed:', error);
+    });
+
+    it('should set up message event listener', () => {
+      // Execute
+      registerServiceWorker();
+      
+      // Simulate load event
+      const loadCallback = mockWindow.addEventListener.mock.calls[0][1];
+      loadCallback();
+      
+      // Verify
+      expect(mockNavigator.serviceWorker.addEventListener).toHaveBeenCalledWith('message', expect.any(Function));
+    });
+
+    it('should handle different message types', () => {
+      // Execute
+      registerServiceWorker();
+      
+      // Simulate load event
+      const loadCallback = mockWindow.addEventListener.mock.calls[0][1];
+      loadCallback();
+      
+      // Get message handler
+      const messageHandler = mockNavigator.serviceWorker.addEventListener.mock.calls[0][1];
+      
+      // Test CACHE_UPDATED message
+      messageHandler({ data: { type: 'CACHE_UPDATED', payload: 'test-cache' } });
+      expect(console.log).toHaveBeenCalledWith('Cache updated:', 'test-cache');
+      
+      // Test OFFLINE_READY message
+      messageHandler({ data: { type: 'OFFLINE_READY' } });
+      expect(console.log).toHaveBeenCalledWith('App is ready for offline use');
+      
+      // Test CACHE_ERROR message
+      messageHandler({ data: { type: 'CACHE_ERROR', payload: 'test-error' } });
+      expect(console.error).toHaveBeenCalledWith('Cache error:', 'test-error');
+      
+      // Test unknown message
+      messageHandler({ data: { type: 'UNKNOWN', payload: 'test' } });
+      // No additional console calls should be made
+      expect(console.log).toHaveBeenCalledTimes(2);
+      expect(console.error).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle controllerchange event', () => {
+      // Execute
+      registerServiceWorker();
+      
+      // Get controllerchange handler
+      const controllerChangeHandler = mockNavigator.serviceWorker.addEventListener.mock.calls[1][1];
+      
+      // Simulate controllerchange event
+      controllerChangeHandler();
+      
+      // Verify page reload
+      expect(mockWindow.location.reload).toHaveBeenCalled();
+      
+      // Second call should not trigger another reload
+      controllerChangeHandler();
+      expect(mockWindow.location.reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('should do nothing when service worker is not supported', () => {
+      // Setup a browser that doesn't support service workers
+      (global.navigator as any) = { serviceWorker: undefined };
+      
+      // Execute
+      registerServiceWorker();
+      
+      // Verify no service worker registration was attempted
+      expect(mockWindow.addEventListener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isOffline', () => {
+    it('should return true when navigator.onLine is false', () => {
+      // Setup
+      (global.navigator as any).onLine = false;
+      
+      // Execute & Verify
+      expect(isOffline()).toBe(true);
+    });
+
+    it('should return false when navigator.onLine is true', () => {
+      // Setup
+      (global.navigator as any).onLine = true;
+      
+      // Execute & Verify
+      expect(isOffline()).toBe(false);
+    });
+
+    it('should handle when navigator is undefined', () => {
+      // Setup
+      (global as any).navigator = undefined;
+      
+      // Execute & Verify
+      expect(isOffline()).toBe(false);
+    });
+  });
+
+  describe('sendToServiceWorker', () => {
+    it('should send message to service worker when available', () => {
+      // Setup
+      const message = { type: 'TEST_MESSAGE', payload: { test: true } };
+      
+      // Execute
+      sendToServiceWorker(message);
+      
+      // Verify
+      expect(mockNavigator.serviceWorker.controller.postMessage).toHaveBeenCalledWith(message);
+    });
+
+    it('should not send message when service worker controller is not available', () => {
+      // Setup
+      (mockNavigator.serviceWorker as any).controller = null;
+      const message = { type: 'TEST_MESSAGE' };
+      
+      // Execute
+      sendToServiceWorker(message);
+      
+      // Verify
+      expect(mockNavigator.serviceWorker.controller?.postMessage).not.toHaveBeenCalled();
+    });
+
+    it('should handle when navigator is undefined', () => {
+      // Setup
+      (global as any).navigator = undefined;
+      const message = { type: 'TEST_MESSAGE' };
+      
+      // Execute & Verify (should not throw)
+      expect(() => sendToServiceWorker(message)).not.toThrow();
+    });
+  });
+
+  describe('getCacheStatus', () => {
+    it('should return cache details when available', async () => {
+      // Setup
+      const mockCache1 = {
+        keys: jest.fn().mockResolvedValue([
+          { url: 'https://example.com/1' },
+          { url: 'https://example.com/2' }
+        ])
+      };
+      
+      const mockCache2 = {
+        keys: jest.fn().mockResolvedValue([
+          { url: 'https://example.com/3' }
+        ])
+      };
+      
+      mockCaches.keys.mockResolvedValue(['cache1', 'cache2']);
+      mockCaches.open
+        .mockResolvedValueOnce(mockCache1)
+        .mockResolvedValueOnce(mockCache2);
+      
+      // Execute
+      const result = await getCacheStatus();
+      
+      // Verify
+      expect(mockCaches.keys).toHaveBeenCalled();
+      expect(mockCaches.open).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        available: true,
+        caches: [
+          {
+            name: 'cache1',
+            size: 2,
+            urls: ['https://example.com/1', 'https://example.com/2']
+          },
+          {
+            name: 'cache2',
+            size: 1,
+            urls: ['https://example.com/3']
+          }
+        ],
+        totalCached: 3
+      });
+    });
+
+    it('should handle when caches is undefined', async () => {
+      // Setup
+      (global as any).caches = undefined;
+      
+      // Execute
+      const result = await getCacheStatus();
+      
+      // Verify
+      expect(result).toEqual({ available: false });
+    });
+
+    it('should handle errors when accessing caches', async () => {
+      // Setup
+      const error = new Error('Cache access error');
+      mockCaches.keys.mockRejectedValue(error);
+      
+      // Execute
+      const result = await getCacheStatus();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Failed to get cache status:', error);
+      expect(result).toEqual({ available: false, error: error.message });
+    });
+  });
+
+  describe('clearAllCaches', () => {
+    it('should clear all caches when available', async () => {
+      // Setup
+      mockCaches.keys.mockResolvedValue(['cache1', 'cache2']);
+      mockCaches.delete.mockResolvedValue(true);
+      
+      // Execute
+      const result = await clearAllCaches();
+      
+      // Verify
+      expect(mockCaches.keys).toHaveBeenCalled();
+      expect(mockCaches.delete).toHaveBeenCalledTimes(2);
+      expect(mockNavigator.serviceWorker.controller.postMessage).toHaveBeenCalledWith({ 
+        type: 'CLEAR_ALL_CACHES' 
+      });
+      expect(result).toBe(true);
+    });
+
+    it('should handle when caches is undefined', async () => {
+      // Setup
+      (global as any).caches = undefined;
+      
+      // Execute
+      const result = await clearAllCaches();
+      
+      // Verify
+      expect(result).toBe(false);
+    });
+
+    it('should handle errors when clearing caches', async () => {
+      // Setup
+      const error = new Error('Cache clearing error');
+      mockCaches.keys.mockRejectedValue(error);
+      
+      // Execute
+      const result = await clearAllCaches();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Failed to clear caches:', error);
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('unregisterServiceWorker', () => {
+    it('should unregister service worker when registered', async () => {
+      // Setup
+      mockNavigator.serviceWorker.getRegistration.mockResolvedValue(mockRegistration);
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(mockNavigator.serviceWorker.getRegistration).toHaveBeenCalled();
+      expect(mockRegistration.unregister).toHaveBeenCalled();
+      expect(result).toBe(true);
+    });
+
+    it('should handle when service worker is not registered', async () => {
+      // Setup
+      mockNavigator.serviceWorker.getRegistration.mockResolvedValue(null);
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(mockNavigator.serviceWorker.getRegistration).toHaveBeenCalled();
+      expect(mockRegistration.unregister).not.toHaveBeenCalled();
+      expect(result).toBe(false);
+    });
+
+    it('should handle when navigator is undefined', async () => {
+      // Setup
+      (global as any).navigator = undefined;
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(result).toBe(false);
+    });
+
+    it('should handle when service worker is not supported', async () => {
+      // Setup
+      (global.navigator as any) = { serviceWorker: undefined };
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(result).toBe(false);
+    });
+
+    it('should handle errors during unregistration', async () => {
+      // Setup
+      const error = new Error('Unregister error');
+      mockNavigator.serviceWorker.getRegistration.mockRejectedValue(error);
+      
+      // Execute
+      const result = await unregisterServiceWorker();
+      
+      // Verify
+      expect(console.error).toHaveBeenCalledWith('Failed to unregister service worker:', error);
+      expect(result).toBe(false);
+    });
+  });
+});

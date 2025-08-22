@@ -2,12 +2,14 @@
  * Utility for game-related route information
  * This is dynamically imported to reduce initial bundle size
  */
+import { getCacheManager } from './cache-manager';
 
 interface GameRoute {
   id: string;
   path: string;
   components: string[];
   priority: 'high' | 'medium' | 'low';
+  offlineSupport?: boolean;
 }
 
 export const gameRoutes: GameRoute[] = [
@@ -15,19 +17,22 @@ export const gameRoutes: GameRoute[] = [
     id: 'poker-texas-holdem',
     path: '/game/poker-texas-holdem',
     components: ['GameBoard', 'PlayerStats', 'ChatPanel'],
-    priority: 'high'
+    priority: 'high',
+    offlineSupport: true
   },
   { 
     id: 'poker-omaha',
     path: '/game/poker-omaha',
     components: ['GameBoard', 'PlayerStats', 'ChatPanel'],
-    priority: 'medium'
+    priority: 'medium',
+    offlineSupport: true
   },
   {
     id: 'tournament',
     path: '/game/tournament',
     components: ['GameBoard', 'PlayerStats', 'ChatPanel', 'TournamentBracket'],
-    priority: 'medium'
+    priority: 'medium',
+    offlineSupport: false
   }
 ];
 
@@ -84,4 +89,61 @@ export const prefetchGameComponents = async (gameType: string): Promise<void> =>
     // await import('../components/TournamentBracket')
     console.log('Prefetched TournamentBracket');
   }
+};
+
+/**
+ * Cache game data for offline support
+ */
+export const cacheGameData = async (gameType: string): Promise<boolean> => {
+  const route = gameRoutes.find(r => r.id === gameType);
+  if (!route || !route.offlineSupport) {
+    console.log(`Caching not available for ${gameType}`);
+    return false;
+  }
+  
+  try {
+    const cacheManager = getCacheManager();
+    
+    // Cache static game assets
+    const gameAssets = [
+      `/assets/games/${gameType}/board.svg`,
+      `/assets/games/${gameType}/cards.svg`,
+      `/assets/games/${gameType}/chips.svg`,
+      `/assets/games/${gameType}/config.json`
+    ];
+    
+    // Cache API responses for game rules
+    const gameRulesUrl = `/api/games/${gameType}/rules`;
+    const gameRules = await fetch(gameRulesUrl).then(res => res.json());
+    await cacheManager.set('gameData', `${gameType}-rules`, gameRules, {
+      ttl: 86400, // 24 hours
+      tags: ['gameRules', gameType]
+    });
+    
+    // Notify service worker to cache game assets
+    if (typeof navigator !== 'undefined' && 
+        'serviceWorker' in navigator && 
+        navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'CACHE_GAME_ASSETS',
+        payload: {
+          gameType,
+          urls: gameAssets
+        }
+      });
+    }
+    
+    console.log(`Cached game data for ${gameType}`);
+    return true;
+  } catch (error) {
+    console.error(`Failed to cache game data for ${gameType}:`, error);
+    return false;
+  }
+};
+
+/**
+ * Get offline-supported game routes
+ */
+export const getOfflineSupportedRoutes = (): GameRoute[] => {
+  return gameRoutes.filter(route => route.offlineSupport);
 };

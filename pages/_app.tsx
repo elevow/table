@@ -7,11 +7,34 @@ import Script from 'next/script';
 
 // Code splitting and optimization imports
 import { dynamicImport } from '../src/utils/code-splitting';
+// Service worker registration
+import { registerServiceWorker, isOffline } from '../src/utils/service-worker-registration';
 
 function MyApp({ Component, pageProps }: AppProps) {
   const router = useRouter();
   const [isRouteChanging, setIsRouteChanging] = useState(false);
   const [loadingKey, setLoadingKey] = useState(0);
+  const [offline, setOffline] = useState(false);
+  
+  useEffect(() => {
+    // Register service worker for caching and offline support
+    registerServiceWorker();
+    
+    // Initialize offline status
+    setOffline(isOffline());
+    
+    // Listen for online/offline events
+    const handleOnline = () => setOffline(false);
+    const handleOffline = () => setOffline(true);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
   
   useEffect(() => {
     // Setup route change handlers for loading indicators
@@ -37,6 +60,7 @@ function MyApp({ Component, pageProps }: AppProps) {
       if (router.pathname !== '/game/[id]') {
         // Dynamically load the game route metadata
         try {
+          // Note: If game-routes.ts doesn't exist, this will need to be created or modified
           await dynamicImport(() => import('../src/utils/game-routes'));
           console.log('Prefetched game route metadata');
         } catch (error) {
@@ -81,6 +105,13 @@ function MyApp({ Component, pageProps }: AppProps) {
         strategy="lazyOnload"
         onLoad={() => console.log('Analytics script loaded')}
       />
+      
+      {/* Offline indicator */}
+      {offline && (
+        <div className="offline-indicator">
+          You are currently offline. Some features may be limited.
+        </div>
+      )}
       
       {/* Loading indicator for route changes */}
       {isRouteChanging && (

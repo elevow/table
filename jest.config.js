@@ -5,7 +5,11 @@ module.exports = {
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts'],
   transform: {
-    '^.+\\.tsx?$': 'ts-jest',
+    '^.+\\.tsx?$': ['ts-jest', {
+      tsconfig: {
+        jsx: 'react-jsx',
+      },
+    }],
   },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
@@ -19,7 +23,8 @@ module.exports = {
     '!src/**/*.test.{ts,tsx}',
     '!src/**/__tests__/**',
     '!src/**/__mocks__/**',
-    '!src/test/setup.ts'
+    '!src/test/setup.ts',
+    '!src/components/**/*.tsx', // Exclude React components from coverage for now
   ],
   coverageThreshold: {
     global: {

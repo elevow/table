@@ -25,6 +25,7 @@ module.exports = {
     '!src/**/__mocks__/**',
     '!src/test/setup.ts',
     '!src/components/**/*.tsx', // Exclude React components from coverage for now
+    '!src/examples/**', // Exclude example files from coverage
   ],
   coverageThreshold: {
     global: {

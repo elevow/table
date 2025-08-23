@@ -53,6 +53,11 @@ export class MockDatabaseClient implements DatabaseClient {
     // Simple mock implementation
     console.log('Mock Query:', text, params);
     
+    // Simulate error for invalid SQL
+    if (text.toUpperCase().includes('INVALID')) {
+      throw new Error('Mock database error: Invalid SQL syntax');
+    }
+    
     // Return empty result for now
     return { rows: [], rowCount: 0 };
   }

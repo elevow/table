@@ -54,6 +54,26 @@ export class PlayerProfileManager {
       // Validate input
       this.validatePlayerCreation(request);
       
+      // Check for existing username
+      const usernameCheck = await client.query(
+        'SELECT id FROM players WHERE username = $1',
+        [request.username]
+      );
+      
+      if (usernameCheck.rows.length > 0) {
+        throw new PlayerProfileError('Username already exists', 'USERNAME_EXISTS');
+      }
+      
+      // Check for existing email
+      const emailCheck = await client.query(
+        'SELECT id FROM players WHERE email = $1',
+        [request.email]
+      );
+      
+      if (emailCheck.rows.length > 0) {
+        throw new PlayerProfileError('Email already exists', 'EMAIL_EXISTS');
+      }
+      
       // Hash password
       const passwordHash = await bcrypt.hash(request.password, 12);
       
@@ -216,7 +236,7 @@ export class PlayerProfileManager {
       const result = await client.query(query, values);
       
       if (result.rows.length === 0) {
-        throw new PlayerProfileError('Player not found or inactive');
+        throw new PlayerProfileError('Player not found', 'PLAYER_NOT_FOUND');
       }
       
       return this.mapDatabasePlayerToPlayer(result.rows[0]);
@@ -262,9 +282,9 @@ export class PlayerProfileManager {
         ]
       );
       
-      const bankrollResult = result.rows[0].result;
+      const bankrollResult = result.rows?.[0]?.result;
       
-      if (!bankrollResult.success) {
+      if (!bankrollResult || !bankrollResult.success) {
         throw new PlayerProfileError('Bankroll update failed', 'BANKROLL_UPDATE_FAILED');
       }
       
@@ -411,7 +431,7 @@ export class PlayerProfileManager {
       // Count total
       const countQuery = `SELECT COUNT(*) as total FROM players WHERE ${whereClause}`;
       const countResult = await client.query(countQuery, values);
-      const total = parseInt(countResult.rows[0].total);
+      const total = parseInt(countResult?.rows?.[0]?.total || '0');
       
       // Get paginated results
       const orderBy = pagination.sortBy || 'created_at';
@@ -427,8 +447,7 @@ export class PlayerProfileManager {
       
       values.push(pagination.limit, offset);
       const dataResult = await client.query(dataQuery, values);
-      
-      const players = dataResult.rows.map(row => this.mapDatabasePlayerToPlayer(row));
+      const players = dataResult?.rows?.map(row => this.mapDatabasePlayerToPlayer(row)) || [];
       
       return {
         players,
@@ -618,13 +637,10 @@ export class PlayerProfileManager {
   }
 
   private handlePlayerError(error: any, code: string): PlayerProfileError {
-    const playerError = new PlayerProfileError(
-      error.message || 'Player operation failed'
-    ) as PlayerProfileError;
+    const errorMessage = error?.message || 'Player operation failed';
+    const playerError = new PlayerProfileError(errorMessage, code);
     
-    playerError.code = code;
-    
-    if (error.code === '23505') { // Unique constraint violation
+    if (error?.code === '23505') { // Unique constraint violation
       if (error.detail?.includes('username')) {
         playerError.message = 'Username already exists';
         playerError.code = 'USERNAME_EXISTS';

@@ -349,9 +349,23 @@ export class DatabasePerformanceMonitor {
   private async updateConnectionMetrics(): Promise<void> {
     // In a real implementation, this would query the database for connection stats
     // For now, we'll simulate metrics based on current activity
+    try {
+      // US-043: If pool exposes stats, use them
+      const stats = this.dbPool.getStats?.();
+      if (stats) {
+        this.metrics.connections.total = stats.total;
+        this.metrics.connections.idle = stats.idle;
+        this.metrics.connections.maxCapacity = stats.max;
+        const active = Math.max(0, stats.total - stats.idle);
+        this.metrics.connections.active = active;
+        this.metrics.connections.utilization = (active / Math.max(1, stats.max)) * 100;
+        return;
+      }
+    } catch {}
+
+    // Fallback simulated metrics
     this.metrics.connections.total = this.metrics.connections.active + this.metrics.connections.idle;
-    this.metrics.connections.utilization = 
-      (this.metrics.connections.active / this.metrics.connections.maxCapacity) * 100;
+    this.metrics.connections.utilization = (this.metrics.connections.active / this.metrics.connections.maxCapacity) * 100;
   }
 
   private updateQueryMetrics(): void {

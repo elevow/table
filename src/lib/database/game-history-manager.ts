@@ -169,27 +169,30 @@ export class GameHistoryManager {
     const client = await this.pool.connect();
     
     try {
+      // US-043: Use JSONB containment operators to leverage GIN indexes
       const query = `
         SELECT gh.* FROM game_history gh
-        WHERE gh.action_sequence::text LIKE $1
-        OR gh.results::text LIKE $1
+        WHERE gh.action_sequence @> $1::jsonb
+           OR gh.results @> $2::jsonb
         ORDER BY gh.started_at DESC
-        LIMIT $2 OFFSET $3
+        LIMIT $3 OFFSET $4
       `;
       
       const countQuery = `
         SELECT COUNT(*) FROM game_history gh
-        WHERE gh.action_sequence::text LIKE $1
-        OR gh.results::text LIKE $1
+        WHERE gh.action_sequence @> $1::jsonb
+           OR gh.results @> $2::jsonb
       `;
       
-      const playerPattern = `%"playerId":"${playerId}"%`;
+      // Match any element in action_sequence with the given playerId, and results winners containing that playerId
+      const actionProbe = JSON.stringify([{ playerId }]);
+      const resultsProbe = JSON.stringify({ winners: [{ playerId }] });
       const limit = options.limit || 50;
       const offset = options.offset || 0;
       
       const [countResult, result] = await Promise.all([
-        client.query(countQuery, [playerPattern]),
-        client.query(query, [playerPattern, limit, offset])
+        client.query(countQuery, [actionProbe, resultsProbe]),
+        client.query(query, [actionProbe, resultsProbe, limit, offset])
       ]);
       
       const total = parseInt(countResult.rows[0].count, 10);

@@ -299,10 +299,8 @@ export class DataAccessOptimizer {
 
   private async getCachedResult<T>(queryId: string): Promise<{ rows: T[] } | null> {
     try {
-      const cached = await this.cacheManager.get('queries', queryId);
-      if (cached) {
-        return JSON.parse(cached);
-      }
+  const cached = await this.cacheManager.get<{ rows: T[] }>('queries', queryId);
+  if (cached) return cached;
       return null;
     } catch {
       return null;
@@ -320,7 +318,7 @@ export class DataAccessOptimizer {
   private async cacheResult(queryId: string, rows: any[], ttl?: number): Promise<void> {
     const cacheTtl = ttl || this.config.cache.ttl;
     try {
-      await this.cacheManager.set('queries', queryId, JSON.stringify({ rows }), cacheTtl);
+  await this.cacheManager.set('queries', queryId, { rows }, { ttl: cacheTtl, tags: ['db', 'query'] });
     } catch {
       // Silently fail if cache is unavailable
     }

@@ -434,7 +434,7 @@ export class EfficientDataRetrievalService {
     const recommendations = await this.getOptimizationRecommendations();
     
     // Log recommendations for manual review
-    console.log('Optimization recommendations generated:', {
+    // console.log('Optimization recommendations generated:', {
       dataAccess: recommendations.dataAccess.suggestions.length,
       database: recommendations.database.indexRecommendations.length,
       strategy: Object.keys(recommendations.strategy).length

@@ -90,7 +90,7 @@ type MockPerformanceObserverConstructor = {
   
   beforeEach(() => {
     jest.resetAllMocks();
-    console.log = jest.fn();
+    // console.log = jest.fn();
     console.error = jest.fn();
     jest.useFakeTimers();
     
@@ -100,7 +100,7 @@ type MockPerformanceObserverConstructor = {
   });
   
   afterEach(() => {
-    console.log = originalConsole.log;
+    // console.log = original// console.log;
     console.error = originalConsole.error;
     jest.useRealTimers();
   });
@@ -118,8 +118,8 @@ type MockPerformanceObserverConstructor = {
     test('starts and ends marks correctly', () => {
       const monitor = getPerformanceMonitor();
       
-      // Force console.log to be called
-      console.log('Test output');
+      // Force // console.log to be called
+      // console.log('Test output');
       
       monitor.startMark('test-mark');
       jest.advanceTimersByTime(100);
@@ -128,8 +128,8 @@ type MockPerformanceObserverConstructor = {
       // Advance timers to trigger the flush
       jest.advanceTimersByTime(10000);
       
-      // We know console.log was called at least once
-      expect(console.log).toHaveBeenCalled();
+      // We know // console.log was called at least once
+      expect(// console.log).toHaveBeenCalled();
     });
 
     test('handles cleanup properly', () => {
@@ -247,7 +247,7 @@ type MockPerformanceObserverConstructor = {
       // Get monitor instance
       const monitor = getPerformanceMonitor();
       
-      // Create a spy on console.log
+      // Create a spy on // console.log
       const consoleLogSpy = jest.spyOn(console, 'log');
       
       // Call methods that would log in development
@@ -474,8 +474,8 @@ type MockPerformanceObserverConstructor = {
     });
 
     test('handles interaction with metadata', () => {
-      // Reset console.log mock to ensure clean state
-      (console.log as jest.Mock).mockClear();
+      // Reset // console.log mock to ensure clean state
+      (// console.log as jest.Mock).mockClear();
       
       const { result } = renderHook(() => useComponentPerformance('MetadataComponent'));
       
@@ -524,7 +524,7 @@ type MockPerformanceObserverConstructor = {
       jest.advanceTimersByTime(100);
       
       // Should have logged a message about sending metrics
-      expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Sending'));
+      expect(// console.log).toHaveBeenCalledWith(expect.stringContaining('Sending'));
       
       // Now add more metrics and manually flush to test sent tracking
       (monitor as any).addMetric({
@@ -537,7 +537,7 @@ type MockPerformanceObserverConstructor = {
       (monitor as any).flush();
       
       // Only the new metric should be sent
-      expect(console.log).toHaveBeenCalledWith('Sending 1 performance metrics');
+      expect(// console.log).toHaveBeenCalledWith('Sending 1 performance metrics');
       
       // Cleanup
       monitor.cleanup();
@@ -557,7 +557,7 @@ type MockPerformanceObserverConstructor = {
       (monitor as any).flush();
       
       // Should not have logged anything about sending metrics
-      expect(console.log).not.toHaveBeenCalledWith(expect.stringContaining('Sending'));
+      expect(// console.log).not.toHaveBeenCalledWith(expect.stringContaining('Sending'));
       
       // Cleanup
       monitor.cleanup();

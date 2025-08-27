@@ -308,7 +308,7 @@ export const initializeApplicationWithMetrics = async () => {
       }, 5000);
     }
     
-    console.log('Application metrics initialized successfully');
+    // console.log('Application metrics initialized successfully');
     
   } catch (error) {
     console.error('Failed to initialize metrics:', error);

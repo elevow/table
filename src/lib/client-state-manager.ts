@@ -13,7 +13,7 @@ export class ClientStateManager {
   private readonly RECONNECT_DELAY = 1000;
   private connectionStatus: 'connected' | 'disconnected' | 'reconnecting' = 'disconnected';
 
-  constructor(socket: typeof Socket, onStateChange: (state: TableState) => void) {
+  constructor(socket: Socket, onStateChange: (state: TableState) => void) {
     this.socket = socket;
     this.onStateChange = onStateChange;
     this.setupSocketHandlers();
@@ -50,11 +50,13 @@ export class ClientStateManager {
   }
 
   private setupErrorHandling(): void {
-    window.addEventListener('online', () => {
-      if (this.connectionStatus === 'disconnected') {
-        this.attemptReconnect();
-      }
-    });
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('online', () => {
+        if (this.connectionStatus === 'disconnected') {
+          this.attemptReconnect();
+        }
+      });
+    }
   }
 
   private handleDisconnect(): void {

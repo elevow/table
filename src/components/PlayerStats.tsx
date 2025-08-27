@@ -11,7 +11,7 @@ interface PlayerStatsProps {
 function PlayerStats({ gameId }: PlayerStatsProps) {
   useEffect(() => {
     // Log when the component is loaded to demonstrate code splitting
-    console.log('PlayerStats component loaded for game:', gameId);
+    // console.log('PlayerStats component loaded for game:', gameId);
     
     // In a real implementation, this would fetch player statistics
   }, [gameId]);

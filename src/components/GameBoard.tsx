@@ -11,7 +11,7 @@ interface GameBoardProps {
 function GameBoard({ gameId }: GameBoardProps) {
   useEffect(() => {
     // Log when the component is loaded to demonstrate code splitting
-    console.log('GameBoard component loaded for game:', gameId);
+    // console.log('GameBoard component loaded for game:', gameId);
     
     // In a real implementation, this would load game resources, connect to game server, etc.
   }, [gameId]);

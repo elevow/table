@@ -14,7 +14,7 @@ export class WebSocketManager {
   private log(message: string): void {
     // Only log in non-CI environments or when DEBUG_WEBSOCKET is set
     if (!process.env.CI || process.env.DEBUG_WEBSOCKET) {
-      console.log(`[WebSocket] ${message}`);
+      // console.log(`[WebSocket] ${message}`);
     }
   }
   

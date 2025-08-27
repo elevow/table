@@ -19,7 +19,7 @@ function GameSettings({ gameId }: GameSettingsProps) {
   
   useEffect(() => {
     // Log when the component is loaded to demonstrate code splitting
-    console.log('GameSettings component loaded for game:', gameId);
+    // console.log('GameSettings component loaded for game:', gameId);
     
     // In a real implementation, this would load saved user settings
   }, [gameId]);

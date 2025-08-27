@@ -76,18 +76,18 @@ export const prefetchGameComponents = async (gameType: string): Promise<void> =>
   if (!route) return;
   
   // In a real implementation, this would use dynamic imports to prefetch components
-  console.log(`Prefetching components for ${gameType}:`, route.components);
+  // console.log(`Prefetching components for ${gameType}:`, route.components);
   
   // Example of how you would actually prefetch each component
   if (route.components.includes('GameBoard')) {
     // This is just a mock implementation - in real code you would use:
     // await import('../components/GameBoard')
-    console.log('Prefetched GameBoard');
+    // console.log('Prefetched GameBoard');
   }
   
   if (route.components.includes('TournamentBracket')) {
     // await import('../components/TournamentBracket')
-    console.log('Prefetched TournamentBracket');
+    // console.log('Prefetched TournamentBracket');
   }
 };
 
@@ -97,7 +97,7 @@ export const prefetchGameComponents = async (gameType: string): Promise<void> =>
 export const cacheGameData = async (gameType: string): Promise<boolean> => {
   const route = gameRoutes.find(r => r.id === gameType);
   if (!route || !route.offlineSupport) {
-    console.log(`Caching not available for ${gameType}`);
+    // console.log(`Caching not available for ${gameType}`);
     return false;
   }
   
@@ -133,7 +133,7 @@ export const cacheGameData = async (gameType: string): Promise<boolean> => {
       });
     }
     
-    console.log(`Cached game data for ${gameType}`);
+    // console.log(`Cached game data for ${gameType}`);
     return true;
   } catch (error) {
     console.error(`Failed to cache game data for ${gameType}:`, error);

@@ -25,7 +25,7 @@ describe('Code Splitting Utilities', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     global.IntersectionObserver = mockIntersectionObserver;
-    console.log = mockConsoleLog;
+    // console.log = mockConsoleLog;
     console.warn = mockConsoleWarn;
     
     // Mock window object
@@ -38,7 +38,7 @@ describe('Code Splitting Utilities', () => {
   });
   
   afterEach(() => {
-    console.log = originalConsole.log;
+    // console.log = original// console.log;
     console.warn = originalConsole.warn;
     vi.restoreAllMocks();
   });

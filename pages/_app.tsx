@@ -62,7 +62,7 @@ function MyApp({ Component, pageProps }: AppProps) {
         try {
           // Note: If game-routes.ts doesn't exist, this will need to be created or modified
           await dynamicImport(() => import('../src/utils/game-routes'));
-          console.log('Prefetched game route metadata');
+          // console.log('Prefetched game route metadata');
         } catch (error) {
           console.error('Failed to prefetch game route metadata', error);
         }
@@ -103,7 +103,7 @@ function MyApp({ Component, pageProps }: AppProps) {
       <Script
         src="https://cdn.example.com/analytics.js"
         strategy="lazyOnload"
-        onLoad={() => console.log('Analytics script loaded')}
+        onLoad={() => // console.log('Analytics script loaded')}
       />
       
       {/* Offline indicator */}

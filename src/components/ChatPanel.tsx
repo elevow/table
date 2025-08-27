@@ -13,20 +13,20 @@ function ChatPanel({ gameId }: ChatPanelProps) {
   
   useEffect(() => {
     // Log when the component is loaded to demonstrate code splitting
-    console.log('ChatPanel component loaded for game:', gameId);
+    // console.log('ChatPanel component loaded for game:', gameId);
     
     // In a real implementation, this would connect to a chat service
     setMessages(['Welcome to the game chat!', 'Type a message to communicate with other players.']);
     
     // Cleanup on unmount
     return () => {
-      console.log('ChatPanel component unloaded');
+      // console.log('ChatPanel component unloaded');
     };
   }, [gameId]);
   
   const handleSendMessage = () => {
     // Mock implementation
-    console.log('Message sent');
+    // console.log('Message sent');
   };
   
   return (

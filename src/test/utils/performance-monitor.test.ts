@@ -26,7 +26,7 @@ describe('Performance Monitoring', () => {
   
   beforeEach(() => {
     jest.resetAllMocks();
-    console.log = jest.fn();
+    // console.log = jest.fn();
     console.error = jest.fn();
     
     // Mock setTimeout
@@ -34,7 +34,7 @@ describe('Performance Monitoring', () => {
   });
   
   afterEach(() => {
-    console.log = originalConsole.log;
+    // console.log = original// console.log;
     console.error = originalConsole.error;
     jest.useRealTimers();
   });
@@ -68,7 +68,7 @@ describe('Performance Monitoring', () => {
       // Advance timers to trigger the flush
       jest.advanceTimersByTime(10000);
       
-      expect(console.log).toHaveBeenCalledWith(
+      expect(// console.log).toHaveBeenCalledWith(
         expect.stringContaining('Performance metric: test-mark')
       );
     });

@@ -70,7 +70,7 @@ class CacheManager {
     try {
       if (typeof window === 'undefined') {
         this.redisClient = new Redis(options);
-        console.log('Redis cache initialized');
+        // console.log('Redis cache initialized');
       }
     } catch (error) {
       console.error('Failed to initialize Redis cache:', error);
@@ -102,7 +102,7 @@ class CacheManager {
         
         request.onsuccess = (event) => {
           this.idbDatabase = (event.target as IDBOpenDBRequest).result;
-          console.log('IndexedDB cache initialized');
+          // console.log('IndexedDB cache initialized');
           
           // Process any pending operations
           this.processPendingOperations();
@@ -125,7 +125,7 @@ class CacheManager {
       ...config,
       namespace
     };
-    console.log(`Cache configured for namespace: ${namespace}`);
+    // console.log(`Cache configured for namespace: ${namespace}`);
   }
 
   /**
@@ -705,7 +705,7 @@ class CacheManager {
       try {
         const registration = await navigator.serviceWorker.register('/service-worker.js');
         this.serviceWorkerRegistration = registration;
-        console.log('Service worker registered successfully');
+        // console.log('Service worker registered successfully');
         
         // Setup message channel for communication with service worker
         const messageChannel = new MessageChannel();
@@ -719,7 +719,7 @@ class CacheManager {
           const { type, payload } = event.data;
           
           if (type === 'CACHE_UPDATED') {
-            console.log('Service worker updated cache:', payload);
+            // console.log('Service worker updated cache:', payload);
           }
         };
       } catch (error) {
@@ -733,7 +733,7 @@ class CacheManager {
    */
   private handleOnline = async (): Promise<void> => {
     this.isOffline = false;
-    console.log('App is online. Processing pending operations...');
+    // console.log('App is online. Processing pending operations...');
     
     // Process any pending operations queued while offline
     this.processPendingOperations();
@@ -744,7 +744,7 @@ class CacheManager {
    */
   private handleOffline = (): void => {
     this.isOffline = true;
-    console.log('App is offline. Operations will be queued.');
+    // console.log('App is offline. Operations will be queued.');
   };
 
   /**
@@ -755,7 +755,7 @@ class CacheManager {
       return;
     }
     
-    console.log(`Processing ${this.pendingOperations.length} pending operations`);
+    // console.log(`Processing ${this.pendingOperations.length} pending operations`);
     
     const operations = [...this.pendingOperations];
     this.pendingOperations = [];

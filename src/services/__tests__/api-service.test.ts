@@ -24,16 +24,16 @@ global.fetch = jest.fn();
 
 describe('API Service', () => {
   const mockCacheManager = getCacheManager();
-  const originalConsoleLog = console.log;
+  const originalConsoleLog = // console.log;
   
   beforeAll(() => {
-    // Mock console.log to avoid noise in test output
-    console.log = jest.fn();
+    // Mock // console.log to avoid noise in test output
+    // console.log = jest.fn();
   });
   
   afterAll(() => {
-    // Restore console.log
-    console.log = originalConsoleLog;
+    // Restore // console.log
+    // console.log = originalConsoleLog;
   });
   
   beforeEach(() => {
@@ -376,7 +376,7 @@ describe('API Service', () => {
       
       // Verify
       expect(mockCacheManager.clearAll).toHaveBeenCalled();
-      expect(console.log).toHaveBeenCalledWith('All API cache cleared');
+      expect(// console.log).toHaveBeenCalledWith('All API cache cleared');
     });
   });
 });

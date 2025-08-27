@@ -46,7 +46,7 @@ export class PokerSchemaEvolution {
 
     // Execute the migration
     const result = await this.evolutionManager.executeZeroDowntimeMigration(migration);
-    console.log(`Migration ${version} completed in ${result.executionTime}ms`);
+    // console.log(`Migration ${version} completed in ${result.executionTime}ms`);
   }
 
   /**
@@ -235,7 +235,7 @@ export class PokerSchemaEvolution {
     };
 
     const result = await this.evolutionManager.executeZeroDowntimeMigration(migration);
-    console.log(`Statistics table migration completed: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+    // console.log(`Statistics table migration completed: ${result.success ? 'SUCCESS' : 'FAILED'}`);
   }
 
   /**
@@ -431,15 +431,15 @@ export class PokerSchemaEvolution {
    * Example usage demonstrating the full migration lifecycle
    */
   async demonstrateFullMigrationLifecycle(): Promise<void> {
-    console.log('=== Schema Evolution Demonstration ===');
+    // console.log('=== Schema Evolution Demonstration ===');
     
     // 1. Initialize
     await this.initialize();
-    console.log('✓ Schema evolution system initialized');
+    // console.log('✓ Schema evolution system initialized');
 
     // 2. Check current version
     const currentVersion = await this.getCurrentSchemaVersion();
-    console.log(`Current schema version: ${currentVersion || 'None'}`);
+    // console.log(`Current schema version: ${currentVersion || 'None'}`);
 
     // 3. Plan a migration
     const version = MigrationVersioning.generateVersion();
@@ -455,24 +455,24 @@ export class PokerSchemaEvolution {
 
     // 4. Validate migration plan
     const validation = await this.evolutionManager.validateEvolutionPlan(migration);
-    console.log(`Migration validation: ${validation.isValid ? 'PASSED' : 'FAILED'}`);
+    // console.log(`Migration validation: ${validation.isValid ? 'PASSED' : 'FAILED'}`);
     
     if (validation.warnings.length > 0) {
-      console.log('Warnings:', validation.warnings);
+      // console.log('Warnings:', validation.warnings);
     }
 
     // 5. Execute migration if valid
     if (validation.isValid) {
       const result = await this.evolutionManager.executeZeroDowntimeMigration(migration);
-      console.log(`Migration ${version}: ${result.success ? 'SUCCESS' : 'FAILED'} (${result.executionTime}ms)`);
+      // console.log(`Migration ${version}: ${result.success ? 'SUCCESS' : 'FAILED'} (${result.executionTime}ms)`);
       
       // 6. Verify new version
       const newVersion = await this.getCurrentSchemaVersion();
-      console.log(`New schema version: ${newVersion}`);
+      // console.log(`New schema version: ${newVersion}`);
       
       // 7. Show migration history
       const history = await this.getMigrationHistory();
-      console.log(`Total migrations applied: ${history.length}`);
+      // console.log(`Total migrations applied: ${history.length}`);
     }
   }
 }

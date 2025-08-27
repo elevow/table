@@ -21,7 +21,7 @@ class MockDatabaseClient {
 
   async query(text: string, params?: any[]): Promise<{ rows: any[]; rowCount: number }> {
     MockDatabaseClient.queryCount++;
-    console.log('Mock Query:', text, params);
+    // console.log('Mock Query:', text, params);
 
     // Simulate transaction control
     if (text.trim().toUpperCase() === 'BEGIN') {

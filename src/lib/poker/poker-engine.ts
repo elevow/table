@@ -37,7 +37,7 @@ export class PokerEngine {
   // Private logging methods that respect environment variables
   private log(message: string, ...args: any[]): void {
     if (this.debugEnabled) {
-      console.log(`[DEBUG] ${message}`, ...args);
+      // console.log(`[DEBUG] ${message}`, ...args);
     }
   }
   

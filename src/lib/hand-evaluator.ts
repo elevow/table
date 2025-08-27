@@ -22,7 +22,7 @@ export class HandEvaluator {
   // Static logging methods that respect environment variables
   private static log(message: string, ...args: any[]): void {
     if (this.debugEnabled) {
-      console.log(message, ...args);
+      // console.log(message, ...args);
     }
   }
 

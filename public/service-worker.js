@@ -21,7 +21,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Service worker precaching resources');
+        // console.log('Service worker precaching resources');
         return cache.addAll(PRECACHE_RESOURCES);
       })
       .then(() => {
@@ -45,7 +45,7 @@ self.addEventListener('activate', (event) => {
                   cacheName !== RUNTIME_CACHE_NAME;
           })
           .map(cacheName => {
-            console.log('Service worker removing old cache:', cacheName);
+            // console.log('Service worker removing old cache:', cacheName);
             return caches.delete(cacheName);
           })
       );

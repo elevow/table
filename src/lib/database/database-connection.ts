@@ -57,7 +57,7 @@ export class MockDatabaseClient implements DatabaseClient {
 
   async query(text: string, params?: any[]): Promise<{ rows: any[]; rowCount: number }> {
     // Simple mock implementation
-    console.log('Mock Query:', text, params);
+    // console.log('Mock Query:', text, params);
     
     // Simulate error for invalid SQL
     if (text.toUpperCase().includes('INVALID')) {
@@ -165,7 +165,7 @@ export class DatabaseMigrationRunner implements MigrationRunner {
     
     try {
       // In production, this would run actual database migrations
-      console.log('Running migrations to version:', targetVersion || 'latest');
+      // console.log('Running migrations to version:', targetVersion || 'latest');
       
       // Mock migration execution
       await client.query(`
@@ -182,7 +182,7 @@ export class DatabaseMigrationRunner implements MigrationRunner {
   }
 
   async rollback(steps: number = 1): Promise<void> {
-    console.log('Rolling back', steps, 'migration steps');
+    // console.log('Rolling back', steps, 'migration steps');
     // Mock rollback
   }
 

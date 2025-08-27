@@ -18,7 +18,7 @@ interface MockServiceWorkerRegistration {
 
 describe('Service Worker Registration', () => {
   // Mock console methods
-  const originalConsoleLog = console.log;
+  const originalConsoleLog = // console.log;
   const originalConsoleError = console.error;
   
   // Mock navigator properties and methods
@@ -51,13 +51,13 @@ describe('Service Worker Registration', () => {
   
   beforeAll(() => {
     // Mock console
-    console.log = jest.fn();
+    // console.log = jest.fn();
     console.error = jest.fn();
   });
   
   afterAll(() => {
     // Restore console
-    console.log = originalConsoleLog;
+    // console.log = originalConsoleLog;
     console.error = originalConsoleError;
     
     // Restore globals (if they existed)
@@ -174,7 +174,7 @@ describe('Service Worker Registration', () => {
       
       // Verify
       expect(mockRegistrationAddEventListener).toHaveBeenCalledWith('updatefound', expect.any(Function));
-      expect(console.log).toHaveBeenCalledWith('SW registered: ', expect.any(Object));
+      expect(// console.log).toHaveBeenCalledWith('SW registered: ', expect.any(Object));
       
       // Test the updatefound listener
       const updateFoundListener = mockRegistrationAddEventListener.mock.calls[0][1];
@@ -228,11 +228,11 @@ describe('Service Worker Registration', () => {
       
       // Test CACHE_UPDATED message
       messageHandler({ data: { type: 'CACHE_UPDATED', payload: 'test-cache' } });
-      expect(console.log).toHaveBeenCalledWith('Cache updated:', 'test-cache');
+      expect(// console.log).toHaveBeenCalledWith('Cache updated:', 'test-cache');
       
       // Test OFFLINE_READY message
       messageHandler({ data: { type: 'OFFLINE_READY' } });
-      expect(console.log).toHaveBeenCalledWith('App is ready for offline use');
+      expect(// console.log).toHaveBeenCalledWith('App is ready for offline use');
       
       // Test CACHE_ERROR message
       messageHandler({ data: { type: 'CACHE_ERROR', payload: 'test-error' } });
@@ -241,7 +241,7 @@ describe('Service Worker Registration', () => {
       // Test unknown message
       messageHandler({ data: { type: 'UNKNOWN', payload: 'test' } });
       // No additional console calls should be made
-      expect(console.log).toHaveBeenCalledTimes(2);
+      expect(// console.log).toHaveBeenCalledTimes(2);
       expect(console.error).toHaveBeenCalledTimes(1);
     });
     
@@ -1019,7 +1019,7 @@ describe('Service Worker Registration', () => {
       
       // Verify
       expect(mockRegistration.addEventListener).toHaveBeenCalledWith('updatefound', expect.any(Function));
-      expect(console.log).toHaveBeenCalledWith('SW registered: ', mockRegistration);
+      expect(// console.log).toHaveBeenCalledWith('SW registered: ', mockRegistration);
     });
 
     it('should handle registration error', async () => {
@@ -1063,11 +1063,11 @@ describe('Service Worker Registration', () => {
       
       // Test CACHE_UPDATED message
       messageHandler({ data: { type: 'CACHE_UPDATED', payload: 'test-cache' } });
-      expect(console.log).toHaveBeenCalledWith('Cache updated:', 'test-cache');
+      expect(// console.log).toHaveBeenCalledWith('Cache updated:', 'test-cache');
       
       // Test OFFLINE_READY message
       messageHandler({ data: { type: 'OFFLINE_READY' } });
-      expect(console.log).toHaveBeenCalledWith('App is ready for offline use');
+      expect(// console.log).toHaveBeenCalledWith('App is ready for offline use');
       
       // Test CACHE_ERROR message
       messageHandler({ data: { type: 'CACHE_ERROR', payload: 'test-error' } });
@@ -1076,7 +1076,7 @@ describe('Service Worker Registration', () => {
       // Test unknown message
       messageHandler({ data: { type: 'UNKNOWN', payload: 'test' } });
       // No additional console calls should be made
-      expect(console.log).toHaveBeenCalledTimes(2);
+      expect(// console.log).toHaveBeenCalledTimes(2);
       expect(console.error).toHaveBeenCalledTimes(1);
     });
 

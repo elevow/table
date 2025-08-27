@@ -27,12 +27,12 @@ export async function setupDevelopmentMonitoring(pool: Pool): Promise<Performanc
 
   // Set up event listeners for development
   monitor.on('alert', (alert: Alert) => {
-    console.log(`🚨 [DEV] Performance Alert: ${alert.message}`);
-    console.log(`   Metric: ${alert.metric}, Value: ${alert.currentValue}, Threshold: ${alert.threshold}`);
+    // console.log(`🚨 [DEV] Performance Alert: ${alert.message}`);
+    // console.log(`   Metric: ${alert.metric}, Value: ${alert.currentValue}, Threshold: ${alert.threshold}`);
   });
 
   monitor.on('monitoringStarted', () => {
-    console.log('✅ Performance monitoring started');
+    // console.log('✅ Performance monitoring started');
   });
 
   monitor.on('monitoringError', (error: Error) => {
@@ -74,11 +74,11 @@ export async function setupProductionMonitoring(
   });
 
   monitor.on('alertAcknowledged', (alert: Alert) => {
-    console.log(`✅ Alert acknowledged: ${alert.id}`);
+    // console.log(`✅ Alert acknowledged: ${alert.id}`);
   });
 
   monitor.on('alertResolved', (alert: Alert) => {
-    console.log(`✅ Alert resolved: ${alert.id}`);
+    // console.log(`✅ Alert resolved: ${alert.id}`);
   });
 
   await monitor.initialize();
@@ -188,35 +188,35 @@ export async function generateDailyReport(monitor: PerformanceMonitoringService)
 
   const report = await monitor.generatePerformanceReport(startDate, endDate, true);
 
-  console.log(`📊 Daily Performance Report - ${report.reportId}`);
-  console.log(`Period: ${startDate.toISOString()} to ${endDate.toISOString()}`);
-  console.log(`Total Queries: ${report.summary.totalQueries}`);
-  console.log(`Average Query Time: ${report.summary.avgQueryTime.toFixed(2)}ms`);
-  console.log(`Slowest Query: ${report.summary.slowestQuery.mean_time?.toFixed(2)}ms`);
-  console.log(`Error Count: ${report.summary.errorCount}`);
-  console.log(`System Uptime: ${report.summary.uptime}%`);
+  // console.log(`📊 Daily Performance Report - ${report.reportId}`);
+  // console.log(`Period: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+  // console.log(`Total Queries: ${report.summary.totalQueries}`);
+  // console.log(`Average Query Time: ${report.summary.avgQueryTime.toFixed(2)}ms`);
+  // console.log(`Slowest Query: ${report.summary.slowestQuery.mean_time?.toFixed(2)}ms`);
+  // console.log(`Error Count: ${report.summary.errorCount}`);
+  // console.log(`System Uptime: ${report.summary.uptime}%`);
 
   // Print top slow queries
-  console.log('\n🐌 Top 5 Slowest Queries:');
+  // console.log('\n🐌 Top 5 Slowest Queries:');
   report.queryAnalysis.topSlowQueries.slice(0, 5).forEach((query, index) => {
-    console.log(`${index + 1}. ${query.mean_time.toFixed(2)}ms - ${query.calls} calls`);
-    console.log(`   Query: ${query.query_text.substring(0, 100)}...`);
+    // console.log(`${index + 1}. ${query.mean_time.toFixed(2)}ms - ${query.calls} calls`);
+    // console.log(`   Query: ${query.query_text.substring(0, 100)}...`);
   });
 
   // Print recommendations
   if (report.recommendations.length > 0) {
-    console.log('\n💡 Recommendations:');
+    // console.log('\n💡 Recommendations:');
     report.recommendations.forEach((rec, index) => {
-      console.log(`${index + 1}. ${rec}`);
+      // console.log(`${index + 1}. ${rec}`);
     });
   }
 
   // Print anomalies
   if (report.anomalies.length > 0) {
-    console.log('\n⚠️ Anomalies Detected:');
+    // console.log('\n⚠️ Anomalies Detected:');
     report.anomalies.forEach((anomaly, index) => {
-      console.log(`${index + 1}. ${anomaly.type}: ${anomaly.description}`);
-      console.log(`   Impact: ${anomaly.impact}, Recommendation: ${anomaly.recommendation}`);
+      // console.log(`${index + 1}. ${anomaly.type}: ${anomaly.description}`);
+      // console.log(`   Impact: ${anomaly.impact}, Recommendation: ${anomaly.recommendation}`);
     });
   }
 }
@@ -230,7 +230,7 @@ export async function generateWeeklyTrendReport(monitor: PerformanceMonitoringSe
 
   const report = await monitor.generatePerformanceReport(startDate, endDate, true);
 
-  console.log(`📈 Weekly Trend Report - ${report.reportId}`);
+  // console.log(`📈 Weekly Trend Report - ${report.reportId}`);
   
   // Analyze resource trends
   const connectionTrends = report.resourceAnalysis.connectionTrends;
@@ -239,27 +239,27 @@ export async function generateWeeklyTrendReport(monitor: PerformanceMonitoringSe
     const minConnections = Math.min(...connectionTrends.map(t => t.count));
     const avgConnections = connectionTrends.reduce((sum, t) => sum + t.count, 0) / connectionTrends.length;
 
-    console.log(`\n🔗 Connection Usage Trends:`);
-    console.log(`   Average: ${avgConnections.toFixed(1)} connections`);
-    console.log(`   Peak: ${maxConnections} connections`);
-    console.log(`   Minimum: ${minConnections} connections`);
+    // console.log(`\n🔗 Connection Usage Trends:`);
+    // console.log(`   Average: ${avgConnections.toFixed(1)} connections`);
+    // console.log(`   Peak: ${maxConnections} connections`);
+    // console.log(`   Minimum: ${minConnections} connections`);
   }
 
   // Analyze disk growth
   if (report.resourceAnalysis.diskGrowth > 0) {
     const growthMB = report.resourceAnalysis.diskGrowth / (1024 * 1024);
-    console.log(`\n💾 Disk Usage Growth: ${growthMB.toFixed(2)} MB this week`);
+    // console.log(`\n💾 Disk Usage Growth: ${growthMB.toFixed(2)} MB this week`);
     
     if (growthMB > 1000) {
-      console.log(`   ⚠️ High disk growth detected - consider cleanup or scaling`);
+      // console.log(`   ⚠️ High disk growth detected - consider cleanup or scaling`);
     }
   }
 
   // Query pattern analysis
-  console.log('\n🔍 Query Pattern Analysis:');
+  // console.log('\n🔍 Query Pattern Analysis:');
   report.queryAnalysis.queryPatterns.slice(0, 5).forEach((pattern, index) => {
-    console.log(`${index + 1}. ${pattern.count} queries matching pattern (avg: ${pattern.avgTime.toFixed(2)}ms)`);
-    console.log(`   Pattern: ${pattern.pattern.substring(0, 80)}...`);
+    // console.log(`${index + 1}. ${pattern.count} queries matching pattern (avg: ${pattern.avgTime.toFixed(2)}ms)`);
+    // console.log(`   Pattern: ${pattern.pattern.substring(0, 80)}...`);
   });
 }
 
@@ -301,7 +301,7 @@ export class AlertDashboard {
     
     for (const alert of alerts) {
       await this.monitor.acknowledgeAlert(alert.id, acknowledgedBy);
-      console.log(`✅ Acknowledged alert ${alert.id} for metric ${metric}`);
+      // console.log(`✅ Acknowledged alert ${alert.id} for metric ${metric}`);
     }
   }
 
@@ -336,7 +336,7 @@ export class AlertDashboard {
 
       if (shouldResolve) {
         await this.monitor.resolveAlert(alert.id, resolvedBy);
-        console.log(`🔧 Auto-resolved alert ${alert.id} for ${alert.metric}`);
+        // console.log(`🔧 Auto-resolved alert ${alert.id} for ${alert.metric}`);
       }
     }
   }
@@ -350,16 +350,16 @@ export class AlertDashboard {
     const warnings = this.getAlertsBySeverity('warning');
     const info = this.getAlertsBySeverity('info');
 
-    console.log('\n🚨 Alert Summary:');
-    console.log(`   Critical: ${critical.length}`);
-    console.log(`   Error: ${errors.length}`);
-    console.log(`   Warning: ${warnings.length}`);
-    console.log(`   Info: ${info.length}`);
+    // console.log('\n🚨 Alert Summary:');
+    // console.log(`   Critical: ${critical.length}`);
+    // console.log(`   Error: ${errors.length}`);
+    // console.log(`   Warning: ${warnings.length}`);
+    // console.log(`   Info: ${info.length}`);
 
     if (critical.length > 0) {
-      console.log('\n🔴 Critical Alerts:');
+      // console.log('\n🔴 Critical Alerts:');
       critical.forEach(alert => {
-        console.log(`   - ${alert.message} (${alert.timestamp.toLocaleString()})`);
+        // console.log(`   - ${alert.message} (${alert.timestamp.toLocaleString()})`);
       });
     }
   }
@@ -426,11 +426,11 @@ class ApplicationMonitoringManager {
 
     // Setup monitoring event handlers
     this.monitor.on('monitoringStarted', () => {
-      console.log('🎯 Performance monitoring system started');
+      // console.log('🎯 Performance monitoring system started');
     });
 
     this.monitor.on('monitoringStopped', () => {
-      console.log('⏹️ Performance monitoring system stopped');
+      // console.log('⏹️ Performance monitoring system stopped');
     });
 
     this.monitor.on('monitoringError', (error) => {
@@ -439,7 +439,7 @@ class ApplicationMonitoringManager {
   }
 
   async start(): Promise<void> {
-    console.log('🚀 Starting application monitoring...');
+    // console.log('🚀 Starting application monitoring...');
     
     await this.monitor.initialize();
     
@@ -449,7 +449,7 @@ class ApplicationMonitoringManager {
     // Setup alert management
     this.setupAlertManagement();
     
-    console.log('✅ Application monitoring started successfully');
+    // console.log('✅ Application monitoring started successfully');
   }
 
   private setupPeriodicReporting(): void {
@@ -489,14 +489,14 @@ class ApplicationMonitoringManager {
   async gracefulShutdown(): Promise<void> {
     if (this.isShuttingDown) return;
     
-    console.log('🛑 Gracefully shutting down monitoring system...');
+    // console.log('🛑 Gracefully shutting down monitoring system...');
     this.isShuttingDown = true;
     
     // Stop monitoring
     this.monitor.stopMonitoring();
     
     // Generate final report
-    console.log('📊 Generating final performance report...');
+    // console.log('📊 Generating final performance report...');
     const endDate = new Date();
     const startDate = new Date(endDate.getTime() - 24 * 60 * 60 * 1000);
     
@@ -506,7 +506,7 @@ class ApplicationMonitoringManager {
       console.error('Error generating final report:', error);
     }
     
-    console.log('✅ Monitoring system shutdown complete');
+    // console.log('✅ Monitoring system shutdown complete');
     process.exit(0);
   }
 
@@ -565,18 +565,18 @@ async function logAlert(alert: Alert): Promise<void> {
     alert_id: alert.id
   };
 
-  console.log(JSON.stringify(logEntry));
+  // console.log(JSON.stringify(logEntry));
 }
 
 async function sendToPagerDuty(alert: Alert): Promise<void> {
   // Mock PagerDuty integration
-  console.log(`📟 PAGERDUTY: Critical alert - ${alert.message}`);
+  // console.log(`📟 PAGERDUTY: Critical alert - ${alert.message}`);
   // In real implementation, use PagerDuty API
 }
 
 async function notifyTradingTeam(alert: Alert): Promise<void> {
   // Mock trading team notification
-  console.log(`📞 TRADING TEAM ALERT: ${alert.message}`);
+  // console.log(`📞 TRADING TEAM ALERT: ${alert.message}`);
   // In real implementation, send to trading team notification system
 }
 
@@ -611,7 +611,7 @@ export async function exampleUsage(): Promise<void> {
   // Manual operations examples
   setTimeout(async () => {
     // Generate an on-demand report
-    console.log('📊 Generating on-demand performance report...');
+    // console.log('📊 Generating on-demand performance report...');
     await generateDailyReport(monitor);
 
     // Check alert status
@@ -622,7 +622,7 @@ export async function exampleUsage(): Promise<void> {
   }, 5000);
 
   // The monitoring system will continue running until the application shuts down
-  console.log('🎯 Monitoring system is now active and will continue until shutdown...');
+  // console.log('🎯 Monitoring system is now active and will continue until shutdown...');
 }
 
 // Export main classes for use in application

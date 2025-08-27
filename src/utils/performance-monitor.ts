@@ -134,7 +134,7 @@ export class PerformanceMonitor {
     
     // Log to console in development
     if (process.env.NODE_ENV === 'development') {
-      console.log(`Performance metric: ${metric.name} (${metric.type}) - ${metric.duration.toFixed(2)}ms`);
+      // console.log(`Performance metric: ${metric.name} (${metric.type}) - ${metric.duration.toFixed(2)}ms`);
     }
   }
   
@@ -146,7 +146,7 @@ export class PerformanceMonitor {
     
     if (metricsToSend.length > 0) {
       // In a real implementation, you would send these to your analytics service
-      console.log(`Sending ${metricsToSend.length} performance metrics`);
+      // console.log(`Sending ${metricsToSend.length} performance metrics`);
       
       // Mark as sent
       metricsToSend.forEach(m => this.sent.add(`${m.name}-${m.startTime}`));

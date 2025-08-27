@@ -59,7 +59,7 @@ describe('IntelligentPrefetcher', () => {
   let prefetcher: IntelligentPrefetcher;
   
   beforeEach(() => {
-    // Reset console.log mock to avoid interference
+    // Reset // console.log mock to avoid interference
     jest.spyOn(console, 'log').mockImplementation(() => {});
     
     prefetcher = new IntelligentPrefetcher(defaultCodeSplitConfig);
@@ -97,8 +97,8 @@ describe('IntelligentPrefetcher', () => {
     prefetcher.prefetchComponent('PlayerStats');
     
     // PlayerStats depends on game-core chunk, so both should be prefetched
-    expect(console.log).toHaveBeenCalledWith('Prefetching component: GameBoard');
-    expect(console.log).toHaveBeenCalledWith('Prefetching component: PlayerStats');
+    expect(// console.log).toHaveBeenCalledWith('Prefetching component: GameBoard');
+    expect(// console.log).toHaveBeenCalledWith('Prefetching component: PlayerStats');
   });
   
   test('handles user interaction prefetching', () => {

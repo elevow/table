@@ -38,35 +38,36 @@ type MockPerformanceObserverConstructor = {
     writable: true
   });
   
-  // Create a proper mock that TypeScript will accept
-  const mockConstructor = function(callback: any) {
-    this.callback = callback;
-    this.observe = jest.fn((options) => {
-      // Store the callback and options for testing
-      (global as any).__lastPOCallback = callback;
-      
-      // Track all created observers
-      if (!global.createdObservers) {
-        (global as any).createdObservers = [];
-      }
-      (global as any).createdObservers.push({
-        callback,
-        entryTypes: options?.entryTypes
+  // Create a proper mock that TypeScript will accept (class-based to avoid implicit this issues)
+  class MockPO implements MockPerformanceObserver {
+    static supportedEntryTypes = ['resource', 'navigation', 'paint'];
+    callback: any;
+    observe: jest.Mock;
+    disconnect: jest.Mock;
+    takeRecords: jest.Mock;
+
+    constructor(callback: any) {
+      this.callback = callback;
+      this.observe = jest.fn((options?: { entryTypes?: string[] }) => {
+        // Store the callback and options for testing
+        (global as any).__lastPOCallback = callback;
+
+        // Track all created observers
+        if (!(global as any).createdObservers) {
+          (global as any).createdObservers = [];
+        }
+        (global as any).createdObservers.push({
+          callback,
+          entryTypes: options?.entryTypes,
+        });
       });
-    });
-    this.disconnect = jest.fn();
-    this.takeRecords = jest.fn();
-    return this;
-  } as unknown as MockPerformanceObserverConstructor;
-  
-  // Add the required property
-  Object.defineProperty(mockConstructor, 'supportedEntryTypes', {
-    value: ['resource', 'navigation', 'paint'],
-    writable: false
-  });
-  
+      this.disconnect = jest.fn();
+      this.takeRecords = jest.fn();
+    }
+  }
+
   // Set the global
-  global.PerformanceObserver = mockConstructor as unknown as typeof PerformanceObserver;
+  (global as any).PerformanceObserver = MockPO as any;
   
   // Mock localStorage
   Object.defineProperty(window, 'localStorage', {

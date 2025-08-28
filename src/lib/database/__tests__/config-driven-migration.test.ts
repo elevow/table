@@ -83,6 +83,54 @@ describe('Config-driven Schema Migration', () => {
 
     await expect(manager.run(cfg)).rejects.toThrow('Migration validation failed: bad');
   });
+
+  it('integrates DataTransformationService to produce schema steps and data operations', async () => {
+    const mockPlan = {
+      schemaChanges: [ { sql: 'ALTER TABLE players ALTER COLUMN email DROP NOT NULL' } ],
+      dataSteps: [ { sql: 'INSERT INTO players_v2 (id, email_lower) SELECT s.id, LOWER(s.email) FROM players s LIMIT {LIMIT} OFFSET {OFFSET}' } ]
+    };
+
+    const transformer = { plan: jest.fn().mockReturnValue(mockPlan) } as any;
+    const mgr = new ConfigDrivenMigrationManager(evolution, transformer);
+
+    const cfg: MigrationConfig = {
+      version: '2025.08.28.0001',
+      dependencies: [],
+      preChecks: [],
+      steps: [
+        {
+          type: 'dataTransformation',
+          table: 'players',
+          details: {
+            transformation: { /* minimal stub; transformer.plan is mocked */ } as any,
+            batchSize: 2000,
+            description: 'lowercase emails'
+          }
+        }
+      ],
+      postChecks: [],
+      rollback: []
+    };
+
+    const zero = mgr.buildFromConfig(cfg);
+    expect(zero.stages[0].steps.find(s => s.sql.includes('ALTER TABLE players ALTER COLUMN email DROP NOT NULL'))).toBeTruthy();
+    expect(zero.dataMigration).toBeDefined();
+    expect(zero.dataMigration!.batchSize).toBe(2000);
+    expect(zero.dataMigration!.operations[0].sql).toContain('LIMIT {LIMIT} OFFSET {OFFSET}');
+  });
+
+  it('throws when dataTransformation step is used without providing transformer', () => {
+    const cfg: MigrationConfig = {
+      version: '2025.08.28.0002',
+      dependencies: [],
+      preChecks: [],
+      steps: [ { type: 'dataTransformation', table: 'players', details: { transformation: {} as any } } ],
+      postChecks: [],
+      rollback: []
+    };
+
+    expect(() => manager.buildFromConfig(cfg)).toThrow('DataTransformationService not provided');
+  });
 });
 import { ConfigDrivenMigrationManager, MigrationConfig } from '../config-driven-migration';
 import { SchemaEvolutionManager } from '../schema-evolution';

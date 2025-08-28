@@ -3,6 +3,7 @@
 // ZeroDowntimeMigration and executes it via SchemaEvolutionManager.
 
 import { SchemaEvolutionManager, ZeroDowntimeMigration, EvolutionStage, EvolutionStep, ValidationConfiguration, BackwardCompatibilitySetup, RollbackConfiguration, DataMigrationPlan } from './schema-evolution';
+import { DataTransformationService, DataTransformation } from './data-transformation-service';
 
 // Technical Notes: MigrationConfig and related interfaces
 export interface MigrationConfig {
@@ -23,7 +24,7 @@ export interface MigrationCheck {
   errorMessage?: string;
 }
 
-export type StepType = 'addColumn' | 'dropColumn' | 'modifyColumn' | 'addIndex' | 'custom';
+export type StepType = 'addColumn' | 'dropColumn' | 'modifyColumn' | 'addIndex' | 'custom' | 'dataTransformation';
 
 export interface MigrationStep {
   type: StepType;
@@ -39,7 +40,7 @@ export interface RollbackStep {
  * Maps generic MigrationConfig into a concrete ZeroDowntimeMigration and runs it
  */
 export class ConfigDrivenMigrationManager {
-  constructor(private evolution: SchemaEvolutionManager) {}
+  constructor(private evolution: SchemaEvolutionManager, private transformer?: DataTransformationService) {}
 
   /** Build a ZeroDowntimeMigration from a generic config */
   buildFromConfig(cfg: MigrationConfig): ZeroDowntimeMigration {
@@ -50,7 +51,8 @@ export class ConfigDrivenMigrationManager {
       dataIntegrityChecks: []
     };
 
-    const dataMigrationOps: DataMigrationPlan['operations'] = [];
+  const dataMigrationOps: DataMigrationPlan['operations'] = [];
+  let dataBatchSize: number | undefined;
 
     // Pre-checks become validators (soft gate before execution)
     for (const c of cfg.preChecks || []) {
@@ -101,6 +103,25 @@ export class ConfigDrivenMigrationManager {
           }
           break;
         }
+        case 'dataTransformation': {
+          if (!this.transformer) {
+            throw new Error('DataTransformationService not provided to ConfigDrivenMigrationManager');
+          }
+          const { transformation, batchSize, description } = s.details as { transformation: DataTransformation; batchSize?: number; description?: string };
+          const plan = this.transformer.plan(transformation);
+          // Schema changes from the transformation plan become evolution steps
+          for (const sc of plan.schemaChanges) {
+            stageSteps.push({ sql: sc.sql });
+          }
+          // Data steps become data migration operations with batching handled by SchemaEvolutionManager
+          for (const ds of plan.dataSteps) {
+            dataMigrationOps.push({ sql: ds.sql, description: description || ds.description || 'Data transformation step' });
+          }
+          if (typeof batchSize === 'number') {
+            dataBatchSize = batchSize;
+          }
+          break;
+        }
         default:
           const neverType: never = (s as any).type;
           throw new Error(`Unsupported step type: ${neverType}`);
@@ -130,7 +151,7 @@ export class ConfigDrivenMigrationManager {
       description: cfg.description || 'Config-driven schema migration',
       dependencies: cfg.dependencies || [],
       stages,
-      dataMigration: dataMigrationOps.length ? { operations: dataMigrationOps } : undefined,
+      dataMigration: dataMigrationOps.length ? { operations: dataMigrationOps, batchSize: dataBatchSize } : undefined,
       backwardCompatibility: cfg.backwardCompatibility,
       rollback,
       validation: validations

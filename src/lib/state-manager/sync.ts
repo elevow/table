@@ -69,7 +69,10 @@ export class SyncManager implements ISyncManager {
 
       // Successful sync - update timestamp and reset
       const syncCompleteTime = Date.now();
-      this.state.lastSync = syncCompleteTime;
+      // Ensure lastSync strictly increases even within the same millisecond
+      this.state.lastSync = syncCompleteTime > this.state.lastSync
+        ? syncCompleteTime
+        : this.state.lastSync + 1;
       this.reset();
       
       // Only restart sync interval if we're not already syncing

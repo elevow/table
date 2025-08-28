@@ -104,29 +104,29 @@ describe('Game Routes', () => {
     test('prefetches components for a valid game type', async () => {
       await prefetchGameComponents('poker-texas-holdem');
       
-      expect(// console.log).toHaveBeenCalledWith(
+  expect(console.log).toHaveBeenCalledWith(
         'Prefetching components for poker-texas-holdem:',
         expect.arrayContaining(['GameBoard', 'PlayerStats', 'ChatPanel'])
       );
-      expect(// console.log).toHaveBeenCalledWith('Prefetched GameBoard');
+  expect(console.log).toHaveBeenCalledWith('Prefetched GameBoard');
     });
     
     test('handles tournament game type with special components', async () => {
       await prefetchGameComponents('tournament');
       
-      expect(// console.log).toHaveBeenCalledWith(
+  expect(console.log).toHaveBeenCalledWith(
         'Prefetching components for tournament:',
         expect.arrayContaining(['GameBoard', 'PlayerStats', 'ChatPanel', 'TournamentBracket'])
       );
-      expect(// console.log).toHaveBeenCalledWith('Prefetched GameBoard');
-      expect(// console.log).toHaveBeenCalledWith('Prefetched TournamentBracket');
+  expect(console.log).toHaveBeenCalledWith('Prefetched GameBoard');
+  expect(console.log).toHaveBeenCalledWith('Prefetched TournamentBracket');
     });
     
     test('does nothing for invalid game type', async () => {
       await prefetchGameComponents('invalid-game');
       
       // Should not log anything if game type doesn't exist
-      expect(// console.log).not.toHaveBeenCalled();
+  expect(console.log).not.toHaveBeenCalled();
     });
   });
 });

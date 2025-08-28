@@ -13,7 +13,7 @@ export function registerServiceWorkerImpl(window: Window, navigator: Navigator):
     navigator.serviceWorker
       .register('/service-worker.js')
       .then(registration => {
-        // console.log('SW registered: ', registration);
+  console.log('SW registered: ', registration);
         
         // Check for updates
         registration.addEventListener('updatefound', () => {
@@ -40,10 +40,10 @@ export function registerServiceWorkerImpl(window: Window, navigator: Navigator):
       
       switch (type) {
         case 'CACHE_UPDATED':
-          // console.log('Cache updated:', payload);
+          console.log('Cache updated:', payload);
           break;
         case 'OFFLINE_READY':
-          // console.log('App is ready for offline use');
+          console.log('App is ready for offline use');
           break;
         case 'CACHE_ERROR':
           console.error('Cache error:', payload);

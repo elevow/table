@@ -433,12 +433,15 @@ export class EfficientDataRetrievalService {
     // Get current recommendations
     const recommendations = await this.getOptimizationRecommendations();
     
-    // Log recommendations for manual review
-    // console.log('Optimization recommendations generated:', {
-      dataAccess: recommendations.dataAccess.suggestions.length,
-      database: recommendations.database.indexRecommendations.length,
-      strategy: Object.keys(recommendations.strategy).length
-    });
+    // Log recommendations for manual review (skip in CI)
+    if (!process.env.CI) {
+      // eslint-disable-next-line no-console
+      console.log('Optimization recommendations generated:', {
+        dataAccess: recommendations.dataAccess.suggestions.length,
+        database: recommendations.database.indexRecommendations.length,
+        strategy: Object.keys(recommendations.strategy).length
+      });
+    }
 
     // Clear caches to free up memory
     this.dataAccessOptimizer.cleanup();

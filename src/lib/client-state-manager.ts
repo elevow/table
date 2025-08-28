@@ -1,4 +1,9 @@
-import { Socket } from 'socket.io-client';
+// Minimal socket interface to decouple from socket.io-client typings
+type SocketLike = {
+  on: (event: string, listener: (...args: any[]) => void) => any;
+  emit: (event: string, ...args: any[]) => any;
+  connect: () => any;
+};
 import { TableState } from '../types/poker';
 import { StateUpdate, StateReconciliation } from '../types/state-update';
 
@@ -6,14 +11,14 @@ export class ClientStateManager {
   private state: TableState | null = null;
   private sequence: number = 0;
   private pendingUpdates: Map<number, Partial<TableState>> = new Map();
-  private socket: Socket;
+  private socket: SocketLike;
   private onStateChange: (state: TableState) => void;
   private reconnectAttempts: number = 0;
   private readonly MAX_RECONNECT_ATTEMPTS = 5;
   private readonly RECONNECT_DELAY = 1000;
   private connectionStatus: 'connected' | 'disconnected' | 'reconnecting' = 'disconnected';
 
-  constructor(socket: Socket, onStateChange: (state: TableState) => void) {
+  constructor(socket: SocketLike, onStateChange: (state: TableState) => void) {
     this.socket = socket;
     this.onStateChange = onStateChange;
     this.setupSocketHandlers();

@@ -176,7 +176,7 @@ export class IntelligentPrefetcher {
     
     // Mark as prefetched
     this.prefetchedModules.add(componentName);
-    // console.log(`Prefetching component: ${componentName}`);
+  console.log(`Prefetching component: ${componentName}`);
     
     // In a real implementation, you would use Next.js router.prefetch here
     // or dynamic imports with prefetch depending on your setup

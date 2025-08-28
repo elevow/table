@@ -22,9 +22,9 @@ class StubClient {
       };
     }
 
-    // Basic count query mock
-    if (text.toLowerCase().startsWith('select count(*) from game_history')) {
-      return { rows: [{ count: '0' }], rowCount: 1 };
+    // Basic count query mock (handles any count query)
+    if (text.toLowerCase().includes('select count(*) from game_history')) {
+      return { rows: [{ count: 0 }], rowCount: 1 };
     }
 
     // Basic select query mock
@@ -62,7 +62,7 @@ describe('GameHistoryManager.getPlayerGameHistory JSONB optimization', () => {
     expect(calls.length).toBeGreaterThanOrEqual(2);
 
     // Capture the SELECT query (second call)
-    const selectCall = calls.find(c => c.text.toLowerCase().startsWith('select gh.* from game_history'))!;
+  const selectCall = calls.find(c => c.text.trim().toLowerCase().startsWith('select gh.* from game_history'))!;
     expect(selectCall).toBeDefined();
 
     // Ensure JSONB containment is used instead of LIKE

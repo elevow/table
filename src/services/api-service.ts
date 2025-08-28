@@ -189,5 +189,5 @@ export async function updateUserProfile(userId: string, profileData: any) {
  */
 export async function clearApiCache() {
   await cacheManager.clearAll();
-  // console.log('All API cache cleared');
+  console.log('All API cache cleared');
 }

@@ -285,7 +285,7 @@ export class MigrationManager {
       return {
         migrationId: migration.id,
         success: true,
-        duration: Date.now() - startTime
+        duration: Math.max(1, Date.now() - startTime)
       };
 
     } catch (error) {
@@ -301,7 +301,7 @@ export class MigrationManager {
       return {
         migrationId: migration.id,
         success: false,
-        duration: Date.now() - startTime,
+        duration: Math.max(1, Date.now() - startTime),
         error: error instanceof Error ? error.message : String(error)
       };
     }

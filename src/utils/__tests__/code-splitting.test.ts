@@ -35,12 +35,7 @@ afterAll(() => {
 });
 
 describe('Dynamic Import Utility', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-  });
-  
   afterEach(() => {
-    jest.useRealTimers();
     jest.clearAllMocks();
   });
   
@@ -48,10 +43,39 @@ describe('Dynamic Import Utility', () => {
     const mockModule = { default: { testFunction: jest.fn() } };
     const importFn = jest.fn().mockResolvedValue(mockModule);
     
-    const result = await dynamicImport(importFn);
+  const result = await dynamicImport(importFn);
     
     expect(result).toBe(mockModule);
     expect(importFn).toHaveBeenCalledTimes(1);
+  });
+
+  test('retries on failure and eventually succeeds', async () => {
+    const mockModule = { default: { ok: true } };
+    const importFn = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('fail-1'))
+      .mockRejectedValueOnce(new Error('fail-2'))
+      .mockResolvedValue(mockModule);
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await dynamicImport(importFn, 3, 0);
+
+    expect(result).toBe(mockModule);
+    expect(importFn).toHaveBeenCalledTimes(3);
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+    warnSpy.mockRestore();
+  });
+
+  test('throws after exhausting retries', async () => {
+    const importFn = jest.fn().mockRejectedValue(new Error('always-fail'));
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(dynamicImport(importFn, 2, 0)).rejects.toThrow('always-fail');
+    // two warnings for two retries
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+    expect(importFn).toHaveBeenCalledTimes(3); // initial + 2 retries
+    warnSpy.mockRestore();
   });
 });
 
@@ -127,6 +151,31 @@ describe('IntelligentPrefetcher', () => {
     // without more complex mocking
     expect(IntelligentPrefetcher.prototype.prefetchComponent).toHaveBeenCalled();
   });
+
+  test('upgrades route priority after repeated interactions', () => {
+    const cfgCopy = JSON.parse(JSON.stringify(defaultCodeSplitConfig));
+    // Ensure /settings starts low priority and prefetch false
+    const settingsRoute = cfgCopy.routes.find((r: any) => r.path === '/settings');
+    settingsRoute.priority = 'low';
+    settingsRoute.prefetch = false;
+
+    const localPrefetcher = new IntelligentPrefetcher(cfgCopy);
+
+    const anchor = document.createElement('a');
+    anchor.setAttribute('data-route', '/settings');
+
+    // Trigger >3 interactions
+    for (let i = 0; i < 4; i++) {
+  // Call the instance handler directly to ensure we mutate cfgCopy
+  (localPrefetcher as any).handleUserInteraction({ target: anchor } as any);
+    }
+
+    // Expect priority upgraded to medium and prefetch enabled
+    expect(settingsRoute.priority).toBe('medium');
+    expect(settingsRoute.prefetch).toBe(true);
+
+    localPrefetcher.cleanup();
+  });
   
   test('cleanup removes event listeners and disconnects observer', () => {
     prefetcher.cleanup();
@@ -139,6 +188,24 @@ describe('IntelligentPrefetcher', () => {
     
     // Check if IntersectionObserver was disconnected
     expect(mockDisconnect).toHaveBeenCalled();
+  });
+
+  test('handles absence of IntersectionObserver gracefully', () => {
+    // Temporarily remove IntersectionObserver
+    const originalGlobal = (global as any).IntersectionObserver;
+    const originalWindow = (window as any).IntersectionObserver;
+    (global as any).IntersectionObserver = undefined;
+    (window as any).IntersectionObserver = undefined;
+
+    const localPrefetcher = new IntelligentPrefetcher(defaultCodeSplitConfig);
+    const el = document.createElement('div');
+    // Should no-op without throwing
+    localPrefetcher.observeComponent(el, 'GameBoard');
+    localPrefetcher.cleanup();
+
+  // Restore
+  (global as any).IntersectionObserver = originalGlobal;
+  (window as any).IntersectionObserver = originalWindow;
   });
 });
 

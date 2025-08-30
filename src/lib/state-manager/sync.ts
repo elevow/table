@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { StateDelta } from '../../types/state';
+import { StateDelta } from '../../types/state-sync';
 import { TableState } from '../../types/poker';
 import { ISyncManager, StateManagerConfig, VersionedState } from './types';
 
@@ -50,14 +50,14 @@ export class SyncManager implements ISyncManager {
 
       // Only emit sync attempt event for retries
       if (isRetry) {
-        await this.config.socket.emit('sync_attempt', {
+        await (this.config.socket as any).emit('sync_attempt', {
           version: this.state.version,
           timestamp: now,
           attempt: this.retryCount
         });
       }
 
-      const result = await this.config.socket.emit('sync_request', {
+      const result = await (this.config.socket as any).emit('sync_request', {
         version: this.state.version,
         checksum,
         pendingUpdates
@@ -84,7 +84,7 @@ export class SyncManager implements ISyncManager {
       this.retryCount++;
       if (this.retryCount >= this.config.retryAttempts) {
         // Max retries reached - emit failure 
-        await this.config.socket.emit('sync_failed', {
+  await (this.config.socket as any).emit('sync_failed', {
           version: this.state.version,
           timestamp: Date.now()
         });

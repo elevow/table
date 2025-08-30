@@ -12,9 +12,9 @@ describe('Application Metrics Integration Tests', () => {
   
   beforeAll(async () => {
     // Import the actual module
-    const module = await import('../application-metrics');
-    ApplicationMetricsCollector = (module as any).ApplicationMetricsCollector;
-    getApplicationMetrics = module.getApplicationMetrics;
+    const imported = await import('../application-metrics');
+    ApplicationMetricsCollector = (imported as any).ApplicationMetricsCollector;
+    getApplicationMetrics = imported.getApplicationMetrics;
   });
   
   beforeEach(() => {

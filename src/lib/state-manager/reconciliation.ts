@@ -1,5 +1,5 @@
-import { StateChange, VersionedState } from './types';
-import { StateConflict } from '../../types/state';
+import { VersionedState } from './types';
+import { StateConflict, StateChange } from '../../types/state-sync';
 
 export class ReconciliationManager<T extends Record<string, any>> {
   private conflictHandlers: Map<string, (conflict: StateConflict, state: VersionedState<T>) => VersionedState<T>>;
@@ -27,7 +27,11 @@ export class ReconciliationManager<T extends Record<string, any>> {
         clientVersion: clientState.version,
         serverVersion: serverState.version,
         conflictType: 'merge',
-        resolution: 'server'
+        resolution: 'server',
+        path: '',
+        clientValue: undefined,
+        serverValue: undefined,
+        resolvedValue: undefined
       });
     }
 
@@ -42,7 +46,11 @@ export class ReconciliationManager<T extends Record<string, any>> {
           clientVersion: clientState.version,
           serverVersion: serverState.version,
           conflictType: 'override',
-          resolution: 'server'
+          resolution: 'server',
+          path: '',
+          clientValue: undefined,
+          serverValue: undefined,
+          resolvedValue: undefined
         });
       }
     }
@@ -101,7 +109,7 @@ export class ReconciliationManager<T extends Record<string, any>> {
     return mergedState;
   }
 
-  private applyChange<T extends Record<string, any>>(state: VersionedState<T>, change: StateChange<any>): void {
+  private applyChange<T extends Record<string, any>>(state: VersionedState<T>, change: StateChange): void {
     let target: Record<string, any> = state.data;
     
     // Navigate to the target object using the path

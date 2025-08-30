@@ -4,7 +4,7 @@
  */
 import { getCacheManager } from './cache-manager';
 
-interface GameRoute {
+export interface GameRoute {
   id: string;
   path: string;
   components: string[];
@@ -122,15 +122,17 @@ export const cacheGameData = async (gameType: string): Promise<boolean> => {
     
     // Notify service worker to cache game assets
     if (typeof navigator !== 'undefined' && 
-        'serviceWorker' in navigator && 
-        navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: 'CACHE_GAME_ASSETS',
-        payload: {
-          gameType,
-          urls: gameAssets
-        }
-      });
+        'serviceWorker' in navigator) {
+      const controller = (navigator as any).serviceWorker?.controller;
+      if (controller) {
+        controller.postMessage({
+          type: 'CACHE_GAME_ASSETS',
+          payload: {
+            gameType,
+            urls: gameAssets
+          }
+        });
+      }
     }
     
     // console.log(`Cached game data for ${gameType}`);

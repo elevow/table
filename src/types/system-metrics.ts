@@ -27,7 +27,7 @@ export interface LoadBalancingMetrics {
 
 export interface SystemAlert {
   type: 'warning' | 'critical';
-  metric: keyof SystemMetrics | keyof ResourceUtilization;
+  metric: keyof SystemMetrics | keyof ResourceUtilization | 'errors';
   current: number;
   threshold: number;
   timestamp: number;

@@ -41,22 +41,11 @@ export interface ApplicationMetrics {
 }
 
 // Extended metrics for comprehensive monitoring
-export interface MetricValue {
-  timestamp: number;
-  labels: Record<string, string>;
-}
+export type MetricValue =
+  | { timestamp: number; labels: Record<string, string>; value: number }
+  | { timestamp: number; labels: Record<string, string>; increment: number };
 
-export interface HistogramValue extends MetricValue {
-  value: number;
-}
-
-export interface CounterValue extends MetricValue {
-  increment: number;
-}
-
-export interface GaugeValue extends MetricValue {
-  value: number;
-}
+// Specific metric value helpers can be derived from MetricValue union when needed.
 
 // Metric collection configuration
 export interface MetricsConfig {
@@ -656,7 +645,7 @@ class ApplicationMetricsCollector {
     }, this.config.flushInterval);
   }
   
-  private async flushMetrics(): void {
+  private async flushMetrics(): Promise<void> {
     if (!this.config.exportEndpoint) return;
     
     try {
@@ -761,11 +750,4 @@ export const usePerformanceTracking = (componentName: string) => {
 };
 
 // Export types
-export type {
-  ApplicationMetrics,
-  Histogram,
-  Counter,
-  Gauge,
-  MetricsConfig,
-  AlertRule
-};
+// Types are already exported as interfaces above; no duplicate re-export needed

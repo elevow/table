@@ -1,6 +1,6 @@
 import io, { Socket } from 'socket.io-client';
 import { TableState } from '../types/poker';
-import { StateDelta, StateConflict, ClientState, SyncConfig } from '../types/state-sync';
+import { StateDelta, StateConflict, ClientState, SyncConfig, StateChange } from '../types/state-sync';
 import { createHash } from 'crypto';
 
 export class EnhancedStateManager {
@@ -128,34 +128,41 @@ export class EnhancedStateManager {
   }
 
   private handleStateUpdate(update: TableState): void {
-    const delta = this.calculateDelta(this.state.data, update);
+  const delta = this.calculateDelta(this.state.data, update);
+  const deltaId = `delta_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     if (this.config.optimisticUpdates) {
       this.applyOptimisticUpdate(delta);
       this.state.version++; // Increment version optimistically
     }
 
-    this.state.pendingUpdates.set(delta.deltaId, delta);
-    this.attemptStateUpdate(delta);
+  this.state.pendingUpdates.set(deltaId, delta);
+  this.attemptStateUpdate(delta, deltaId);
   }
 
   private calculateDelta(oldState: any, newState: any): StateDelta {
-    const changes = [];
+    const changes: StateChange[] = [];
     const paths = this.findChangedPaths(oldState, newState);
 
     for (const path of paths) {
+      const oldValue = this.getValueAtPath(oldState, path);
+      const newValue = this.getValueAtPath(newState, path);
       changes.push({
-        path,
-        oldValue: this.getValueAtPath(oldState, path),
-        newValue: this.getValueAtPath(newState, path),
-        timestamp: Date.now()
+        id: `chg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        type: 'update',
+        path: path.split('.'),
+        value: newValue,
+        timestamp: Date.now(),
+        source: 'client',
+        oldValue,
+        newValue
       });
     }
 
     return {
       changes,
-      baseVersion: this.state.version,
-      deltaId: `delta_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      from: this.state.version,
+      to: this.state.version + 1
     };
   }
 
@@ -193,12 +200,13 @@ export class EnhancedStateManager {
 
   private applyOptimisticUpdate(delta: StateDelta): void {
     for (const change of delta.changes) {
-      this.state.optimisticUpdates.set(change.path, change.newValue);
-      this.setValueAtPath(this.state.data, change.path, change.newValue);
+      const pathStr = change.path.join('.');
+      this.state.optimisticUpdates.set(pathStr, (change as any).newValue ?? change.value);
+      this.setValueAtPath(this.state.data, pathStr, (change as any).newValue ?? change.value);
     }
   }
 
-  private async attemptStateUpdate(delta: StateDelta): Promise<void> {
+  private async attemptStateUpdate(delta: StateDelta, deltaId: string): Promise<void> {
     try {
       const serverAck = await new Promise<any>((resolve) => {
         this.socket.emit('state_update', {
@@ -209,12 +217,13 @@ export class EnhancedStateManager {
 
       if (serverAck.accepted) {
         this.state.version = serverAck.newVersion;
-        this.state.pendingUpdates.delete(delta.deltaId);
+        this.state.pendingUpdates.delete(deltaId);
         
         // Clear optimistic updates that were confirmed
         for (const change of delta.changes) {
-          this.state.optimisticUpdates.delete(change.path);
-          this.setValueAtPath(this.state.data, change.path, change.newValue);
+          const pathStr = change.path.join('.');
+          this.state.optimisticUpdates.delete(pathStr);
+          this.setValueAtPath(this.state.data, pathStr, (change as any).newValue ?? change.value);
         }
       } else {
         this.handleUpdateRejection(delta, serverAck.conflicts);
@@ -229,8 +238,9 @@ export class EnhancedStateManager {
     if (!this.config.optimisticUpdates) return;
 
     for (const change of delta.changes) {
-      this.state.optimisticUpdates.delete(change.path);
-      this.setValueAtPath(this.state.data, change.path, change.oldValue);
+      const pathStr = change.path.join('.');
+      this.state.optimisticUpdates.delete(pathStr);
+      this.setValueAtPath(this.state.data, pathStr, (change as any).oldValue);
     }
   }
 
@@ -269,16 +279,18 @@ export class EnhancedStateManager {
     const conflicts: StateConflict[] = [];
 
     for (const change of delta.changes) {
-      const optimisticValue = this.state.optimisticUpdates.get(change.path);
-      if (optimisticValue !== undefined && optimisticValue !== change.newValue) {
+      const pathStr = change.path.join('.');
+      const optimisticValue = this.state.optimisticUpdates.get(pathStr);
+      const newValue = (change as any).newValue ?? change.value;
+      if (optimisticValue !== undefined && optimisticValue !== newValue) {
         conflicts.push({
           clientVersion: this.state.version,
-          serverVersion: delta.baseVersion,
+          serverVersion: delta.to,
           conflictType: 'merge',
           resolution: this.config.conflictResolutionStrategy,
-          path: change.path,
+          path: pathStr,
           clientValue: optimisticValue,
-          serverValue: change.newValue,
+          serverValue: newValue,
           resolvedValue: null
         });
       }

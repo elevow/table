@@ -179,7 +179,14 @@ export const getPerformanceMonitor = (): PerformanceMonitor => {
 
 // Hook for measuring component render performance
 export const useComponentPerformance = (componentName: string) => {
-  if (typeof window === 'undefined') return { markInteraction: () => {} };
+  if (typeof window === 'undefined') {
+    return {
+      // Always return a function to keep the signature consistent in SSR
+      markInteraction: (_interactionName: string, _metadata?: Record<string, any>) => {
+        return () => {};
+      }
+    };
+  }
   
   const monitor = getPerformanceMonitor();
   

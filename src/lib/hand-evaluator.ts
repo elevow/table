@@ -48,7 +48,7 @@ export class HandEvaluator {
     const hand = pokersolver.solve(cardStrings);
     
     // Map the cards in the winning hand back to our Card objects
-    const winningCards = hand.cards.map(solverCard => {
+  const winningCards = hand.cards.map((solverCard: any) => {
       const rank = solverCard.value === 'T' ? '10' : solverCard.value;
       return allCards.find(card => 
         card.rank === rank && 

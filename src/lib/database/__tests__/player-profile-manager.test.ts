@@ -39,9 +39,9 @@ jest.mock('bcryptjs', () => ({
   hash: jest.fn(),
 }));
 
-jest.mock('uuid', () => ({
-  v4: mockUuidv4,
-}));
+jest.mock('uuid', () => {
+  return { v4: (...args: any[]) => mockUuidv4(...args) };
+});
 
 describe('PlayerProfileManager', () => {
   let manager: PlayerProfileManager;

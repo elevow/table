@@ -511,10 +511,12 @@ export class GameAnalyticsCollector extends EventEmitter {
 
   // Feature Usage Tracking
   public trackFeatureUsage(feature: keyof FeatureUsageStats, playerId: string, metadata?: Record<string, any>): void {
-    if (this.metrics.features.usage[feature]) {
-      this.metrics.features.usage[feature].usage++;
-      this.metrics.features.usage[feature].frequency = this.calculateFeatureFrequency(feature);
+    if (!this.metrics.features.usage[feature]) {
+      // Initialize missing feature bucket
+      (this.metrics.features.usage as any)[feature] = { usage: 0, frequency: 0 };
     }
+    this.metrics.features.usage[feature]!.usage++;
+    this.metrics.features.usage[feature]!.frequency = this.calculateFeatureFrequency(feature);
 
     this.recordEvent('feature_usage', { feature, playerId, metadata });
   }

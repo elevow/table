@@ -3,11 +3,16 @@ import os from 'os';
 
 export class SystemMonitor {
   private static instance: SystemMonitor;
-  private metrics: SystemMetrics;
-  private tables: Map<string, TableMetrics>;
-  private messageHistory: number[];
-  private connections: Map<string, number>;
-  private errors: Map<string, number>;
+  private metrics: SystemMetrics = {
+    activeTables: 0,
+    activePlayers: 0,
+    messageRate: 0,
+    resourceUtilization: { cpu: 0, memory: 0, network: 0 }
+  };
+  private tables: Map<string, TableMetrics> = new Map();
+  private messageHistory: number[] = [];
+  private connections: Map<string, number> = new Map();
+  private errors: Map<string, number> = new Map();
   private readonly maxHistorySize = 60; // 1 minute of history at 1 sample/sec
   private alertHandlers: ((alert: SystemAlert) => void)[] = [];
 

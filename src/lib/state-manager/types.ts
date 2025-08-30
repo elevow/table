@@ -1,5 +1,5 @@
-import { StateDelta, StateConflict } from '../../types/state';
-import { Socket } from 'socket.io-client';
+import { StateDelta, StateConflict } from '../../types/state-sync';
+import type { Socket } from 'socket.io-client';
 import { TableState } from '../../types/poker';
 
 export interface StateVersioning {
@@ -61,7 +61,7 @@ export interface IConflictManager {
 }
 
 export interface StateManagerConfig extends StateSyncOptions {
-  socket: typeof Socket;
+  socket: Socket;
   optimisticUpdates: boolean;
 }
 

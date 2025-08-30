@@ -98,6 +98,47 @@ describe('Database Connection', () => {
       
       expect(createdPool).toBeInstanceOf(MockDatabasePool);
     });
+
+    test('falls back to mock when config is incomplete', () => {
+      const createdPool = createDatabasePool({
+        host: 'localhost',
+        // Missing database and username
+        port: 5432,
+        database: '' as any,
+        username: '' as any,
+        password: 'x'
+      } as any);
+
+      expect(createdPool).toBeInstanceOf(MockDatabasePool);
+    });
+
+
+    test('falls back to mock pool when pg module is unavailable', () => {
+      const originalEnv = { ...process.env };
+      // Avoid direct assignment to readonly env properties
+      process.env = {
+        ...process.env,
+        NODE_ENV: 'production',
+        USE_MOCK_DB: 'false'
+      } as any;
+
+      // Simulate missing/invalid pg module so constructor path throws
+      jest.doMock('pg', () => ({}), { virtual: true });
+
+      const config: DatabaseConfig = {
+        host: 'localhost',
+        port: 5432,
+        database: 'prod_db',
+        username: 'prod_user',
+        password: 'prod_pass'
+      };
+
+      const createdPool = createDatabasePool(config);
+      expect(createdPool).toBeInstanceOf(MockDatabasePool);
+
+  jest.unmock('pg');
+  process.env = originalEnv;
+    });
   });
 
   describe('DatabaseMigrationRunner', () => {

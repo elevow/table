@@ -575,12 +575,12 @@ export const usePerformanceAnalytics = () => {
 // Example: Custom Analytics Hook for Game Components
 export const useGameAnalyticsIntegration = (gameId: string) => {
   const analytics = getGameAnalytics();
-  const performance = usePerformanceAnalytics();
+  const perf = usePerformanceAnalytics();
 
   const trackGameStart = useCallback(() => {
-    const startTime = performance.now();
-    performance.trackComponentRender('game-initialization', startTime);
-  }, [performance]);
+    const start = performance.now();
+    perf.trackComponentRender('game-initialization', start);
+  }, [perf]);
 
   const trackGameAction = useCallback((playerId: string, action: string, metadata?: any) => {
     const actionTime = Date.now();
@@ -599,10 +599,12 @@ export const useGameAnalyticsIntegration = (gameId: string) => {
   };
 };
 
-export default {
+const GameAnalyticsIntegration = {
   PokerTableWithAnalytics,
   AnalyticsDashboardPage,
   RealTimeMonitor,
   usePerformanceAnalytics,
   useGameAnalyticsIntegration
 };
+
+export default GameAnalyticsIntegration;

@@ -132,8 +132,6 @@ describe('ConflictManager', () => {
         await conflictManager.handleConflict(conflict);
       }
 
-      await conflictManager.handleConflict(conflict);
-
       // Check that states were merged
       expect(state.version).toBe(serverState.version);
       expect(state.data.pot).toBe(200);

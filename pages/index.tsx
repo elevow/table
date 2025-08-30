@@ -34,7 +34,7 @@ const Home: NextPage = () => {
     
     // End the performance mark after everything is loaded
     return () => {
-      endMark();
+      if (typeof endMark === 'function') endMark();
       prefetcher.cleanup();
     };
   }, [markInteraction]);
@@ -48,7 +48,7 @@ const Home: NextPage = () => {
     router.push('/game/poker-texas-holdem');
     
     // End timing when the function completes
-    endMark();
+  if (typeof endMark === 'function') endMark();
   };
   
   return (
@@ -102,7 +102,5 @@ const Home: NextPage = () => {
     </div>
   );
 };
-
-export default Home;
 
 export default Home;

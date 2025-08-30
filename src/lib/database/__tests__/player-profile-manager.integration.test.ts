@@ -15,8 +15,9 @@ describe('PlayerProfileManager Integration Tests', () => {
 
     // Create mock implementations
     const mockBcrypt = {
-      hash: jest.fn().mockResolvedValue('$2a$12$hashedpassword'),
-      compare: jest.fn().mockResolvedValue(true)
+      // Async implementations avoid mockResolvedValue typing pitfalls
+      hash: jest.fn(async () => '$2a$12$hashedpassword'),
+      compare: jest.fn(async () => true)
     };
 
     const mockUuid = {
@@ -38,12 +39,12 @@ describe('PlayerProfileManager Integration Tests', () => {
 
     // Create mock pool
     mockPool = {
-      connect: jest.fn().mockResolvedValue(mockClient)
+      connect: jest.fn(async () => mockClient)
     };
 
     // Dynamically import the PlayerProfileManager
-    const module = await import('../player-profile-manager');
-    PlayerProfileManager = module.PlayerProfileManager;
+  const imported = await import('../player-profile-manager');
+  PlayerProfileManager = imported.PlayerProfileManager;
     
     // Create the actual PlayerProfileManager instance
     playerManager = new PlayerProfileManager(mockPool);

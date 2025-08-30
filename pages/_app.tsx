@@ -103,7 +103,7 @@ function MyApp({ Component, pageProps }: AppProps) {
       <Script
         src="https://cdn.example.com/analytics.js"
         strategy="lazyOnload"
-        onLoad={() => // console.log('Analytics script loaded')}
+  onLoad={() => { /* Analytics script loaded */ }}
       />
       
       {/* Offline indicator */}

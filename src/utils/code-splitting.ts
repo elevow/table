@@ -104,7 +104,7 @@ export class IntelligentPrefetcher {
   }
   
   private initViewportObserver() {
-    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) return;
+  if (typeof window === 'undefined' || typeof (window as any).IntersectionObserver !== 'function') return;
     
     this.viewportObserver = new IntersectionObserver(
       (entries) => {

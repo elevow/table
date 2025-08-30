@@ -33,7 +33,7 @@ export default function GamePage() {
   const chatPanelRef = useRef(null);
   const settingsRef = useRef(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [gameRoutes, setGameRoutes] = useState([]);
+  const [gameRoutes, setGameRoutes] = useState<import('../../src/utils/game-routes').GameRoute[]>([]);
   const { markInteraction } = useComponentPerformance('GamePage');
   
   useEffect(() => {
@@ -64,14 +64,14 @@ export default function GamePage() {
     }
     
     // Mark performance for this page load
-    const endMark = markInteraction('game-page-load', {
+  const endMark = markInteraction('game-page-load', {
       gameId: id,
       timestamp: Date.now()
     });
     
     return () => {
       // Clean up when component unmounts
-      endMark();
+  if (typeof endMark === 'function') endMark();
       prefetcher.cleanup();
     };
   }, [id, markInteraction]);
@@ -80,7 +80,7 @@ export default function GamePage() {
   const toggleSettings = () => {
     const endMark = markInteraction('toggle-settings');
     setShowSettings(prev => !prev);
-    endMark();
+    if (typeof endMark === 'function') endMark();
   };
   
   return (

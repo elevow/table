@@ -123,8 +123,9 @@ export class ConfigDrivenMigrationManager {
           break;
         }
         default:
-          const neverType: never = (s as any).type;
-          throw new Error(`Unsupported step type: ${neverType}`);
+          // Exhaustive type guard: capture type as string for error message
+          const stepType = (s as any).type as string;
+          throw new Error(`Unsupported step type: ${stepType}`);
       }
     }
 

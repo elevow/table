@@ -18,8 +18,8 @@ export class UserService {
     return this.manager.createUser(req);
   }
 
-  getUserById(id: string): Promise<UserRecord | null> {
-    return this.manager.getUserById(id);
+  getUserById(id: string, callerUserId?: string): Promise<UserRecord | null> {
+    return this.manager.getUserById(id, callerUserId);
   }
 
   getUserByEmail(email: string): Promise<UserRecord | null> {
@@ -30,8 +30,8 @@ export class UserService {
     return this.manager.getUserByUsername(username);
   }
 
-  updateUser(id: string, updates: UpdateUserRequest): Promise<UserRecord> {
-    return this.manager.updateUser(id, updates);
+  updateUser(id: string, updates: UpdateUserRequest, callerUserId?: string): Promise<UserRecord> {
+    return this.manager.updateUser(id, updates, callerUserId);
   }
 
   searchUsers(filters: UserQueryFilters, pagination: PaginationOptions): Promise<PaginatedUsersResponse> {

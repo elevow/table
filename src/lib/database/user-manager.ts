@@ -69,7 +69,15 @@ export class UserManager {
     }
   }
 
-  async getUserById(id: string): Promise<UserRecord | null> {
+  async getUserById(id: string, callerUserId?: string): Promise<UserRecord | null> {
+    // If callerUserId provided, run within RLS context to honor policies
+    if (callerUserId) {
+      const { withRlsUserContext } = await import('./rls-context');
+      return withRlsUserContext(this.pool, { userId: callerUserId }, async (client) => {
+        const res = await client.query('SELECT * FROM users WHERE id = $1', [id]);
+        return res.rows[0] ? this.mapRowToUser(res.rows[0]) : null;
+      });
+    }
     const res = await this.pool.query('SELECT * FROM users WHERE id = $1', [id]);
     return res.rows[0] ? this.mapRowToUser(res.rows[0]) : null;
   }
@@ -84,7 +92,7 @@ export class UserManager {
     return res.rows[0] ? this.mapRowToUser(res.rows[0]) : null;
   }
 
-  async updateUser(id: string, updates: UpdateUserRequest): Promise<UserRecord> {
+  async updateUser(id: string, updates: UpdateUserRequest, callerUserId?: string): Promise<UserRecord> {
     const sets: string[] = [];
     const vals: any[] = [];
     let i = 1;
@@ -94,11 +102,23 @@ export class UserManager {
     if (updates.isVerified !== undefined) { sets.push(`is_verified = $${i++}`); vals.push(updates.isVerified); }
     if (updates.metadata !== undefined) { sets.push(`metadata = COALESCE(metadata,'{}'::jsonb) || $${i++}::jsonb`); vals.push(JSON.stringify(updates.metadata)); }
     if (!sets.length) {
-      const existing = await this.getUserById(id);
+      const existing = await this.getUserById(id, callerUserId);
       if (!existing) throw new UserError('User not found', 'NOT_FOUND');
       return existing;
     }
     vals.push(id);
+    if (callerUserId) {
+      const { withRlsUserContext } = await import('./rls-context');
+      const res = await withRlsUserContext(this.pool, { userId: callerUserId }, async (client) => {
+        return client.query(
+          `UPDATE users SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+          vals
+        );
+      });
+      const row = (res as any).rows?.[0];
+      if (!row) throw new UserError('User not found', 'NOT_FOUND');
+      return this.mapRowToUser(row);
+    }
     const res = await this.pool.query(
       `UPDATE users SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
       vals

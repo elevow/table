@@ -40,8 +40,11 @@ export class GameService {
     return this.manager.endGame(id);
   }
 
-  async getActiveGameByRoom(roomId: string): Promise<ActiveGameRecord | null> {
+  async getActiveGameByRoom(roomId: string, callerUserId?: string): Promise<ActiveGameRecord | null> {
     this.require(roomId, 'roomId');
+    if (callerUserId !== undefined) {
+      return this.manager.getActiveGameByRoom(roomId, callerUserId);
+    }
     return this.manager.getActiveGameByRoom(roomId);
   }
 

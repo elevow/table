@@ -57,3 +57,5 @@ export interface Paginated<T> {
   limit: number;
   totalPages: number;
 }
+
+// Note: Some service/manager methods may accept an optional callerUserId to run under RLS.

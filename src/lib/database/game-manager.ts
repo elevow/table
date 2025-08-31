@@ -100,7 +100,15 @@ export class GameManager {
     }
   }
 
-  async getActiveGameByRoom(roomId: string): Promise<ActiveGameRecord | null> {
+  async getActiveGameByRoom(roomId: string, callerUserId?: string): Promise<ActiveGameRecord | null> {
+    if (callerUserId) {
+      const { withRlsUserContext } = await import('./rls-context');
+      return withRlsUserContext(this.pool, { userId: callerUserId }, async (client) => {
+        const res = await client.query(`SELECT * FROM active_games WHERE room_id = $1 LIMIT 1`, [roomId]);
+        if (!res.rows[0]) return null;
+        return this.mapActive(res.rows[0]);
+      });
+    }
     const res = await this.pool.query(`SELECT * FROM active_games WHERE room_id = $1 LIMIT 1`, [roomId]);
     if (!res.rows[0]) return null;
     return this.mapActive(res.rows[0]);

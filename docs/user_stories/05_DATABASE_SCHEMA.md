@@ -271,6 +271,31 @@ CREATE TABLE feature_cooldowns (
     user_id UUID REFERENCES users(id),
     feature_type VARCHAR(50) NOT NULL,
     last_used TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    next_available TIMESTAMP WITH TIME ZONE NOT NULL
+        next_available TIMESTAMP WITH TIME ZONE NOT NULL,
+        UNIQUE(user_id, feature_type)
 );
+```
+
+Migration (for existing databases):
+
+If the `feature_cooldowns` table already exists without the composite uniqueness required for upserts, add a concurrent unique index to avoid long table locks in production. Ensure there are no duplicate `(user_id, feature_type)` rows before applying the index.
+
+```sql
+-- Optional: inspect duplicates and resolve them before adding uniqueness
+WITH dups AS (
+    SELECT user_id, feature_type, COUNT(*) AS cnt
+    FROM feature_cooldowns
+    GROUP BY user_id, feature_type
+    HAVING COUNT(*) > 1
+)
+SELECT * FROM dups;
+
+-- Add a concurrent unique index to support ON CONFLICT (user_id, feature_type)
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS feature_cooldowns_user_feature_uidx
+ON feature_cooldowns (user_id, feature_type);
+
+-- (Optional) If you prefer a table constraint, you can attach one using the created index:
+-- ALTER TABLE feature_cooldowns
+--   ADD CONSTRAINT feature_cooldowns_user_feature_unique
+--   UNIQUE USING INDEX feature_cooldowns_user_feature_uidx;
 ```

@@ -131,3 +131,44 @@ export interface PlayerActionRow {
   position: number;
   created_at: Date;
 }
+
+// US-021: Run It Twice outcomes
+export interface RunItTwiceOutcomeInput {
+  handId: string;
+  boardNumber: number; // 1 or 2 typically
+  communityCards: string[]; // 5 cards when fully revealed
+  winners: any; // structure holding winners and amounts for this board
+  potAmount: number;
+}
+
+export interface RunItTwiceOutcomeRecord {
+  id: string;
+  handId: string;
+  boardNumber: number;
+  communityCards: string[];
+  winners: any;
+  potAmount: number;
+}
+
+export interface RunItTwiceOutcomeRow {
+  id: string;
+  hand_id: string;
+  board_number: number;
+  community_cards: string[];
+  winners: string; // JSON string
+  pot_amount: string | number; // may come back as string from DB numeric
+}
+
+// US-021: hand_history row shape
+export interface HandHistoryRow {
+  id: string;
+  game_id: string;
+  hand_number: number;
+  community_cards: string[];
+  player_cards: string; // JSON string
+  actions: string; // JSON string array
+  started_at: Date;
+  ended_at: Date | null;
+  winners: string; // JSON string
+  pot_distribution: string; // JSON string
+}

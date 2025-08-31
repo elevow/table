@@ -10,18 +10,6 @@ module.exports = (phase, { defaultConfig }) => {
     // Enable SWC minification for improved build times
     swcMinify: true,
     
-    // Configure code splitting strategies
-    experimental: {
-      // Enable Server Components
-      serverComponents: true,
-      // Enable concurrent features
-      concurrentFeatures: true,
-      // Optimize code in development
-      optimizeCss: !isDev,
-      // Optimize fonts
-      optimizeFonts: true,
-    },
-    
     webpack: (config, { dev, isServer }) => {
       // Keep the chunk size reasonable
       config.optimization.splitChunks = {
@@ -98,13 +86,6 @@ module.exports = (phase, { defaultConfig }) => {
       deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
       imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
       minimumCacheTTL: 60,
-    },
-    
-    // Modern module support for browsers
-    // Export as ES modules and optimize performance
-    // for modern browsers
-    future: {
-      webpack5: true,
-    },
+  },
   };
 };

@@ -10,14 +10,16 @@ describe('HandHistoryManager (US-021)', () => {
   let mockPool: any;
 
   beforeEach(() => {
-    mockClient = { query: jest.fn(), release: jest.fn() };
-    mockPool = { connect: jest.fn().mockResolvedValue(mockClient) } as any;
-    mgr = new HandHistoryManager(mockPool);
+    mockClient = { query: jest.fn(), release: jest.fn() } as any;
+    const connect = jest.fn();
+    (connect as any).mockResolvedValue(mockClient);
+    mockPool = { connect } as any;
+    mgr = new HandHistoryManager(mockPool as any);
     jest.clearAllMocks();
   });
 
   it('creates hand history and maps return shape', async () => {
-    mockClient.query.mockResolvedValueOnce({ rows: [{ id: 'hid-1' }] });
+  (mockClient.query as any).mockResolvedValueOnce({ rows: [{ id: 'hid-1' }] });
 
     const now = new Date();
     const res = await mgr.createHandHistory({
@@ -52,7 +54,7 @@ describe('HandHistoryManager (US-021)', () => {
   });
 
   it('adds run-it-twice outcome and parses winners/pot types', async () => {
-    mockClient.query.mockResolvedValueOnce({
+  (mockClient.query as any).mockResolvedValueOnce({
       rows: [{
         id: 'o1',
         hand_id: 'hid-1',
@@ -80,7 +82,7 @@ describe('HandHistoryManager (US-021)', () => {
   });
 
   it('lists run-it-twice outcomes and handles mixed types', async () => {
-    mockClient.query.mockResolvedValueOnce({
+  (mockClient.query as any).mockResolvedValueOnce({
       rows: [
         {
           id: 'o1', hand_id: 'hid-1', board_number: 1,
@@ -91,8 +93,7 @@ describe('HandHistoryManager (US-021)', () => {
         {
           id: 'o2', hand_id: 'hid-1', board_number: 2,
           community_cards: ['2s', '3d', '4c', '5h', '6s'],
-          // @ts-expect-error - purposely not a string to exercise non-string branch
-          winners: [{ playerId: 'p2', amount: 30 }],
+          winners: [{ playerId: 'p2', amount: 30 }] as any,
           pot_amount: '30',
         } as any,
       ],
@@ -107,7 +108,7 @@ describe('HandHistoryManager (US-021)', () => {
   });
 
   it('releases client on error and propagates', async () => {
-    mockClient.query.mockRejectedValueOnce(new Error('db error'));
+  (mockClient.query as any).mockRejectedValueOnce(new Error('db error'));
 
     await expect(mgr.addRunItTwiceOutcome({
       handId: 'hid-err',

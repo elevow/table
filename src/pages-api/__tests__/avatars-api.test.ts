@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 // Handlers under test
 import uploadHandler from '../../../pages/api/avatars/upload';
-import getLatestHandler from '../../../pages/api/avatars/[userId]';
+import getLatestHandler from '../../../pages/api/avatars/user/[userId]';
 import updateHandler from '../../../pages/api/avatars/[avatarId]';
 
 // Mocks: pg Pool, rate limiter, and AvatarService used inside handlers

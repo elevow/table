@@ -4,7 +4,7 @@
  * Supports memory, Redis, localStorage, and IndexedDB storage
  */
 
-import { Redis } from 'ioredis';
+import type { Redis as IORedisClient } from 'ioredis';
 
 // Types based on the user story requirements
 export type CacheStorage = 'memory' | 'redis' | 'local' | 'indexeddb';
@@ -38,7 +38,7 @@ export interface CacheEntry<T = any> {
 class CacheManager {
   private static instance: CacheManager;
   private memoryCache: Map<string, CacheEntry> = new Map();
-  private redisClient: Redis | null = null;
+  private redisClient: IORedisClient | null = null;
   private config: Record<string, CacheConfig> = {};
   private idbDatabase: IDBDatabase | null = null;
   private isOffline = false;
@@ -66,10 +66,13 @@ class CacheManager {
   /**
    * Initialize Redis client for server-side caching
    */
-  public initRedis(options: { host: string; port: number; password?: string }): void {
+  public async initRedis(options: { host: string; port: number; password?: string }): Promise<void> {
     try {
       if (typeof window === 'undefined') {
-        this.redisClient = new Redis(options);
+        // Dynamically import to avoid bundling ioredis in the browser
+        const mod: any = await import('ioredis');
+        const RedisCtor = mod?.default ?? mod?.Redis ?? mod;
+        this.redisClient = new RedisCtor(options) as IORedisClient;
         // console.log('Redis cache initialized');
       }
     } catch (error) {

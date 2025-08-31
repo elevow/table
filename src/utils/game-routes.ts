@@ -2,7 +2,8 @@
  * Utility for game-related route information
  * This is dynamically imported to reduce initial bundle size
  */
-import { getCacheManager } from './cache-manager';
+// Use dynamic import to avoid pulling any server-only deps into the client bundle
+const loadCacheManager = async () => (await import('./cache-manager')).getCacheManager();
 
 export interface GameRoute {
   id: string;
@@ -102,7 +103,7 @@ export const cacheGameData = async (gameType: string): Promise<boolean> => {
   }
   
   try {
-    const cacheManager = getCacheManager();
+  const cacheManager = await loadCacheManager();
     
     // Cache static game assets
     const gameAssets = [

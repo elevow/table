@@ -130,4 +130,23 @@ describe('Profile API', () => {
     expect(res.status).toHaveBeenCalledWith(405);
     expect(res.json).toHaveBeenCalledWith({ error: 'Method not allowed' });
   });
+
+  it('OPTIONS returns 204 and Allow header for preflight', async () => {
+    const req = createReq('OPTIONS');
+    // Ensure no auth header needed for preflight
+    (req as any).headers['x-user-id'] = '';
+    const res = {
+      ...createRes(),
+      setHeader: jest.fn(),
+      end: jest.fn()
+    } as any;
+
+    await handler(req as any, res as any);
+
+    expect(res.setHeader).toHaveBeenCalledWith('Allow', ['GET', 'PUT', 'PATCH']);
+    // Access-Control-Allow-Methods is optional but we set it; assert presence
+    expect(res.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Methods', 'GET, PUT, PATCH');
+    expect(res.status).toHaveBeenCalledWith(204);
+    expect(res.end).toHaveBeenCalled();
+  });
 });

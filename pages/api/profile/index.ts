@@ -22,6 +22,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const method = req.method || 'GET';
   const allowedMethods = ['GET', 'PUT', 'PATCH'];
 
+  // CORS preflight: respond early without auth/rate limiting
+  if (method === 'OPTIONS') {
+    res.setHeader('Allow', allowedMethods);
+    // Optional CORS helpers
+    res.setHeader('Access-Control-Allow-Methods', allowedMethods.join(', '));
+    return res.status(204).end();
+  }
+
   // Rate limit per IP+method
   const rl = rateLimit(req, { windowMs: 60_000, limit: method === 'GET' ? 120 : 60 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });

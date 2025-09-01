@@ -1,10 +1,10 @@
 import type { MigrationConfig } from '../config-driven-migration';
 
-// US-069: Ensure unique upsert on feature_cooldowns by adding a concurrent unique index
+// Ensure unique upsert on feature_cooldowns by adding a concurrent unique index
 // Covers acceptance from DB schema doc: add unique index on (user_id, feature_type)
 // to support ON CONFLICT upserts without long locks.
-export const US069_FEATURE_COOLDOWNS_UNIQUE_INDEX: MigrationConfig = {
-  version: '2025.08.31.US-069',
+export const FEATURE_COOLDOWNS_UNIQUE_INDEX: MigrationConfig = {
+  version: '2025.08.31.1001',
   description: 'Add concurrent unique index on feature_cooldowns (user_id, feature_type) to support safe upserts',
   dependencies: [],
   preChecks: [

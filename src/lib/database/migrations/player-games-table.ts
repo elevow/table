@@ -1,9 +1,9 @@
 import type { MigrationConfig } from '../config-driven-migration';
 
-// US-070: Active Game State — player-specific state within active games
+// Active Game State — player-specific state within active games
 // Tracks positions, stacks, current bets, fold/all-in flags, and securely stored hole cards
 export const PLAYER_GAMES_TABLE: MigrationConfig = {
-  version: '2025.08.31.US-070',
+  version: '2025.08.31.1002',
   description: 'Create player_games table for per-player active game state with supporting indexes',
   dependencies: [],
   preChecks: [],

@@ -1,7 +1,7 @@
 import { ConfigDrivenMigrationManager } from '../config-driven-migration';
 import { SchemaEvolutionManager } from '../schema-evolution';
 import type { TransactionManager } from '../transaction-manager';
-import { PLAYER_GAMES_TABLE as cfg } from '../migrations/player-games-table';
+import { ROOM_CONFIGURATION_COLUMNS as cfg } from '../migrations/room-configuration-columns';
 
 const mockTransactionManager = {
   withTransaction: jest.fn().mockImplementation(async (callback) => {
@@ -10,7 +10,7 @@ const mockTransactionManager = {
   })
 } as unknown as TransactionManager;
 
-describe('player_games table migration', () => {
+describe('game_rooms room configuration migration', () => {
   let evolution: SchemaEvolutionManager;
   let manager: ConfigDrivenMigrationManager;
 
@@ -19,29 +19,19 @@ describe('player_games table migration', () => {
     manager = new ConfigDrivenMigrationManager(evolution);
   });
 
-  it('defines table creation and indexes with validations', () => {
+  it('defines columns, constraints and checks', () => {
     expect(cfg.version).toMatch(/\d{4}\.\d{2}\.\d{2}\./);
-    expect(cfg.description).toMatch(/player_games table/i);
+    expect(cfg.description).toMatch(/room configuration/i);
 
-    // Create table step present
-    const createTable = cfg.steps.find(s => s.type === 'custom' && s.table === 'player_games');
-    expect(createTable).toBeTruthy();
-    expect((createTable as any).details.sql).toContain('CREATE TABLE IF NOT EXISTS player_games');
-    expect((createTable as any).details.sql).toContain('PRIMARY KEY (game_id, user_id)');
+    const cols = cfg.steps.filter(s => s.type === 'addColumn').map(s => (s as any).details.columnName);
+    expect(cols).toEqual(expect.arrayContaining(['small_blind','big_blind','min_buy_in','max_buy_in','updated_at']));
 
-    // Indexes
-    const idxUser = cfg.steps.find(s => s.type === 'addIndex' && s.table === 'player_games' && (s as any).details.indexName === 'idx_player_games_user');
-    const idxGame = cfg.steps.find(s => s.type === 'addIndex' && s.table === 'player_games' && (s as any).details.indexName === 'idx_player_games_game');
-    expect(idxUser).toBeTruthy();
-    expect(idxGame).toBeTruthy();
+    const hasConstraintBlock = cfg.steps.some(s => s.type === 'custom' && (s as any).details.sql.includes('valid_blinds'));
+    expect(hasConstraintBlock).toBe(true);
 
-    // Post checks
-    expect(cfg.postChecks[0].sql).toContain("information_schema.tables");
-    expect(cfg.postChecks[1].sql).toContain("pg_indexes");
-    expect(cfg.postChecks[2].sql).toContain("pg_indexes");
-
-    // Rollback
-    expect(cfg.rollback[0].sql).toContain('DROP TABLE IF EXISTS player_games');
+    // Post checks cover columns and constraints
+    expect(cfg.postChecks.find(c => c.name.includes('col_small_blind_exists'))).toBeTruthy();
+    expect(cfg.postChecks.find(c => c.name.includes('constraint_valid_blinds_exists'))).toBeTruthy();
   });
 
   it('runs through the config-driven migration manager pipeline', async () => {

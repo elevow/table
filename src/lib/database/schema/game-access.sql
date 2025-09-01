@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS active_games (
 CREATE INDEX IF NOT EXISTS idx_active_games_room_id ON active_games(room_id);
 CREATE INDEX IF NOT EXISTS idx_active_games_last_action ON active_games(last_action_at DESC);
 
--- Player-game participation and per-player state (US-070 technical notes adapted)
+-- Player-game participation and per-player state (technical notes adapted)
 CREATE TABLE IF NOT EXISTS player_games (
     game_id UUID NOT NULL REFERENCES active_games(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -1,7 +1,7 @@
 import { ConfigDrivenMigrationManager } from '../config-driven-migration';
 import { SchemaEvolutionManager } from '../schema-evolution';
 import type { TransactionManager } from '../transaction-manager';
-import { US069_FEATURE_COOLDOWNS_UNIQUE_INDEX as cfg } from '../migrations/feature-cooldowns-unique-index';
+import { FEATURE_COOLDOWNS_UNIQUE_INDEX as cfg } from '../migrations/feature-cooldowns-unique-index';
 
 // Reuse a simple in-memory TransactionManager mock pattern
 const mockTransactionManager = {
@@ -22,7 +22,7 @@ describe('feature-cooldowns unique index migration config', () => {
 
   it('defines concurrent unique index creation and sanity checks', () => {
     // Validate config fields
-    expect(cfg.version).toContain('US-069');
+    expect(cfg.version).toMatch(/\d{4}\.\d{2}\.\d{2}\./);
     expect(cfg.description).toMatch(/unique index/i);
 
     // Pre-check queries for duplicates

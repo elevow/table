@@ -66,3 +66,25 @@ export interface HandResult {
   strength: number;
   winAmount: number;
 }
+
+// US-026: Hand Rankings types
+export enum HandRank {
+  HighCard = 1,
+  OnePair = 2,
+  TwoPair = 3,
+  ThreeOfAKind = 4,
+  Straight = 5,
+  Flush = 6,
+  FullHouse = 7,
+  FourOfAKind = 8,
+  StraightFlush = 9,
+  RoyalFlush = 10
+}
+
+export interface HandRanking {
+  rank: number; // numeric rank (1-10) aligned with HandRank
+  name: string; // e.g., "Full House"
+  cards: Card[]; // best 5 cards forming the hand
+  kickers: Card[]; // tie-breakers in order (if applicable)
+  strength: number; // same as rank for now; reserved for extended scoring
+}

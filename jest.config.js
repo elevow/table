@@ -4,6 +4,11 @@ module.exports = {
   testEnvironment: 'jsdom',
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    // Ignore legacy user-story-numbered test filenames (migrated to clean names)
+    '.*us-\\d+.*\\.test\\.ts$'
+  ],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: {

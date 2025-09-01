@@ -130,7 +130,7 @@ export class PokerEngine {
     const oldBet = player.currentBet;
     
     // Process the action
-    const { pot, currentBet, minRaise } = this.bettingManager.processAction(
+  const { pot, currentBet, minRaise } = this.bettingManager.processAction(
       player,
       action,
       this.state.currentBet,
@@ -138,7 +138,7 @@ export class PokerEngine {
     );
 
     // Update state and add new contribution to pot if any
-    if ((action.type === 'call' || action.type === 'raise') && pot > 0) {
+  if ((action.type === 'call' || action.type === 'raise' || action.type === 'bet') && pot > 0) {
       // Only add the difference between new bet and old bet
       this.log(`Processing bet: oldBet=${oldBet}, newBet=${player.currentBet}, potContribution=${pot}`);
       if (pot > 0) {

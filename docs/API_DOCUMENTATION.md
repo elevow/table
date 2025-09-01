@@ -198,6 +198,42 @@ Notes:
 - Outcomes are always returned for the given handId when available.
 ```
 
+### Rabbit Hunt Preview
+
+Preview the remaining community cards and the remaining deck without mutating live game state.
+
+```typescript
+GET /api/rabbit-hunt/preview
+Rate Limit: 300 requests per minute
+
+Query Params:
+{
+  roomId: string;                         // required – active room identifier
+  street: 'flop' | 'turn' | 'river';      // required – target preview street
+  knownCards?: string | string[];         // optional – cards to exclude (player/known), CSV or repeated query param
+  communityCards?: string | string[];     // optional – current community snapshot, CSV or repeated query param
+}
+
+Notes:
+- knownCards/communityCards accept either a comma-separated string (e.g. "Ah,Kd,Ts") or repeated query params (?knownCards=Ah&knownCards=Kd).
+- Card strings use the DB card format used elsewhere in the system.
+
+Response:
+{
+  street: 'flop' | 'turn' | 'river';
+  revealedCards: string[];                // previewed community cards to reach the requested street
+  remainingDeck: string[];                // snapshot of the remaining deck after the preview draw
+}
+
+Example:
+// GET /api/rabbit-hunt/preview?roomId=room-123&street=turn&communityCards=Ah,Kd,Ts
+{
+  "street": "turn",
+  "revealedCards": ["2c"],
+  "remainingDeck": ["3c","4c","5c", "..." ]
+}
+```
+
 ### Social Features
 1. Friend Management
    ```

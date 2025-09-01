@@ -27,6 +27,12 @@ const PlayerStats = dynamic(() => import('../../src/components/PlayerStats'), {
   loading: () => <div className="skeleton-loader stats-loader" />,
 });
 
+// Rabbit Hunt Preview panel (SSR-safe)
+const RabbitHuntPreviewPanel = dynamic(() => import('../../src/components/RabbitHuntPreviewPanel'), {
+  loading: () => <div className="skeleton-loader rabbit-panel-loader" />,
+  ssr: true,
+});
+
 export default function GamePage() {
   const router = useRouter();
   const { id } = router.query;
@@ -104,6 +110,11 @@ export default function GamePage() {
             <ChatPanel gameId={String(id)} />
           </div>
           
+          {/* Rabbit Hunt Preview Panel */}
+          <div className="bg-white rounded-lg shadow-md p-4 mt-6">
+            <RabbitHuntPreviewPanel roomId={String(id)} />
+          </div>
+
           {/* On-demand loaded component */}
           <div ref={settingsRef} className="bg-white rounded-lg shadow-md p-4 mt-6">
             <button 

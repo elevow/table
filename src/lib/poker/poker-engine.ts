@@ -13,6 +13,8 @@ export class PokerEngine {
   private bettingManager: BettingManager;
   private gameStateManager: GameStateManager;
   private debugEnabled: boolean;
+  // Tracks how many community cards have been previewed (rabbit hunt) this hand
+  private rabbitPreviewed: number = 0;
   // Optional RIT persistence hook
   private ritPersistence?: { handId?: string; onOutcome?: (input: RunItTwiceOutcomeInput) => Promise<void> };
   // Optional unanimous-consent requirement and consent tracking for RIT
@@ -79,6 +81,36 @@ export class PokerEngine {
     this.log(`New pot total: ${this.state.pot}`);
   }
 
+  // US-031: Prepare deck/state for rabbit-hunt previews without starting a hand
+  // Optionally exclude known cards (e.g., mucked holes, burned cards) and seed community snapshot
+  public prepareRabbitPreview(opts?: { community?: Card[]; known?: Card[]; seed?: number }): void {
+    const community = opts?.community ?? [];
+    const known = opts?.known ?? [];
+    // Build a fresh deck excluding known + community
+    const excludes = [...known, ...community];
+    const dm = DeckManager.fromExcluding(excludes, opts?.seed);
+    this.deckManager = dm;
+    // Seed current community snapshot
+    this.state.communityCards = [...community];
+    // Reset preview tracker
+    this.rabbitPreviewed = 0;
+  }
+
+  // US-031: Compute Rabbit Hunt reveal for a given street and provide remaining deck snapshot
+  public previewRabbitHunt(street: 'flop' | 'turn' | 'river'):
+    { street: 'flop' | 'turn' | 'river'; cards: Card[]; remainingDeck: Card[] } {
+  // Determine total cards required for the requested street
+  const target = street === 'flop' ? 3 : street === 'turn' ? 4 : 5;
+  // Use whichever is greater: actual community dealt or previously previewed
+  const shown = Math.max(this.state.communityCards.length, this.rabbitPreviewed);
+  const need = Math.max(0, target - shown);
+  const cards = need > 0 ? this.deckManager.dealCards(need) : [];
+  // Track preview progress so subsequent previews are incremental
+  this.rabbitPreviewed += cards.length;
+    const remaining = this.deckManager.getRemainingDeck();
+    return { street, cards, remainingDeck: remaining };
+  }
+
   // US-029: Enable/Configure Run It Twice before showdown (2-4 runs)
   public enableRunItTwice(numberOfRuns: number, seeds?: string[], playerEntropy: string = ''): void {
     if (numberOfRuns < 2 || numberOfRuns > 4) {
@@ -131,6 +163,8 @@ export class PokerEngine {
     this.gameStateManager.rotateDealerButton();
   // Reset consents for any new hand
   this.ritConsents.clear();
+  // Reset rabbit preview tracking for new hand
+  this.rabbitPreviewed = 0;
     this.dealHoleCards();
     this.postBlinds();
     this.gameStateManager.startBettingRound('preflop');
@@ -556,5 +590,22 @@ export class PokerEngine {
     };
     const rank = card.rank; // keep '10' as '10'
     return `${rank}${suitMap[card.suit]}`;
+  }
+
+  // Helper for external services: serialize card to string once
+  public static toDbCard(card: Card): string {
+    return PokerEngine.cardToDbString(card);
+  }
+
+  // Helper: parse DB-friendly string (e.g., 'Ah', '10d') back to Card
+  public static fromDbCard(s: string): Card {
+    const suitChar = s.slice(-1);
+    const rankStr = s.slice(0, -1);
+    const suitMap: Record<string, Card['suit']> = { h: 'hearts', d: 'diamonds', c: 'clubs', s: 'spades' };
+    const suit = suitChar.toLowerCase();
+    if (!suitMap[suit]) throw new Error(`Invalid card suit: ${s}`);
+    const validRanks = new Set(['2','3','4','5','6','7','8','9','10','J','Q','K','A']);
+    if (!validRanks.has(rankStr)) throw new Error(`Invalid card rank: ${s}`);
+    return { rank: rankStr as Card['rank'], suit: suitMap[suit] };
   }
 }

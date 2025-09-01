@@ -52,4 +52,16 @@ describe('RabbitHuntService (US-024)', () => {
     const res = await svc.listReveals({ handId: 'h1' });
     expect(res).toEqual([{ id: 'x' }]);
   });
+
+  it('preview returns engine-based reveal and deck snapshot', async () => {
+    // Mock GameManager.getActiveGameByRoom via service internals by monkey-patching the instance
+    const svc = new RabbitHuntService(pool) as any;
+    svc.gameMgr = { getActiveGameByRoom: jest.fn().mockResolvedValue({ id: 'g1', state: { smallBlind: 5, bigBlind: 10, communityCards: [] } }) };
+    const out = await svc.preview({ roomId: 'r1', street: 'flop', knownCards: [], communityCards: [] });
+    expect(out.street).toBe('flop');
+    expect(Array.isArray(out.revealedCards)).toBe(true);
+    expect(Array.isArray(out.remainingDeck)).toBe(true);
+    expect(out.revealedCards.length).toBe(3);
+    expect(out.remainingDeck.length).toBeGreaterThan(40);
+  });
 });

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import requestHandler from '../../../pages/api/rabbit-hunt/request';
 import listHandler from '../../../pages/api/rabbit-hunt/list';
 import cooldownHandler from '../../../pages/api/rabbit-hunt/cooldown';
+import previewHandler from '../../../pages/api/rabbit-hunt/preview';
 
 jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({})) }));
 jest.mock('../../../src/lib/api/rate-limit', () => ({ rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 }) }));
@@ -10,6 +11,7 @@ const mockService: any = {
   requestReveal: jest.fn(),
   listReveals: jest.fn(),
   getCooldown: jest.fn(),
+  preview: jest.fn(),
 };
 
 jest.mock('../../../src/lib/services/rabbit-hunt-service', () => ({
@@ -56,5 +58,14 @@ describe('Rabbit Hunt API (US-024)', () => {
     await cooldownHandler(req as any, res as any);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ cooldown: { userId: 'u1' } });
+  });
+
+  it('GET /api/rabbit-hunt/preview returns preview payload', async () => {
+    mockService.preview.mockResolvedValue({ street: 'flop', revealedCards: ['Ah','Kd','Qs'], remainingDeck: ['2d'] });
+  const req = reqHelper('GET', undefined, { roomId: 'room1', street: 'flop', knownCards: 'As,Ks', communityCards: '', userId: 'u1' });
+    const res = resHelper();
+    await previewHandler(req as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ street: 'flop', revealedCards: ['Ah','Kd','Qs'], remainingDeck: ['2d'] });
   });
 });

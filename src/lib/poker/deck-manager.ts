@@ -39,6 +39,11 @@ export class DeckManager {
     return cards;
   }
 
+  // US-031: Snapshot the remaining deck (top of deck is at the end, since we pop())
+  public getRemainingDeck(): Card[] {
+    return [...this.deck];
+  }
+
   // US-029: Helper to create an ad-hoc deck excluding given cards (e.g., for run-it-twice)
   public static fromExcluding(exclude: Card[], seed?: number): DeckManager {
     const dm = new DeckManager();

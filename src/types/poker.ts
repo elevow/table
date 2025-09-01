@@ -58,7 +58,7 @@ export interface BettingRound {
 }
 
 export interface PlayerAction {
-  type: 'bet' | 'call' | 'raise' | 'fold';
+  type: 'bet' | 'call' | 'raise' | 'fold' | 'check';
   playerId: string;
   tableId: string;
   amount?: number;
@@ -131,4 +131,17 @@ export interface RunItTwice {
       proof: string; // may be withheld from clients; used server-side for verification
     };
   };
+}
+
+// US-032: Disconnection handling
+export interface DisconnectionState {
+  playerId: string;
+  graceTime: number; // in ms
+  autoAction: {
+    type: 'fold' | 'check-fold';
+    executeAt: Date;
+  };
+  preservedStack: number;
+  position: number;
+  reconnectBy: Date;
 }

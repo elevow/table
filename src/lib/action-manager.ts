@@ -1,5 +1,5 @@
 import { Server as SocketServer } from 'socket.io';
-import { PlayerAction, TableState, Player } from '../types/poker';
+import { PlayerAction, TableState, Player, DisconnectionState } from '../types/poker';
 import { ActionValidator } from './action-validator';
 import { StateManager } from './state-manager';
 
@@ -13,20 +13,49 @@ export class ActionManager {
   private stateManager: StateManager;
   private io: SocketServer;
   private actionTimeouts: Map<string, NodeJS.Timeout>;
+  // US-032: Track player disconnections with grace period and scheduled auto-actions
+  private disconnects: Map<string, DisconnectionState>;
 
   constructor(stateManager: StateManager, io: SocketServer) {
     this.stateManager = stateManager;
     this.io = io;
     this.actionTimeouts = new Map();
+  this.disconnects = new Map();
     this.setupSocketHandlers();
   }
 
   private setupSocketHandlers(): void {
     this.io.on('connection', (socket) => {
+      // On join, clear any pending disconnection state for this player if known
+      socket.on('join_table', ({ tableId, playerId }: { tableId: string; playerId: string }) => {
+        const key = `${tableId}:${playerId}`;
+        const disc = this.disconnects.get(key);
+        if (disc) {
+          // Player reconnected within grace period; cancel auto-action
+          this.clearAutoActionTimeout(key);
+          this.disconnects.delete(key);
+        }
+  (socket as any).playerId = playerId;
+        socket.join(tableId);
+      });
       socket.on('player_action', (action: PlayerAction, callback: (response: ActionResponse) => void) => {
+        // Remember identity and ensure socket is in the room for broadcasts
+        (socket as any).playerId = action.playerId;
+        socket.join(action.tableId);
         this.handlePlayerAction(action)
           .then(response => callback(response))
           .catch(error => callback({ success: false, error: error.message }));
+      });
+
+      // Track disconnects and schedule auto-actions
+      socket.on('disconnect', (reason) => {
+        // Expect client to have identified with last join_table; if not, skip
+        const rooms = Array.from(socket.rooms).filter(r => r !== socket.id);
+        const tableId = rooms[0];
+        const playerId = (socket as any).playerId as string | undefined;
+        if (!tableId || !playerId) return;
+
+        this.scheduleAutoAction(tableId, playerId);
       });
     });
   }
@@ -158,6 +187,57 @@ export class ActionManager {
     this.io.to(action.tableId).emit('player_action', action);
   }
 
+  // US-032: Disconnection handling
+  private scheduleAutoAction(tableId: string, playerId: string): void {
+    const state = this.stateManager.getState(tableId);
+    if (!state) return;
+    const player = state.players.find(p => p.id === playerId);
+    if (!player) return;
+
+    const graceMs = Math.max(5000, player.timeBank ?? 30000); // use timeBank as baseline
+    const executeAt = new Date(Date.now() + graceMs);
+    const key = `${tableId}:${playerId}`;
+
+    const autoType: DisconnectionState['autoAction']['type'] = state.currentBet > player.currentBet ? 'fold' : 'check-fold';
+    const disc: DisconnectionState = {
+      playerId,
+      graceTime: graceMs,
+      autoAction: { type: autoType, executeAt },
+      preservedStack: player.stack,
+      position: player.position,
+      reconnectBy: executeAt
+    };
+    this.disconnects.set(key, disc);
+
+    const timer = setTimeout(async () => {
+      const current = this.disconnects.get(key);
+      if (!current) return; // cancelled due to reconnect
+      // Re-evaluate latest state for check-fold behavior
+      const s = this.stateManager.getState(tableId);
+      const pl = s?.players.find(p => p.id === playerId);
+      const execType: PlayerAction['type'] = (!s || !pl) ? 'fold' : (s.currentBet > pl.currentBet ? 'fold' : 'check');
+      const action: PlayerAction = { type: execType, playerId, tableId, timestamp: Date.now() } as PlayerAction;
+      this.broadcastAction(action);
+      try {
+        await this.handlePlayerAction(action);
+      } catch {
+        // ignore if invalid now
+      }
+      this.disconnects.delete(key);
+    }, graceMs);
+
+    // Store timer using existing map for reuse
+    this.actionTimeouts.set(`disc:${key}`, timer);
+  }
+
+  private clearAutoActionTimeout(key: string): void {
+    const timer = this.actionTimeouts.get(`disc:${key}`);
+    if (timer) {
+      clearTimeout(timer);
+      this.actionTimeouts.delete(`disc:${key}`);
+    }
+  }
+
   private setActionTimeout(tableId: string, state: TableState): void {
     const timeout = setTimeout(() => {
       this.handleTimeout(tableId, state.activePlayer);
@@ -175,16 +255,13 @@ export class ActionManager {
   }
 
   private async handleTimeout(tableId: string, playerId: string): Promise<void> {
-    // Auto-fold on timeout
-    const timeoutAction: PlayerAction = {
-      type: 'fold',
-      playerId,
-      tableId,
-      timestamp: Date.now()
-    };
-
-    // Broadcast timeout fold action before processing
+  // For active turn timeouts, default to fold to preserve legacy behavior
+  const timeoutAction: PlayerAction = { type: 'fold', playerId, tableId, timestamp: Date.now() } as PlayerAction;
     this.broadcastAction(timeoutAction);
-    await this.handlePlayerAction(timeoutAction);
+    try {
+      await this.handlePlayerAction(timeoutAction);
+    } catch {
+      // ignore
+    }
   }
 }

@@ -151,4 +151,44 @@ describe('ActionManager', () => {
       expect(result.state?.players.every(p => !p.hasActed)).toBe(true);
     });
   });
+
+  describe('disconnect grace auto-action', () => {
+    it('emits check when not facing a bet (check-fold path)', async () => {
+      // Ensure player is not facing a bet
+      mockState.currentBet = 0;
+      mockPlayer.currentBet = 0;
+      // Shorten timeBank to minimum grace (5000ms enforced by Math.max)
+      mockPlayer.timeBank = 1000;
+
+      // Call the private scheduler directly
+      (actionManager as any).scheduleAutoAction('table1', 'player1');
+
+      // Advance to after grace window
+      jest.advanceTimersByTime(5000);
+
+      // Expect a check to be broadcast as part of check-fold behavior
+      expect(mockIo.to).toHaveBeenLastCalledWith('table1');
+      expect(mockIo.to('table1').emit).toHaveBeenLastCalledWith(
+        'player_action',
+        expect.objectContaining({ type: 'check', playerId: 'player1' })
+      );
+    });
+
+    it('emits fold when facing a bet (check-fold path)', async () => {
+      // Facing a bet: table currentBet > player's currentBet
+      mockState.currentBet = 50;
+      mockPlayer.currentBet = 0;
+      mockPlayer.timeBank = 1000;
+
+      (actionManager as any).scheduleAutoAction('table1', 'player1');
+
+      jest.advanceTimersByTime(5000);
+
+      expect(mockIo.to).toHaveBeenLastCalledWith('table1');
+      expect(mockIo.to('table1').emit).toHaveBeenLastCalledWith(
+        'player_action',
+        expect.objectContaining({ type: 'fold', playerId: 'player1' })
+      );
+    });
+  });
 });

@@ -25,6 +25,12 @@ export class ActionValidator {
       case 'fold':
         return { valid: true };
 
+      case 'check':
+        if (state.currentBet > player.currentBet) {
+          return { valid: false, error: 'Cannot check facing a bet' };
+        }
+        return { valid: true };
+
       case 'call':
         if (state.currentBet <= player.currentBet) {
           return { valid: false, error: 'No bet to call' };
@@ -34,7 +40,7 @@ export class ActionValidator {
         }
         return { valid: true };
 
-      case 'bet':
+  case 'bet':
       case 'raise':
         if (!action.amount) {
           return { valid: false, error: 'Bet amount required' };
@@ -88,6 +94,10 @@ export class ActionValidator {
 
     switch (action.type) {
       case 'fold':
+        break;
+
+      case 'check':
+        // no pot or stack deltas
         break;
 
       case 'call':

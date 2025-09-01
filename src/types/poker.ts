@@ -40,6 +40,8 @@ export interface TableState {
   bigBlind: number;
   minRaise: number;
   lastRaise: number;
+  // Betting mode for the table: 'no-limit' (default) or 'pot-limit'
+  bettingMode?: 'no-limit' | 'pot-limit';
 }
 
 export interface BettingRound {

@@ -1,11 +1,17 @@
 import { Player } from '../../types/poker';
 import { PlayerAction } from '../../types/poker-engine';
+import { PotLimitCalculator } from './pot-limit';
 
 export class BettingManager {
+  private mode: 'no-limit' | 'pot-limit' = 'no-limit';
   constructor(
     private readonly smallBlind: number,
     private readonly bigBlind: number
   ) {}
+
+  public setMode(mode: 'no-limit' | 'pot-limit') {
+    this.mode = mode;
+  }
 
   /**
    * Places a total bet (not incremental) for the player, deducting only the delta
@@ -50,7 +56,8 @@ export class BettingManager {
     player: Player,
     action: PlayerAction,
     currentBet: number,
-    minRaise: number
+    minRaise: number,
+    ctx?: { currentPot: number; players: Player[] }
   ): { pot: number; currentBet: number; minRaise: number } {
     let potIncrease = 0;
     const previousBet = player.currentBet;
@@ -65,23 +72,29 @@ export class BettingManager {
         }
 
         const maxTotal = previousBet + player.stack;
-        const desiredTotal = action.amount;
+        let desiredTotal = action.amount;
+        if (this.mode === 'pot-limit') {
+          const plc = PotLimitCalculator.calculateMaxBet(
+            ctx?.currentPot ?? 0,
+            0,
+            (ctx?.players || []).map(p => ({ currentBet: p.currentBet, isFolded: p.isFolded, isAllIn: p.isAllIn })),
+            previousBet
+          );
+          desiredTotal = Math.min(desiredTotal, plc.maxBet);
+        }
         const newTotal = Math.min(desiredTotal, maxTotal);
 
         // Enforce minimum bet equal to big blind, unless player is all-in short
-        if (newTotal < this.bigBlind && newTotal < maxTotal) {
-          throw new Error('Bet amount must be at least the big blind');
+        if (this.mode === 'no-limit') {
+          if (newTotal < this.bigBlind && newTotal < maxTotal) {
+            throw new Error('Bet amount must be at least the big blind');
+          }
         }
 
         potIncrease = this.placeBet(player, newTotal);
         currentBet = player.currentBet;
-        // If short all-in (< BB), do not lower the minRaise below BB
-        if (player.currentBet < this.bigBlind && player.isAllIn) {
-          minRaise = this.bigBlind;
-        } else {
-          // First bet sets the min raise size
-          minRaise = player.currentBet;
-        }
+        // First bet sets the min raise size (stick to BB minimum in NL; PL follows amount)
+        minRaise = this.mode === 'no-limit' ? Math.max(this.bigBlind, player.currentBet) : player.currentBet;
         player.hasActed = true;
         break;
       }
@@ -113,7 +126,16 @@ export class BettingManager {
         {
           const desiredTotal = action.amount;
           const maxTotal = previousBet + player.stack;
-          const effectiveTotal = Math.min(desiredTotal, maxTotal);
+          let effectiveTotal = Math.min(desiredTotal, maxTotal);
+          if (this.mode === 'pot-limit') {
+            const plc = PotLimitCalculator.calculateMaxBet(
+              ctx?.currentPot ?? 0,
+              currentBet,
+              (ctx?.players || []).map(p => ({ currentBet: p.currentBet, isFolded: p.isFolded, isAllIn: p.isAllIn })),
+              previousBet
+            );
+            effectiveTotal = Math.min(effectiveTotal, plc.maxBet);
+          }
           const raiseAmount = effectiveTotal - currentBet;
 
           // Validate minimum raise; allow short all-in raises that don't meet minRaise
@@ -151,12 +173,25 @@ export class BettingManager {
   public getBettingLimits(player: Player, currentBet: number, minRaise: number) {
     const maxBet = player.currentBet + player.stack;
     const hasBet = currentBet > 0;
-    const minBet = hasBet ? currentBet + minRaise : Math.min(this.bigBlind, maxBet);
+    let minBet = hasBet ? currentBet + minRaise : Math.min(this.bigBlind, maxBet);
+    if (this.mode === 'pot-limit') {
+      // For pot-limit, minBet when no bet is the big blind; when there is a bet, min total is call + minRaise
+      // Max total is computed as tableCurrentBet + (pot + pending calls). Engine should pass real pot if needed.
+      // Without pot here, we expose stack-capped value; UI can query engine for precise.
+      minBet = hasBet ? currentBet + minRaise : Math.min(this.bigBlind, maxBet);
+    }
     return {
       minBet,
       minRaise,
       maxBet,
       currentBet
     };
+  }
+
+  /**
+   * For pot-limit tables, announce pot size (UI helper).
+   */
+  public announcePot(currentPot: number): string {
+    return `Pot is ${currentPot}`;
   }
 }

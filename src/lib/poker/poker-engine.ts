@@ -11,9 +11,15 @@ export class PokerEngine {
   private bettingManager: BettingManager;
   private gameStateManager: GameStateManager;
   private debugEnabled: boolean;
+  
+  // Optional engine options to configure behavior such as betting mode
+  public static defaultOptions = {
+    bettingMode: 'no-limit' as 'no-limit' | 'pot-limit',
+  };
 
-  constructor(tableId: string, players: Player[], smallBlind: number, bigBlind: number) {
+  constructor(tableId: string, players: Player[], smallBlind: number, bigBlind: number, options?: Partial<typeof PokerEngine.defaultOptions>) {
     this.debugEnabled = process.env.DEBUG_POKER === 'true';
+    const opts = { ...PokerEngine.defaultOptions, ...(options || {}) };
     this.state = {
       tableId,
       stage: 'preflop',
@@ -28,9 +34,15 @@ export class PokerEngine {
       minRaise: bigBlind,
       lastRaise: 0
     };
+    // Only set bettingMode on state when not default to preserve backward-compat visuals/equality
+    if (opts.bettingMode !== 'no-limit') {
+      this.state.bettingMode = opts.bettingMode;
+    }
 
     this.deckManager = new DeckManager();
     this.bettingManager = new BettingManager(smallBlind, bigBlind);
+    // Apply betting mode to betting manager
+    this.bettingManager.setMode(opts.bettingMode);
     this.gameStateManager = new GameStateManager(this.state);
   }
 
@@ -107,6 +119,17 @@ export class PokerEngine {
     this.log(`Pot: ${this.state.pot}, Current bet: ${this.state.currentBet}, Min raise: ${this.state.minRaise}`);
   }
 
+  // Allow changing betting mode at runtime (e.g., by room configuration update)
+  public setBettingMode(mode: 'no-limit' | 'pot-limit'): void {
+    if (mode === 'no-limit') {
+      // Remove the optional property to avoid breaking strict equality snapshots
+      delete (this.state as any).bettingMode;
+    } else {
+      this.state.bettingMode = mode;
+    }
+    this.bettingManager.setMode(mode);
+  }
+
   public handleAction(action: PlayerAction): void {
     this.log(`Handling action ${action.type} from ${action.playerId} for amount ${action.amount}`);
     this.log(`Before action - pot: ${this.state.pot}, currentBet: ${this.state.currentBet}, minRaise: ${this.state.minRaise}`);
@@ -130,11 +153,12 @@ export class PokerEngine {
     const oldBet = player.currentBet;
     
     // Process the action
-  const { pot, currentBet, minRaise } = this.bettingManager.processAction(
+    const { pot, currentBet, minRaise } = this.bettingManager.processAction(
       player,
       action,
       this.state.currentBet,
-      this.state.minRaise
+      this.state.minRaise,
+      { currentPot: this.state.pot, players: this.state.players }
     );
 
     // Update state and add new contribution to pot if any

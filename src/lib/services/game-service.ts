@@ -27,7 +27,14 @@ export class GameService {
     this.require(input.roomId, 'roomId');
     this.requireNumber(input.dealerPosition, 'dealerPosition');
     this.requireNumber(input.currentPlayerPosition, 'currentPlayerPosition');
-    return this.manager.startGame(input);
+    // If the room has a configuration specifying bettingMode, persist it in initial state
+    const room = await this.manager.getRoomById(input.roomId);
+    let state = input.state;
+    const bettingMode = (room?.configuration?.bettingMode as 'no-limit' | 'pot-limit' | undefined);
+    if (bettingMode && bettingMode !== 'no-limit') {
+      state = { ...(state || {}), bettingMode };
+    }
+    return this.manager.startGame({ ...input, state });
   }
 
   async updateActiveGame(input: UpdateActiveGameInput): Promise<ActiveGameRecord> {

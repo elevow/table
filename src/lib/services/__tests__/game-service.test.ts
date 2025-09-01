@@ -6,6 +6,17 @@ import { ActiveGameRecord, CreateRoomInput, GameRoomRecord } from '../../../type
 jest.mock('../../database/game-manager', () => {
   return {
     GameManager: jest.fn().mockImplementation(() => ({
+      getRoomById: jest.fn(async (_roomId: string) => ({
+        id: _roomId,
+        name: 'Room',
+        gameType: 'poker',
+        maxPlayers: 6,
+        blindLevels: {},
+        createdBy: 'u1',
+        createdAt: new Date(),
+        status: 'waiting',
+        configuration: { bettingMode: 'pot-limit' },
+      })),
       createRoom: jest.fn(async (input: CreateRoomInput): Promise<GameRoomRecord> => ({
         id: 'room-1',
         name: input.name,
@@ -114,8 +125,10 @@ describe('GameService', () => {
     const svc = new GameService({} as any);
     const mgr = getMgr();
 
-    await svc.startGame({ roomId: 'room-1', dealerPosition: 1, currentPlayerPosition: 2 });
-    expect(mgr.startGame).toHaveBeenCalledWith({ roomId: 'room-1', dealerPosition: 1, currentPlayerPosition: 2 });
+  await svc.startGame({ roomId: 'room-1', dealerPosition: 1, currentPlayerPosition: 2 });
+  // Expect service to fetch room config and include bettingMode in state
+  expect(mgr.getRoomById).toHaveBeenCalledWith('room-1');
+  expect(mgr.startGame).toHaveBeenCalledWith({ roomId: 'room-1', dealerPosition: 1, currentPlayerPosition: 2, state: { bettingMode: 'pot-limit' } });
 
     await expect(svc.startGame({ roomId: '', dealerPosition: 1, currentPlayerPosition: 2 })).rejects.toThrow('Missing or invalid roomId');
     await expect(svc.startGame({ roomId: 'room-1', dealerPosition: NaN as any, currentPlayerPosition: 2 })).rejects.toThrow('Missing or invalid dealerPosition');

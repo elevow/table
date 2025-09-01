@@ -50,6 +50,12 @@ export class GameManager {
     return this.mapRoom(res.rows[0]);
   }
 
+  async getRoomById(roomId: string): Promise<GameRoomRecord | null> {
+    const res = await this.pool.query(`SELECT * FROM game_rooms WHERE id = $1 LIMIT 1`, [roomId]);
+    if (!res.rows[0]) return null;
+    return this.mapRoom(res.rows[0]);
+  }
+
   // Active Games
   async startGame(input: StartGameInput): Promise<ActiveGameRecord> {
     const id = uuidv4();

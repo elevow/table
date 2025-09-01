@@ -3,8 +3,7 @@ import { Pool } from 'pg';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { UserManager } from '../../../src/lib/database/user-manager';
 import { createUserService } from '../../../src/lib/services/user-service';
-import { DataProtectionFactory } from '../../../src/lib/database/security-utilities';
-import { logAccess } from '../../../src/lib/database/rls-context';
+import { createSafeAudit } from '../../../src/lib/api/audit';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -43,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const pool = new Pool();
   const manager = new UserManager(pool);
   const userService = createUserService(manager);
-  const dataProtection = await DataProtectionFactory.createDataProtectionService(pool);
+  const safeLog = createSafeAudit(pool);
 
   const meta = { ip, userAgent, endpoint: '/api/profile' } as Record<string, any>;
 
@@ -52,11 +51,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const q: any = req.query || {};
       const targetUserId = (q.userId as string) || callerUserId;
       if (targetUserId !== callerUserId) {
-        await logAccess(dataProtection, callerUserId, 'users', 'read', false, { ...meta, targetUserId, reason: 'forbidden' });
+        await safeLog(callerUserId, 'users', 'read', false, { ...meta, targetUserId, reason: 'forbidden' });
         return res.status(403).json({ error: 'Forbidden' });
       }
       const user = await userService.getUserById(targetUserId, callerUserId);
-      await logAccess(dataProtection, callerUserId, 'users', 'read', true, { ...meta, targetUserId });
+      await safeLog(callerUserId, 'users', 'read', true, { ...meta, targetUserId });
       return user ? res.status(200).json(user) : res.status(404).json({ error: 'Not found' });
     }
 
@@ -64,19 +63,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const q: any = req.query || {};
       const targetUserId = (q.userId as string) || callerUserId;
       if (targetUserId !== callerUserId) {
-        await logAccess(dataProtection, callerUserId, 'users', 'update', false, { ...meta, targetUserId, reason: 'forbidden' });
+        await safeLog(callerUserId, 'users', 'update', false, { ...meta, targetUserId, reason: 'forbidden' });
         return res.status(403).json({ error: 'Forbidden' });
       }
       const updates = req.body || {};
       const updated = await userService.updateUser(targetUserId, updates, callerUserId);
-      await logAccess(dataProtection, callerUserId, 'users', 'update', true, { ...meta, targetUserId });
+      await safeLog(callerUserId, 'users', 'update', true, { ...meta, targetUserId });
       return res.status(200).json(updated);
     }
 
     // Method not allowed
     res.setHeader('Allow', allowedMethods);
-    await logAccess(
-      dataProtection,
+    await safeLog(
       callerUserId,
       'users',
       'other',
@@ -85,7 +83,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err: any) {
-    await logAccess(dataProtection, callerUserId, 'users', method === 'GET' ? 'read' : 'update', false, { ...meta, reason: err?.message || 'error' });
+    await safeLog(callerUserId, 'users', method === 'GET' ? 'read' : 'update', false, { ...meta, reason: err?.message || 'error' });
     return res.status(400).json({ error: err?.message || 'Bad request' });
   }
 }

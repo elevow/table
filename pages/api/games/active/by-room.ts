@@ -2,8 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { GameService } from '../../../../src/lib/services/game-service';
-import { DataProtectionFactory } from '../../../../src/lib/database/security-utilities';
-import { logAccess } from '../../../../src/lib/database/rls-context';
+import { createSafeAudit } from '../../../../src/lib/api/audit';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -21,20 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const rl = rateLimit(req, { limit: 60, windowMs: 60_000 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
   const pool = new Pool();
-  const safeLog = async (
-    userId: string,
-    resource: string,
-    action: string,
-    success: boolean,
-    metadata?: Record<string, any>
-  ) => {
-    try {
-      const dp = await DataProtectionFactory.createDataProtectionService(pool);
-      await logAccess(dp, userId, resource, action, success, metadata);
-    } catch {
-      // ignore audit failures
-    }
-  };
+  const safeLog = createSafeAudit(pool);
   const ip = getClientIp(req);
   const userAgent = (req.headers['user-agent'] as string) || '';
   const meta = { ip, userAgent, endpoint: '/api/games/active/by-room' } as Record<string, any>;

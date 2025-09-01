@@ -2,26 +2,14 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { GameService } from '../../../../src/lib/services/game-service';
-import { DataProtectionFactory } from '../../../../src/lib/database/security-utilities';
-import { logAccess } from '../../../../src/lib/database/rls-context';
+import { createSafeAudit } from '../../../../src/lib/api/audit';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const rl = rateLimit(req, { limit: 60, windowMs: 60_000 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
   const pool = new Pool();
-  const safeLog = async (
-    userId: string,
-    resource: string,
-    action: string,
-    success: boolean,
-    metadata?: Record<string, any>
-  ) => {
-    try {
-      const dp = await DataProtectionFactory.createDataProtectionService(pool);
-      await logAccess(dp, userId, resource, action, success, metadata);
-    } catch {}
-  };
+  const safeLog = createSafeAudit(pool);
 
   try {
     const service = new GameService(pool);

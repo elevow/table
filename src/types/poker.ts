@@ -117,4 +117,18 @@ export interface RunItTwice {
   results: RunResult[];
   potDistribution: PotSplit[]; // aggregated distribution across runs
   seeds: string[]; // RNG seeds (opaque strings)
+  // US-030: RNG Security metadata for audit/verification
+  rngSecurity?: {
+    seedGeneration: {
+      entropy: any; // stored opaque; not serialized to clients
+      timestamp: number;
+      playerEntropy: string;
+      vrf: string;
+    };
+    verification: {
+      publicSeed: string;
+      hashChain: string[];
+      proof: string; // may be withheld from clients; used server-side for verification
+    };
+  };
 }

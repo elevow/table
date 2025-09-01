@@ -144,6 +144,60 @@ const RATE_LIMITS = {
    POST /api/games/:id/chat
    ```
 
+### Run It Twice (RIT)
+
+1. Verify RNG Audit and Outcomes
+```typescript
+GET /api/history/run-it-twice/verify
+Rate Limit: 120 requests per minute
+
+Query Params:
+{
+  handId: string;                        // required
+  publicSeed?: string;                   // optional
+  proof?: string;                        // optional
+  timestamp?: number;                    // optional (ms since epoch)
+  playerEntropy?: string;                // optional
+  hashChain?: string | string[];         // optional (JSON array or comma-separated)
+}
+
+Response (audit metadata provided):
+{
+  handId: string;
+  auditAvailable: true;
+  verified: boolean;                     // true if hashChain matches recomputed chain
+  numberOfRuns: number;
+  publicSeed: string;
+  proof: string;
+  hashChain: string[];                   // expected per-run seeds
+  playerEntropy?: string;
+  timestamp: number;
+  outcomes: Array<{                      // persisted per-run results
+    id: string;
+    handId: string;
+    boardNumber: number;
+    communityCards: string[];
+    winners: Array<{ playerId: string; amount: number }>;
+    potAmount: number;
+  }>;
+}
+
+Response (no/partial audit metadata):
+{
+  handId: string;
+  auditAvailable: false;
+  verified: false;
+  reason: 'rng metadata not provided';
+  numberOfRuns: number;                  // inferred from outcomes
+  outcomes: Array<...>;
+}
+
+Notes:
+- hashChain accepts a JSON-encoded array (e.g. "[\"s1\",\"s2\"]") or comma-separated string (e.g. "s1,s2").
+- When audit metadata is provided, the endpoint recomputes the expected seeds and compares with hashChain to set verified.
+- Outcomes are always returned for the given handId when available.
+```
+
 ### Social Features
 1. Friend Management
    ```

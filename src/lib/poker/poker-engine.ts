@@ -4,6 +4,7 @@ import { HandEvaluator } from './hand-evaluator';
 import { PotCalculator } from './pot-calculator';
 import { DeckManager } from './deck-manager';
 import { BettingManager } from './betting-manager';
+import { generateRngSecurity, verifyRngSecurity, RNGSecurity } from './rng-security';
 import { GameStateManager } from './game-state-manager';
 
 export class PokerEngine {
@@ -79,7 +80,7 @@ export class PokerEngine {
   }
 
   // US-029: Enable/Configure Run It Twice before showdown (2-4 runs)
-  public enableRunItTwice(numberOfRuns: number, seeds?: string[]): void {
+  public enableRunItTwice(numberOfRuns: number, seeds?: string[], playerEntropy: string = ''): void {
     if (numberOfRuns < 2 || numberOfRuns > 4) {
       throw new Error('Run It Twice supports 2-4 runs');
     }
@@ -94,13 +95,33 @@ export class PokerEngine {
         throw new Error(`Run It Twice requires unanimous agreement; missing: ${missing.map(m => m.id).join(', ')}`);
       }
     }
+    // If no seeds provided, generate via RNG security module (US-030)
+    let rngSec: RNGSecurity | undefined;
+    let runSeeds: string[];
+    if (!seeds || seeds.length !== numberOfRuns) {
+      const { rng, seeds: gen } = generateRngSecurity(numberOfRuns, playerEntropy);
+      rngSec = rng;
+      runSeeds = gen;
+    } else {
+      runSeeds = seeds;
+    }
+
     this.state.runItTwice = {
       enabled: true,
       numberOfRuns,
       boards: [],
       results: [],
       potDistribution: [],
-      seeds: seeds && seeds.length === numberOfRuns ? seeds : Array.from({ length: numberOfRuns }, () => Math.random().toString(36).slice(2))
+      seeds: runSeeds,
+      rngSecurity: rngSec ? {
+        seedGeneration: {
+          entropy: rngSec.seedGeneration.entropy, // kept server-side
+          timestamp: rngSec.seedGeneration.timestamp,
+          playerEntropy: rngSec.seedGeneration.playerEntropy,
+          vrf: rngSec.seedGeneration.vrf,
+        },
+        verification: rngSec.verification,
+      } : undefined,
     };
   }
 
@@ -498,6 +519,16 @@ export class PokerEngine {
 
   public getState(): TableState {
     return { ...this.state };
+  }
+
+  // US-030: Verify RNG security chain matches seeds stored
+  public verifyRunItTwiceSeeds(): boolean {
+    const rit = this.state.runItTwice;
+    if (!rit || !rit.rngSecurity) return true; // nothing to verify (e.g., custom seeds provided)
+    const res = verifyRngSecurity(rit.rngSecurity, rit.numberOfRuns, rit.rngSecurity.seedGeneration.playerEntropy);
+    if (!res.ok) return false;
+    // Ensure computed matches stored seeds
+    return JSON.stringify(res.computed) === JSON.stringify(rit.seeds);
   }
 
   // Configure or update run-it-twice persistence at runtime

@@ -38,4 +38,37 @@ export class DeckManager {
     }
     return cards;
   }
+
+  // US-029: Helper to create an ad-hoc deck excluding given cards (e.g., for run-it-twice)
+  public static fromExcluding(exclude: Card[], seed?: number): DeckManager {
+    const dm = new DeckManager();
+    const suits = ['hearts', 'diamonds', 'clubs', 'spades'] as const;
+    const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'] as const;
+    const excluded = new Set(exclude.map(c => `${c.rank}-${c.suit}`));
+    const full: Card[] = [];
+    for (const suit of suits) {
+      for (const rank of ranks) {
+        const key = `${rank}-${suit}`;
+        if (!excluded.has(key)) full.push({ suit, rank });
+      }
+    }
+    // Deterministic shuffle if seed provided; else random
+    dm.deck = full;
+    if (seed !== undefined) {
+      // Simple LCG-based shuffle for determinism within tests
+      let s = seed || 1;
+      for (let i = dm.deck.length - 1; i > 0; i--) {
+        s = (s * 1664525 + 1013904223) >>> 0;
+        const j = s % (i + 1);
+        [dm.deck[i], dm.deck[j]] = [dm.deck[j], dm.deck[i]];
+      }
+    } else {
+      // randomize a bit
+      for (let i = dm.deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [dm.deck[i], dm.deck[j]] = [dm.deck[j], dm.deck[i]];
+      }
+    }
+    return dm;
+  }
 }

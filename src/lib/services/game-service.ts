@@ -31,8 +31,13 @@ export class GameService {
     const room = await this.manager.getRoomById(input.roomId);
     let state = input.state;
     const bettingMode = (room?.configuration?.bettingMode as 'no-limit' | 'pot-limit' | undefined);
+    const requireRitUnanimous = !!room?.configuration?.requireRunItTwiceUnanimous;
+    // Only include non-defaults to preserve backward-compat visuals/equality
     if (bettingMode && bettingMode !== 'no-limit') {
       state = { ...(state || {}), bettingMode };
+    }
+    if (requireRitUnanimous) {
+      state = { ...(state || {}), requireRunItTwiceUnanimous: true };
     }
     return this.manager.startGame({ ...input, state });
   }

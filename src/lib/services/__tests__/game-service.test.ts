@@ -15,7 +15,7 @@ jest.mock('../../database/game-manager', () => {
         createdBy: 'u1',
         createdAt: new Date(),
         status: 'waiting',
-        configuration: { bettingMode: 'pot-limit' },
+  configuration: { bettingMode: 'pot-limit', requireRunItTwiceUnanimous: true },
       })),
       createRoom: jest.fn(async (input: CreateRoomInput): Promise<GameRoomRecord> => ({
         id: 'room-1',
@@ -126,9 +126,9 @@ describe('GameService', () => {
     const mgr = getMgr();
 
   await svc.startGame({ roomId: 'room-1', dealerPosition: 1, currentPlayerPosition: 2 });
-  // Expect service to fetch room config and include bettingMode in state
+  // Expect service to fetch room config and include bettingMode and RIT unanimity policy in state
   expect(mgr.getRoomById).toHaveBeenCalledWith('room-1');
-  expect(mgr.startGame).toHaveBeenCalledWith({ roomId: 'room-1', dealerPosition: 1, currentPlayerPosition: 2, state: { bettingMode: 'pot-limit' } });
+  expect(mgr.startGame).toHaveBeenCalledWith({ roomId: 'room-1', dealerPosition: 1, currentPlayerPosition: 2, state: { bettingMode: 'pot-limit', requireRunItTwiceUnanimous: true } });
 
     await expect(svc.startGame({ roomId: '', dealerPosition: 1, currentPlayerPosition: 2 })).rejects.toThrow('Missing or invalid roomId');
     await expect(svc.startGame({ roomId: 'room-1', dealerPosition: NaN as any, currentPlayerPosition: 2 })).rejects.toThrow('Missing or invalid dealerPosition');

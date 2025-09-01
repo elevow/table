@@ -1,4 +1,5 @@
-import { TableState, Player, Card, GameStage, PlayerAction, HandResult } from '../../types/poker';
+import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking } from '../../types/poker';
+import { RunItTwiceOutcomeInput } from '../../types/game-history';
 import { HandEvaluator } from './hand-evaluator';
 import { PotCalculator } from './pot-calculator';
 import { DeckManager } from './deck-manager';
@@ -11,10 +12,17 @@ export class PokerEngine {
   private bettingManager: BettingManager;
   private gameStateManager: GameStateManager;
   private debugEnabled: boolean;
+  // Optional RIT persistence hook
+  private ritPersistence?: { handId?: string; onOutcome?: (input: RunItTwiceOutcomeInput) => Promise<void> };
+  // Optional unanimous-consent requirement and consent tracking for RIT
+  private requireRitUnanimous: boolean = false;
+  private ritConsents: Set<string> = new Set();
   
   // Optional engine options to configure behavior such as betting mode
   public static defaultOptions = {
     bettingMode: 'no-limit' as 'no-limit' | 'pot-limit',
+    runItTwicePersistence: undefined as | { handId?: string; onOutcome?: (input: RunItTwiceOutcomeInput) => Promise<void> } | undefined,
+  requireRunItTwiceUnanimous: false as boolean,
   };
 
   constructor(tableId: string, players: Player[], smallBlind: number, bigBlind: number, options?: Partial<typeof PokerEngine.defaultOptions>) {
@@ -38,6 +46,10 @@ export class PokerEngine {
     if (opts.bettingMode !== 'no-limit') {
       this.state.bettingMode = opts.bettingMode;
     }
+  // Configure optional RIT persistence
+  this.ritPersistence = opts.runItTwicePersistence;
+    // Configure unanimous-consent toggle
+    this.requireRitUnanimous = !!opts.requireRunItTwiceUnanimous;
 
     this.deckManager = new DeckManager();
     this.bettingManager = new BettingManager(smallBlind, bigBlind);
@@ -66,10 +78,38 @@ export class PokerEngine {
     this.log(`New pot total: ${this.state.pot}`);
   }
 
+  // US-029: Enable/Configure Run It Twice before showdown (2-4 runs)
+  public enableRunItTwice(numberOfRuns: number, seeds?: string[]): void {
+    if (numberOfRuns < 2 || numberOfRuns > 4) {
+      throw new Error('Run It Twice supports 2-4 runs');
+    }
+    // Only valid if an all-in has occurred and betting is closed or heading to showdown
+    const anyAllIn = this.state.players.some(p => p.isAllIn);
+    if (!anyAllIn) throw new Error('Run It Twice requires an all-in situation');
+    // If unanimity required, ensure all active players have given consent
+    if (this.requireRitUnanimous) {
+      const active = this.state.players.filter(p => !p.isFolded);
+      const missing = active.filter(p => !this.ritConsents.has(p.id));
+      if (missing.length > 0) {
+        throw new Error(`Run It Twice requires unanimous agreement; missing: ${missing.map(m => m.id).join(', ')}`);
+      }
+    }
+    this.state.runItTwice = {
+      enabled: true,
+      numberOfRuns,
+      boards: [],
+      results: [],
+      potDistribution: [],
+      seeds: seeds && seeds.length === numberOfRuns ? seeds : Array.from({ length: numberOfRuns }, () => Math.random().toString(36).slice(2))
+    };
+  }
+
   public startNewHand(): void {
     this.deckManager.resetDeck();
     this.gameStateManager.resetPlayerStates();
     this.gameStateManager.rotateDealerButton();
+  // Reset consents for any new hand
+  this.ritConsents.clear();
     this.dealHoleCards();
     this.postBlinds();
     this.gameStateManager.startBettingRound('preflop');
@@ -215,6 +255,11 @@ export class PokerEngine {
   }
 
   private determineWinner(): void {
+    // If Run It Twice is enabled and we have reached showdown condition, execute RIT flow
+    if (this.state.runItTwice?.enabled) {
+      this.executeRunItTwice();
+      return;
+    }
     const activePlayers = this.state.players.filter(p => !p.isFolded);
     
     // If only one player remains, they win
@@ -340,7 +385,145 @@ export class PokerEngine {
       this.state.activePlayer = '';
   }
 
+  // US-029: Execute run-it-twice using separate decks/boards per run and equal pot split
+  private executeRunItTwice(): void {
+    const rit = this.state.runItTwice!;
+    const activePlayers = this.state.players.filter(p => !p.isFolded);
+    if (activePlayers.length === 0) {
+      // Edge-case: no active players; nothing to distribute
+      this.state.stage = 'showdown';
+      this.state.activePlayer = '';
+      return;
+    }
+
+    // Determine missing community cards count
+    const missing = 5 - this.state.communityCards.length;
+    if (missing <= 0) {
+      // Already have full board; fallback to standard showdown
+      this.state.runItTwice = undefined;
+      this.determineWinner();
+      return;
+    }
+
+    // Exclude all known cards (players' hole cards + current community)
+    const known: Card[] = [];
+    activePlayers.forEach(p => (p.holeCards || []).forEach(c => known.push(c)));
+    this.state.communityCards.forEach(c => known.push(c));
+
+    const totalPrizePool = this.state.pot;
+    const perRunPot = Math.floor(totalPrizePool / rit.numberOfRuns);
+    let remainder = totalPrizePool % rit.numberOfRuns;
+
+    const aggregate: Map<string, number> = new Map();
+    const results = [] as {
+      boardId: string;
+      winners: Array<{ playerId: string; winningHand: HandRanking; potShare: number }>
+    }[];
+
+    for (let r = 0; r < rit.numberOfRuns; r++) {
+      // Build a fresh deck excluding knowns; use a simple numeric seed from seed string for determinism
+      const seedStr = rit.seeds[r] || `${r + 1}`;
+      const seedNum = Array.from(seedStr).reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 0);
+      const dm = DeckManager.fromExcluding(known, seedNum);
+      const runBoard = [...this.state.communityCards, ...dm.dealCards(missing)];
+      rit.boards.push(runBoard);
+
+      // Evaluate winners on this run's board
+      const evals = activePlayers.map(player => ({
+        playerId: player.id,
+        evaluation: HandEvaluator.evaluateHand(player.holeCards || [], runBoard)
+      }));
+      const winners = evals.filter(ph => !evals.some(other => ph !== other && HandEvaluator.compareHands(other.evaluation.hand, ph.evaluation.hand) > 0));
+
+      // Split this run's pot equally among winners
+      const runPot = perRunPot + (remainder > 0 ? 1 : 0);
+      if (remainder > 0) remainder -= 1;
+      const prizePerWinner = Math.floor(runPot / winners.length);
+      let runRemainder = runPot % winners.length;
+      const runWinners: Array<{ playerId: string; winningHand: HandRanking; potShare: number }> = [];
+      winners.forEach((w, idx) => {
+        const potShare = prizePerWinner + (idx === winners.length - 1 ? runRemainder : 0);
+        const prev = aggregate.get(w.playerId) || 0;
+        aggregate.set(w.playerId, prev + potShare);
+        const winningHand = HandEvaluator.getHandRanking(
+          activePlayers.find(p => p.id === w.playerId)?.holeCards || [],
+          runBoard
+        );
+        runWinners.push({ playerId: w.playerId, winningHand, potShare });
+      });
+      results.push({ boardId: `run-${r + 1}`, winners: runWinners });
+
+      // Fire-and-forget persistence per run if configured
+      const onOutcome = this.ritPersistence?.onOutcome;
+      const handId = this.ritPersistence?.handId;
+      if (onOutcome && handId) {
+        const communityCards = runBoard.map(c => PokerEngine.cardToDbString(c));
+        const winnersPayload = runWinners.map(w => ({ playerId: w.playerId, potShare: w.potShare, hand: w.winningHand }));
+        const input: RunItTwiceOutcomeInput = {
+          handId,
+          boardNumber: r + 1,
+          communityCards,
+          winners: winnersPayload,
+          potAmount: runPot,
+        };
+        // Do not await to keep engine synchronous; log errors if any
+        onOutcome(input).catch(err => {
+          if (!process.env.CI || this.debugEnabled) {
+            console.error('RIT persistence failed:', err);
+          }
+        });
+      }
+    }
+
+    // Apply aggregated distribution to players, clear pot and bets
+    this.state.players.forEach(p => { p.currentBet = 0; });
+    this.state.pot = 0;
+    for (const [playerId, amount] of aggregate.entries()) {
+      const player = this.state.players.find(p => p.id === playerId);
+      if (player) player.stack += amount;
+    }
+
+    // Persist results on state and finalize
+    rit.results = results;
+    rit.potDistribution = Array.from(aggregate.entries()).map(([playerId, amount]) => ({ playerId, amount }));
+    this.state.stage = 'showdown';
+    this.state.activePlayer = '';
+  }
+
+  // Public helper to trigger RIT resolution immediately (for tests/integration when betting is closed)
+  public runItTwiceNow(): void {
+    if (!this.state.runItTwice?.enabled) throw new Error('Run It Twice is not enabled');
+    this.executeRunItTwice();
+  }
+
   public getState(): TableState {
     return { ...this.state };
+  }
+
+  // Configure or update run-it-twice persistence at runtime
+  public configureRunItTwicePersistence(handId: string, onOutcome: (input: RunItTwiceOutcomeInput) => Promise<void>): void {
+    this.ritPersistence = { handId, onOutcome };
+  }
+
+  // Toggle unanimous consent requirement for RIT
+  public setRunItTwiceUnanimous(required: boolean): void {
+    this.requireRitUnanimous = !!required;
+  }
+
+  // Record or revoke a player's consent for RIT
+  public recordRunItTwiceConsent(playerId: string, consent: boolean): void {
+    if (consent) this.ritConsents.add(playerId); else this.ritConsents.delete(playerId);
+  }
+
+  // Helper: format a Card to DB-friendly string like 'As', 'Kd', '10s'
+  private static cardToDbString(card: Card): string {
+    const suitMap: Record<Card['suit'], string> = {
+      hearts: 'h',
+      diamonds: 'd',
+      clubs: 'c',
+      spades: 's',
+    };
+    const rank = card.rank; // keep '10' as '10'
+    return `${rank}${suitMap[card.suit]}`;
   }
 }

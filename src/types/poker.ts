@@ -42,6 +42,10 @@ export interface TableState {
   lastRaise: number;
   // Betting mode for the table: 'no-limit' (default) or 'pot-limit'
   bettingMode?: 'no-limit' | 'pot-limit';
+  // Policy: when true, Run It Twice requires unanimous consent from all active players
+  requireRunItTwiceUnanimous?: boolean;
+  // US-029: Run It Twice state (set only when enabled)
+  runItTwice?: RunItTwice;
 }
 
 export interface BettingRound {
@@ -89,4 +93,28 @@ export interface HandRanking {
   cards: Card[]; // best 5 cards forming the hand
   kickers: Card[]; // tie-breakers in order (if applicable)
   strength: number; // same as rank for now; reserved for extended scoring
+}
+
+// US-029: Run It Twice types
+export interface PotSplit {
+  playerId: string;
+  amount: number;
+}
+
+export interface RunResult {
+  boardId: string;
+  winners: Array<{
+    playerId: string;
+    winningHand: HandRanking;
+    potShare: number;
+  }>;
+}
+
+export interface RunItTwice {
+  enabled: boolean;
+  numberOfRuns: number; // 2-4
+  boards: Card[][]; // Full community boards per run
+  results: RunResult[];
+  potDistribution: PotSplit[]; // aggregated distribution across runs
+  seeds: string[]; // RNG seeds (opaque strings)
 }

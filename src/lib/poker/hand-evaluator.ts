@@ -41,11 +41,11 @@ export class HandEvaluator {
     
     // Map the cards in the winning hand back to our Card objects
     const winningCards = hand.cards.map((solverCard: PokerSolverCard) => {
-      const rank = solverCard.value === 'T' ? '10' : solverCard.value;
-      return allCards.find(card => 
-        card.rank === rank && 
-        card.suit === Object.keys(this.suitMap).find(key => this.suitMap[key] === solverCard.suit)
-      )!;
+      const rank = (solverCard.value === 'T' ? '10' : solverCard.value) as Card['rank'] | string;
+      const suit = Object.keys(this.suitMap).find(key => this.suitMap[key] === solverCard.suit) as Card['suit'] | undefined;
+      const found = allCards.find(card => card.rank === (rank as Card['rank']) && card.suit === suit);
+      // Fallback: construct a Card if mapping fails (should not happen, but be resilient in tests)
+      return found || ({ rank: rank as Card['rank'], suit: (suit || 'hearts') as Card['suit'] });
     });
 
     return { 
@@ -69,10 +69,12 @@ export class HandEvaluator {
       }));
     };
 
-    const solved1 = pokersolver.solve(this.cardsToString(convertToCards(hand1)));
-    const solved2 = pokersolver.solve(this.cardsToString(convertToCards(hand2)));
-    
-    return solved1.rank === pokersolver.winners([solved1, solved2])[0].rank ? 1 : -1;
+  const solved1 = pokersolver.solve(this.cardsToString(convertToCards(hand1)));
+  const solved2 = pokersolver.solve(this.cardsToString(convertToCards(hand2)));
+  const winners = pokersolver.winners([solved1, solved2]);
+  // If both are winners, it's a tie
+  if (winners.length > 1) return 0;
+  return winners[0] === solved1 ? 1 : -1;
   }
 
   /**

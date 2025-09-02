@@ -351,93 +351,111 @@ export class PokerEngine {
       return;
     }
 
-    // Evaluate hands and determine winners
-    const playerHands = activePlayers.map(player => ({
-      playerId: player.id,
-      evaluation: HandEvaluator.evaluateHand(player.holeCards || [], this.state.communityCards)
-    }));
-
-    this.log(`Player hands evaluated: ${JSON.stringify(playerHands.map(ph => ({
-      playerId: ph.playerId,
-      description: ph.evaluation.hand.description,
-      rank: ph.evaluation.hand.rank
-    })))}`);
-
-    // Find the winning hand(s)
-    const winners = playerHands.filter(ph => 
-      !playerHands.some(other => 
-        ph !== other && HandEvaluator.compareHands(other.evaluation.hand, ph.evaluation.hand) > 0
-      )
-    );
-
-    this.log(`Winners determined: ${JSON.stringify(winners.map(w => w.playerId))}`);
-
-    // Calculate winnings using pot calculator
-    const results: HandResult[] = winners.map(w => ({
-      playerId: w.playerId,
-      hand: w.evaluation.cards,
-      description: w.evaluation.hand.description,
-      strength: w.evaluation.hand.rank,
-      winAmount: 0
-    }));
-
+    // Evaluate hands and distribute pots (US-033: multi-way all-in resolution with side pots)
     this.log(`-------- Showdown --------`);
     this.log(`Initial state:`);
     this.log(`- Pot: ${this.state.pot}`);
     this.log(`- Current bets: ${this.state.players.map(p => `${p.id}: ${p.currentBet}`).join(', ')}`);
     this.log(`- Player stacks: ${this.state.players.map(p => `${p.id}: ${p.stack}`).join(', ')}`);
 
-    // First verify total chips in play (pot already includes all bets, so only count stacks + pot)
-    const initialTotal = this.state.players.reduce((sum, p) => sum + p.stack, 0) + this.state.pot;
+  // Verify total chips conservation baseline (pot already includes contributed bets)
+  const betsTotal = this.state.players.reduce((sum, p) => sum + (p.currentBet || 0), 0);
+  const potBefore = this.state.pot;
+  const stacksTotal = this.state.players.reduce((sum, p) => sum + p.stack, 0);
+  const includeOutstandingBets = potBefore === 0 ? betsTotal : 0;
+  const initialTotal = stacksTotal + potBefore + includeOutstandingBets;
     this.log(`Total chips before distribution: ${initialTotal}`);
 
-    // The pot already contains all bets, so we just need to distribute it
-    const totalPrizePool = this.state.pot;
-    this.log(`Total prize pool: ${totalPrizePool}`);
+    // Build side pots from current bets and eligibility
+  const sidePots = PotCalculator.calculateSidePots(
+      this.state.players.map(p => ({ id: p.id, stack: p.stack, currentBet: p.currentBet, isFolded: p.isFolded }))
+    );
+    this.log(`Calculated side pots: ${JSON.stringify(sidePots)}`);
+
+  // Create a base pot representing chips from previous streets (exclude current round unmatched totals)
+  const baseAmount = Math.max(0, potBefore - betsTotal);
+  const basePot = baseAmount > 0 ? [{ amount: baseAmount, eligiblePlayers: activePlayers.map(p => p.id) }] : [];
+  const potsToDistribute = [...basePot, ...sidePots];
+
+    // Precompute hand strengths for all non-folded players
+    // Build a composite numeric score: category rank + ordered best-5 ranks for intra-category tie-breaks
+    const rankWeight: Record<Card['rank'], number> = {
+      '2': 2,
+      '3': 3,
+      '4': 4,
+      '5': 5,
+      '6': 6,
+      '7': 7,
+      '8': 8,
+      '9': 9,
+      '10': 10,
+      'J': 11,
+      'Q': 12,
+      'K': 13,
+      'A': 14,
+    };
+    const computeScore = (cards: Card[], category: number): number => {
+      // Use 2 digits per card slot to pack values safely within Number range
+      const vals = cards.map(c => rankWeight[c.rank] || 0);
+      // Ensure length 5 (best hand); pad with zeros if defensive
+      while (vals.length < 5) vals.push(0);
+      const [v0, v1, v2, v3, v4] = vals;
+      return category * 1e10 + v0 * 1e8 + v1 * 1e6 + v2 * 1e4 + v3 * 1e2 + v4;
+    };
+    const strengths = new Map<string, number>();
+    const handViews = new Map<string, { cards: Card[]; description: string }>();
+    activePlayers.forEach(p => {
+      const hr = HandEvaluator.getHandRanking(p.holeCards || [], this.state.communityCards);
+      const score = computeScore(hr.cards, hr.rank);
+      strengths.set(p.id, score);
+      handViews.set(p.id, { cards: hr.cards, description: hr.name });
+    });
+
+    // Prepare distribution array for all players (winAmount accumulates)
+    const distribution = this.state.players.map(p => ({
+      playerId: p.id,
+      winAmount: 0,
+      strength: strengths.get(p.id)
+    }));
+
+    // Distribute each side pot to highest-strength eligible players
+  PotCalculator.distributePots(potsToDistribute, distribution);
+
+    // Apply distribution to stacks and clear bets/pot
+    this.state.players.forEach(p => {
+      const win = distribution.find(d => d.playerId === p.id)?.winAmount || 0;
+      if (win > 0) {
+        p.stack += win;
+        this.log(`Awarded ${win} to ${p.id} (stack now: ${p.stack})`);
+      }
+    });
 
     // Clear all current bets and pot
     this.state.players.forEach(p => {
-        this.log(`Clearing bet for player ${p.id}: ${p.currentBet} -> 0`);
-        p.currentBet = 0;
-      });
-      this.state.pot = 0;
+      this.log(`Clearing bet for player ${p.id}: ${p.currentBet} -> 0`);
+      p.currentBet = 0;
+    });
+    this.state.pot = 0;
 
-      // Calculate prize per winner
-      const prizePerWinner = Math.floor(totalPrizePool / winners.length);
-      const remainder = totalPrizePool % winners.length;  // Handle any remainder chips
-
-      this.log(`Total prize pool: ${totalPrizePool}, Winners: ${winners.length}`);
-      this.log(`Each winner gets: ${prizePerWinner} + ${remainder} remainder to last winner`);
-
-      results.forEach((result, index) => {
-        const player = this.state.players.find(p => p.id === result.playerId);
-        if (player) {
-          // Last winner gets any remainder chips
-          const winAmount = index === winners.length - 1 ? prizePerWinner + remainder : prizePerWinner;
-          player.stack += winAmount;
-          result.winAmount = winAmount;
-          this.log(`Awarded ${winAmount} to winner ${player.id} (stack now: ${player.stack})`);
-        }
-      });
-
-      // Check that pot was properly distributed
-      const finalTotal = this.state.players.reduce((sum, p) => sum + p.stack, 0);
-      this.log(`Total chips after distribution: ${finalTotal} (should equal initial ${initialTotal})`);
-
-      if (finalTotal !== initialTotal) {
-        this.error(`Chip count mismatch! Lost ${initialTotal - finalTotal} chips in distribution.`);
-        // Fix: If there are no winners, give the pot to one player to maintain chip conservation
-        if (winners.length === 0 && totalPrizePool > 0) {
-          const firstActivePlayer = this.state.players.find(p => !p.isFolded);
-          if (firstActivePlayer) {
-            firstActivePlayer.stack += totalPrizePool;
-            this.log(`No hand winner detected. Giving pot to player ${firstActivePlayer.id} to maintain chip count.`);
-          }
+    // Conservation check
+  const finalTotal = this.state.players.reduce((sum, p) => sum + p.stack, 0);
+    this.log(`Total chips after distribution: ${finalTotal} (should equal initial ${initialTotal})`);
+    if (finalTotal !== initialTotal) {
+      this.error(`Chip count mismatch! Lost ${initialTotal - finalTotal} chips in distribution.`);
+      // As a last resort (should not happen), push any remaining difference to first active player
+      const delta = initialTotal - finalTotal;
+      if (delta !== 0) {
+        const firstActive = this.state.players.find(p => !p.isFolded);
+        if (firstActive) {
+          firstActive.stack += delta;
+          this.log(`Adjusted ${firstActive.id} stack by ${delta} to maintain chip conservation.`);
         }
       }
+    }
 
-      // Set stage to indicate hand is over
-      this.state.activePlayer = '';
+  // Set stage to indicate hand is over
+  this.state.stage = 'showdown';
+  this.state.activePlayer = '';
   }
 
   // US-029: Execute run-it-twice using separate decks/boards per run and equal pot split

@@ -18,7 +18,8 @@ export interface EngineFactoryOptions {
  * - optional RIT per-run persistence hook
  */
 export function createPokerEngine(opts: EngineFactoryOptions): PokerEngine {
-  const mode = opts.state?.bettingMode ?? 'no-limit';
+  const variant = opts.state?.variant;
+  const mode = opts.state?.bettingMode ?? (variant === 'omaha' ? 'pot-limit' : 'no-limit');
   const requireRit = !!opts.state?.requireRunItTwiceUnanimous;
   const persistence = opts.runItTwicePersistence
     ? { handId: opts.runItTwicePersistence.handId, onOutcome: opts.runItTwicePersistence.onOutcome }
@@ -31,6 +32,7 @@ export function createPokerEngine(opts: EngineFactoryOptions): PokerEngine {
     opts.bigBlind,
     {
       bettingMode: mode,
+  variant,
       requireRunItTwiceUnanimous: requireRit,
       runItTwicePersistence: persistence,
     }

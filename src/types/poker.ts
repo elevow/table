@@ -40,6 +40,8 @@ export interface TableState {
   bigBlind: number;
   minRaise: number;
   lastRaise: number;
+  // Optional game variant; when set to 'omaha', rules and dealing are adapted accordingly
+  variant?: 'texas-holdem' | 'omaha';
   // Betting mode for the table: 'no-limit' (default) or 'pot-limit'
   bettingMode?: 'no-limit' | 'pot-limit';
   // Policy: when true, Run It Twice requires unanimous consent from all active players

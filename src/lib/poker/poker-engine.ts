@@ -26,6 +26,7 @@ export class PokerEngine {
     bettingMode: 'no-limit' as 'no-limit' | 'pot-limit',
     runItTwicePersistence: undefined as | { handId?: string; onOutcome?: (input: RunItTwiceOutcomeInput) => Promise<void> } | undefined,
   requireRunItTwiceUnanimous: false as boolean,
+  variant: undefined as undefined | 'texas-holdem' | 'omaha',
   };
 
   constructor(tableId: string, players: Player[], smallBlind: number, bigBlind: number, options?: Partial<typeof PokerEngine.defaultOptions>) {
@@ -48,6 +49,10 @@ export class PokerEngine {
     // Only set bettingMode on state when not default to preserve backward-compat visuals/equality
     if (opts.bettingMode !== 'no-limit') {
       this.state.bettingMode = opts.bettingMode;
+    }
+    // Set variant on state only when provided (keep undefined as default Hold'em)
+    if (opts.variant) {
+      this.state.variant = opts.variant;
     }
   // Configure optional RIT persistence
   this.ritPersistence = opts.runItTwicePersistence;
@@ -171,8 +176,9 @@ export class PokerEngine {
   }
 
   private dealHoleCards(): void {
-    // Deal 2 cards to each player in order
-    for (let round = 0; round < 2; round++) {
+  // Deal 2 cards for Hold'em, 4 for Omaha
+  const rounds = this.state.variant === 'omaha' ? 4 : 2;
+  for (let round = 0; round < rounds; round++) {
       for (let i = 0; i < this.state.players.length; i++) {
         const playerPosition = (this.state.dealerPosition + 1 + i) % this.state.players.length;
         const player = this.state.players[playerPosition];
@@ -405,7 +411,10 @@ export class PokerEngine {
     const strengths = new Map<string, number>();
     const handViews = new Map<string, { cards: Card[]; description: string }>();
     activePlayers.forEach(p => {
-      const hr = HandEvaluator.getHandRanking(p.holeCards || [], this.state.communityCards);
+      const hr = (this.state.variant === 'omaha'
+        ? HandEvaluator.getOmahaHandRanking
+        : HandEvaluator.getHandRanking
+      ).call(HandEvaluator, p.holeCards || [], this.state.communityCards);
       const score = computeScore(hr.cards, hr.rank);
       strengths.set(p.id, score);
       handViews.set(p.id, { cards: hr.cards, description: hr.name });
@@ -458,6 +467,15 @@ export class PokerEngine {
   this.state.activePlayer = '';
   }
 
+  // Allow changing variant at runtime before a hand starts
+  public setVariant(variant: 'texas-holdem' | 'omaha'): void {
+    if (variant) {
+      this.state.variant = variant;
+    } else {
+      delete (this.state as any).variant;
+    }
+  }
+
   // US-029: Execute run-it-twice using separate decks/boards per run and equal pot split
   private executeRunItTwice(): void {
     const rit = this.state.runItTwice!;
@@ -501,10 +519,12 @@ export class PokerEngine {
       const runBoard = [...this.state.communityCards, ...dm.dealCards(missing)];
       rit.boards.push(runBoard);
 
-      // Evaluate winners on this run's board
+      // Evaluate winners on this run's board; enforce Omaha rules when applicable
       const evals = activePlayers.map(player => ({
         playerId: player.id,
-        evaluation: HandEvaluator.evaluateHand(player.holeCards || [], runBoard)
+        evaluation: (this.state.variant === 'omaha'
+          ? HandEvaluator.evaluateOmahaHand
+          : HandEvaluator.evaluateHand).call(HandEvaluator, player.holeCards || [], runBoard)
       }));
       const winners = evals.filter(ph => !evals.some(other => ph !== other && HandEvaluator.compareHands(other.evaluation.hand, ph.evaluation.hand) > 0));
 
@@ -518,10 +538,13 @@ export class PokerEngine {
         const potShare = prizePerWinner + (idx === winners.length - 1 ? runRemainder : 0);
         const prev = aggregate.get(w.playerId) || 0;
         aggregate.set(w.playerId, prev + potShare);
-        const winningHand = HandEvaluator.getHandRanking(
-          activePlayers.find(p => p.id === w.playerId)?.holeCards || [],
-          runBoard
-        );
+        const winningHand = (this.state.variant === 'omaha'
+          ? HandEvaluator.getOmahaHandRanking
+          : HandEvaluator.getHandRanking).call(
+            HandEvaluator,
+            activePlayers.find(p => p.id === w.playerId)?.holeCards || [],
+            runBoard
+          );
         runWinners.push({ playerId: w.playerId, winningHand, potShare });
       });
       results.push({ boardId: `run-${r + 1}`, winners: runWinners });

@@ -32,12 +32,16 @@ export class GameService {
     let state = input.state;
     const bettingMode = (room?.configuration?.bettingMode as 'no-limit' | 'pot-limit' | undefined);
     const requireRitUnanimous = !!room?.configuration?.requireRunItTwiceUnanimous;
+    const variant = room?.configuration?.variant as undefined | 'texas-holdem' | 'omaha';
     // Only include non-defaults to preserve backward-compat visuals/equality
     if (bettingMode && bettingMode !== 'no-limit') {
       state = { ...(state || {}), bettingMode };
     }
     if (requireRitUnanimous) {
       state = { ...(state || {}), requireRunItTwiceUnanimous: true };
+    }
+    if (variant) {
+      state = { ...(state || {}), variant };
     }
     return this.manager.startGame({ ...input, state });
   }

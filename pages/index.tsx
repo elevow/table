@@ -75,6 +75,13 @@ const Home: NextPage = () => {
           >
             Start New Game
           </button>
+          <button
+            className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2 rounded-md"
+            onClick={() => router.push('/game/create')}
+            data-route="/game/create"
+          >
+            Create Room (choose variant)
+          </button>
           
           <button
             className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-md"

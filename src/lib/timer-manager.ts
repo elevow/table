@@ -127,7 +127,8 @@ export class TimerManager {
     // Remove the timer
     this.timers.delete(tableId);
 
-    // Notify state manager of the auto-fold
+    // Broadcast in the room to align with action flow, then notify state manager
+    this.io.to(tableId).emit('player_action', autoAction);
     this.stateManager.handleAction(tableId, autoAction);
   }
 

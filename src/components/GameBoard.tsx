@@ -6,9 +6,10 @@ import { useEffect, memo } from 'react';
 
 interface GameBoardProps {
   gameId: string;
+  headerSlot?: React.ReactNode;
 }
 
-function GameBoard({ gameId }: GameBoardProps) {
+function GameBoard({ gameId, headerSlot }: GameBoardProps) {
   useEffect(() => {
     // Log when the component is loaded to demonstrate code splitting
     // console.log('GameBoard component loaded for game:', gameId);
@@ -18,7 +19,10 @@ function GameBoard({ gameId }: GameBoardProps) {
   
   return (
     <div className="game-board">
-      <h1>Game Board</h1>
+      <div className="flex items-center justify-between">
+        <h1>Game Board</h1>
+        {headerSlot}
+      </div>
       <p>Game ID: {gameId}</p>
       {/* Game board content would go here */}
     </div>

@@ -2,6 +2,7 @@ import { Server as SocketServer } from 'socket.io';
 import { PlayerAction, TableState, Player, DisconnectionState } from '../types/poker';
 import { ActionValidator } from './action-validator';
 import { StateManager } from './state-manager';
+import { TimerManager } from './timer-manager';
 
 interface ActionResponse {
   success: boolean;
@@ -15,12 +16,16 @@ export class ActionManager {
   private actionTimeouts: Map<string, NodeJS.Timeout>;
   // US-032: Track player disconnections with grace period and scheduled auto-actions
   private disconnects: Map<string, DisconnectionState>;
+  // US-034: Time Bank and turn timers
+  private timerManager: TimerManager;
 
   constructor(stateManager: StateManager, io: SocketServer) {
     this.stateManager = stateManager;
     this.io = io;
     this.actionTimeouts = new Map();
   this.disconnects = new Map();
+  // Initialize time bank/timer manager (US-034)
+  this.timerManager = new TimerManager(this.io, this.stateManager);
     this.setupSocketHandlers();
   }
 
@@ -36,7 +41,9 @@ export class ActionManager {
           this.disconnects.delete(key);
         }
   (socket as any).playerId = playerId;
-        socket.join(tableId);
+  socket.join(tableId);
+  // Also join a personal room for per-player events (e.g., timebank updates)
+  socket.join(playerId);
       });
       socket.on('player_action', (action: PlayerAction, callback: (response: ActionResponse) => void) => {
         // Remember identity and ensure socket is in the room for broadcasts
@@ -45,6 +52,15 @@ export class ActionManager {
         this.handlePlayerAction(action)
           .then(response => callback(response))
           .catch(error => callback({ success: false, error: error.message }));
+      });
+
+      // US-034: Allow clients to consume their time bank for the active turn
+      socket.on('use_timebank', (
+        { tableId, playerId }: { tableId: string; playerId: string },
+        callback?: (resp: { success: boolean }) => void
+      ) => {
+        const success = this.timerManager.useTimeBank(tableId, playerId);
+        if (callback) callback({ success });
       });
 
       // Track disconnects and schedule auto-actions
@@ -90,8 +106,8 @@ export class ActionManager {
     this.broadcastAction(action);
 
     // Clear existing timeout and set new one for next player
-    this.clearActionTimeout(action.tableId);
-    this.setActionTimeout(action.tableId, newState);
+  this.clearActionTimeout(action.tableId);
+  this.setActionTimeout(action.tableId, newState);
 
     return { success: true, state: newState };
   }
@@ -239,19 +255,13 @@ export class ActionManager {
   }
 
   private setActionTimeout(tableId: string, state: TableState): void {
-    const timeout = setTimeout(() => {
-      this.handleTimeout(tableId, state.activePlayer);
-    }, state.players.find(p => p.id === state.activePlayer)?.timeBank || 30000);
-
-    this.actionTimeouts.set(tableId, timeout);
+  // Delegate to TimerManager (US-034)
+  this.timerManager.startTimer(tableId, state.activePlayer);
   }
 
   private clearActionTimeout(tableId: string): void {
-    const timeout = this.actionTimeouts.get(tableId);
-    if (timeout) {
-      clearTimeout(timeout);
-      this.actionTimeouts.delete(tableId);
-    }
+  // Stop the TimerManager timer for this table (US-034)
+  this.timerManager.stopTimer(tableId);
   }
 
   private async handleTimeout(tableId: string, playerId: string): Promise<void> {

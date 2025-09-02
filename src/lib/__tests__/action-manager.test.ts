@@ -56,7 +56,8 @@ describe('ActionManager', () => {
     mockIo = new SocketServer({} as HttpServer) as jest.Mocked<SocketServer>;
     mockStateManager = {
       getState: jest.fn().mockReturnValue(mockState),
-      updateState: jest.fn().mockResolvedValue(true)
+      updateState: jest.fn().mockResolvedValue(true),
+      handleAction: jest.fn()
     } as unknown as jest.Mocked<StateManager>;
 
     actionManager = new ActionManager(mockStateManager, mockIo);

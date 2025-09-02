@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
 import { useComponentPerformance } from '../../src/utils/performance-monitor';
+import TimerHUD from '../../src/components/TimerHUD';
+import { getSocket } from '../../src/lib/clientSocket';
 
 // Dynamic import with loading state
 const GameBoard = dynamic(() => import('../../src/components/GameBoard'), {
@@ -41,8 +43,20 @@ export default function GamePage() {
   const [showSettings, setShowSettings] = useState(false);
   const [gameRoutes, setGameRoutes] = useState<import('../../src/utils/game-routes').GameRoute[]>([]);
   const { markInteraction } = useComponentPerformance('GamePage');
+  const [playerId, setPlayerId] = useState<string>('');
+  const socket = getSocket();
   
   useEffect(() => {
+    // Example: derive playerId from localStorage or a session; fallback to random for demo
+    const pid = (typeof window !== 'undefined' && (localStorage.getItem('player_id') || 'p_' + Math.random().toString(36).slice(2))) as string;
+    setPlayerId(pid);
+    if (typeof window !== 'undefined') localStorage.setItem('player_id', pid);
+
+    // Join table and personal room
+    if (socket && id && typeof id === 'string') {
+      socket.emit('join_table', { tableId: id, playerId: pid });
+    }
+
     // Load game routes data only when needed
     const loadGameRoutes = async () => {
       try {
@@ -80,7 +94,7 @@ export default function GamePage() {
   if (typeof endMark === 'function') endMark();
       prefetcher.cleanup();
     };
-  }, [id, markInteraction]);
+  }, [id, markInteraction, socket]);
   
   // Toggle settings component
   const toggleSettings = () => {
@@ -98,6 +112,13 @@ export default function GamePage() {
           {/* Critical component loaded immediately */}
           <div className="lg:col-span-2 bg-white rounded-lg shadow-md overflow-hidden">
             <GameBoard gameId={String(id)} />
+          </div>
+
+          {/* Timer HUD */}
+          <div className="bg-white rounded-lg shadow-md p-4">
+            {id && playerId && (
+              <TimerHUD tableId={String(id)} playerId={playerId} />
+            )}
           </div>
           
           {/* Player stats (important info, loaded early) */}

@@ -3,13 +3,18 @@
  * In a real implementation, you would have a fully functional game board component.
  */
 import { useEffect, memo } from 'react';
+import VariantControls from './VariantControls';
+import VariantHelpPanel from './VariantHelpPanel';
+import type { TableState } from '../types/poker';
 
 interface GameBoardProps {
   gameId: string;
   headerSlot?: React.ReactNode;
+  // Optional table state preview to render variant UI; remains backward compatible
+  tableState?: Pick<TableState, 'variant' | 'stage' | 'lowHandQualifier' | 'hiLoDeclarations'>;
 }
 
-function GameBoard({ gameId, headerSlot }: GameBoardProps) {
+function GameBoard({ gameId, headerSlot, tableState }: GameBoardProps) {
   useEffect(() => {
     // Log when the component is loaded to demonstrate code splitting
     // console.log('GameBoard component loaded for game:', gameId);
@@ -25,6 +30,18 @@ function GameBoard({ gameId, headerSlot }: GameBoardProps) {
       </div>
       <p>Game ID: {gameId}</p>
       {/* Game board content would go here */}
+      {tableState?.variant && tableState.stage && (
+        <div className="mt-4">
+          <VariantControls
+            variant={tableState.variant}
+            stage={tableState.stage}
+            declarationsEnabled={!!tableState.hiLoDeclarations}
+          />
+          <div className="mt-2">
+            <VariantHelpPanel variant={tableState.variant} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

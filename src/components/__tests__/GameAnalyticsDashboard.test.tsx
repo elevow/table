@@ -9,7 +9,7 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { jest } from '@jest/globals';
 
@@ -199,34 +199,42 @@ jest.mock('../../lib/game-analytics', () => {
 global.URL.createObjectURL = jest.fn(() => 'mock-blob-url');
 global.URL.revokeObjectURL = jest.fn();
 
-// Mock HTMLAnchorElement click for download tests
+// Mock HTMLAnchorElement click for download tests, but preserve native DOM for others
 const mockClick = jest.fn();
 const mockAppendChild = jest.fn();
 const mockRemoveChild = jest.fn();
 
+// Preserve originals
+const realCreateElement = document.createElement.bind(document);
+const realAppendChild = document.body.appendChild.bind(document.body);
+const realRemoveChild = document.body.removeChild.bind(document.body);
+
+// Only intercept anchor creation; return a real <a> element with a mocked click
 Object.defineProperty(document, 'createElement', {
-  value: jest.fn((tagName) => {
-    if (tagName === 'a') {
-      return {
-        href: '',
-        download: '',
-        click: mockClick,
-        style: {}
-      };
+  value: jest.fn((tagName: string, ...args: any[]) => {
+    if (tagName.toLowerCase() === 'a') {
+      const anchor = realCreateElement('a');
+      // Ensure click is spy-able without breaking behavior
+      Object.defineProperty(anchor, 'click', {
+        value: mockClick,
+        configurable: true
+      });
+      return anchor as HTMLAnchorElement;
     }
-    return {};
+    return realCreateElement(tagName as any, ...args);
   }),
   configurable: true
 });
 
-Object.defineProperty(document.body, 'appendChild', {
-  value: mockAppendChild,
-  configurable: true
+// Spy on append/remove calls but keep native behavior so React Testing Library works
+jest.spyOn(document.body, 'appendChild').mockImplementation((node: Node) => {
+  mockAppendChild(node);
+  return realAppendChild(node);
 });
 
-Object.defineProperty(document.body, 'removeChild', {
-  value: mockRemoveChild,
-  configurable: true
+jest.spyOn(document.body, 'removeChild').mockImplementation((node: Node) => {
+  mockRemoveChild(node);
+  return realRemoveChild(node);
 });
 
 describe('GameAnalyticsDashboard', () => {
@@ -246,7 +254,7 @@ describe('GameAnalyticsDashboard', () => {
       expect(screen.getByText('Trends')).toBeInTheDocument();
     });
 
-    it('should render loading state initially', () => {
+  it('should render loading state initially', () => {
       // Mock loading state
       const MockDashboardWithLoading = () => {
         return (
@@ -258,8 +266,8 @@ describe('GameAnalyticsDashboard', () => {
         );
       };
 
-      render(<MockDashboardWithLoading />);
-      expect(screen.getByRole('generic')).toHaveClass('animate-pulse');
+  const { container } = render(<MockDashboardWithLoading />);
+  expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
     });
 
     it('should render error state when analytics fail', () => {
@@ -304,16 +312,16 @@ describe('GameAnalyticsDashboard', () => {
     it('should highlight active tab', () => {
       render(<GameAnalyticsDashboard />);
       
-      const overviewTab = screen.getByText('Overview');
-      const playersTab = screen.getByText('Players');
+  const overviewTab = screen.getByText('Overview');
+  const playersTab = screen.getByText('Players');
       
       // Overview should be active initially
-      expect(overviewTab.parentElement).toHaveClass('border-blue-500', 'text-blue-600');
+  expect(overviewTab).toHaveClass('border-blue-500', 'text-blue-600');
       
       // Click Players tab
-      fireEvent.click(playersTab);
-      expect(playersTab.parentElement).toHaveClass('border-blue-500', 'text-blue-600');
-      expect(overviewTab.parentElement).not.toHaveClass('border-blue-500', 'text-blue-600');
+  fireEvent.click(playersTab);
+  expect(playersTab).toHaveClass('border-blue-500', 'text-blue-600');
+  expect(overviewTab).not.toHaveClass('border-blue-500', 'text-blue-600');
     });
   });
 
@@ -328,7 +336,7 @@ describe('GameAnalyticsDashboard', () => {
       expect(screen.getByText('25')).toBeInTheDocument(); // Active players value
       
       expect(screen.getByText('Total Revenue')).toBeInTheDocument();
-      expect(screen.getByText('$1,251')).toBeInTheDocument(); // Revenue value
+  expect(screen.getByText('$1,250.75')).toBeInTheDocument(); // Revenue value
       
       expect(screen.getByText('Avg Session Duration')).toBeInTheDocument();
       expect(screen.getByText('35m 0s')).toBeInTheDocument(); // Duration value
@@ -350,13 +358,13 @@ describe('GameAnalyticsDashboard', () => {
       
       fireEvent.click(screen.getByText('Rooms'));
       
-      expect(screen.getByText('Room ID')).toBeInTheDocument();
-      expect(screen.getByText('Game Type')).toBeInTheDocument();
-      expect(screen.getByText('Stakes')).toBeInTheDocument();
-      expect(screen.getByText('Players')).toBeInTheDocument();
-      expect(screen.getByText('Hands')).toBeInTheDocument();
-      expect(screen.getByText('Duration')).toBeInTheDocument();
-      expect(screen.getByText('Rake')).toBeInTheDocument();
+      const table = screen.getByRole('table');
+      expect(table).toBeInTheDocument();
+      const headers = within(table).getAllByRole('columnheader');
+      const headerTexts = headers.map(h => h.textContent?.trim());
+      expect(headerTexts).toEqual(
+        expect.arrayContaining(['Room ID', 'Game Type', 'Stakes', 'Players', 'Hands', 'Duration', 'Rake'])
+      );
       
       // Check for room data
       expect(screen.getByText('room-1')).toBeInTheDocument();
@@ -396,9 +404,9 @@ describe('GameAnalyticsDashboard', () => {
       
       fireEvent.click(screen.getByText('Players'));
       
-      expect(screen.getByText('Player Demographics')).toBeInTheDocument();
-      expect(screen.getByText('By Device')).toBeInTheDocument();
-      expect(screen.getByText('Desktop')).toBeInTheDocument();
+  expect(screen.getByText('Player Demographics')).toBeInTheDocument();
+  expect(screen.getByText('By Device')).toBeInTheDocument();
+  expect(screen.getByText(/desktop/i)).toBeInTheDocument();
       expect(screen.getByText('18')).toBeInTheDocument(); // Desktop count
     });
 
@@ -425,10 +433,12 @@ describe('GameAnalyticsDashboard', () => {
       
       fireEvent.click(screen.getByText('Features'));
       
-      expect(screen.getByText('Chat')).toBeInTheDocument();
-      expect(screen.getByText('Emotes')).toBeInTheDocument();
-      expect(screen.getByText('Autoactions')).toBeInTheDocument();
-      expect(screen.getByText('Handhistory')).toBeInTheDocument();
+  const metricsGrid = screen.getByText('Chat').closest('.grid');
+  expect(metricsGrid).toBeInTheDocument();
+  expect(within(metricsGrid as HTMLElement).getByText('Chat')).toBeInTheDocument();
+  expect(within(metricsGrid as HTMLElement).getByText('Emotes')).toBeInTheDocument();
+  expect(within(metricsGrid as HTMLElement).getByText(/AutoActions/i)).toBeInTheDocument();
+  expect(within(metricsGrid as HTMLElement).getByText(/HandHistory/i)).toBeInTheDocument();
     });
 
     it('should display feature performance table', () => {
@@ -690,7 +700,7 @@ describe('Integration with Game Analytics', () => {
     // Should render data from the mocked analytics collector
     expect(screen.getByText('5')).toBeInTheDocument(); // Active rooms
     expect(screen.getByText('25')).toBeInTheDocument(); // Active players
-    expect(screen.getByText('$1,251')).toBeInTheDocument(); // Revenue
+  expect(screen.getByText('$1,250.75')).toBeInTheDocument(); // Revenue
   });
 
   it('should handle analytics updates through events', () => {

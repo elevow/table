@@ -3,16 +3,16 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'jsdom',
   roots: ['<rootDir>/src'],
-  testMatch: ['**/__tests__/**/*.test.ts'],
+  testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
   testPathIgnorePatterns: [
     '/node_modules/',
     // Ignore legacy user-story-numbered test filenames (migrated to clean names)
     '.*us-\\d+.*\\.test\\.ts$'
   ],
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
+  '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: {
-        jsx: 'react-jsx',
+    jsx: 'react-jsx'
       },
     }],
   },

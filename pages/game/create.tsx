@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import { tournamentPresets } from '../../src/lib/tournament/tournament-utils';
+import type { TournamentConfig } from '../../src/types/tournament';
 
 type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo';
 type BettingMode = 'no-limit' | 'pot-limit';
@@ -17,13 +19,17 @@ export default function CreateGameRoomPage() {
   const [createdBy, setCreatedBy] = useState('u1');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [enableTournament, setEnableTournament] = useState(false);
+  const [presetKey, setPresetKey] = useState<string>('freezeout_default');
+  const presetOptions = useMemo(() => Object.entries(tournamentPresets), []);
+  const selectedTournamentConfig: TournamentConfig | null = useMemo(() => enableTournament ? tournamentPresets[presetKey]?.build() : null, [enableTournament, presetKey]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/api/games/rooms/create', {
+  const res = await fetch('/api/games/rooms/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -36,6 +42,7 @@ export default function CreateGameRoomPage() {
             variant,
             bettingMode,
             requireRunItTwiceUnanimous: requireRitUnanimous,
+    tournament: enableTournament ? { preset: presetKey, config: selectedTournamentConfig } : undefined,
           },
         }),
       });
@@ -100,6 +107,44 @@ export default function CreateGameRoomPage() {
               <span className="text-sm">Require unanimous RIT consent</span>
             </label>
           </div>
+        </div>
+        <div className="border-t pt-4 space-y-3">
+          <label className="inline-flex items-center space-x-2">
+            <input type="checkbox" checked={enableTournament} onChange={e => setEnableTournament(e.target.checked)} />
+            <span className="text-sm font-medium">Enable tournament structure</span>
+          </label>
+          {enableTournament && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium">Preset</label>
+                <select className="border p-2 w-full" value={presetKey} onChange={e => setPresetKey(e.target.value)}>
+                  {presetOptions.map(([key, p]) => (
+                    <option key={key} value={key}>{p.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-600 mt-1">{tournamentPresets[presetKey]?.description}</p>
+              </div>
+              <div className="bg-gray-50 rounded p-3 text-sm">
+                <div className="font-semibold mb-1">Preview</div>
+                {selectedTournamentConfig ? (
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Type: {selectedTournamentConfig.type}</li>
+                    <li>Starting stack: {selectedTournamentConfig.startingStack.toLocaleString()}</li>
+                    <li>Levels: {selectedTournamentConfig.blindLevels.length} ({selectedTournamentConfig.blindLevels[0].durationMinutes} min)</li>
+                    <li>Late reg: {selectedTournamentConfig.lateRegistration.enabled ? `until L${selectedTournamentConfig.lateRegistration.endLevel}` : 'disabled'}</li>
+                    {selectedTournamentConfig.rebuys?.enabled && (
+                      <li>Rebuys: up to {selectedTournamentConfig.rebuys.maxPerPlayer ?? '∞'} until L{selectedTournamentConfig.rebuys.availableUntilLevel}</li>
+                    )}
+                    {selectedTournamentConfig.addOn?.enabled && (
+                      <li>Add-on at break after L{selectedTournamentConfig.addOn.availableAtBreakAfterLevel}</li>
+                    )}
+                  </ul>
+                ) : (
+                  <p className="text-gray-600">Select a preset to preview configuration.</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium">Created by (user id)</label>

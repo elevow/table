@@ -3,6 +3,7 @@
 import { Pool } from 'pg';
 import { GameManager } from '../database/game-manager';
 import { ActiveGameRecord, CreateRoomInput, GameRoomRecord, Paginated, StartGameInput, UpdateActiveGameInput } from '../../types/game';
+import { validateTournamentConfig } from '../tournament/tournament-utils';
 
 export class GameService {
   private manager: GameManager;
@@ -15,6 +16,16 @@ export class GameService {
     this.require(input.gameType, 'gameType');
     this.requireNumber(input.maxPlayers, 'maxPlayers');
     this.require(input.createdBy, 'createdBy');
+    // Validate optional tournament configuration if present
+    const maybeTournament = (input.configuration && (input.configuration as any).tournament) as
+      | { preset?: string; config?: any }
+      | undefined;
+    if (maybeTournament?.config) {
+      const result = validateTournamentConfig(maybeTournament.config);
+      if (!result.valid) {
+        throw new Error(`Invalid tournament config: ${result.errors.join(', ')}`);
+      }
+    }
     return this.manager.createRoom(input);
   }
 

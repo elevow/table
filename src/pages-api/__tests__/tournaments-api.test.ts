@@ -9,6 +9,9 @@ import pauseHandler from '../../../pages/api/tournaments/pause';
 import resumeHandler from '../../../pages/api/tournaments/resume';
 import payoutsHandler from '../../../pages/api/tournaments/payouts';
 import getHandler from '../../../pages/api/tournaments/get';
+import reportHandler from '../../../pages/api/tournaments/report';
+import rebuyHandler from '../../../pages/api/tournaments/rebuy';
+import addOnHandler from '../../../pages/api/tournaments/add-on';
 
 import { createDefaultFreezeoutConfig } from '../../../src/lib/tournament/tournament-utils';
 
@@ -102,5 +105,44 @@ describe('Tournaments API routes (US-058)', () => {
     const res11 = createRes();
     await getHandler(createReq('GET', undefined, { tournamentId: created.id }) as any, res11 as any);
     expect(res11.status).toHaveBeenCalledWith(200);
+
+  // Rebuy (should be allowed if config supports; default freezeout does not, expect error)
+  const resRebuy = createRes();
+  await rebuyHandler(createReq('POST', { tournamentId: created.id, userId: 'u1' }) as any, resRebuy as any);
+  // For freezeout, expect 400
+  expect(resRebuy.status).toHaveBeenCalledWith(400);
+
+  // Create a rebuy tournament and exercise add-on
+  const resA = createRes();
+  const { createRebuyAddOnConfig } = await import('../../../src/lib/tournament/tournament-utils');
+  await createHandler(createReq('POST', { name: 'Rebuy', config: createRebuyAddOnConfig() }) as any, resA as any);
+  const createdRebuy = resA.json.mock.calls[0][0];
+  const resB = createRes();
+  await registerHandler(createReq('POST', { tournamentId: createdRebuy.id, userId: 'u3' }) as any, resB as any);
+  const resC = createRes();
+  await registerHandler(createReq('POST', { tournamentId: createdRebuy.id, userId: 'u4' }) as any, resC as any);
+  const resD = createRes();
+  await startHandler(createReq('POST', { tournamentId: createdRebuy.id }) as any, resD as any);
+  // Rebuy should succeed
+  const resE = createRes();
+  await rebuyHandler(createReq('POST', { tournamentId: createdRebuy.id, userId: 'u3' }) as any, resE as any);
+  expect(resE.status).toHaveBeenCalledWith(200);
+  // Advance to break and do add-on
+  const resF1 = createRes();
+  await advanceHandler(createReq('POST', { tournamentId: createdRebuy.id }) as any, resF1 as any);
+  const resF2 = createRes();
+  await advanceHandler(createReq('POST', { tournamentId: createdRebuy.id }) as any, resF2 as any);
+  const resF3 = createRes();
+  await advanceHandler(createReq('POST', { tournamentId: createdRebuy.id }) as any, resF3 as any);
+  const resG = createRes();
+  await addOnHandler(createReq('POST', { tournamentId: createdRebuy.id, userId: 'u3' }) as any, resG as any);
+  expect(resG.status).toHaveBeenCalledWith(200);
+
+  // Report
+  const res12 = createRes();
+  await reportHandler(createReq('GET', undefined, { tournamentId: created.id, prizePool: '1000' }) as any, res12 as any);
+  expect(res12.status).toHaveBeenCalledWith(200);
+  const report = res12.json.mock.calls[0][0];
+  expect(report.registration.total).toBeGreaterThanOrEqual(2);
   });
 });

@@ -22,6 +22,10 @@ export interface TournamentState {
   currentLevelStartedAt: number | null; // epoch ms
   onBreak: boolean;
   breakEndsAt: number | null;
+  currentBreakAfterLevel?: number | null; // which level's break we are currently on
+  // Reporting fields
+  registrationTimeline?: { at: number; type: 'register' | 'rebuy' | 'addOn'; userId?: string }[];
+  eliminationRecords?: { userId: string; at: number; place: number }[];
 }
 
 export interface CreateTournamentInput {
@@ -35,6 +39,16 @@ export interface RegisterPlayerInput {
 }
 
 export interface EliminatePlayerInput {
+  tournamentId: string;
+  userId: string;
+}
+
+export interface RebuyInput {
+  tournamentId: string;
+  userId: string;
+}
+
+export interface AddOnInput {
   tournamentId: string;
   userId: string;
 }

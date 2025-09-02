@@ -44,21 +44,21 @@ export interface TableState {
   minRaise: number;
   lastRaise: number;
   // Optional game variant; when set to 'omaha' or 'omaha-hi-lo', rules and dealing are adapted accordingly
-  variant?: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud';
+  variant?: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo';
   // Betting mode for the table: 'no-limit' (default) or 'pot-limit'
   bettingMode?: 'no-limit' | 'pot-limit';
   // Policy: when true, Run It Twice requires unanimous consent from all active players
   requireRunItTwiceUnanimous?: boolean;
   // US-029: Run It Twice state (set only when enabled)
   runItTwice?: RunItTwice;
-  // US-052: Omaha Hi-Lo last showdown results (optional, present only for omaha-hi-lo variant)
+  // US-052/US-054: Hi-Lo last showdown results (optional, present for omaha-hi-lo or seven-card-stud-hi-lo)
   lastHiLoResult?: {
     high: Array<{ playerId: string; amount: number }>;
     low: Array<{ playerId: string; amount: number }> | null;
   };
-  // US-052: Optional player declarations for Hi-Lo variants
+  // US-052/US-054: Optional player declarations for Hi-Lo variants
   hiLoDeclarations?: Record<string, 'high' | 'low' | 'both'>;
-  // US-052: Low hand qualifier value (defaults to 8 for Omaha Hi-Lo)
+  // US-052/US-054: Low hand qualifier value (defaults to 8 for Hi-Lo variants)
   lowHandQualifier?: 8;
   // US-053: Seven-card Stud per-player cards and bring-in tracking
   studState?: {

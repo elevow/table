@@ -26,7 +26,7 @@ export class PokerEngine {
     bettingMode: 'no-limit' as 'no-limit' | 'pot-limit',
     runItTwicePersistence: undefined as | { handId?: string; onOutcome?: (input: RunItTwiceOutcomeInput) => Promise<void> } | undefined,
   requireRunItTwiceUnanimous: false as boolean,
-  variant: undefined as undefined | 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud',
+  variant: undefined as undefined | 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo',
   };
 
   constructor(tableId: string, players: Player[], smallBlind: number, bigBlind: number, options?: Partial<typeof PokerEngine.defaultOptions>) {
@@ -170,7 +170,7 @@ export class PokerEngine {
   this.ritConsents.clear();
   // Reset rabbit preview tracking for new hand
   this.rabbitPreviewed = 0;
-    if (this.state.variant === 'seven-card-stud') {
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
       this.dealStudInitial();
       // Stud uses bring-in instead of blinds
       this.computeStudBringIn();
@@ -304,7 +304,7 @@ export class PokerEngine {
 
       const nextStage = this.gameStateManager.moveToNextStage();
 
-      if (this.state.variant === 'seven-card-stud') {
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
         switch (nextStage) {
           case 'fourth':
           case 'fifth':
@@ -480,7 +480,7 @@ export class PokerEngine {
   const potsToDistribute = [...basePot, ...sidePots];
 
   // Special handling: Omaha Hi-Lo (US-052)
-    if (this.state.variant === 'omaha-hi-lo') {
+  if (this.state.variant === 'omaha-hi-lo') {
       // Prepare helpers
       const rankWeight: Record<Card['rank'], number> = {
         '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
@@ -611,6 +611,75 @@ export class PokerEngine {
       };
 
       // Set stage to indicate hand is over
+      this.state.stage = 'showdown';
+      this.state.activePlayer = '';
+      return;
+    }
+
+    // Stud Hi-Lo showdown path (US-054): evaluate high best-5 from 7; low Ace-to-Five 8-or-better from 7
+    if (this.state.variant === 'seven-card-stud-hi-lo') {
+      const rankWeight: Record<Card['rank'], number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
+      const computeHighScore = (cards: Card[], category: number): number => {
+        const vals = cards.map(c => rankWeight[c.rank] || 0); while (vals.length < 5) vals.push(0);
+        const [v0, v1, v2, v3, v4] = vals; return category * 1e10 + v0 * 1e8 + v1 * 1e6 + v2 * 1e4 + v3 * 1e2 + v4;
+      };
+      // Precompute high strengths from stud cards
+      const highStrengths = new Map<string, { score: number }>();
+      const lowEvals = new Map<string, { ranks: number[] }>();
+      activePlayers.forEach(p => {
+        const st = this.state.studState?.playerCards[p.id];
+        const all = st ? [...(st.downCards || []), ...(st.upCards || [])] : [];
+        const hr = HandEvaluator.getHandRanking(all, []);
+        const score = computeHighScore(hr.cards, hr.rank);
+        highStrengths.set(p.id, { score });
+        const low = HandEvaluator.evaluateAceToFiveLow(all);
+        if (low) lowEvals.set(p.id, { ranks: low.ranks });
+      });
+
+      const totals = new Map<string, number>();
+      const highTotals = new Map<string, number>();
+      const lowTotals = new Map<string, number>();
+
+      for (const pot of potsToDistribute) {
+        const eligible = pot.eligiblePlayers.filter(id => activePlayers.some(p => p.id === id));
+        if (eligible.length === 0 || pot.amount <= 0) continue;
+        const eligibleHigh = eligible.map(id => ({ id, s: highStrengths.get(id)?.score || 0 }));
+        const maxHigh = Math.max(...eligibleHigh.map(e => e.s));
+        const highWinners = eligibleHigh.filter(e => e.s === maxHigh).map(e => e.id);
+        const eligibleLow = eligible.filter(id => lowEvals.has(id));
+        let lowWinners: string[] = [];
+        if (eligibleLow.length > 0) {
+          const cmp = (a: number[], b: number[]) => { const n = Math.min(a.length, b.length); for (let i = 0; i < n; i++) { if (a[i] !== b[i]) return a[i] - b[i]; } return a.length - b.length; };
+          let best: number[] | null = null;
+          for (const id of eligibleLow) { const r = lowEvals.get(id)!.ranks; if (!best || cmp(r, best) < 0) best = r; }
+          lowWinners = eligibleLow.filter(id => cmp(lowEvals.get(id)!.ranks, best!) === 0);
+        }
+
+        if (lowWinners.length === 0) {
+          const share = Math.floor(pot.amount / highWinners.length); let rem = pot.amount % highWinners.length;
+          highWinners.forEach((id, i) => { const add = share + (i < rem ? 1 : 0); totals.set(id, (totals.get(id) || 0) + add); highTotals.set(id, (highTotals.get(id) || 0) + add); });
+        } else {
+          const highPortion = Math.floor(pot.amount / 2) + (pot.amount % 2);
+          const lowPortion = Math.floor(pot.amount / 2);
+          const hShare = Math.floor(highPortion / highWinners.length); let hRem = highPortion % highWinners.length;
+          highWinners.forEach((id, i) => { const add = hShare + (i < hRem ? 1 : 0); totals.set(id, (totals.get(id) || 0) + add); highTotals.set(id, (highTotals.get(id) || 0) + add); });
+          const lShare = Math.floor(lowPortion / lowWinners.length); let lRem = lowPortion % lowWinners.length;
+          lowWinners.forEach((id, i) => { const add = lShare + (i < lRem ? 1 : 0); totals.set(id, (totals.get(id) || 0) + add); lowTotals.set(id, (lowTotals.get(id) || 0) + add); });
+        }
+      }
+
+      this.state.players.forEach(p => { const win = totals.get(p.id) || 0; if (win > 0) { p.stack += win; this.log(`Awarded (Stud Hi-Lo) ${win} to ${p.id}`); } });
+      this.state.players.forEach(p => { p.currentBet = 0; });
+      this.state.pot = 0;
+      const finalTotalSHL = this.state.players.reduce((sum, p) => sum + p.stack, 0);
+      this.log(`Total chips after Stud Hi-Lo distribution: ${finalTotalSHL} (should equal initial ${initialTotal})`);
+      if (finalTotalSHL !== initialTotal) {
+        this.error(`Chip count mismatch (Stud Hi-Lo)! Lost ${initialTotal - finalTotalSHL} chips.`);
+        const delta = initialTotal - finalTotalSHL; if (delta !== 0) { const firstActive = this.state.players.find(p => !p.isFolded); if (firstActive) { firstActive.stack += delta; } }
+      }
+      const highArr = Array.from(highTotals.entries()).map(([playerId, amount]) => ({ playerId, amount }));
+      const lowArrRaw = Array.from(lowTotals.entries()).map(([playerId, amount]) => ({ playerId, amount }));
+      this.state.lastHiLoResult = { high: highArr.sort((a,b)=>a.playerId.localeCompare(b.playerId)), low: lowArrRaw.length ? lowArrRaw.sort((a,b)=>a.playerId.localeCompare(b.playerId)) : null };
       this.state.stage = 'showdown';
       this.state.activePlayer = '';
       return;
@@ -747,7 +816,7 @@ export class PokerEngine {
   }
 
   // Allow changing variant at runtime before a hand starts
-  public setVariant(variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud'): void {
+  public setVariant(variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo'): void {
     if (variant) {
       this.state.variant = variant;
     } else {

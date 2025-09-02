@@ -34,6 +34,40 @@ export class HandEvaluator {
     return cards.map(card => this.cardToString(card));
   }
 
+  // Generic Ace-to-Five low evaluator (8-or-better). Returns lowest 5-card set or null if no qualify.
+  static evaluateAceToFiveLow(cards: Card[]): { lowCards: Card[]; ranks: number[] } | null {
+    const weight: Record<Card['rank'], number> = {
+      'A': 1, 'K': 13, 'Q': 12, 'J': 11, '10': 10, '9': 9, '8': 8, '7': 7, '6': 6, '5': 5, '4': 4, '3': 3, '2': 2,
+    };
+    const ranksOnly = (cs: Card[]) => cs.map(c => weight[c.rank]);
+    const isLowQual = (vals: number[]) => vals.every(v => v <= 8) && new Set(vals).size === 5;
+    // generate 5-card combinations
+    const combos = <T>(arr: T[], k: number): T[][] => {
+      const res: T[][] = [];
+      const backtrack = (start: number, path: T[]) => {
+        if (path.length === k) { res.push([...path]); return; }
+        for (let i = start; i < arr.length; i++) { path.push(arr[i]); backtrack(i + 1, path); path.pop(); }
+      };
+      backtrack(0, []);
+      return res;
+    };
+    let best: { lowCards: Card[]; ranks: number[] } | null = null;
+    for (const five of combos(cards, 5)) {
+      const vals = ranksOnly(five);
+      if (!isLowQual(vals)) continue;
+      const sorted = [...vals].sort((a, b) => a - b);
+      if (!best) best = { lowCards: five, ranks: sorted };
+      else {
+        const a = best.ranks, b = sorted;
+        const n = Math.min(a.length, b.length);
+        let cmp = 0;
+        for (let i = 0; i < n; i++) { if (a[i] !== b[i]) { cmp = a[i] - b[i]; break; } }
+        if (cmp > 0) best = { lowCards: five, ranks: sorted };
+      }
+    }
+    return best;
+  }
+
   static evaluateHand(holeCards: Card[], communityCards: Card[]): { hand: HandInterface; cards: Card[] } {
     const allCards = [...holeCards, ...communityCards];
     const cardStrings = this.cardsToString(allCards);

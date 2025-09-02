@@ -9,7 +9,7 @@ export class GameStateManager {
     this.state.stage = stage;
     // Determine start position by variant/stage
     let startPosition = 0;
-    if (this.state.variant === 'seven-card-stud') {
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
       // US-053: In Stud, third street starts with bring-in (lowest upcard); simplify to position 0 for now
       // Later streets normally start with highest upcards; for MVP tests we start at position 0
       startPosition = 0;
@@ -23,7 +23,7 @@ export class GameStateManager {
   }
 
   public moveToNextStage(): GameStage {
-    const stages: GameStage[] = this.state.variant === 'seven-card-stud'
+  const stages: GameStage[] = (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo')
       ? ['third', 'fourth', 'fifth', 'sixth', 'seventh', 'showdown']
       : ['preflop', 'flop', 'turn', 'river', 'showdown'];
     const currentIndex = stages.indexOf(this.state.stage);
@@ -48,7 +48,7 @@ export class GameStateManager {
     this.state.pot = 0;
     this.state.currentBet = 0;
     this.state.communityCards = [];
-    if (this.state.variant === 'seven-card-stud') {
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
       this.state.studState = { playerCards: {} };
     } else {
       this.state.studState = undefined;

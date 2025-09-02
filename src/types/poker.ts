@@ -1,4 +1,7 @@
-export type GameStage = 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';
+// Extended to support Seven-card Stud streets (US-053)
+export type GameStage =
+  | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' // Hold'em/Omaha
+  | 'third' | 'fourth' | 'fifth' | 'sixth' | 'seventh'; // Seven-card Stud
 
 export interface Card {
   suit: 'hearts' | 'diamonds' | 'clubs' | 'spades';
@@ -41,7 +44,7 @@ export interface TableState {
   minRaise: number;
   lastRaise: number;
   // Optional game variant; when set to 'omaha' or 'omaha-hi-lo', rules and dealing are adapted accordingly
-  variant?: 'texas-holdem' | 'omaha' | 'omaha-hi-lo';
+  variant?: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud';
   // Betting mode for the table: 'no-limit' (default) or 'pot-limit'
   bettingMode?: 'no-limit' | 'pot-limit';
   // Policy: when true, Run It Twice requires unanimous consent from all active players
@@ -57,6 +60,11 @@ export interface TableState {
   hiLoDeclarations?: Record<string, 'high' | 'low' | 'both'>;
   // US-052: Low hand qualifier value (defaults to 8 for Omaha Hi-Lo)
   lowHandQualifier?: 8;
+  // US-053: Seven-card Stud per-player cards and bring-in tracking
+  studState?: {
+    playerCards: Record<string, { downCards: Card[]; upCards: Card[] }>;
+    bringIn?: { amount: number; player: string };
+  };
 }
 
 export interface BettingRound {

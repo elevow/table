@@ -26,7 +26,7 @@ export class PokerEngine {
     bettingMode: 'no-limit' as 'no-limit' | 'pot-limit',
     runItTwicePersistence: undefined as | { handId?: string; onOutcome?: (input: RunItTwiceOutcomeInput) => Promise<void> } | undefined,
   requireRunItTwiceUnanimous: false as boolean,
-  variant: undefined as undefined | 'texas-holdem' | 'omaha' | 'omaha-hi-lo',
+  variant: undefined as undefined | 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud',
   };
 
   constructor(tableId: string, players: Player[], smallBlind: number, bigBlind: number, options?: Partial<typeof PokerEngine.defaultOptions>) {
@@ -170,9 +170,16 @@ export class PokerEngine {
   this.ritConsents.clear();
   // Reset rabbit preview tracking for new hand
   this.rabbitPreviewed = 0;
-    this.dealHoleCards();
-    this.postBlinds();
-    this.gameStateManager.startBettingRound('preflop');
+    if (this.state.variant === 'seven-card-stud') {
+      this.dealStudInitial();
+      // Stud uses bring-in instead of blinds
+      this.computeStudBringIn();
+      this.gameStateManager.startBettingRound('third');
+    } else {
+      this.dealHoleCards();
+      this.postBlinds();
+      this.gameStateManager.startBettingRound('preflop');
+    }
   }
 
   private dealHoleCards(): void {
@@ -195,6 +202,10 @@ export class PokerEngine {
   }
 
   private postBlinds(): void {
+    if (this.state.variant === 'seven-card-stud') {
+      // No blinds in Stud; handled via bring-in mechanic
+      return;
+    }
     this.log(`-------- Posting Blinds --------`);
     this.log(`Before blinds:`, this.state.players.map(p => ({
       id: p.id,
@@ -292,18 +303,34 @@ export class PokerEngine {
       }
 
       const nextStage = this.gameStateManager.moveToNextStage();
-      
-      switch (nextStage) {
-        case 'flop':
-          this.dealCommunityCards(3);
-          break;
-        case 'turn':
-        case 'river':
-          this.dealCommunityCards(1);
-          break;
-        case 'showdown':
-          this.determineWinner();
-          return;
+
+      if (this.state.variant === 'seven-card-stud') {
+        switch (nextStage) {
+          case 'fourth':
+          case 'fifth':
+          case 'sixth':
+            this.dealStudUpCards(1);
+            break;
+          case 'seventh':
+            this.dealStudDownCards(1);
+            break;
+          case 'showdown':
+            this.determineWinner();
+            return;
+        }
+      } else {
+        switch (nextStage) {
+          case 'flop':
+            this.dealCommunityCards(3);
+            break;
+          case 'turn':
+          case 'river':
+            this.dealCommunityCards(1);
+            break;
+          case 'showdown':
+            this.determineWinner();
+            return;
+        }
       }
 
       this.gameStateManager.startBettingRound(nextStage);
@@ -313,6 +340,75 @@ export class PokerEngine {
   private dealCommunityCards(count: number): void {
     const cards = this.deckManager.dealCards(count);
     this.state.communityCards.push(...cards);
+  }
+
+  // US-053: Seven-card Stud helpers
+  private ensureStudState(): void {
+    if (!this.state.studState) this.state.studState = { playerCards: {} };
+  }
+
+  private dealStudInitial(): void {
+    this.ensureStudState();
+    // Deal two down cards, then one up card to each player
+    for (let r = 0; r < 2; r++) {
+      for (const p of this.state.players) {
+        const c = this.deckManager.dealCard();
+        if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
+        if (c) this.state.studState!.playerCards[p.id].downCards.push(c);
+      }
+    }
+    for (const p of this.state.players) {
+      const c = this.deckManager.dealCard();
+      if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
+      if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
+    }
+  }
+
+  private dealStudUpCards(count: number): void {
+    this.ensureStudState();
+    for (let k = 0; k < count; k++) {
+      for (const p of this.state.players) {
+        const c = this.deckManager.dealCard();
+        if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
+        if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
+      }
+    }
+  }
+
+  private dealStudDownCards(count: number): void {
+    this.ensureStudState();
+    for (let k = 0; k < count; k++) {
+      for (const p of this.state.players) {
+        const c = this.deckManager.dealCard();
+        if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
+        if (c) this.state.studState!.playerCards[p.id].downCards.push(c);
+      }
+    }
+  }
+
+  private computeStudBringIn(): void {
+    this.ensureStudState();
+    // Simplified bring-in: lowest upcard pays small blind amount as bring-in; choose first player if tie
+    const weight: Record<Card['rank'], number> = {
+      'A': 14,'K': 13,'Q': 12,'J': 11,'10': 10,'9': 9,'8': 8,'7': 7,'6': 6,'5': 5,'4': 4,'3': 3,'2': 2,
+    };
+    let chosen: { id: string; val: number } | null = null;
+    for (const p of this.state.players) {
+      const up = this.state.studState!.playerCards[p.id]?.upCards?.[0];
+      if (!up) continue;
+      const val = weight[up.rank];
+      if (!chosen || val < chosen.val) chosen = { id: p.id, val };
+    }
+    const amount = Math.max(1, Math.floor(this.state.smallBlind));
+    if (chosen) {
+      const player = this.state.players.find(pl => pl.id === chosen!.id)!;
+      const pay = Math.min(amount, player.stack);
+      player.stack -= pay;
+      player.currentBet += pay;
+      this.state.pot += pay;
+      // Do not set table currentBet for bring-in in this simplified implementation
+      this.state.studState!.bringIn = { amount: pay, player: player.id };
+    }
   }
 
   private determineWinner(): void {
@@ -372,7 +468,7 @@ export class PokerEngine {
   const initialTotal = stacksTotal + potBefore + includeOutstandingBets;
     this.log(`Total chips before distribution: ${initialTotal}`);
 
-    // Build side pots from current bets and eligibility
+  // Build side pots from current bets and eligibility
   const sidePots = PotCalculator.calculateSidePots(
       this.state.players.map(p => ({ id: p.id, stack: p.stack, currentBet: p.currentBet, isFolded: p.isFolded }))
     );
@@ -383,7 +479,7 @@ export class PokerEngine {
   const basePot = baseAmount > 0 ? [{ amount: baseAmount, eligiblePlayers: activePlayers.map(p => p.id) }] : [];
   const potsToDistribute = [...basePot, ...sidePots];
 
-    // Special handling: Omaha Hi-Lo (US-052)
+  // Special handling: Omaha Hi-Lo (US-052)
     if (this.state.variant === 'omaha-hi-lo') {
       // Prepare helpers
       const rankWeight: Record<Card['rank'], number> = {
@@ -520,7 +616,53 @@ export class PokerEngine {
       return;
     }
 
-    // Precompute hand strengths for all non-folded players
+    // Stud showdown path: evaluate with 7-card sets (best 5 of 7)
+    if (this.state.variant === 'seven-card-stud') {
+      const rankWeight: Record<Card['rank'], number> = {
+        '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14,
+      };
+      const computeScore = (cards: Card[], category: number): number => {
+        const vals = cards.map(c => rankWeight[c.rank] || 0);
+        while (vals.length < 5) vals.push(0);
+        const [v0, v1, v2, v3, v4] = vals;
+        return category * 1e10 + v0 * 1e8 + v1 * 1e6 + v2 * 1e4 + v3 * 1e2 + v4;
+      };
+      // Build pseudo hole/community: use all stud cards as holeCards input to generic evaluator
+      const strengths = new Map<string, number>();
+      const handViews = new Map<string, { cards: Card[]; description: string }>();
+      activePlayers.forEach(p => {
+        const st = this.state.studState?.playerCards[p.id];
+        const all = st ? [...(st.downCards || []), ...(st.upCards || [])] : [];
+        const { hand, cards } = HandEvaluator.evaluateHand(all, []);
+        const hr = HandEvaluator.getHandRanking(all, []);
+        strengths.set(p.id, computeScore(cards, hr.rank));
+        handViews.set(p.id, { cards: hr.cards, description: hr.name });
+      });
+
+      const distribution = this.state.players.map(p => ({ playerId: p.id, winAmount: 0, strength: strengths.get(p.id) }));
+      PotCalculator.distributePots(potsToDistribute, distribution);
+      this.state.players.forEach(p => {
+        const win = distribution.find(d => d.playerId === p.id)?.winAmount || 0;
+        if (win > 0) { p.stack += win; this.log(`Awarded ${win} to ${p.id} (stack now: ${p.stack})`); }
+      });
+      this.state.players.forEach(p => { p.currentBet = 0; });
+      this.state.pot = 0;
+      const finalTotal = this.state.players.reduce((sum, p) => sum + p.stack, 0);
+      this.log(`Total chips after distribution: ${finalTotal} (should equal initial ${initialTotal})`);
+      if (finalTotal !== initialTotal) {
+        this.error(`Chip count mismatch! Lost ${initialTotal - finalTotal} chips in distribution.`);
+        const delta = initialTotal - finalTotal;
+        if (delta !== 0) {
+          const firstActive = this.state.players.find(p => !p.isFolded);
+          if (firstActive) { firstActive.stack += delta; this.log(`Adjusted ${firstActive.id} stack by ${delta} to maintain chip conservation.`); }
+        }
+      }
+      this.state.stage = 'showdown';
+      this.state.activePlayer = '';
+      return;
+    }
+
+    // Precompute hand strengths for all non-folded players (Hold'em/Omaha)
     // Build a composite numeric score: category rank + ordered best-5 ranks for intra-category tie-breaks
     const rankWeight: Record<Card['rank'], number> = {
       '2': 2,
@@ -605,7 +747,7 @@ export class PokerEngine {
   }
 
   // Allow changing variant at runtime before a hand starts
-  public setVariant(variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo'): void {
+  public setVariant(variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud'): void {
     if (variant) {
       this.state.variant = variant;
     } else {

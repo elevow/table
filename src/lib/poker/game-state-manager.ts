@@ -7,9 +7,15 @@ export class GameStateManager {
 
   public startBettingRound(stage: GameStage): void {
     this.state.stage = stage;
-    const startPosition = stage === 'preflop' ? 
-      0 : // UTG starts after dealer in preflop
-      1;  // SB starts in other rounds
+    // Determine start position by variant/stage
+    let startPosition = 0;
+    if (this.state.variant === 'seven-card-stud') {
+      // US-053: In Stud, third street starts with bring-in (lowest upcard); simplify to position 0 for now
+      // Later streets normally start with highest upcards; for MVP tests we start at position 0
+      startPosition = 0;
+    } else {
+      startPosition = stage === 'preflop' ? 0 : 1;
+    }
 
     const activePlayer = this.state.players.find(p => p.position === startPosition);
     if (!activePlayer) throw new Error('Could not find active player');
@@ -17,7 +23,9 @@ export class GameStateManager {
   }
 
   public moveToNextStage(): GameStage {
-    const stages: GameStage[] = ['preflop', 'flop', 'turn', 'river', 'showdown'];
+    const stages: GameStage[] = this.state.variant === 'seven-card-stud'
+      ? ['third', 'fourth', 'fifth', 'sixth', 'seventh', 'showdown']
+      : ['preflop', 'flop', 'turn', 'river', 'showdown'];
     const currentIndex = stages.indexOf(this.state.stage);
     
     if (currentIndex >= stages.length - 1) {
@@ -40,6 +48,11 @@ export class GameStateManager {
     this.state.pot = 0;
     this.state.currentBet = 0;
     this.state.communityCards = [];
+    if (this.state.variant === 'seven-card-stud') {
+      this.state.studState = { playerCards: {} };
+    } else {
+      this.state.studState = undefined;
+    }
   }
 
   public rotateDealerButton(): number {

@@ -89,6 +89,9 @@ export class HandEvaluator {
     for (const hp of holePairs) {
       for (const bt of boardTriples) {
         const five = [...hp, ...bt];
+        // Guard: skip impossible combos where the same physical card appears twice (can happen in contrived tests)
+        const uniq = new Set(five.map(c => `${c.rank}-${c.suit}`));
+        if (uniq.size !== 5) continue;
         const solved = pokersolver.solve(this.cardsToString(five));
         if (!best) {
           best = { hand: solved, cards: solved.cards };
@@ -140,6 +143,49 @@ export class HandEvaluator {
   // If both are winners, it's a tie
   if (winners.length > 1) return 0;
   return winners[0] === solved1 ? 1 : -1;
+  }
+
+  // US-052: Omaha Hi-Lo support (8-or-better, Ace-to-Five low) minimal evaluator
+  // Returns null if no qualifying low can be made using exactly 2 hole + 3 board cards
+  static evaluateOmahaLowEightOrBetter(holeCards: Card[], communityCards: Card[]): { lowCards: Card[]; ranks: number[] } | null {
+    const holes = holeCards || [];
+    const board = communityCards || [];
+    if (holes.length < 2 || board.length < 3) return null;
+
+    const weight: Record<Card['rank'], number> = {
+      'A': 1, 'K': 13, 'Q': 12, 'J': 11, '10': 10, '9': 9, '8': 8, '7': 7, '6': 6, '5': 5, '4': 4, '3': 3, '2': 2,
+    };
+    const isLowQual = (ranks: number[]) => ranks.every(v => v <= 8) && new Set(ranks).size === 5;
+
+    const combos = <T>(arr: T[], k: number): T[][] => {
+      const res: T[][] = [];
+      const backtrack = (start: number, path: T[]) => {
+        if (path.length === k) { res.push([...path]); return; }
+        for (let i = start; i < arr.length; i++) { path.push(arr[i]); backtrack(i + 1, path); path.pop(); }
+      };
+      backtrack(0, []);
+      return res;
+    };
+
+    let best: { lowCards: Card[]; ranks: number[] } | null = null;
+    for (const hp of combos(holes, 2)) {
+      for (const bt of combos(board, 3)) {
+        const five = [...hp, ...bt];
+        // Ace-to-Five: ignore suits and straights/flushes; duplicates not allowed
+        const ranks = five.map(c => weight[c.rank]);
+        if (!isLowQual(ranks)) continue;
+        const sorted = [...ranks].sort((a, b) => a - b);
+        if (!best) best = { lowCards: five, ranks: sorted };
+        else {
+          // Lower lexicographic ranks is better (e.g., 5-4-3-2-A => [1,2,3,4,5])
+          const cmpLen = Math.min(best.ranks.length, sorted.length);
+          let cmp = 0;
+          for (let i = 0; i < cmpLen; i++) { if (best.ranks[i] !== sorted[i]) { cmp = best.ranks[i] - sorted[i]; break; } }
+          if (cmp > 0) best = { lowCards: five, ranks: sorted };
+        }
+      }
+    }
+    return best;
   }
 
   /**

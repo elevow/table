@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
-type Variant = 'texas-holdem' | 'omaha';
+type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo';
 type BettingMode = 'no-limit' | 'pot-limit';
 
 export default function CreateGameRoomPage() {
@@ -84,6 +84,7 @@ export default function CreateGameRoomPage() {
             <select className="border p-2 w-full" value={variant} onChange={e => setVariant(e.target.value as Variant)}>
               <option value="texas-holdem">Texas Hold&apos;em</option>
               <option value="omaha">Omaha</option>
+              <option value="omaha-hi-lo">Omaha Hi-Lo (8 or Better)</option>
             </select>
           </div>
           <div>

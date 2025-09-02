@@ -26,7 +26,7 @@ export class PokerEngine {
     bettingMode: 'no-limit' as 'no-limit' | 'pot-limit',
     runItTwicePersistence: undefined as | { handId?: string; onOutcome?: (input: RunItTwiceOutcomeInput) => Promise<void> } | undefined,
   requireRunItTwiceUnanimous: false as boolean,
-  variant: undefined as undefined | 'texas-holdem' | 'omaha',
+  variant: undefined as undefined | 'texas-holdem' | 'omaha' | 'omaha-hi-lo',
   };
 
   constructor(tableId: string, players: Player[], smallBlind: number, bigBlind: number, options?: Partial<typeof PokerEngine.defaultOptions>) {
@@ -176,8 +176,8 @@ export class PokerEngine {
   }
 
   private dealHoleCards(): void {
-  // Deal 2 cards for Hold'em, 4 for Omaha
-  const rounds = this.state.variant === 'omaha' ? 4 : 2;
+  // Deal 2 cards for Hold'em, 4 for Omaha (including Omaha Hi-Lo)
+  const rounds = (this.state.variant === 'omaha' || this.state.variant === 'omaha-hi-lo') ? 4 : 2;
   for (let round = 0; round < rounds; round++) {
       for (let i = 0; i < this.state.players.length; i++) {
         const playerPosition = (this.state.dealerPosition + 1 + i) % this.state.players.length;
@@ -357,7 +357,7 @@ export class PokerEngine {
       return;
     }
 
-    // Evaluate hands and distribute pots (US-033: multi-way all-in resolution with side pots)
+  // Evaluate hands and distribute pots (US-033: multi-way all-in resolution with side pots)
     this.log(`-------- Showdown --------`);
     this.log(`Initial state:`);
     this.log(`- Pot: ${this.state.pot}`);
@@ -378,10 +378,147 @@ export class PokerEngine {
     );
     this.log(`Calculated side pots: ${JSON.stringify(sidePots)}`);
 
-  // Create a base pot representing chips from previous streets (exclude current round unmatched totals)
+    // Create a base pot representing chips from previous streets (exclude current round unmatched totals)
   const baseAmount = Math.max(0, potBefore - betsTotal);
   const basePot = baseAmount > 0 ? [{ amount: baseAmount, eligiblePlayers: activePlayers.map(p => p.id) }] : [];
   const potsToDistribute = [...basePot, ...sidePots];
+
+    // Special handling: Omaha Hi-Lo (US-052)
+    if (this.state.variant === 'omaha-hi-lo') {
+      // Prepare helpers
+      const rankWeight: Record<Card['rank'], number> = {
+        '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
+      };
+      const computeHighScore = (cards: Card[], category: number): number => {
+        // Pack to a single number; high is better
+        const vals = cards.map(c => rankWeight[c.rank] || 0);
+        while (vals.length < 5) vals.push(0);
+        const [v0, v1, v2, v3, v4] = vals;
+        return category * 1e10 + v0 * 1e8 + v1 * 1e6 + v2 * 1e4 + v3 * 1e2 + v4;
+      };
+
+      // Precompute high hand ranks
+      const highStrengths = new Map<string, { score: number; view: { cards: Card[]; description: string } }>();
+      activePlayers.forEach(p => {
+        const hr = HandEvaluator.getOmahaHandRanking(p.holeCards || [], this.state.communityCards);
+        const score = computeHighScore(hr.cards, hr.rank);
+        highStrengths.set(p.id, { score, view: { cards: hr.cards, description: hr.name } });
+      });
+
+      // Precompute low evaluations (8-or-better, Ace-to-Five), store ranks arrays for comparison
+      const lowEvals = new Map<string, { ranks: number[] }>();
+      activePlayers.forEach(p => {
+        const low = HandEvaluator.evaluateOmahaLowEightOrBetter(p.holeCards || [], this.state.communityCards);
+        if (low) lowEvals.set(p.id, { ranks: low.ranks });
+      });
+
+      // Aggregated per-player winnings for summary
+      const totals = new Map<string, number>();
+      const highTotals = new Map<string, number>();
+      const lowTotals = new Map<string, number>();
+
+      // Distribute each pot as hi/lo
+      for (const pot of potsToDistribute) {
+        const eligible = pot.eligiblePlayers.filter(id => activePlayers.some(p => p.id === id));
+        if (eligible.length === 0 || pot.amount <= 0) continue;
+
+        // Determine high winners among eligible
+        const eligibleHigh = eligible.map(id => ({ id, s: highStrengths.get(id)?.score || 0 }));
+        const maxHigh = Math.max(...eligibleHigh.map(e => e.s));
+        const highWinners = eligibleHigh.filter(e => e.s === maxHigh).map(e => e.id);
+
+        // Determine low qualifiers and winners among eligible
+        const eligibleLow = eligible.filter(id => lowEvals.has(id));
+        let lowWinners: string[] = [];
+        if (eligibleLow.length > 0) {
+          // Find minimal lexicographic ranks
+          const cmp = (a: number[], b: number[]) => {
+            const n = Math.min(a.length, b.length);
+            for (let i = 0; i < n; i++) { if (a[i] !== b[i]) return a[i] - b[i]; }
+            return a.length - b.length;
+          };
+          let bestRanks: number[] | null = null;
+          for (const id of eligibleLow) {
+            const r = lowEvals.get(id)!.ranks;
+            if (!bestRanks || cmp(r, bestRanks) < 0) bestRanks = r;
+          }
+          lowWinners = eligibleLow.filter(id => cmp(lowEvals.get(id)!.ranks, bestRanks!) === 0);
+        }
+
+        if (lowWinners.length === 0) {
+          // No qualifying low: entire pot to high winners (even split, remainder to earliest indices)
+          const share = Math.floor(pot.amount / highWinners.length);
+          let rem = pot.amount % highWinners.length;
+          highWinners.forEach((id, i) => {
+            const add = share + (i < rem ? 1 : 0);
+            totals.set(id, (totals.get(id) || 0) + add);
+            highTotals.set(id, (highTotals.get(id) || 0) + add);
+          });
+        } else {
+          // Split pot into high and low halves; odd chip goes to high side
+          const highPortion = Math.floor(pot.amount / 2) + (pot.amount % 2);
+          const lowPortion = Math.floor(pot.amount / 2);
+
+          // Distribute high portion
+          const hShare = Math.floor(highPortion / highWinners.length);
+          let hRem = highPortion % highWinners.length;
+          highWinners.forEach((id, i) => {
+            const add = hShare + (i < hRem ? 1 : 0);
+            totals.set(id, (totals.get(id) || 0) + add);
+            highTotals.set(id, (highTotals.get(id) || 0) + add);
+          });
+
+          // Distribute low portion
+          const lShare = Math.floor(lowPortion / lowWinners.length);
+          let lRem = lowPortion % lowWinners.length;
+          lowWinners.forEach((id, i) => {
+            const add = lShare + (i < lRem ? 1 : 0);
+            totals.set(id, (totals.get(id) || 0) + add);
+            lowTotals.set(id, (lowTotals.get(id) || 0) + add);
+          });
+        }
+      }
+
+      // Apply distribution to stacks and clear bets/pot
+      this.state.players.forEach(p => {
+        const win = totals.get(p.id) || 0;
+        if (win > 0) {
+          p.stack += win;
+          this.log(`Awarded (Hi-Lo) ${win} to ${p.id} (stack now: ${p.stack})`);
+        }
+      });
+
+      this.state.players.forEach(p => { p.currentBet = 0; });
+      this.state.pot = 0;
+
+      // Conservation check
+      const finalTotalHL = this.state.players.reduce((sum, p) => sum + p.stack, 0);
+      this.log(`Total chips after Hi-Lo distribution: ${finalTotalHL} (should equal initial ${initialTotal})`);
+      if (finalTotalHL !== initialTotal) {
+        this.error(`Chip count mismatch (Hi-Lo)! Lost ${initialTotal - finalTotalHL} chips in distribution.`);
+        const delta = initialTotal - finalTotalHL;
+        if (delta !== 0) {
+          const firstActive = this.state.players.find(p => !p.isFolded);
+          if (firstActive) {
+            firstActive.stack += delta;
+            this.log(`Adjusted ${firstActive.id} stack by ${delta} to maintain chip conservation.`);
+          }
+        }
+      }
+
+      // Persist last Hi-Lo result summary
+      const highArr = Array.from(highTotals.entries()).map(([playerId, amount]) => ({ playerId, amount }));
+      const lowArrRaw = Array.from(lowTotals.entries()).map(([playerId, amount]) => ({ playerId, amount }));
+      this.state.lastHiLoResult = {
+        high: highArr.sort((a, b) => a.playerId.localeCompare(b.playerId)),
+        low: lowArrRaw.length > 0 ? lowArrRaw.sort((a, b) => a.playerId.localeCompare(b.playerId)) : null,
+      };
+
+      // Set stage to indicate hand is over
+      this.state.stage = 'showdown';
+      this.state.activePlayer = '';
+      return;
+    }
 
     // Precompute hand strengths for all non-folded players
     // Build a composite numeric score: category rank + ordered best-5 ranks for intra-category tie-breaks
@@ -411,7 +548,7 @@ export class PokerEngine {
     const strengths = new Map<string, number>();
     const handViews = new Map<string, { cards: Card[]; description: string }>();
     activePlayers.forEach(p => {
-      const hr = (this.state.variant === 'omaha'
+  const hr = ((this.state.variant === 'omaha' || this.state.variant === 'omaha-hi-lo')
         ? HandEvaluator.getOmahaHandRanking
         : HandEvaluator.getHandRanking
       ).call(HandEvaluator, p.holeCards || [], this.state.communityCards);
@@ -420,7 +557,7 @@ export class PokerEngine {
       handViews.set(p.id, { cards: hr.cards, description: hr.name });
     });
 
-    // Prepare distribution array for all players (winAmount accumulates)
+  // Prepare distribution array for all players (winAmount accumulates)
     const distribution = this.state.players.map(p => ({
       playerId: p.id,
       winAmount: 0,
@@ -468,7 +605,7 @@ export class PokerEngine {
   }
 
   // Allow changing variant at runtime before a hand starts
-  public setVariant(variant: 'texas-holdem' | 'omaha'): void {
+  public setVariant(variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo'): void {
     if (variant) {
       this.state.variant = variant;
     } else {
@@ -522,7 +659,7 @@ export class PokerEngine {
       // Evaluate winners on this run's board; enforce Omaha rules when applicable
       const evals = activePlayers.map(player => ({
         playerId: player.id,
-        evaluation: (this.state.variant === 'omaha'
+        evaluation: ((this.state.variant === 'omaha' || this.state.variant === 'omaha-hi-lo')
           ? HandEvaluator.evaluateOmahaHand
           : HandEvaluator.evaluateHand).call(HandEvaluator, player.holeCards || [], runBoard)
       }));
@@ -538,7 +675,7 @@ export class PokerEngine {
         const potShare = prizePerWinner + (idx === winners.length - 1 ? runRemainder : 0);
         const prev = aggregate.get(w.playerId) || 0;
         aggregate.set(w.playerId, prev + potShare);
-        const winningHand = (this.state.variant === 'omaha'
+        const winningHand = ((this.state.variant === 'omaha' || this.state.variant === 'omaha-hi-lo')
           ? HandEvaluator.getOmahaHandRanking
           : HandEvaluator.getHandRanking).call(
             HandEvaluator,

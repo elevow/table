@@ -1,5 +1,5 @@
 import { AccountLinkage, AccountLinkageSignals, DeviceFingerprintSignal, IPAddressSignal, LoginEvent, LoginPatternMetric, RiskLevel, MultiAccountConfig } from '../../types';
-import { getSecurityConfig } from './security-config';
+import { getLiveSecurityConfig } from './security-config';
 
 export interface MultiAccountAnalyzeInput {
   logins: LoginEvent[];
@@ -10,7 +10,7 @@ export class MultiAccountAnalyzer {
   analyze(input: MultiAccountAnalyzeInput): AccountLinkage {
     const { logins } = input;
     if (!Array.isArray(logins)) throw new Error('logins array required');
-    const cfg = input.config ?? getSecurityConfig().multiAccount;
+  const cfg = input.config ?? getLiveSecurityConfig().multiAccount;
 
     // Normalize
     const events = logins

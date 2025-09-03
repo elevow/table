@@ -1,4 +1,4 @@
-import { getSecurityConfig } from './security-config';
+import { getLiveSecurityConfig } from './security-config';
 import { MultiAccountAnalyzer } from './multi-account-analyzer';
 import { adminAlertStore } from './admin-alert-store';
 import type { LoginEvent } from '../../types';
@@ -12,7 +12,7 @@ class SecuritySchedulerImpl {
   constructor(private fetchLogins: FetchLoginsFn) {}
 
   start(): void {
-    const cfg = getSecurityConfig().scheduler;
+  const cfg = getLiveSecurityConfig().scheduler;
     if (!cfg.enabled) return;
     this.stop();
     this.timer = setInterval(() => void this.runOnce(), cfg.intervalMs);
@@ -23,7 +23,7 @@ class SecuritySchedulerImpl {
   }
 
   async runOnce(): Promise<void> {
-    const sys = getSecurityConfig();
+  const sys = getLiveSecurityConfig();
     const since = Date.now() - sys.scheduler.lookbackMs;
     const logins = await this.fetchLogins(since);
     if (!logins || logins.length === 0) return;

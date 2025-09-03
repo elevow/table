@@ -341,6 +341,39 @@ Notes:
 - Thresholds are conservative and may be tuned; use results as investigative leads, not definitive judgments.
 ```
 
+2. Multi‑Account Detection
+```typescript
+POST /api/security/multi-account
+Rate Limit: 60/min
+
+Request:
+{
+  logins: Array<{
+    accountId: string;
+    ip: string;
+    timestamp: number;           // ms since epoch
+    fingerprint?: string;        // device fingerprint id
+    userAgent?: string;
+  }>
+}
+
+Response:
+{
+  signals: {
+    ip: Array<{ ip: string; accounts: string[]; count: number; recentAt?: number; risk: 'low'|'medium'|'high' }>;
+    device: Array<{ fingerprint: string; accounts: string[]; userAgents?: string[]; count: number; risk: 'low'|'medium'|'high' }>;
+    behavior: Array<{ accountId: string; metric: 'login_frequency'|'ip_diversity'|'device_diversity'; value: number; risk: 'low'|'medium'|'high' }>;
+    timing: Array<{ pair: [string,string]; overlaps: number; medianDeltaMs: number | null; risk: 'low'|'medium'|'high' }>;
+  };
+  confidence: number;            // 0..1 weighted by signal strengths
+  linkedAccounts: string[];      // union of accounts implicated by medium/high risk signals
+}
+
+Notes:
+- Shared IPs/devices across multiple accounts, repeated near‑simultaneous logins, and extreme behavior metrics raise risk.
+- Use as investigative input; combine with manual review and policy.
+```
+
 ### Rabbit Hunt Preview
 
 Preview the remaining community cards and the remaining deck without mutating live game state.

@@ -2,6 +2,100 @@
 
 ## API Documentation
 
+### Tournament Management Endpoints
+
+1. Create Tournament
+```typescript
+POST /api/tournaments/create
+Rate Limit: 60/min
+
+Request:
+{
+  name: string,
+  config: TournamentConfig // validated server-side
+}
+
+Response: TournamentState
+```
+
+2. Get Tournament
+```typescript
+GET /api/tournaments/get?tournamentId=string
+Rate Limit: 120/min
+
+Response: TournamentState
+```
+
+3. Register Player
+```typescript
+POST /api/tournaments/register
+Rate Limit: 120/min
+
+Request: { tournamentId: string, userId: string }
+Response: TournamentState
+```
+
+4. Start/Pause/Resume
+```typescript
+POST /api/tournaments/start    // { tournamentId }
+POST /api/tournaments/pause    // { tournamentId }
+POST /api/tournaments/resume   // { tournamentId }
+Rate Limit: 60/min
+
+Response: TournamentState
+```
+
+5. Advance Level / End Break
+```typescript
+POST /api/tournaments/advance-level // { tournamentId }
+POST /api/tournaments/end-break     // { tournamentId }
+Rate Limit: 120/min
+
+Response: TournamentState
+```
+
+6. Eliminate Player
+```typescript
+POST /api/tournaments/eliminate
+Rate Limit: 120/min
+
+Request: { tournamentId: string, userId: string }
+Response: TournamentState
+```
+
+7. Rebuy / Add-on
+```typescript
+POST /api/tournaments/rebuy
+POST /api/tournaments/add-on
+Rate Limit: 120/min
+
+Request: { tournamentId: string, userId: string }
+Response: TournamentState
+
+Notes:
+- Rebuy validates tournament type, availability window, and per-player limits.
+- Add-on is restricted to the configured break level and allowed once per player.
+```
+
+8. Payouts (preview)
+```typescript
+GET /api/tournaments/payouts?tournamentId=string&prizePool=number
+Rate Limit: 120/min
+
+Response: {
+  placesPaid: number,
+  distribution: Array<{ place: number; amount: number }>
+}
+```
+
+9. Tournament Report
+```typescript
+GET /api/tournaments/report?tournamentId=string&prizePool=number
+Rate Limit: 120/min
+
+Response: TournamentReporting // registration timeline, eliminations, prize distribution, stats
+```
+
 ### Avatar Management Endpoints
 
 1. Upload Avatar
@@ -196,6 +290,55 @@ Notes:
 - hashChain accepts a JSON-encoded array (e.g. "[\"s1\",\"s2\"]") or comma-separated string (e.g. "s1,s2").
 - When audit metadata is provided, the endpoint recomputes the expected seeds and compares with hashChain to set verified.
 - Outcomes are always returned for the given handId when available.
+```
+
+### Security & Anti‑Collusion
+
+1. Collusion Analysis
+```typescript
+POST /api/security/collusion
+Rate Limit: 60/min
+
+Request:
+{
+  hands: Array<{
+    id: string;
+    players: string[];                 // participating player IDs
+    actions?: Array<{                  // optional; when present, used for betting pattern metrics
+      playerId: string;
+      type: 'fold' | 'check' | 'call' | 'bet' | 'raise';
+      amount?: number;
+      street?: 'preflop' | 'flop' | 'turn' | 'river';
+      timestamp?: number;
+    }>;
+    contributions?: Record<string, number>; // per-player committed chips for the hand
+    winnerId?: string;                  // final winner for concentration analysis
+    potAmount?: number;                 // total pot for thresholding
+    timestamp?: number;
+  }>
+}
+
+Response:
+{
+  suspicious: boolean;
+  alerts: Array<{
+    id: string;
+    type: 'betting_anomaly' | 'player_grouping' | 'folding_pattern' | 'chip_dumping';
+    severity: 'low' | 'medium' | 'high';
+    message: string;
+    evidence?: any;
+  }>;
+  metrics: {
+    betting: Record<string, { vpip: number; pfr: number; aggression: number; suspicious: boolean }>;
+    groupings: Array<{ players: [string, string]; coHands: number; ratio: number; suspicious: boolean }>;
+    folding: Record<string, { opportunities: number; foldToAggPct: number; suspicious: boolean }>;
+    chipDumping: Array<{ from: string; to: string; occurrences: number; totalAmount: number; suspicious: boolean }>;
+  };
+}
+
+Notes:
+- Heuristics flag extreme VPIP/PFR/aggression, unusually frequent co‑play pairs, high fold‑to‑aggressor, and concentrated transfers to the same winner.
+- Thresholds are conservative and may be tuned; use results as investigative leads, not definitive judgments.
 ```
 
 ### Rabbit Hunt Preview

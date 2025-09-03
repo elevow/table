@@ -31,3 +31,26 @@ export interface Paginated<T> {
   limit: number;
   totalPages: number;
 }
+
+// US-064: Friend System — Invites and head-to-head
+export type InviteStatus = 'pending' | 'accepted' | 'declined' | 'canceled';
+
+export interface FriendInviteRecord {
+  id: string;
+  inviterId: string;
+  inviteeId: string;
+  roomId: string; // game_rooms.id
+  status: InviteStatus;
+  createdAt: Date;
+  respondedAt?: Date | null;
+}
+
+export interface FriendRelationshipStatus {
+  status: FriendStatus | 'none';
+  direction?: 'outgoing' | 'incoming' | null; // when pending
+}
+
+export interface HeadToHeadSummary {
+  gamesPlayed: number;
+  lastPlayed: Date | null;
+}

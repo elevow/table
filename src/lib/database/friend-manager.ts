@@ -7,7 +7,10 @@ import {
   FriendRequestInput,
   FriendStatus,
   BlockRecord,
-  Paginated
+  Paginated,
+  FriendRelationshipStatus,
+  FriendInviteRecord,
+  HeadToHeadSummary
 } from '../../types/friend';
 
 class FriendError extends Error {
@@ -132,6 +135,82 @@ export class FriendManager {
     await this.pool.query(`DELETE FROM blocked_users WHERE user_id = $1 AND blocked_id = $2`, [userId, blockedId]);
   }
 
+  // US-064: relationship status between two users
+  async getRelationshipStatus(a: string, b: string): Promise<FriendRelationshipStatus> {
+    const res = await this.pool.query(
+      `SELECT * FROM friend_relationships WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1) LIMIT 1`,
+      [a, b]
+    );
+    const row = res.rows[0];
+    if (!row) return { status: 'none', direction: null };
+    if (row.status === 'pending') {
+      const direction = row.user_id === a ? 'outgoing' : 'incoming';
+      return { status: 'pending', direction };
+    }
+    return { status: row.status as any, direction: null };
+  }
+
+  // US-064: Game invites between friends - store as friend_relationships extensions via a separate invites table
+  async createGameInvite(inviterId: string, inviteeId: string, roomId: string): Promise<FriendInviteRecord> {
+    // Ensure not blocked and either friends or pending allowed invites
+    const block = await this.pool.query(
+      `SELECT 1 FROM blocked_users WHERE (user_id = $1 AND blocked_id = $2) OR (user_id = $2 AND blocked_id = $1) LIMIT 1`,
+      [inviterId, inviteeId]
+    );
+    if (block.rows.length) throw new FriendError('Either user has blocked the other', 'BLOCKED');
+
+    const id = uuidv4();
+    const res = await this.pool.query(
+      `INSERT INTO friend_game_invites (id, inviter_id, invitee_id, room_id, status) VALUES ($1,$2,$3,$4,'pending') RETURNING *`,
+      [id, inviterId, inviteeId, roomId]
+    );
+    return this.mapInvite(res.rows[0]);
+  }
+
+  async respondToGameInvite(id: string, accept: boolean): Promise<FriendInviteRecord> {
+    const status = accept ? 'accepted' : 'declined';
+    const res = await this.pool.query(
+      `UPDATE friend_game_invites SET status = $1, responded_at = NOW() WHERE id = $2 RETURNING *`,
+      [status, id]
+    );
+    if (!res.rows[0]) throw new FriendError('Invite not found', 'NOT_FOUND');
+    return this.mapInvite(res.rows[0]);
+  }
+
+  async listInvites(userId: string, kind: 'incoming' | 'outgoing' = 'incoming', page = 1, limit = 20): Promise<Paginated<FriendInviteRecord>> {
+    const col = kind === 'incoming' ? 'invitee_id' : 'inviter_id';
+    const offset = (page - 1) * limit;
+    const count = await this.pool.query(`SELECT COUNT(*) AS total FROM friend_game_invites WHERE ${col} = $1`, [userId]);
+    const total = parseInt(count.rows?.[0]?.total || '0', 10);
+    const res = await this.pool.query(
+      `SELECT * FROM friend_game_invites WHERE ${col} = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+      [userId, limit, offset]
+    );
+    const items = res.rows.map(r => this.mapInvite(r));
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  // US-064: Head-to-head summary using game_history
+  async getHeadToHeadSummary(a: string, b: string): Promise<HeadToHeadSummary> {
+    const res = await this.pool.query(
+      `SELECT 
+         COUNT(*)::int AS games_played,
+         COALESCE(MAX(gh.ended_at), MAX(gh.started_at)) AS last_played
+       FROM game_history gh
+       WHERE (gh.action_sequence @> $1::jsonb OR gh.results @> $2::jsonb)
+         AND (gh.action_sequence @> $3::jsonb OR gh.results @> $4::jsonb)`,
+      [
+        JSON.stringify([{ playerId: a }]),
+        JSON.stringify({ winners: [{ playerId: a }] }),
+        JSON.stringify([{ playerId: b }]),
+        JSON.stringify({ winners: [{ playerId: b }] })
+      ]
+    );
+    const gamesPlayed = parseInt(res.rows?.[0]?.games_played || '0', 10);
+    const lastPlayed = res.rows?.[0]?.last_played || null;
+    return { gamesPlayed, lastPlayed };
+  }
+
   private mapFriend(row: any): FriendRelationshipRecord {
     return {
       id: row.id,
@@ -150,6 +229,18 @@ export class FriendManager {
       blockedId: row.blocked_id,
       reason: row.reason ?? null,
       createdAt: row.created_at
+    };
+  }
+
+  private mapInvite(row: any): FriendInviteRecord {
+    return {
+      id: row.id,
+      inviterId: row.inviter_id,
+      inviteeId: row.invitee_id,
+      roomId: row.room_id,
+      status: row.status,
+      createdAt: row.created_at,
+      respondedAt: row.responded_at ?? null
     };
   }
 }

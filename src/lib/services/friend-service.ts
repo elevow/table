@@ -2,7 +2,7 @@
 
 import { Pool } from 'pg';
 import { FriendManager } from '../database/friend-manager';
-import { BlockRecord, FriendRelationshipRecord, Paginated } from '../../types/friend';
+import { BlockRecord, FriendRelationshipRecord, Paginated, FriendRelationshipStatus, FriendInviteRecord, HeadToHeadSummary } from '../../types/friend';
 
 export class FriendService {
   private manager: FriendManager;
@@ -51,6 +51,40 @@ export class FriendService {
     this.requireId(userId, 'userId');
     this.requireId(blockedId, 'blockedId');
     return this.manager.unblock(userId, blockedId);
+  }
+
+  // US-064: Relationship status
+  async relationshipStatus(a: string, b: string): Promise<FriendRelationshipStatus> {
+    this.requireId(a, 'a');
+    this.requireId(b, 'b');
+    return this.manager.getRelationshipStatus(a, b);
+  }
+
+  // US-064: Game invites
+  async inviteToGame(inviterId: string, inviteeId: string, roomId: string): Promise<FriendInviteRecord> {
+    this.requireId(inviterId, 'inviterId');
+    this.requireId(inviteeId, 'inviteeId');
+    this.requireId(roomId, 'roomId');
+    return this.manager.createGameInvite(inviterId, inviteeId, roomId);
+  }
+
+  async respondToInvite(id: string, action: 'accept' | 'decline'): Promise<FriendInviteRecord> {
+    this.requireId(id, 'id');
+    const accept = action === 'accept';
+    return this.manager.respondToGameInvite(id, accept);
+  }
+
+  async listInvites(userId: string, kind: 'incoming' | 'outgoing' = 'incoming', page = 1, limit = 20): Promise<Paginated<FriendInviteRecord>> {
+    this.requireId(userId, 'userId');
+    const { p, l } = this.normalizePagination(page, limit);
+    return this.manager.listInvites(userId, kind, p, l);
+  }
+
+  // US-064: Head-to-head summary
+  async headToHead(a: string, b: string): Promise<HeadToHeadSummary> {
+    this.requireId(a, 'a');
+    this.requireId(b, 'b');
+    return this.manager.getHeadToHeadSummary(a, b);
   }
 
   private requireId(value: string | undefined, name: string): void {

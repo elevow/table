@@ -5,6 +5,7 @@ import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
 import { useComponentPerformance } from '../../src/utils/performance-monitor';
 import TimerHUD from '../../src/components/TimerHUD';
 import { getSocket } from '../../src/lib/clientSocket';
+import { createInvite } from '../../src/services/friends-ui';
 
 // Dynamic import with loading state
 const GameBoard = dynamic(() => import('../../src/components/GameBoard'), {
@@ -45,6 +46,9 @@ export default function GamePage() {
   const { markInteraction } = useComponentPerformance('GamePage');
   const [playerId, setPlayerId] = useState<string>('');
   const socket = getSocket();
+  const [inviteeId, setInviteeId] = useState<string>('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteStatus, setInviteStatus] = useState<string | null>(null);
   
   useEffect(() => {
     // Example: derive playerId from localStorage or a session; fallback to random for demo
@@ -102,6 +106,28 @@ export default function GamePage() {
     setShowSettings(prev => !prev);
     if (typeof endMark === 'function') endMark();
   };
+
+  const handleInvite = async () => {
+    if (!playerId || !id || typeof id !== 'string') {
+      setInviteStatus('Missing player or room');
+      return;
+    }
+    const target = inviteeId.trim();
+    if (!target) {
+      setInviteStatus('Enter friend ID');
+      return;
+    }
+    setInviteLoading(true);
+    try {
+      await createInvite(playerId, target, String(id));
+      setInviteStatus('Invite sent');
+    } catch (err: any) {
+      setInviteStatus(err?.message || 'Failed to send invite');
+    } finally {
+      setInviteLoading(false);
+      setTimeout(() => setInviteStatus(null), 3000);
+    }
+  };
   
   return (
     <div className="game-page bg-gray-100 min-h-screen">
@@ -111,7 +137,31 @@ export default function GamePage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Critical component loaded immediately */}
           <div className="lg:col-span-2 bg-white rounded-lg shadow-md overflow-hidden">
-            <GameBoard gameId={String(id)} />
+            <GameBoard
+              gameId={String(id)}
+              headerSlot={(
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={inviteeId}
+                    onChange={e => setInviteeId(e.target.value)}
+                    placeholder="Friend user ID"
+                    className="border rounded px-2 py-1 text-sm"
+                  />
+                  <button
+                    onClick={handleInvite}
+                    disabled={inviteLoading || !inviteeId.trim()}
+                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-medium px-3 py-1 rounded"
+                    title="Invite to game"
+                  >
+                    {inviteLoading ? 'Inviting…' : 'Invite to game'}
+                  </button>
+                  {inviteStatus && (
+                    <span className="text-xs text-gray-600" aria-live="polite">{inviteStatus}</span>
+                  )}
+                </div>
+              )}
+            />
           </div>
 
           {/* Timer HUD */}

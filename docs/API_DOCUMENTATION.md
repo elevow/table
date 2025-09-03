@@ -411,21 +411,45 @@ Example:
 ```
 
 ### Social Features
-1. Friend Management
-   ```
-   GET /api/friends
-   POST /api/friends/request
-   PUT /api/friends/accept
-   DELETE /api/friends/:id
-   GET /api/friends/online
-   ```
+1. Friend Management and Game Invites
+   
+  Relationship & Requests
+  ```
+  GET  /api/friends/status?a=string&b=string            // relationship between two users
+  POST /api/friends/request                               // { fromUserId, toUserId }
+  POST /api/friends/respond                               // { requestId, action: 'accept'|'decline' }
+  POST /api/friends/block                                 // { blockerId, blockedId }
+  POST /api/friends/unblock                               // { blockerId, blockedId }
+  POST /api/friends/unfriend                              // { userId, friendId }
+  GET  /api/friends/list?userId=string&page=1&limit=25    // paginated list
+  GET  /api/friends/pending?userId=string                 // pending inbound/outbound
+  ```
+
+  Game Invites (US‑064)
+  ```
+  POST /api/friends/invite                                // { inviterId, inviteeId, roomId }
+  GET  /api/friends/invites?userId=string&kind=incoming   // kind: 'incoming' | 'outgoing'
+  POST /api/friends/invite-respond                         // { inviteId, action: 'accept'|'decline' }
+  GET  /api/friends/head-to-head?a=string&b=string        // summary of H2H results
+  ```
+
+  Head‑to‑Head Summary Response
+  ```ts
+  {
+    players: { a: string; b: string };
+    totalHands: number;
+    wins: { a: number; b: number; splits: number };
+    netChips: { a: number; b: number };
+    lastPlayedAt?: string; // ISO timestamp
+  }
+  ```
 
 2. Notifications
-   ```
-   GET /api/notifications
-   PUT /api/notifications/:id
-   DELETE /api/notifications/:id
-   ```
+  ```
+  GET /api/notifications
+  PUT /api/notifications/:id
+  DELETE /api/notifications/:id
+  ```
 
 ## WebSocket Events
 

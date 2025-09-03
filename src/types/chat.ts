@@ -44,3 +44,30 @@ export interface ListPrivateChatQuery {
   limit?: number;
   before?: string;
 }
+
+// US-063: Emoji Reactions types
+export interface ChatReactionRow {
+  id: string;
+  message_id: string;
+  user_id: string;
+  emoji: string;
+  created_at: string; // timestamp
+}
+
+export interface ChatReaction {
+  id: string;
+  messageId: string;
+  userId: string;
+  emoji: string;
+  createdAt: string;
+}
+
+export interface AddReactionInput {
+  messageId: string;
+  userId: string;
+  emoji: string; // unicode emoji or shortcode
+}
+
+export interface ListReactionsQuery {
+  messageId: string;
+}

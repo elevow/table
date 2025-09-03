@@ -1,5 +1,16 @@
 import type { Pool } from 'pg';
-import type { ChatMessage, ChatMessageRow, SendChatInput, ListRoomChatQuery, ListPrivateChatQuery } from '../../types/chat';
+import type {
+  ChatMessage,
+  ChatMessageRow,
+  SendChatInput,
+  ListRoomChatQuery,
+  ListPrivateChatQuery,
+  ChatReactionRow,
+  ChatReaction,
+  AddReactionInput,
+  ListReactionsQuery,
+} from '../../types/chat';
+import { filterMessage } from '../utils/content-filter';
 
 function mapRow(r: ChatMessageRow): ChatMessage {
   return {
@@ -20,6 +31,11 @@ export class ChatManager {
   constructor(private pool: Pool) {}
 
   async send(input: SendChatInput): Promise<ChatMessage> {
+    // US-063: content filtering
+    const filter = filterMessage(input.message);
+    if (!filter.ok) {
+      throw new Error('Message contains inappropriate content');
+    }
     const isPrivate = !!input.isPrivate;
     if (!input.senderId) throw new Error('senderId required');
     if (!input.message || !input.message.trim()) throw new Error('message required');
@@ -77,5 +93,53 @@ export class ChatManager {
     );
     if (!res.rows[0]) throw new Error('message not found');
     return mapRow(res.rows[0] as ChatMessageRow);
+  }
+
+  // US-063: Emoji reactions
+  private mapReaction(r: ChatReactionRow): ChatReaction {
+    return {
+      id: r.id,
+      messageId: r.message_id,
+      userId: r.user_id,
+      emoji: r.emoji,
+      createdAt: r.created_at,
+    };
+  }
+
+  async addReaction(input: AddReactionInput): Promise<ChatReaction> {
+    if (!input?.messageId || !input?.userId || !input?.emoji) throw new Error('invalid reaction input');
+    const res = await this.pool.query(
+      `INSERT INTO chat_reactions (message_id, user_id, emoji)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (message_id, user_id, emoji) DO NOTHING
+       RETURNING *`,
+      [input.messageId, input.userId, input.emoji]
+    );
+    if ((res.rows?.length ?? 0) > 0) {
+      return this.mapReaction(res.rows[0] as ChatReactionRow);
+    }
+    const existing = await this.pool.query(
+      `SELECT * FROM chat_reactions WHERE message_id=$1 AND user_id=$2 AND emoji=$3`,
+      [input.messageId, input.userId, input.emoji]
+    );
+    return this.mapReaction(existing.rows[0] as ChatReactionRow);
+  }
+
+  async removeReaction(input: AddReactionInput): Promise<{ removed: boolean }> {
+    if (!input?.messageId || !input?.userId || !input?.emoji) throw new Error('invalid reaction input');
+    const res = await this.pool.query(
+      `DELETE FROM chat_reactions WHERE message_id=$1 AND user_id=$2 AND emoji=$3`,
+      [input.messageId, input.userId, input.emoji]
+    );
+    return { removed: (res.rowCount ?? 0) > 0 };
+  }
+
+  async listReactions(q: ListReactionsQuery): Promise<ChatReaction[]> {
+    if (!q?.messageId) throw new Error('messageId required');
+    const res = await this.pool.query(
+      `SELECT * FROM chat_reactions WHERE message_id=$1 ORDER BY created_at ASC`,
+      [q.messageId]
+    );
+    return (res.rows as ChatReactionRow[]).map((r) => this.mapReaction(r));
   }
 }

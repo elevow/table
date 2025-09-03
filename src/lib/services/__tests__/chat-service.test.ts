@@ -5,6 +5,9 @@ describe('ChatService (US-023)', () => {
     listRoomMessages: jest.fn(),
     listPrivateMessages: jest.fn(),
     moderate: jest.fn(),
+  addReaction: jest.fn(),
+  removeReaction: jest.fn(),
+  listReactions: jest.fn(),
   };
 
   jest.mock('../../database/chat-manager', () => ({
@@ -51,5 +54,23 @@ describe('ChatService (US-023)', () => {
     const svc = new ChatService({} as any);
     mockMgr.moderate.mockResolvedValue({ id: 'm3', isModerated: true });
     await expect(svc.moderate('m3', 'mod1', true)).resolves.toEqual({ id: 'm3', isModerated: true });
+  });
+
+  it('adds a reaction', async () => {
+    const svc = new ChatService({} as any);
+    mockMgr.addReaction.mockResolvedValue({ id: 'r1' });
+    await expect(svc.addReaction({ messageId: 'm1', userId: 'u1', emoji: '👍' })).resolves.toEqual({ id: 'r1' });
+  });
+
+  it('removes a reaction', async () => {
+    const svc = new ChatService({} as any);
+    mockMgr.removeReaction.mockResolvedValue({ removed: true });
+    await expect(svc.removeReaction({ messageId: 'm1', userId: 'u1', emoji: '👍' })).resolves.toEqual({ removed: true });
+  });
+
+  it('lists reactions', async () => {
+    const svc = new ChatService({} as any);
+    mockMgr.listReactions.mockResolvedValue([{ id: 'r1' }]);
+    await expect(svc.listReactions('m1')).resolves.toEqual([{ id: 'r1' }]);
   });
 });

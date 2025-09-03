@@ -128,7 +128,7 @@ export default function GamePage() {
           
           {/* Less critical component in viewport */}
           <div ref={chatPanelRef} className="lg:col-span-2 bg-white rounded-lg shadow-md p-4 mt-6">
-            <ChatPanel gameId={String(id)} />
+            <ChatPanel gameId={String(id)} playerId={playerId} />
           </div>
           
           {/* Rabbit Hunt Preview Panel */}

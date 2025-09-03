@@ -6,7 +6,7 @@ import type { MigrationConfig } from '../config-driven-migration';
 export const FEATURE_COOLDOWNS_UNIQUE_INDEX: MigrationConfig = {
   version: '2025.08.31.1001',
   description: 'Add concurrent unique index on feature_cooldowns (user_id, feature_type) to support safe upserts',
-  dependencies: [],
+  dependencies: ['2025.09.02.1008'],
   preChecks: [
     {
       name: 'no_duplicate_feature_cooldowns',

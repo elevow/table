@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { ChatManager } from '../database/chat-manager';
-import type { SendChatInput, ListRoomChatQuery, ListPrivateChatQuery, ChatMessage } from '../../types/chat';
+import type { SendChatInput, ListRoomChatQuery, ListPrivateChatQuery, ChatMessage, AddReactionInput } from '../../types/chat';
 
 export class ChatService {
   private mgr: ChatManager;
@@ -37,5 +37,25 @@ export class ChatService {
     if (!messageId) throw new Error('messageId required');
     if (!moderatorId) throw new Error('moderatorId required');
     return this.mgr.moderate(messageId, moderatorId, hide);
+  }
+
+  // US-063: Emoji reactions
+  async addReaction(input: AddReactionInput) {
+    if (!input?.messageId) throw new Error('messageId required');
+    if (!input?.userId) throw new Error('userId required');
+    if (!input?.emoji) throw new Error('emoji required');
+    return this.mgr.addReaction(input);
+  }
+
+  async removeReaction(input: AddReactionInput) {
+    if (!input?.messageId) throw new Error('messageId required');
+    if (!input?.userId) throw new Error('userId required');
+    if (!input?.emoji) throw new Error('emoji required');
+    return this.mgr.removeReaction(input);
+  }
+
+  async listReactions(messageId: string) {
+    if (!messageId) throw new Error('messageId required');
+    return this.mgr.listReactions({ messageId });
   }
 }

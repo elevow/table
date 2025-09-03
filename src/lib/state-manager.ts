@@ -58,6 +58,22 @@ export class StateManager {
         socket.leave(tableId);
       });
 
+      // US-063: Lightweight chat realtime relays
+      // Clients emit after successful REST actions; server re-broadcasts to the table room.
+      socket.on('chat:emit_message', (
+        { tableId, message }: { tableId: string; message: { id: string; roomId: string | null; senderId: string; message: string } }
+      ) => {
+        if (!tableId || !message?.id) return;
+        this.io.to(tableId).emit('chat:new_message', { message });
+      });
+
+      socket.on('chat:emit_reaction', (
+        { tableId, messageId, emoji, userId }: { tableId: string; messageId: string; emoji: string; userId: string }
+      ) => {
+        if (!tableId || !messageId || !emoji) return;
+        this.io.to(tableId).emit('chat:reaction', { messageId, emoji, userId });
+      });
+
       socket.on('disconnect', () => {
         if (playerId) {
           // Find the table this player was in

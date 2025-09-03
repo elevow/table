@@ -1,4 +1,5 @@
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
 interface AdminAlertDto {
@@ -63,7 +64,7 @@ export default function AlertDetailPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <a href="/admin/alerts">← Back to Alerts</a>
+  <Link href="/admin/alerts">← Back to Alerts</Link>
       {!token && (
         <div style={{ margin: '12px 0', padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
           <p style={{ marginTop: 0 }}>Enter admin token to access alert details.</p>

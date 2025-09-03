@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
+import { getWsManager } from '../../../src/lib/api/socket-server';
 import { ChatService } from '../../../src/lib/services/chat-service';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -11,6 +12,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const pool = new Pool();
     const svc = new ChatService(pool);
     const msg = await svc.send(req.body);
+    // Authoritative server-side emit to room after DB write
+    try {
+      const ws = getWsManager(res);
+      if (ws && msg?.roomId) {
+        ws.broadcast('chat:new_message', { message: msg }, msg.roomId);
+      }
+    } catch {}
     return res.status(201).json(msg);
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });

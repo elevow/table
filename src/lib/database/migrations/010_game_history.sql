@@ -1,11 +1,9 @@
--- US-010: Game History Recording - Database Schema Migration
 
--- Enable UUID extension if not already enabled
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Main game history table as specified in US-010
 CREATE TABLE IF NOT EXISTS game_history (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     table_id UUID NOT NULL,
     hand_id UUID NOT NULL,
     action_sequence JSONB NOT NULL,
@@ -18,7 +16,7 @@ CREATE TABLE IF NOT EXISTS game_history (
 
 -- Additional table for player actions analytics
 CREATE TABLE IF NOT EXISTS player_actions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     game_id UUID NOT NULL REFERENCES game_history(id) ON DELETE CASCADE,
     player_id UUID NOT NULL,
     action VARCHAR(20) NOT NULL CHECK (action IN ('fold', 'check', 'call', 'bet', 'raise', 'all-in')),
@@ -55,9 +53,9 @@ CREATE INDEX IF NOT EXISTS idx_game_history_results_gin ON game_history USING GI
 CREATE INDEX IF NOT EXISTS idx_game_history_total_pot ON game_history(((results->>'totalPot')::numeric));
 CREATE INDEX IF NOT EXISTS idx_game_history_winner_count ON game_history((jsonb_array_length(results->'winners')));
 
--- Partial indexes for active/recent games
-CREATE INDEX IF NOT EXISTS idx_game_history_recent ON game_history(started_at) 
-WHERE started_at > NOW() - INTERVAL '30 days';
+-- Removed partial index that used NOW() in predicate (non-IMMUTABLE). Use the existing
+-- started_at index above, or consider a BRIN index for very large tables:
+-- CREATE INDEX IF NOT EXISTS idx_game_history_started_at_brin ON game_history USING BRIN (started_at);
 
 -- Comments for documentation
 COMMENT ON TABLE game_history IS 'US-010: Records detailed game history for replay and analysis features';
@@ -161,16 +159,26 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create a scheduled cleanup trigger (runs on insert, but with condition to avoid frequent execution)
-CREATE OR REPLACE FUNCTION should_cleanup_game_history()
-RETURNS BOOLEAN AS $$
+CREATE OR REPLACE FUNCTION cleanup_old_game_history_if_needed()
+RETURNS TRIGGER AS $$
 BEGIN
-    -- Only cleanup once per day
-    RETURN (
-        SELECT COUNT(*) = 0 
-        FROM game_history 
+    -- Only perform cleanup once per day (skip if any row was created in the last day besides the new one)
+    IF (
+        SELECT COUNT(*) = 0
+        FROM game_history
         WHERE created_at > NOW() - INTERVAL '1 day'
-        AND id != NEW.id
-        LIMIT 1
-    );
+          AND id <> NEW.id
+    ) THEN
+        DELETE FROM game_history
+        WHERE started_at < NOW() - INTERVAL '2 years';
+    END IF;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Idempotent trigger creation
+DROP TRIGGER IF EXISTS trg_cleanup_old_game_history ON game_history;
+CREATE TRIGGER trg_cleanup_old_game_history
+AFTER INSERT ON game_history
+FOR EACH ROW
+EXECUTE FUNCTION cleanup_old_game_history_if_needed();

@@ -40,12 +40,12 @@ export const SOCIAL_TABLES: MigrationConfig = {
       }
     },
     {
-      type: 'index',
+      type: 'addIndex',
       table: 'social_shares',
       details: { columns: ['user_id'] }
     },
     {
-      type: 'index',
+      type: 'addIndex',
       table: 'social_shares',
       details: { columns: ['kind'] }
     }

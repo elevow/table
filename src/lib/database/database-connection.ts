@@ -203,3 +203,42 @@ export class DatabaseMigrationRunner implements MigrationRunner {
     }
   }
 }
+
+// Lightweight Pool-like accessor for simple services that expect a `{ query }` API
+// Used by API routes that want a direct query interface without acquiring/releasing clients manually.
+// In test or when `pg` isn't available, this returns a stub with a failing query to surface configuration issues.
+export function getDbPool(): any {
+  // If tests/mock mode, expose a minimal adapter over MockDatabasePool
+  if (process.env.NODE_ENV === 'test' || process.env.USE_MOCK_DB === 'true') {
+    const mockPool = new MockDatabasePool();
+    return {
+      query: async (text: string, params?: any[]) => {
+        const client = await mockPool.connect();
+        try {
+          return await client.query(text, params);
+        } finally {
+          client.release();
+        }
+      }
+    };
+  }
+
+  try {
+    const { Pool } = require('pg') as typeof import('pg');
+    const host = process.env.DB_HOST || process.env.PGHOST || 'localhost';
+    const port = Number(process.env.DB_PORT || process.env.PGPORT || 5432);
+    const database = process.env.DB_NAME || process.env.PGDATABASE || 'app';
+    const user = process.env.DB_USER || process.env.PGUSER || 'postgres';
+    const password = process.env.DB_PASSWORD || process.env.PGPASSWORD || '';
+    const sslMode = (process.env.DB_SSL || process.env.PGSSLMODE || 'disable').toString().toLowerCase();
+    const ssl = sslMode === 'require' ? { rejectUnauthorized: false } : undefined;
+    return new Pool({ host, port, database, user, password, ssl });
+  } catch {
+    // Fallback stub: surface configuration error at runtime
+    return {
+      query: async () => {
+        throw new Error('pg Pool is not available. Ensure the "pg" package is installed and environment is configured.');
+      }
+    };
+  }
+}

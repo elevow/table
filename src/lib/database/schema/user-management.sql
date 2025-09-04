@@ -1,10 +1,11 @@
 -- US-017: Core User Profile
 -- Schema for users and auth tokens supporting multiple auth providers and password reset tokens
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- Use pgcrypto for UUIDs (compatible with Supabase)
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     username VARCHAR(50) UNIQUE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -16,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS auth_tokens (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -33,37 +34,14 @@ CREATE INDEX IF NOT EXISTS idx_auth_tokens_expires_at ON auth_tokens(expires_at)
 -- Enable RLS so that users can only access their own row
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
--- Policy: Users can view their own data
--- Note: We use current_setting('app.current_user_id', true) to support app-managed session context.
--- If you're using a Postgres auth extension that provides auth.uid(), you can swap the USING clause accordingly.
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_policies
-        WHERE schemaname = 'public' AND tablename = 'users' AND policyname = 'users_self_select'
-    ) THEN
-        EXECUTE $$
-            CREATE POLICY users_self_select
-            ON users FOR SELECT
-            USING ((current_setting('app.current_user_id', true))::uuid = id)
-        $$;
-    END IF;
-END$$;
+-- Policies (idempotent via DROP IF EXISTS)
+DROP POLICY IF EXISTS users_self_select ON users;
+CREATE POLICY users_self_select
+ON users FOR SELECT
+USING ((current_setting('app.current_user_id', true))::uuid = id);
 
--- Policy: Users can update their own data
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_policies
-        WHERE schemaname = 'public' AND tablename = 'users' AND policyname = 'users_self_update'
-    ) THEN
-        EXECUTE $$
-            CREATE POLICY users_self_update
-            ON users FOR UPDATE
-            USING ((current_setting('app.current_user_id', true))::uuid = id)
-        $$;
-    END IF;
-END$$;
+DROP POLICY IF EXISTS users_self_update ON users;
+CREATE POLICY users_self_update
+ON users FOR UPDATE
+USING ((current_setting('app.current_user_id', true))::uuid = id);
 

@@ -100,6 +100,25 @@ The schema is defined by user stories in `docs/user_stories/05_DATABASE_SCHEMA.m
 
 Note: A simple mock migration runner exists for tests, but a production migration tool (e.g., Prisma Migrate, Knex, Flyway) is recommended for applying SQL in real environments.
 
+### Recommended apply order (SQL)
+
+Apply these in order (via Supabase SQL editor or psql):
+
+1) Core schema
+  - `src/lib/database/schema/full-schema.sql`
+    - Includes all core tables and indexes; uses `pgcrypto`/`gen_random_uuid()`.
+2) Access control (RLS)
+  - `src/lib/database/schema/user-management.sql`
+  - `src/lib/database/schema/game-access.sql`
+    - Idempotent policies and views; safely re-runnable.
+3) Optional feature add-ons
+  - `src/lib/database/migrations/010_game_history.sql` (game history + analytics)
+  - `src/lib/database/migrations/043_query_performance.sql` (extra indexes)
+  - Any other feature-specific `.sql` files you choose to enable
+
+Notes
+- The TypeScript files in `src/lib/database/migrations/*.ts` are config objects used by tests. They aren’t wired to a production CLI; prefer the SQL files above. If you want a code-driven runner, open an issue and we’ll add a small Node/pg script to execute selected configs.
+
 ## Realtime (Socket.IO)
 
 The app uses Socket.IO for chat and invites. When running `npm run dev` or `npm run start`, the Next.js server hosts both API routes and the Socket.IO server. Ensure your deployment target supports long‑lived WebSocket connections.

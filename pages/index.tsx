@@ -52,7 +52,7 @@ const Home: NextPage = () => {
   };
   
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       <Head>
         <title>Table - Online Poker</title>
         <meta name="description" content="Online poker platform" />
@@ -63,7 +63,7 @@ const Home: NextPage = () => {
       </Head>
 
       <main className="container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold text-center mb-8">
+        <h1 className="text-4xl font-bold text-center mb-8 text-gray-900 dark:text-gray-100">
           Welcome to Table
         </h1>
         
@@ -94,16 +94,16 @@ const Home: NextPage = () => {
         
         {/* Preview of the game board with lazy loading */}
         <div className="game-preview mb-8">
-          <h2 className="text-2xl font-bold mb-4">Preview</h2>
-          <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Preview</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
             <GameBoard gameId="preview" />
           </div>
         </div>
         
         {/* Chat panel that loads when scrolled into view */}
-        <div ref={chatContainerRef} className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold mb-4">Community Chat</h2>
-          <p className="text-gray-600">Chat panel will load when scrolled into view</p>
+        <div ref={chatContainerRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Community Chat</h2>
+          <p className="text-gray-600 dark:text-gray-300">Chat panel will load when scrolled into view</p>
         </div>
       </main>
     </div>

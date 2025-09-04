@@ -1,3 +1,39 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Light/Dark theme base colors */
+@layer base {
+	:root {
+		--bg: 255 255 255; /* white */
+		--fg: 17 24 39;    /* gray-900 */
+		--muted: 107 114 128; /* gray-500 */
+		--card: 249 250 251; /* gray-50 */
+	}
+	.dark {
+		--bg: 17 24 39;    /* gray-900 */
+		--fg: 243 244 246;  /* gray-100 */
+		--muted: 156 163 175; /* gray-400 */
+		--card: 31 41 55;    /* gray-800 */
+	}
+
+	html, body, #__next {
+		height: 100%;
+	}
+	body {
+		@apply bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100;
+		background-color: rgb(var(--bg));
+		color: rgb(var(--fg));
+	}
+}
+
+/* Small UI helpers */
+.offline-indicator {
+	@apply fixed top-0 inset-x-0 z-50 text-center text-sm py-2;
+	@apply bg-yellow-100 text-yellow-900 dark:bg-yellow-900 dark:text-yellow-100;
+}
+
+.route-change-indicator {
+	@apply fixed top-10 right-4 z-50 rounded px-3 py-1 text-sm shadow;
+	@apply bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200;
+}

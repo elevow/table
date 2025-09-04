@@ -15,8 +15,19 @@ function MyApp({ Component, pageProps }: AppProps) {
   const [isRouteChanging, setIsRouteChanging] = useState(false);
   const [loadingKey, setLoadingKey] = useState(0);
   const [offline, setOffline] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => 'dark');
   
   useEffect(() => {
+    // Theme bootstrap: prefer stored value; otherwise default to dark
+    try {
+      const stored = typeof window !== 'undefined' ? localStorage.getItem('theme') as 'light' | 'dark' | null : null;
+      const initial = stored ?? 'dark';
+      setTheme(initial);
+      if (typeof document !== 'undefined') {
+        document.documentElement.classList.toggle('dark', initial === 'dark');
+      }
+    } catch {}
+
     // Register service worker for caching and offline support
     registerServiceWorker();
     
@@ -85,6 +96,15 @@ function MyApp({ Component, pageProps }: AppProps) {
       clearTimeout(prefetchTimer);
     };
   }, [router]);
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    try { localStorage.setItem('theme', next); } catch {}
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', next === 'dark');
+    }
+  };
   
   return (
     <>
@@ -106,6 +126,17 @@ function MyApp({ Component, pageProps }: AppProps) {
   onLoad={() => { /* Analytics script loaded */ }}
       />
       
+      {/* Theme toggle (simple) */}
+      <div className="fixed bottom-4 right-4 z-50">
+        <button
+          onClick={toggleTheme}
+          className="rounded px-3 py-2 text-sm bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600 shadow"
+          aria-label="Toggle theme"
+        >
+          {theme === 'dark' ? 'Dark' : 'Light'} mode
+        </button>
+      </div>
+
       {/* Offline indicator */}
       {offline && (
         <div className="offline-indicator">

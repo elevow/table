@@ -69,26 +69,53 @@ export default function CreateGameRoomPage() {
       <form className="space-y-4" onSubmit={onSubmit}>
         <div>
           <label className="block text-sm font-medium">Table name</label>
-          <input className="border p-2 w-full" value={name} onChange={e => setName(e.target.value)} />
+          <input
+            className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            value={name}
+            onChange={e => setName(e.target.value)}
+          />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium">Max players</label>
-            <input type="number" className="border p-2 w-full" min={2} max={9} value={maxPlayers} onChange={e => setMaxPlayers(parseInt(e.target.value || '0', 10))} />
+            <input
+              type="number"
+              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              min={2}
+              max={9}
+              value={maxPlayers}
+              onChange={e => setMaxPlayers(parseInt(e.target.value || '0', 10))}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium">Small blind</label>
-            <input type="number" className="border p-2 w-full" min={1} value={smallBlind} onChange={e => setSmallBlind(parseInt(e.target.value || '0', 10))} />
+            <input
+              type="number"
+              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              min={1}
+              value={smallBlind}
+              onChange={e => setSmallBlind(parseInt(e.target.value || '0', 10))}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium">Big blind</label>
-            <input type="number" className="border p-2 w-full" min={2} value={bigBlind} onChange={e => setBigBlind(parseInt(e.target.value || '0', 10))} />
+            <input
+              type="number"
+              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              min={2}
+              value={bigBlind}
+              onChange={e => setBigBlind(parseInt(e.target.value || '0', 10))}
+            />
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium">Variant</label>
-            <select className="border p-2 w-full" value={variant} onChange={e => setVariant(e.target.value as Variant)}>
+            <select
+              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={variant}
+              onChange={e => setVariant(e.target.value as Variant)}
+            >
               <option value="texas-holdem">Texas Hold&apos;em</option>
               <option value="omaha">Omaha</option>
               <option value="omaha-hi-lo">Omaha Hi-Lo (8 or Better)</option>
@@ -96,28 +123,46 @@ export default function CreateGameRoomPage() {
           </div>
           <div>
             <label className="block text-sm font-medium">Betting mode</label>
-            <select className="border p-2 w-full" value={bettingMode} onChange={e => setBettingMode(e.target.value as BettingMode)}>
+            <select
+              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={bettingMode}
+              onChange={e => setBettingMode(e.target.value as BettingMode)}
+            >
               <option value="no-limit">No Limit</option>
               <option value="pot-limit">Pot Limit</option>
             </select>
           </div>
           <div className="flex items-end">
             <label className="inline-flex items-center space-x-2">
-              <input type="checkbox" checked={requireRitUnanimous} onChange={e => setRequireRitUnanimous(e.target.checked)} />
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-blue-600 dark:accent-blue-500"
+                checked={requireRitUnanimous}
+                onChange={e => setRequireRitUnanimous(e.target.checked)}
+              />
               <span className="text-sm">Require unanimous RIT consent</span>
             </label>
           </div>
         </div>
         <div className="border-t pt-4 space-y-3">
           <label className="inline-flex items-center space-x-2">
-            <input type="checkbox" checked={enableTournament} onChange={e => setEnableTournament(e.target.checked)} />
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-blue-600 dark:accent-blue-500"
+              checked={enableTournament}
+              onChange={e => setEnableTournament(e.target.checked)}
+            />
             <span className="text-sm font-medium">Enable tournament structure</span>
           </label>
           {enableTournament && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium">Preset</label>
-                <select className="border p-2 w-full" value={presetKey} onChange={e => setPresetKey(e.target.value)}>
+                <select
+                  className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={presetKey}
+                  onChange={e => setPresetKey(e.target.value)}
+                >
                   {presetOptions.map(([key, p]) => (
                     <option key={key} value={key}>{p.name}</option>
                   ))}
@@ -148,7 +193,11 @@ export default function CreateGameRoomPage() {
         </div>
         <div>
           <label className="block text-sm font-medium">Created by (user id)</label>
-          <input className="border p-2 w-full" value={createdBy} onChange={e => setCreatedBy(e.target.value)} />
+          <input
+            className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            value={createdBy}
+            onChange={e => setCreatedBy(e.target.value)}
+          />
         </div>
         {error && <p className="text-red-600 text-sm">{error}</p>}
         <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50" disabled={submitting}>

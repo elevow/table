@@ -6,7 +6,7 @@ export interface GameRoomRecord {
   gameType: string;
   maxPlayers: number;
   blindLevels: any;
-  createdBy: string;
+  createdBy: string | null;
   createdAt: Date;
   status: RoomStatus;
   configuration: any | null;

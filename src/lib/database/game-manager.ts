@@ -21,11 +21,40 @@ export class GameManager {
   // Rooms
   async createRoom(input: CreateRoomInput): Promise<GameRoomRecord> {
     const id = uuidv4();
-    const res = await this.pool.query(
-      `INSERT INTO game_rooms (id, name, game_type, max_players, blind_levels, created_by, configuration, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'waiting') RETURNING *`,
-      [id, input.name, input.gameType, input.maxPlayers, JSON.stringify(input.blindLevels), input.createdBy, input.configuration ?? null]
-    );
+    // created_by references users(id). In dev or non-auth flows, the provided createdBy may not be a valid/existing UUID.
+    // We'll validate format and existence; if not valid or missing, store NULL (the column is nullable with ON DELETE SET NULL semantics elsewhere).
+    const isValidUuid = (v: string | undefined): boolean => !!v && /^(?!00000000-0000-0000-0000-000000000000)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+    let createdByValue: string | null = null;
+    if (isValidUuid(input.createdBy)) {
+      try {
+        const exists = await this.pool.query(`SELECT 1 FROM users WHERE id = $1 LIMIT 1`, [input.createdBy]);
+        if (exists.rowCount && exists.rowCount > 0) {
+          createdByValue = input.createdBy;
+        }
+      } catch {
+        // If the users table isn't present or query fails, fallback to NULL to avoid breaking room creation
+        createdByValue = null;
+      }
+    }
+    let res;
+    try {
+      res = await this.pool.query(
+        `INSERT INTO game_rooms (id, name, game_type, max_players, blind_levels, created_by, configuration, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'waiting') RETURNING *`,
+        [id, input.name, input.gameType, input.maxPlayers, JSON.stringify(input.blindLevels), createdByValue, input.configuration ?? null]
+      );
+    } catch (e: any) {
+      // Map common errors to clearer messages
+      const code = e?.code as string | undefined;
+      if (code === '42P01') {
+        // undefined_table
+        throw new Error('Database not initialized: table game_rooms is missing. Apply the SQL in docs/README order and retry.');
+      }
+      if (code === '08001' || code === 'ECONNREFUSED') {
+        throw new Error('Database connection failed. Check your PG connection env (DATABASE_URL or PGHOST/PGUSER/PGPASSWORD/PGDATABASE).');
+      }
+      throw e;
+    }
     return this.mapRoom(res.rows[0]);
   }
 

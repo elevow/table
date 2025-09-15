@@ -39,17 +39,7 @@ const Home: NextPage = () => {
     };
   }, [markInteraction]);
   
-  // Handle starting a new game - demonstrate how we'd handle a user interaction
-  const handleStartGame = () => {
-    // Start timing this interaction
-    const endMark = markInteraction('start-game-click');
-    
-    // Navigate to the game page
-    router.push('/game/poker-texas-holdem');
-    
-    // End timing when the function completes
-  if (typeof endMark === 'function') endMark();
-  };
+
   
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -68,13 +58,6 @@ const Home: NextPage = () => {
         </h1>
         
         <div className="flex justify-center space-x-4 mb-8">
-          <button
-            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md"
-            onClick={handleStartGame}
-            data-route="/game/poker-texas-holdem"
-          >
-            Start New Game
-          </button>
           <button
             className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2 rounded-md"
             onClick={() => router.push('/game/create')}

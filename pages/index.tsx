@@ -1,92 +1,226 @@
 import type { NextPage } from 'next';
 import Head from 'next/head';
-import { useEffect, useRef } from 'react';
-import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
-import { getPrefetcher } from '../src/utils/code-splitting';
-import { useComponentPerformance } from '../src/utils/performance-monitor';
-
-// Use dynamic import for the Game component to demonstrate code splitting
-const GameBoard = dynamic(() => import('../src/components/GameBoard'), {
-  loading: () => <div className="loading-skeleton">Loading game board...</div>,
-  ssr: false, // Disable SSR for this component
-});
+import { useState } from 'react';
 
 const Home: NextPage = () => {
   const router = useRouter();
-  const chatContainerRef = useRef(null);
-  const { markInteraction } = useComponentPerformance('HomePage');
-  
-  useEffect(() => {
-    // Initialize the prefetcher
-    const prefetcher = getPrefetcher();
-    
-    // Observe the chat container for viewport-based loading
-    if (chatContainerRef.current) {
-      prefetcher.observeComponent(chatContainerRef.current, 'ChatPanel');
-    }
-    
-    // Mark this interaction for performance tracking
-    const endMark = markInteraction('initial-load', { 
-      route: 'home',
-      timestamp: Date.now()
-    });
-    
-    // End the performance mark after everything is loaded
-    return () => {
-      if (typeof endMark === 'function') endMark();
-      prefetcher.cleanup();
-    };
-  }, [markInteraction]);
-  
+  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLogin, setIsLogin] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  
-  return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
-      <Head>
-        <title>Table - Online Poker</title>
-        <meta name="description" content="Online poker platform" />
-        <link rel="icon" href="/favicon.ico" />
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    try {
+      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+      const body = isLogin 
+        ? { email, password }
+        : { email, username, password };
         
-        {/* Add preload directives for critical resources */}
-        <link rel="preload" href="/fonts/main-font.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Store token in localStorage for session management
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        router.push('/dashboard');
+      } else {
+        setError(data.error || 'Authentication failed');
+      }
+    } catch (error) {
+      console.error('Auth error:', error);
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGuestAccess = () => {
+    router.push('/dashboard');
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 flex items-center justify-center">
+      <Head>
+        <title>{`${isLogin ? 'Login' : 'Sign Up'} - Table`}</title>
+        <meta name="description" content="Login to Table - Online poker platform" />
+        <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold text-center mb-8 text-gray-900 dark:text-gray-100">
-          Welcome to Table
-        </h1>
-        
-        <div className="flex justify-center space-x-4 mb-8">
-          <button
-            className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2 rounded-md"
-            onClick={() => router.push('/game/create')}
-            data-route="/game/create"
-          >
-            Create Room (choose variant)
-          </button>
-          
-          <button
-            className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-md"
-            onClick={() => router.push('/game/join')}
-            data-route="/game/join"
-          >
-            Join Existing Game
-          </button>
-        </div>
-        
-        {/* Preview of the game board with lazy loading */}
-        <div className="game-preview mb-8">
-          <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Preview</h2>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <GameBoard gameId="preview" />
+      <main className="w-full max-w-md px-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-8">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+              Welcome to Table
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              {isLogin ? 'Sign in to your account' : 'Create your account'}
+            </p>
           </div>
-        </div>
-        
-        {/* Chat panel that loads when scrolled into view */}
-        <div ref={chatContainerRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Community Chat</h2>
-          <p className="text-gray-600 dark:text-gray-300">Chat panel will load when scrolled into view</p>
+
+          {/* Login/Signup Form */}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Email Address
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Enter your email"
+              />
+            </div>
+
+            {!isLogin && (
+              <div>
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Username
+                </label>
+                <input
+                  id="username"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Choose a username"
+                />
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete={isLogin ? "current-password" : "new-password"}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Enter your password"
+              />
+            </div>
+
+            {!isLogin && (
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Confirm Password
+                </label>
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Confirm your password"
+                />
+              </div>
+            )}
+
+            {isLogin && (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <input
+                    id="remember-me"
+                    name="remember-me"
+                    type="checkbox"
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Remember me
+                  </label>
+                </div>
+                <a href="#" className="text-sm text-blue-600 hover:text-blue-500">
+                  Forgot password?
+                </a>
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+            >
+              {loading ? (
+                <div className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Processing...
+                </div>
+              ) : (
+                isLogin ? 'Sign In' : 'Create Account'
+              )}
+            </button>
+          </form>
+
+          {/* Toggle between login/signup */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setError(null); // Clear error when switching
+                }}
+                className="font-medium text-blue-600 hover:text-blue-500"
+              >
+                {isLogin ? 'Sign up' : 'Sign in'}
+              </button>
+            </p>
+          </div>
+
+          {/* Guest access */}
+          <div className="mt-4">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300 dark:border-gray-600" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white dark:bg-gray-800 text-gray-500">Or</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleGuestAccess}
+              className="mt-4 w-full flex justify-center py-3 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+            >
+              Continue as Guest
+            </button>
+          </div>
         </div>
       </main>
     </div>

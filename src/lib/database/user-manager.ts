@@ -43,9 +43,17 @@ export class UserManager {
 
       const id = uuidv4();
       const insert = await client.query(
-        `INSERT INTO users (id, email, username, auth_provider, auth_provider_id, metadata)
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-        [id, req.email, req.username, req.authProvider || null, req.authProviderId || null, req.metadata ? JSON.stringify(req.metadata) : null]
+        `INSERT INTO users (id, email, username, password_hash, auth_provider, auth_provider_id, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [
+          id, 
+          req.email, 
+          req.username, 
+          req.passwordHash || null,
+          req.authProvider || null, 
+          req.authProviderId || null, 
+          req.metadata ? JSON.stringify(req.metadata) : null
+        ]
       );
 
       await client.query('COMMIT');
@@ -98,6 +106,7 @@ export class UserManager {
     let i = 1;
     if (updates.email !== undefined) { sets.push(`email = $${i++}`); vals.push(updates.email); }
     if (updates.username !== undefined) { sets.push(`username = $${i++}`); vals.push(updates.username); }
+    if (updates.passwordHash !== undefined) { sets.push(`password_hash = $${i++}`); vals.push(updates.passwordHash); }
     if (updates.lastLogin !== undefined) { sets.push(`last_login = $${i++}`); vals.push(updates.lastLogin); }
     if (updates.isVerified !== undefined) { sets.push(`is_verified = $${i++}`); vals.push(updates.isVerified); }
     if (updates.metadata !== undefined) { sets.push(`metadata = COALESCE(metadata,'{}'::jsonb) || $${i++}::jsonb`); vals.push(JSON.stringify(updates.metadata)); }
@@ -184,6 +193,7 @@ export class UserManager {
       id: row.id,
       email: row.email,
       username: row.username,
+      passwordHash: row.password_hash,
       createdAt: row.created_at,
       lastLogin: row.last_login,
       authProvider: row.auth_provider,

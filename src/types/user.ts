@@ -4,6 +4,7 @@ export interface UserRecord {
   id: string;
   email: string;
   username: string;
+  passwordHash?: string | null; // Optional for OAuth users
   createdAt: Date;
   lastLogin?: Date | null;
   authProvider?: string | null;
@@ -15,6 +16,8 @@ export interface UserRecord {
 export interface CreateUserRequest {
   email: string;
   username: string;
+  password?: string; // For email/password registration
+  passwordHash?: string; // Pre-hashed password
   authProvider?: string;
   authProviderId?: string;
   metadata?: Record<string, any>;
@@ -23,9 +26,25 @@ export interface CreateUserRequest {
 export interface UpdateUserRequest {
   email?: string;
   username?: string;
+  passwordHash?: string; // For password changes
   lastLogin?: Date;
   isVerified?: boolean;
   metadata?: Record<string, any>;
+}
+
+export interface ChangePasswordRequest {
+  userId: string;
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface ResetPasswordRequest {
+  email: string;
+}
+
+export interface ConfirmPasswordResetRequest {
+  token: string;
+  newPassword: string;
 }
 
 export interface AuthTokenRecord {

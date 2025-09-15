@@ -169,10 +169,10 @@ export default function CreateGameRoomPage() {
                 </select>
                 <p className="text-xs text-gray-600 mt-1">{tournamentPresets[presetKey]?.description}</p>
               </div>
-              <div className="bg-gray-50 rounded p-3 text-sm">
-                <div className="font-semibold mb-1">Preview</div>
+              <div className="bg-gray-50 dark:bg-gray-700 rounded p-3 text-sm">
+                <div className="font-semibold mb-1 text-gray-900 dark:text-gray-100">Preview</div>
                 {selectedTournamentConfig ? (
-                  <ul className="list-disc pl-5 space-y-1">
+                  <ul className="list-disc pl-5 space-y-1 text-gray-700 dark:text-gray-300">
                     <li>Type: {selectedTournamentConfig.type}</li>
                     <li>Starting stack: {selectedTournamentConfig.startingStack.toLocaleString()}</li>
                     <li>Levels: {selectedTournamentConfig.blindLevels.length} ({selectedTournamentConfig.blindLevels[0].durationMinutes} min)</li>
@@ -185,7 +185,7 @@ export default function CreateGameRoomPage() {
                     )}
                   </ul>
                 ) : (
-                  <p className="text-gray-600">Select a preset to preview configuration.</p>
+                  <p className="text-gray-600 dark:text-gray-400">Select a preset to preview configuration.</p>
                 )}
               </div>
             </div>

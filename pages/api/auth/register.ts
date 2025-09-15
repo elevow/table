@@ -5,6 +5,7 @@ import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { UserManager } from '../../../src/lib/database/user-manager';
 import { createUserService } from '../../../src/lib/services/user-service';
 import { createSafeAudit } from '../../../src/lib/api/audit';
+import { emailService } from '../../../src/lib/services/email-service';
 import { v4 as uuidv4 } from 'uuid';
 
 function getClientIp(req: NextApiRequest): string {
@@ -148,6 +149,16 @@ export default async function handler(
       email: email.toLowerCase(),
       username: username.toLowerCase(),
     });
+
+    // Send welcome email (don't block registration if email fails)
+    try {
+      const emailResult = await emailService.sendWelcomeEmail(newUser.email, newUser.username);
+      if (!emailResult.success) {
+        console.warn('Failed to send welcome email:', emailResult.error);
+      }
+    } catch (emailError) {
+      console.warn('Welcome email error:', emailError);
+    }
 
     // Return success response (don't include sensitive data)
     res.status(201).json({

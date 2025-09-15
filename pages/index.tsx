@@ -1,5 +1,6 @@
 import type { NextPage } from 'next';
 import Head from 'next/head';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
@@ -155,9 +156,9 @@ const Home: NextPage = () => {
                     Remember me
                   </label>
                 </div>
-                <a href="#" className="text-sm text-blue-600 hover:text-blue-500">
+                <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-500">
                   Forgot password?
-                </a>
+                </Link>
               </div>
             )}
 

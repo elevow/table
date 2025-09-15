@@ -1,4 +1,5 @@
 // next.config.js
+require('dotenv').config({ path: '.env.local' });
 const { PHASE_DEVELOPMENT_SERVER } = require('next/constants');
 
 /** @type {import('next').NextConfig} */

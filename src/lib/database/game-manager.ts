@@ -51,7 +51,7 @@ export class GameManager {
         throw new Error('Database not initialized: table game_rooms is missing. Apply the SQL in docs/README order and retry.');
       }
       if (code === '08001' || code === 'ECONNREFUSED') {
-        throw new Error('Database connection failed. Check your PG connection env (DATABASE_URL or PGHOST/PGUSER/PGPASSWORD/PGDATABASE).');
+        throw new Error('Database connection failed. Check your PG connection env (POOL_DATABASE_URL or DIRECT_DATABASE_URL).');
       }
       throw e;
     }

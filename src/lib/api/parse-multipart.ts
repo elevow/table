@@ -12,7 +12,7 @@ export const isMultipart = (req: NextApiRequest): boolean => {
 };
 
 export async function parseMultipart(req: NextApiRequest, opts?: FormidableOptions): Promise<ParsedForm> {
-  const formidable: typeof import('formidable') = require('formidable');
+  const formidable = (await import('formidable')).default;
   const form = formidable({
     multiples: false,
     keepExtensions: true,

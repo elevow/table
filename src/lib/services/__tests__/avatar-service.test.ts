@@ -47,7 +47,7 @@ describe('AvatarService', () => {
   });
 
   describe('uploadAvatar', () => {
-    it('should create a new avatar with pending status', async () => {
+    it('should create a new avatar with active status', async () => {
       const createRequest: CreateAvatarRequest = {
         userId: 'user123',
         originalUrl: 'https://example.com/avatar.jpg',
@@ -59,11 +59,9 @@ describe('AvatarService', () => {
         userId: 'user123',
         originalUrl: 'https://example.com/avatar.jpg',
         variants: { 'small': 'https://example.com/avatar-small.jpg', 'medium': 'https://example.com/avatar-medium.jpg' },
-        status: 'pending',
+        status: 'active',
         version: 1,
-        createdAt: new Date(),
-        moderatorId: null,
-        moderatedAt: null
+        createdAt: new Date()
       };
 
       mockAvatarManager.createAvatar.mockResolvedValue(expectedAvatar);
@@ -72,68 +70,6 @@ describe('AvatarService', () => {
 
       expect(mockAvatarManager.createAvatar).toHaveBeenCalledWith(createRequest);
       expect(result).toEqual(expectedAvatar);
-    });
-  });
-
-  describe('approveAvatar', () => {
-    it('should approve an avatar with moderator info', async () => {
-      const avatarId = 'avatar123';
-      const moderatorId = 'mod123';
-      const mockDate = new Date();
-      
-      const approvedAvatar: AvatarRecord = {
-        id: avatarId,
-        userId: 'user123',
-        originalUrl: 'https://example.com/avatar.jpg',
-        variants: { 'small': 'https://example.com/avatar-small.jpg' },
-        status: 'approved',
-        version: 1,
-        createdAt: new Date(),
-        moderatorId: moderatorId,
-        moderatedAt: mockDate
-      };
-
-      mockAvatarManager.updateAvatar.mockResolvedValue(approvedAvatar);
-
-      const result = await avatarService.approveAvatar(avatarId, moderatorId);
-
-      expect(mockAvatarManager.updateAvatar).toHaveBeenCalledWith(avatarId, {
-        status: 'approved',
-        moderatorId,
-        moderatedAt: expect.any(Date)
-      });
-      expect(result).toEqual(approvedAvatar);
-    });
-  });
-
-  describe('rejectAvatar', () => {
-    it('should reject an avatar with moderator info', async () => {
-      const avatarId = 'avatar123';
-      const moderatorId = 'mod123';
-      const mockDate = new Date();
-      
-      const rejectedAvatar: AvatarRecord = {
-        id: avatarId,
-        userId: 'user123',
-        originalUrl: 'https://example.com/avatar.jpg',
-        variants: { 'small': 'https://example.com/avatar-small.jpg' },
-        status: 'rejected',
-        version: 1,
-        createdAt: new Date(),
-        moderatorId: moderatorId,
-        moderatedAt: mockDate
-      };
-
-      mockAvatarManager.updateAvatar.mockResolvedValue(rejectedAvatar);
-
-      const result = await avatarService.rejectAvatar(avatarId, moderatorId);
-
-      expect(mockAvatarManager.updateAvatar).toHaveBeenCalledWith(avatarId, {
-        status: 'rejected',
-        moderatorId,
-        moderatedAt: expect.any(Date)
-      });
-      expect(result).toEqual(rejectedAvatar);
     });
   });
 
@@ -198,11 +134,9 @@ describe('AvatarService', () => {
         userId: userId,
         originalUrl: 'https://example.com/avatar.jpg',
         variants: { 'small': 'https://example.com/avatar-small.jpg' },
-        status: 'approved',
+        status: 'active',
         version: 1,
-        createdAt: new Date(),
-        moderatorId: 'mod123',
-        moderatedAt: new Date()
+        createdAt: new Date()
       };
 
       mockAvatarManager.getLatestAvatarForUser.mockResolvedValue(expectedAvatar);
@@ -228,7 +162,7 @@ describe('AvatarService', () => {
   describe('search', () => {
     it('should search avatars with all parameters', async () => {
       const userId = 'user123';
-      const status = 'approved';
+      const status = 'active';
       const page = 1;
       const limit = 10;
       
@@ -239,11 +173,9 @@ describe('AvatarService', () => {
             userId: userId,
             originalUrl: 'https://example.com/avatar.jpg',
             variants: { 'small': 'https://example.com/avatar-small.jpg' },
-            status: 'approved',
+            status: 'active',
             version: 1,
-            createdAt: new Date(),
-            moderatorId: 'mod123',
-            moderatedAt: new Date()
+            createdAt: new Date()
           }
         ],
         total: 1,

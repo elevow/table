@@ -30,16 +30,8 @@ export class AvatarService {
   }
 
   async uploadAvatar(req: CreateAvatarRequest): Promise<AvatarRecord> {
-    // Initial status pending
+    // Avatars are immediately active - no approval process
     return this.manager.createAvatar(req);
-  }
-
-  async approveAvatar(avatarId: string, moderatorId: string): Promise<AvatarRecord> {
-    return this.manager.updateAvatar(avatarId, { status: 'approved', moderatorId, moderatedAt: new Date() });
-  }
-
-  async rejectAvatar(avatarId: string, moderatorId: string): Promise<AvatarRecord> {
-    return this.manager.updateAvatar(avatarId, { status: 'rejected', moderatorId, moderatedAt: new Date() });
   }
 
   async addVersion(avatarId: string, url: string): Promise<AvatarVersionRecord> {
@@ -54,7 +46,7 @@ export class AvatarService {
     return this.manager.getLatestAvatarForUser(userId);
   }
 
-  async search(userId: string | undefined, status: 'pending' | 'approved' | 'rejected' | 'archived' | undefined, page: number, limit: number): Promise<PaginatedAvatarsResponse> {
+  async search(userId: string | undefined, status: 'active' | 'archived' | undefined, page: number, limit: number): Promise<PaginatedAvatarsResponse> {
     return this.manager.searchAvatars({ userId, status }, page, limit);
   }
 }

@@ -5,6 +5,8 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { getPrefetcher } from '../src/utils/code-splitting';
 import { useComponentPerformance } from '../src/utils/performance-monitor';
+import { useUserAvatar } from '../src/hooks/useUserAvatar';
+import Avatar from '../src/components/Avatar';
 
 // Use dynamic import for the Game component to demonstrate code splitting
 const GameBoard = dynamic(() => import('../src/components/GameBoard'), {
@@ -16,6 +18,14 @@ const Dashboard: NextPage = () => {
   const router = useRouter();
   const chatContainerRef = useRef(null);
   const { markInteraction } = useComponentPerformance('DashboardPage');
+  
+  // For now, using a mock userId - in a real app this would come from authentication
+  const { avatarData, loading: avatarLoading } = useUserAvatar('user-123');
+  
+  const handleAvatarClick = () => {
+    // Navigate to profile or show profile menu
+    router.push('/profile');
+  };
   
   useEffect(() => {
     // Initialize the prefetcher
@@ -50,10 +60,32 @@ const Dashboard: NextPage = () => {
         <link rel="preload" href="/fonts/main-font.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       </Head>
 
+      {/* Header with avatar in the corner */}
+      <header className="relative bg-white dark:bg-gray-800 shadow-sm">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              Table
+            </h1>
+            
+            {/* Avatar in top-right corner */}
+            <div className="flex items-center space-x-4">
+              <Avatar 
+                src={avatarData?.url}
+                size="md"
+                onClick={handleAvatarClick}
+                className="ring-2 ring-indigo-500 ring-offset-2 ring-offset-gray-100 dark:ring-offset-gray-900"
+                alt="Your profile"
+              />
+            </div>
+          </div>
+        </div>
+      </header>
+
       <main className="container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold text-center mb-8 text-gray-900 dark:text-gray-100">
+        <h2 className="text-4xl font-bold text-center mb-8 text-gray-900 dark:text-gray-100">
           Dashboard
-        </h1>
+        </h2>
         
         <div className="flex justify-center space-x-4 mb-8">
           <button

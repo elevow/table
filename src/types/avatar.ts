@@ -1,6 +1,6 @@
 // US-018: Avatar Management - Types
 
-export type AvatarStatus = 'pending' | 'approved' | 'rejected' | 'archived';
+export type AvatarStatus = 'active' | 'archived';
 
 export interface AvatarRecord {
   id: string;
@@ -10,8 +10,6 @@ export interface AvatarRecord {
   variants: Record<string, string>; // size -> url
   version: number;
   createdAt: Date;
-  moderatedAt?: Date | null;
-  moderatorId?: string | null;
 }
 
 export interface AvatarVersionRecord {
@@ -31,8 +29,6 @@ export interface CreateAvatarRequest {
 export interface UpdateAvatarRequest {
   status?: AvatarStatus;
   variants?: Record<string, string>;
-  moderatorId?: string;
-  moderatedAt?: Date;
 }
 
 export interface AvatarQueryFilters {

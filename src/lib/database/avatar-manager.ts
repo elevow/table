@@ -30,8 +30,8 @@ export class AvatarManager {
   async createAvatar(req: CreateAvatarRequest): Promise<AvatarRecord> {
     const id = uuidv4();
     const res = await this.pool.query(
-      `INSERT INTO avatars (id, user_id, original_url, variants)
-       VALUES ($1,$2,$3,$4::jsonb) RETURNING *`,
+      `INSERT INTO avatars (id, user_id, status, original_url, variants)
+       VALUES ($1,$2,'active',$3,$4::jsonb) RETURNING *`,
       [id, req.userId, req.originalUrl, JSON.stringify(req.variants)]
     );
     return this.mapRowToAvatar(res.rows[0]);
@@ -56,8 +56,6 @@ export class AvatarManager {
     let i = 1;
     if (updates.status !== undefined) { sets.push(`status = $${i++}`); vals.push(updates.status); }
     if (updates.variants !== undefined) { sets.push(`variants = $${i++}::jsonb`); vals.push(JSON.stringify(updates.variants)); }
-    if (updates.moderatedAt !== undefined) { sets.push(`moderated_at = $${i++}`); vals.push(updates.moderatedAt); }
-    if (updates.moderatorId !== undefined) { sets.push(`moderator_id = $${i++}`); vals.push(updates.moderatorId); }
     if (!sets.length) {
       const existing = await this.getAvatarById(id);
       if (!existing) throw new AvatarError('Avatar not found', 'NOT_FOUND');
@@ -129,8 +127,6 @@ export class AvatarManager {
       variants: row.variants || {},
       version: row.version,
       createdAt: row.created_at,
-      moderatedAt: row.moderated_at ?? null,
-      moderatorId: row.moderator_id ?? null,
     };
   }
 

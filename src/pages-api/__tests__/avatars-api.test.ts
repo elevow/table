@@ -15,8 +15,6 @@ jest.mock('../../../src/lib/api/rate-limit', () => ({
 const mockServiceInstance: any = {
   uploadAvatar: jest.fn(),
   getLatestForUser: jest.fn(),
-  approveAvatar: jest.fn(),
-  rejectAvatar: jest.fn(),
   manager: {
     updateAvatar: jest.fn()
   }
@@ -50,7 +48,7 @@ describe('Avatar API routes', () => {
   });
 
   test('POST /api/avatars/upload success', async () => {
-    const avatar = { id: 'a1', originalUrl: 'http://img/orig.jpg', variants: { thumb: 'http://img/t.jpg' }, status: 'pending' } as any;
+    const avatar = { id: 'a1', originalUrl: 'http://img/orig.jpg', variants: { thumb: 'http://img/t.jpg' }, status: 'active' } as any;
     mockServiceInstance.uploadAvatar.mockResolvedValue(avatar);
 
     const req = createReq('POST', { userId: 'u1', originalUrl: avatar.originalUrl, variants: avatar.variants });
@@ -59,7 +57,7 @@ describe('Avatar API routes', () => {
     await uploadHandler(req as any, res as any);
 
     expect(res.status).toHaveBeenCalledWith(201);
-    expect(res.json).toHaveBeenCalledWith({ id: 'a1', url: 'http://img/orig.jpg', thumbnails: { thumb: 'http://img/t.jpg' }, status: 'pending' });
+    expect(res.json).toHaveBeenCalledWith({ id: 'a1', url: 'http://img/orig.jpg', thumbnails: { thumb: 'http://img/t.jpg' }, status: 'active' });
   });
 
   test('POST /api/avatars/upload validation error', async () => {
@@ -73,7 +71,7 @@ describe('Avatar API routes', () => {
   });
 
   test('GET /api/avatars/[userId] returns latest avatar', async () => {
-    const avatar = { id: 'a2', originalUrl: 'http://img/2.jpg', variants: { s: 'http://img/2s.jpg' }, status: 'approved' } as any;
+    const avatar = { id: 'a2', originalUrl: 'http://img/2.jpg', variants: { s: 'http://img/2s.jpg' }, status: 'active' } as any;
     mockServiceInstance.getLatestForUser.mockResolvedValue(avatar);
 
     const req = createReq('GET', undefined, { userId: 'u1' });
@@ -82,7 +80,7 @@ describe('Avatar API routes', () => {
     await getLatestHandler(req as any, res as any);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ id: 'a2', url: 'http://img/2.jpg', thumbnails: { s: 'http://img/2s.jpg' }, status: 'approved' });
+    expect(res.json).toHaveBeenCalledWith({ id: 'a2', url: 'http://img/2.jpg', thumbnails: { s: 'http://img/2s.jpg' }, status: 'active' });
   });
 
   test('GET /api/avatars/[userId] returns 404 when none', async () => {
@@ -94,19 +92,6 @@ describe('Avatar API routes', () => {
 
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.json).toHaveBeenCalledWith({ error: 'Not found' });
-  });
-
-  test('PUT /api/avatars/[avatarId] approve', async () => {
-    const approved = { id: 'a3', status: 'approved', moderatedAt: new Date(), moderatorId: 'm1' } as any;
-    mockServiceInstance.approveAvatar.mockResolvedValue(approved);
-
-    const req = createReq('PUT', { action: 'approve', moderatorId: 'm1' }, { avatarId: 'a3' });
-    const res = createRes();
-
-    await updateHandler(req as any, res as any);
-
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ id: 'a3', status: 'approved', moderatedAt: approved.moderatedAt, moderatorId: 'm1' });
   });
 
   test('DELETE /api/avatars/[avatarId] archives avatar', async () => {

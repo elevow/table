@@ -18,12 +18,11 @@ describe('AvatarManager (US-018)', () => {
     expect(avatar.variants.s).toContain('s.png');
   });
 
-  it('updates status to approved with moderator info', async () => {
+  it('updates avatar status', async () => {
     // updateAvatar
-    (mockPool.query as any).mockResolvedValueOnce({ rows: [{ id: 'a-1', user_id: 'u-1', status: 'approved', original_url: 'http://img/orig.png', variants: { s: 'http://img/s.png' }, version: 1, created_at: new Date(), moderated_at: new Date(), moderator_id: 'mod-1' }] });
-    const res = await manager.updateAvatar('a-1', { status: 'approved', moderatorId: 'mod-1', moderatedAt: new Date() });
-    expect(res.status).toBe('approved');
-    expect(res.moderatorId).toBe('mod-1');
+    (mockPool.query as any).mockResolvedValueOnce({ rows: [{ id: 'a-1', user_id: 'u-1', status: 'archived', original_url: 'http://img/orig.png', variants: { s: 'http://img/s.png' }, version: 1, created_at: new Date() }] });
+    const res = await manager.updateAvatar('a-1', { status: 'archived' });
+    expect(res.status).toBe('archived');
   });
 
   it('adds a new version and updates main avatar version', async () => {
@@ -40,9 +39,9 @@ describe('AvatarManager (US-018)', () => {
   it('searches avatars with pagination', async () => {
     (mockPool.query as any)
       .mockResolvedValueOnce({ rows: [{ total: '1' }] })
-      .mockResolvedValueOnce({ rows: [{ id: 'a-1', user_id: 'u-1', status: 'pending', original_url: 'http://img/orig.png', variants: { s: 'http://img/s.png' }, version: 1, created_at: new Date() }] });
-    const res = await manager.searchAvatars({ status: 'pending' }, 1, 10);
+      .mockResolvedValueOnce({ rows: [{ id: 'a-1', user_id: 'u-1', status: 'active', original_url: 'http://img/orig.png', variants: { s: 'http://img/s.png' }, version: 1, created_at: new Date() }] });
+    const res = await manager.searchAvatars({ status: 'active' }, 1, 10);
     expect(res.total).toBe(1);
-    expect(res.avatars[0].status).toBe('pending');
+    expect(res.avatars[0].status).toBe('active');
   });
 });

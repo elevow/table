@@ -13,14 +13,42 @@ describe('GameManager (US-020)', () => {
 
   it('creates a room and lists rooms with pagination', async () => {
     (mockPool.query as jest.Mock)
-      // insert room
-      .mockImplementationOnce(async () => ({ rows: [{ id: 'r1', name: 'Table 1', game_type: 'NLH', max_players: 6, blind_levels: { sb: 1, bb: 2 }, created_by: 'u1', created_at: new Date(), status: 'waiting', configuration: null }] }))
-      // count
+      // Check for existing room ID (should return empty)
+      .mockImplementationOnce(async () => ({ rows: [] }))
+      // Check if user exists (should return one row)
+      .mockImplementationOnce(async () => ({ rowCount: 1, rows: [{ id: '550e8400-e29b-41d4-a716-446655440000' }] }))
+      // Insert room and return the created room
+      .mockImplementationOnce(async () => ({ 
+        rows: [{ 
+          id: 'r1', 
+          name: 'Table 1', 
+          game_type: 'NLH', 
+          max_players: 6, 
+          blind_levels: { sb: 1, bb: 2 }, 
+          created_by: '550e8400-e29b-41d4-a716-446655440000', 
+          created_at: new Date(), 
+          status: 'waiting', 
+          configuration: null 
+        }] 
+      }))
+      // Count total rooms
       .mockImplementationOnce(async () => ({ rows: [{ total: '1' }] }))
-      // list
-      .mockImplementationOnce(async () => ({ rows: [{ id: 'r1', name: 'Table 1', game_type: 'NLH', max_players: 6, blind_levels: { sb: 1, bb: 2 }, created_by: 'u1', created_at: new Date(), status: 'waiting', configuration: null }] }));
+      // List rooms
+      .mockImplementationOnce(async () => ({ 
+        rows: [{ 
+          id: 'r1', 
+          name: 'Table 1', 
+          game_type: 'NLH', 
+          max_players: 6, 
+          blind_levels: { sb: 1, bb: 2 }, 
+          created_by: '550e8400-e29b-41d4-a716-446655440000', 
+          created_at: new Date(), 
+          status: 'waiting', 
+          configuration: null 
+        }] 
+      }));
 
-    const created = await mgr.createRoom({ name: 'Table 1', gameType: 'NLH', maxPlayers: 6, blindLevels: { sb: 1, bb: 2 }, createdBy: 'u1' });
+    const created = await mgr.createRoom({ name: 'Table 1', gameType: 'NLH', maxPlayers: 6, blindLevels: { sb: 1, bb: 2 }, createdBy: '550e8400-e29b-41d4-a716-446655440000' });
     expect(created.name).toBe('Table 1');
     const rooms = await mgr.listRooms(1, 10);
     expect(rooms.total).toBe(1);
@@ -29,7 +57,19 @@ describe('GameManager (US-020)', () => {
 
   it('updates room status', async () => {
     (mockPool.query as jest.Mock)
-      .mockImplementationOnce(async () => ({ rows: [{ id: 'r1', name: 'T', game_type: 'NLH', max_players: 6, blind_levels: {}, created_by: 'u1', created_at: new Date(), status: 'active', configuration: null }] }));
+      .mockImplementationOnce(async () => ({ 
+        rows: [{ 
+          id: 'r1', 
+          name: 'T', 
+          game_type: 'NLH', 
+          max_players: 6, 
+          blind_levels: {}, 
+          created_by: '550e8400-e29b-41d4-a716-446655440000', 
+          created_at: new Date(), 
+          status: 'active', 
+          configuration: null 
+        }] 
+      }));
     const updated = await mgr.updateRoomStatus('r1', 'active');
     expect(updated.status).toBe('active');
   });
@@ -39,7 +79,19 @@ describe('GameManager (US-020)', () => {
       // start insert
       .mockImplementationOnce(async () => ({ rows: [{ id: 'g1', room_id: 'r1', current_hand_id: null, dealer_position: 0, current_player_position: 1, pot: 0, state: null, last_action_at: new Date() }] }))
       // update room status to active
-      .mockImplementationOnce(async () => ({ rows: [{ id: 'r1', name: 'T', game_type: 'NLH', max_players: 6, blind_levels: {}, created_by: 'u1', created_at: new Date(), status: 'active', configuration: null }] }))
+      .mockImplementationOnce(async () => ({ 
+        rows: [{ 
+          id: 'r1', 
+          name: 'T', 
+          game_type: 'NLH', 
+          max_players: 6, 
+          blind_levels: {}, 
+          created_by: '550e8400-e29b-41d4-a716-446655440000', 
+          created_at: new Date(), 
+          status: 'active', 
+          configuration: null 
+        }] 
+      }))
       // update game
       .mockImplementationOnce(async () => ({ rows: [{ id: 'g1', room_id: 'r1', current_hand_id: 'h1', dealer_position: 1, current_player_position: 2, pot: 10, state: { stage: 'flop' }, last_action_at: new Date() }] }))
       // get by room

@@ -23,12 +23,12 @@ function GameBoard({ gameId, headerSlot, tableState }: GameBoardProps) {
   }, [gameId]);
   
   return (
-    <div className="game-board">
+    <div className="game-board text-gray-900 dark:text-gray-100">
       <div className="flex items-center justify-between">
-        <h1>Game Board</h1>
+        <h1 className="text-lg font-semibold">Game Board</h1>
         {headerSlot}
       </div>
-      <p>Game ID: {gameId}</p>
+      <p className="text-sm text-gray-600 dark:text-gray-400">Game ID: {gameId}</p>
       {/* Game board content would go here */}
       {tableState?.variant && tableState.stage && (
         <div className="mt-4">

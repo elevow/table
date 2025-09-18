@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState, memo } from 'react';
+import { useEffect, useMemo, useState, memo, useCallback } from 'react';
 import type { ChatMessage } from '../types/chat';
-import { getSocket } from '../lib/clientSocket';
 
 interface ChatPanelProps {
   gameId: string;
@@ -15,11 +14,12 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
   const [reactions, setReactions] = useState<Record<string, Record<string, number>>>({});
   // Track current user's reactions for toggle behavior: myReactions[messageId][emoji] = true
   const [myReactions, setMyReactions] = useState<Record<string, Record<string, boolean>>>({});
+  const [socket, setSocket] = useState<any>(null);
 
   // lightweight emoji set for quick reactions
   const emojis = useMemo(() => ['👍', '❤️', '😂'], []);
 
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch(`/api/chat/room/list?roomId=${encodeURIComponent(gameId)}&limit=50`);
@@ -52,63 +52,80 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [gameId, playerId]);
 
   useEffect(() => {
+    // Initialize socket connection (non-blocking)
+    const initSocket = async () => {
+      try {
+        const { getSocket } = await import('../lib/clientSocket');
+        const socketInstance = await getSocket();
+        setSocket(socketInstance);
+      } catch (error) {
+        console.warn('Chat socket initialization failed, continuing without real-time chat:', error);
+      }
+    };
+    
+    // Don't block page load for socket initialization
+    setTimeout(() => {
+      initSocket();
+    }, 200);
+    
     fetchMessages();
-    const socket = getSocket();
-    if (socket) {
-      const onNew = (payload: { message: ChatMessage }) => {
-        // If this message belongs to this room, append if not already present
-        const m = payload?.message;
-        if (!m) return;
-        setMessages(prev => (prev.some(x => x.id === m.id) ? prev : [...prev, m]));
-      };
-      const onReact = (payload: { messageId: string; emoji: string; userId: string }) => {
-        if (!payload?.messageId || !payload?.emoji) return;
-        setReactions(prev => {
-          const current = { ...(prev[payload.messageId] || {}) };
-          current[payload.emoji] = (current[payload.emoji] || 0) + 1;
-          return { ...prev, [payload.messageId]: current };
-        });
-        if (playerId && payload.userId === playerId) {
-          setMyReactions(prev => ({
-            ...prev,
-            [payload.messageId]: { ...(prev[payload.messageId] || {}), [payload.emoji]: true }
-          }));
-        }
-      };
-      const onReactRemoved = (payload: { messageId: string; emoji: string; userId: string }) => {
-        if (!payload?.messageId || !payload?.emoji) return;
-        setReactions(prev => {
-          const current = { ...(prev[payload.messageId] || {}) };
-          if (current[payload.emoji] && current[payload.emoji] > 0) {
-            current[payload.emoji] = current[payload.emoji] - 1;
-            if (current[payload.emoji] <= 0) {
-              delete current[payload.emoji];
-            }
+  }, [gameId, fetchMessages]);
+
+  useEffect(() => {
+    if (!socket) return;
+    
+    const onNew = (payload: { message: ChatMessage }) => {
+      // If this message belongs to this room, append if not already present
+      const m = payload?.message;
+      if (!m) return;
+      setMessages(prev => (prev.some(x => x.id === m.id) ? prev : [...prev, m]));
+    };
+    const onReact = (payload: { messageId: string; emoji: string; userId: string }) => {
+      if (!payload?.messageId || !payload?.emoji) return;
+      setReactions(prev => {
+        const current = { ...(prev[payload.messageId] || {}) };
+        current[payload.emoji] = (current[payload.emoji] || 0) + 1;
+        return { ...prev, [payload.messageId]: current };
+      });
+      if (playerId && payload.userId === playerId) {
+        setMyReactions(prev => ({
+          ...prev,
+          [payload.messageId]: { ...(prev[payload.messageId] || {}), [payload.emoji]: true }
+        }));
+      }
+    };
+    const onReactRemoved = (payload: { messageId: string; emoji: string; userId: string }) => {
+      if (!payload?.messageId || !payload?.emoji) return;
+      setReactions(prev => {
+        const current = { ...(prev[payload.messageId] || {}) };
+        if (current[payload.emoji] && current[payload.emoji] > 0) {
+          current[payload.emoji] = current[payload.emoji] - 1;
+          if (current[payload.emoji] <= 0) {
+            delete current[payload.emoji];
           }
-          return { ...prev, [payload.messageId]: current };
-        });
-        if (playerId && payload.userId === playerId) {
-          setMyReactions(prev => {
-            const mine = { ...(prev[payload.messageId] || {}) };
-            if (mine[payload.emoji]) delete mine[payload.emoji];
-            return { ...prev, [payload.messageId]: mine };
-          });
         }
-      };
-      socket.on('chat:new_message', onNew);
-      socket.on('chat:reaction', onReact);
-      socket.on('chat:reaction_removed', onReactRemoved);
-      return () => {
-        socket.off('chat:new_message', onNew);
-        socket.off('chat:reaction', onReact);
-        socket.off('chat:reaction_removed', onReactRemoved);
-      };
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameId]);
+        return { ...prev, [payload.messageId]: current };
+      });
+      if (playerId && payload.userId === playerId) {
+        setMyReactions(prev => {
+          const mine = { ...(prev[payload.messageId] || {}) };
+          if (mine[payload.emoji]) delete mine[payload.emoji];
+          return { ...prev, [payload.messageId]: mine };
+        });
+      }
+    };
+    socket.on('chat:new_message', onNew);
+    socket.on('chat:reaction', onReact);
+    socket.on('chat:reaction_removed', onReactRemoved);
+    return () => {
+      socket.off('chat:new_message', onNew);
+      socket.off('chat:reaction', onReact);
+      socket.off('chat:reaction_removed', onReactRemoved);
+    };
+  }, [socket, playerId]);
 
   const handleSendMessage = async () => {
     const text = input.trim();
@@ -216,11 +233,11 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
 
   return (
     <div className="chat-panel">
-      <h2 className="text-xl font-semibold mb-2">Chat</h2>
-      <div className="messages space-y-2 max-h-80 overflow-auto p-2 border rounded">
+      <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">Chat</h2>
+      <div className="messages space-y-2 max-h-80 overflow-auto p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700">
         {messages.map((m) => (
           <div key={m.id} className="message">
-            <div className="text-sm">{m.message}</div>
+            <div className="text-sm text-gray-900 dark:text-gray-100">{m.message}</div>
             <div className="flex items-center gap-2 mt-1">
         {emojis.map((e) => (
                 <button
@@ -234,7 +251,7 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
                   {e}
                 </button>
               ))}
-              <div className="text-xs text-gray-600">
+              <div className="text-xs text-gray-600 dark:text-gray-400">
                 {Object.entries(reactions[m.id] || {}).map(([e, c]) => (
                   <span key={e} className="mr-2">{e} {c}</span>
                 ))}
@@ -243,7 +260,7 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
           </div>
         ))}
         {messages.length === 0 && (
-          <div className="text-sm text-gray-500">No messages yet.</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">No messages yet.</div>
         )}
       </div>
       <div className="chat-input mt-3 flex gap-2">
@@ -253,12 +270,12 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           disabled={loading || !playerId}
-          className="flex-1 border rounded px-2 py-1"
+          className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400"
         />
         <button
           onClick={handleSendMessage}
           disabled={loading || !playerId || !input.trim()}
-          className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white px-3 py-1 rounded"
+          className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white px-3 py-1 rounded"
         >
           Send
         </button>

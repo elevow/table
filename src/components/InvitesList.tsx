@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FriendInviteRecord, Paginated } from '../types/friend';
 import { fetchInvites, respondToInvite } from '../services/friends-ui';
-import { getSocket } from '../lib/clientSocket';
 
 type Props = {
   userId: string;
@@ -14,6 +13,7 @@ export default function InvitesList({ userId, kind = 'incoming', page = 1, limit
   const [data, setData] = useState<Paginated<FriendInviteRecord> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [socket, setSocket] = useState<any>(null);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -26,9 +26,26 @@ export default function InvitesList({ userId, kind = 'incoming', page = 1, limit
     return () => ctl.abort();
   }, [userId, kind, page, limit]);
 
+  // Initialize socket connection (non-blocking)
+  useEffect(() => {
+    const initSocket = async () => {
+      try {
+        const { getSocket } = await import('../lib/clientSocket');
+        const socketInstance = await getSocket();
+        setSocket(socketInstance);
+      } catch (error) {
+        console.warn('Invites socket initialization failed, continuing without real-time updates:', error);
+      }
+    };
+    
+    // Don't block page load for socket initialization
+    setTimeout(() => {
+      initSocket();
+    }, 400);
+  }, []);
+
   // Realtime: join personal room and listen for invites updates
   useEffect(() => {
-    const socket = getSocket();
     if (!socket || !userId) return;
 
     const onCreated = ({ invite }: { invite: FriendInviteRecord }) => {
@@ -58,7 +75,7 @@ export default function InvitesList({ userId, kind = 'incoming', page = 1, limit
       socket.off('friends:invite_created', onCreated);
       socket.off('friends:invite_updated', onUpdated);
     };
-  }, [userId, kind]);
+  }, [userId, kind, socket]);
 
   const items = useMemo(() => data?.items ?? [], [data]);
 

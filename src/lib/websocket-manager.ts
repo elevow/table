@@ -38,11 +38,15 @@ export class WebSocketManager {
     this.systemMonitor = SystemMonitor.getInstance();
 
     this.io = new SocketServer(server, {
-      transports: ['websocket'],
-      allowUpgrades: false,
+      transports: ['websocket', 'polling'], // Allow fallback to polling
+      allowUpgrades: true,
       pingInterval: this.config.pingInterval,
       pingTimeout: this.config.timeout,
-      connectTimeout: this.config.timeout
+      connectTimeout: this.config.timeout,
+      cors: {
+        origin: process.env.NODE_ENV === 'development' ? '*' : false,
+        methods: ['GET', 'POST']
+      }
     });
 
     this.setupEventHandlers();
@@ -53,6 +57,11 @@ export class WebSocketManager {
       WebSocketManager.instance = new WebSocketManager(server, config);
     }
     return WebSocketManager.instance;
+  }
+
+  // Get the Socket.IO server instance
+  public getSocketServer(): SocketServer {
+    return this.io;
   }
 
   private setupEventHandlers(): void {

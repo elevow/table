@@ -3,6 +3,7 @@
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 import { ActiveGameRecord, CreateRoomInput, GameRoomRecord, Paginated, StartGameInput, UpdateActiveGameInput } from '../../types/game';
+import { generateUniqueRoomCode } from '../utils/room-code-generator';
 
 class GameError extends Error {
   code: string;
@@ -20,7 +21,31 @@ export class GameManager {
 
   // Rooms
   async createRoom(input: CreateRoomInput): Promise<GameRoomRecord> {
-    const id = uuidv4();
+    // Generate a unique 8-character alphanumeric room code instead of UUID
+    let id = generateUniqueRoomCode();
+    
+    // Ensure uniqueness by checking for collisions (very rare with 8-char codes)
+    let attempts = 0;
+    const maxAttempts = 5;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const existing = await this.pool.query('SELECT 1 FROM game_rooms WHERE id = $1 LIMIT 1', [id]);
+        if (existing.rows.length === 0) {
+          break; // ID is unique
+        }
+        // Generate a new code if collision found
+        id = generateUniqueRoomCode();
+        attempts++;
+      } catch (err) {
+        // If the query fails (e.g., table doesn't exist), we'll proceed and let the insert handle it
+        break;
+      }
+    }
+    
+    if (attempts >= maxAttempts) {
+      throw new GameError('Unable to generate unique room code after multiple attempts', 'GENERATION_ERROR');
+    }
     // created_by references users(id). In dev or non-auth flows, the provided createdBy may not be a valid/existing UUID.
     // We'll validate format and existence; if not valid or missing, store NULL (the column is nullable with ON DELETE SET NULL semantics elsewhere).
     const isValidUuid = (v: string | undefined): boolean => !!v && /^(?!00000000-0000-0000-0000-000000000000)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);

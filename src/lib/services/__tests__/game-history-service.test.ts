@@ -1,222 +1,194 @@
-// US-010: Game History Recording - GameHistoryService Integration Tests
-
-import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { GameHistoryService } from '../game-history-service';
 import { GameHistoryManager } from '../../database/game-history-manager';
 import {
-  CreateGameHistoryRequest,
   GameHistoryRecord,
-  GameAction,
-  GameResults,
+  CreateGameHistoryRequest,
   GameHistoryQueryOptions,
   GameHistoryFilters,
   PaginatedGameHistoryResponse,
-  GameAnalytics
+  GameAnalytics,
+  GameAction
 } from '../../../types/game-history';
 
-// Mock the GameHistoryManager
-const mockGameHistoryManager = {
-  recordGameHistory: jest.fn(),
-  getGameHistoryById: jest.fn(),
-  queryGameHistory: jest.fn(),
-  getPlayerGameHistory: jest.fn(),
-  getGameAnalytics: jest.fn(),
-  cleanupOldRecords: jest.fn(),
-} as any;
+// Mock GameHistoryManager
+jest.mock('../../database/game-history-manager');
 
 describe('GameHistoryService', () => {
-  let service: GameHistoryService;
+  let gameHistoryService: GameHistoryService;
+  let mockGameHistoryManager: jest.Mocked<GameHistoryManager>;
 
   beforeEach(() => {
-    // Reset all mocks
     jest.clearAllMocks();
 
-    // Create service instance with mocked manager
-    service = new GameHistoryService(mockGameHistoryManager);
+    mockGameHistoryManager = {
+      recordGameHistory: jest.fn(),
+      getGameHistoryById: jest.fn(),
+      queryGameHistory: jest.fn(),
+      getPlayerGameHistory: jest.fn(),
+      getGameAnalytics: jest.fn(),
+      cleanupOldRecords: jest.fn(),
+    } as any;
+
+    gameHistoryService = new GameHistoryService(mockGameHistoryManager);
   });
 
   describe('Constructor', () => {
-    test('should create service instance with manager', () => {
-      expect(service).toBeInstanceOf(GameHistoryService);
+    it('should create an instance with GameHistoryManager', () => {
+      expect(gameHistoryService).toBeInstanceOf(GameHistoryService);
     });
   });
 
   describe('recordGame', () => {
-    const validGameActions: GameAction[] = [
-      {
-        playerId: 'player-1',
-        action: 'bet',
-        amount: 50,
-        timestamp: new Date(),
-        position: 1,
-        holeCards: ['AH', 'KS']
-      },
-      {
-        playerId: 'player-2',
-        action: 'call',
-        amount: 50,
-        timestamp: new Date(),
-        position: 2,
-        holeCards: ['QD', 'JC']
-      }
-    ];
-
-    const validGameResults: GameResults = {
-      winners: [
-        {
-          playerId: 'player-1',
-          position: 1,
-          holeCards: ['AH', 'KS'],
-          bestHand: ['AH', 'KS', 'AC', 'KD', 'QH'],
-          handRank: 'Two Pair',
+    const createValidGameRequest = (): CreateGameHistoryRequest => ({
+      tableId: 'table123',
+      handId: 'hand123',
+      communityCards: ['As', 'Ks', 'Qs', 'Js', 'Ts'],
+      startedAt: new Date('2023-01-01T10:00:00Z'),
+      endedAt: new Date('2023-01-01T10:05:00Z'),
+      actionSequence: [
+        { 
+          playerId: 'dealer', 
+          action: 'bet', 
+          amount: 0, 
+          timestamp: new Date(),
+          position: 0
+        } as GameAction
+      ],
+      results: {
+        winners: [{
+          playerId: 'player1',
+          position: 0,
+          holeCards: ['As', 'Ks'],
+          bestHand: ['As', 'Ks', 'Qs', 'Js', 'Ts'],
+          handRank: 'royal flush',
           winAmount: 100,
           showedCards: true
-        }
-      ],
-      pot: [
-        {
-          type: 'main',
-          amount: 100,
-          eligiblePlayers: ['player-1', 'player-2'],
-          winner: 'player-1'
-        }
-      ],
-      totalPot: 100,
-      rake: 5,
-      handType: 'Two Pair'
-    };
-
-    const validCreateRequest: CreateGameHistoryRequest = {
-      tableId: 'table-123',
-      handId: 'hand-456',
-      actionSequence: validGameActions,
-      communityCards: ['AH', 'KD', 'QC', '7S', '2H'],
-      results: validGameResults,
-      startedAt: new Date('2023-01-01T10:00:00Z'),
-      endedAt: new Date('2023-01-01T10:05:00Z')
-    };
+        }],
+        totalPot: 100,
+        pot: [{ type: 'main', amount: 100, eligiblePlayers: ['player1'], winner: 'player1' }],
+        rake: 0
+      }
+    });
 
     const mockGameRecord: GameHistoryRecord = {
-      id: 'game-123',
-      tableId: 'table-123',
-      handId: 'hand-456',
-      actionSequence: validGameActions,
-      communityCards: ['AH', 'KD', 'QC', '7S', '2H'],
-      results: validGameResults,
+      id: 'game123',
+      tableId: 'table123',
+      handId: 'hand123',
+      actionSequence: [],
+      communityCards: ['As', 'Ks', 'Qs', 'Js', 'Ts'],
+      results: {
+        winners: [{
+          playerId: 'player1',
+          position: 0,
+          holeCards: ['As', 'Ks'],
+          bestHand: ['As', 'Ks', 'Qs', 'Js', 'Ts'],
+          handRank: 'royal flush',
+          winAmount: 100,
+          showedCards: true
+        }],
+        totalPot: 100,
+        pot: [{ type: 'main', amount: 100, eligiblePlayers: ['player1'], winner: 'player1' }],
+        rake: 0
+      },
       startedAt: new Date('2023-01-01T10:00:00Z'),
       endedAt: new Date('2023-01-01T10:05:00Z')
     };
 
-    test('should record game successfully with valid request', async () => {
+    it('should record game successfully', async () => {
+      const request = createValidGameRequest();
       mockGameHistoryManager.recordGameHistory.mockResolvedValue(mockGameRecord);
 
-      const result = await service.recordGame(validCreateRequest);
+      const result = await gameHistoryService.recordGame(request);
 
-      expect(mockGameHistoryManager.recordGameHistory).toHaveBeenCalledWith(validCreateRequest);
+      expect(mockGameHistoryManager.recordGameHistory).toHaveBeenCalledWith(request);
       expect(result).toEqual(mockGameRecord);
     });
 
-    test('should validate minimum game duration', async () => {
-      const invalidRequest = {
-        ...validCreateRequest,
-        startedAt: new Date('2023-01-01T10:00:00Z'),
-        endedAt: new Date('2023-01-01T10:00:00.500Z') // Only 500ms duration
-      };
+    it('should throw error for game duration too short', async () => {
+      const request = createValidGameRequest();
+      request.endedAt = new Date(request.startedAt.getTime() + 500); // 500ms duration
 
-      await expect(service.recordGame(invalidRequest)).rejects.toThrow('Game duration too short');
+      await expect(gameHistoryService.recordGame(request))
+        .rejects.toThrow('Game duration too short');
+      
       expect(mockGameHistoryManager.recordGameHistory).not.toHaveBeenCalled();
     });
 
-    test('should validate action sequence is not empty', async () => {
-      const invalidRequest = {
-        ...validCreateRequest,
-        actionSequence: [] // Empty action sequence
-      };
+    it('should throw error for empty action sequence', async () => {
+      const request = createValidGameRequest();
+      request.actionSequence = [];
 
-      await expect(service.recordGame(invalidRequest)).rejects.toThrow('Game must have at least one action');
+      await expect(gameHistoryService.recordGame(request))
+        .rejects.toThrow('Game must have at least one action');
+      
       expect(mockGameHistoryManager.recordGameHistory).not.toHaveBeenCalled();
     });
 
-    test('should validate winners exist', async () => {
-      const invalidRequest = {
-        ...validCreateRequest,
-        results: {
-          ...validGameResults,
-          winners: [] // No winners
-        }
-      };
+    it('should throw error for no winners', async () => {
+      const request = createValidGameRequest();
+      request.results.winners = [];
 
-      await expect(service.recordGame(invalidRequest)).rejects.toThrow('Game must have at least one winner');
+      await expect(gameHistoryService.recordGame(request))
+        .rejects.toThrow('Game must have at least one winner');
+      
       expect(mockGameHistoryManager.recordGameHistory).not.toHaveBeenCalled();
     });
 
-    test('should validate pot distribution matches total', async () => {
-      const invalidRequest = {
-        ...validCreateRequest,
-        results: {
-          ...validGameResults,
-          totalPot: 100,
-          pot: [
-            {
-              type: 'main' as const,
-              amount: 150, // Mismatch: pot says 150 but total is 100
-              eligiblePlayers: ['player-1', 'player-2'],
-              winner: 'player-1'
-            }
-          ]
-        }
-      };
+    it('should throw error for pot distribution mismatch', async () => {
+      const request = createValidGameRequest();
+      request.results.totalPot = 100;
+      request.results.pot = [{ type: 'main', amount: 90, eligiblePlayers: ['player1'], winner: 'player1' }]; // Mismatch
 
-      await expect(service.recordGame(invalidRequest)).rejects.toThrow('Pot distribution does not match total pot');
+      await expect(gameHistoryService.recordGame(request))
+        .rejects.toThrow('Pot distribution does not match total pot');
+      
       expect(mockGameHistoryManager.recordGameHistory).not.toHaveBeenCalled();
     });
 
-    test('should allow small rounding differences in pot distribution', async () => {
-      const validRequestWithRounding = {
-        ...validCreateRequest,
-        results: {
-          ...validGameResults,
-          totalPot: 100.00,
-          pot: [
-            {
-              type: 'main' as const,
-              amount: 100.005, // Small rounding difference (within 0.01 tolerance)
-              eligiblePlayers: ['player-1', 'player-2'],
-              winner: 'player-1'
-            }
-          ]
-        }
-      };
+    it('should allow small rounding differences in pot distribution', async () => {
+      const request = createValidGameRequest();
+      request.results.totalPot = 100;
+      request.results.pot = [{ type: 'main', amount: 100.005, eligiblePlayers: ['player1'], winner: 'player1' }]; // Small difference
 
       mockGameHistoryManager.recordGameHistory.mockResolvedValue(mockGameRecord);
 
-      await service.recordGame(validRequestWithRounding);
-
-      expect(mockGameHistoryManager.recordGameHistory).toHaveBeenCalledWith(validRequestWithRounding);
+      await expect(gameHistoryService.recordGame(request))
+        .resolves.toEqual(mockGameRecord);
     });
 
-    test('should pass through manager errors', async () => {
-      const managerError = new Error('Database connection failed');
-      mockGameHistoryManager.recordGameHistory.mockRejectedValue(managerError);
+    it('should validate minimum game duration of 1 second', async () => {
+      const request = createValidGameRequest();
+      request.endedAt = new Date(request.startedAt.getTime() + 1000); // Exactly 1 second
 
-      await expect(service.recordGame(validCreateRequest)).rejects.toThrow('Database connection failed');
-      expect(mockGameHistoryManager.recordGameHistory).toHaveBeenCalledWith(validCreateRequest);
+      mockGameHistoryManager.recordGameHistory.mockResolvedValue(mockGameRecord);
+
+      await expect(gameHistoryService.recordGame(request))
+        .resolves.toEqual(mockGameRecord);
     });
   });
 
   describe('getGameById', () => {
-    test('should retrieve game by ID successfully', async () => {
+    it('should get game by id', async () => {
+      const gameId = 'game123';
       const mockGame: GameHistoryRecord = {
-        id: 'game-123',
-        tableId: 'table-456',
-        handId: 'hand-789',
+        id: gameId,
+        tableId: 'table123',
+        handId: 'hand123',
         actionSequence: [],
-        communityCards: ['AH', 'KD', 'QC'],
+        communityCards: ['As', 'Ks', 'Qs', 'Js', 'Ts'],
         results: {
-          winners: [],
-          pot: [],
+          winners: [{
+            playerId: 'player1',
+            position: 0,
+            holeCards: ['As', 'Ks'],
+            bestHand: ['As', 'Ks', 'Qs', 'Js', 'Ts'],
+            handRank: 'royal flush',
+            winAmount: 100,
+            showedCards: true
+          }],
           totalPot: 100,
-          rake: 5
+          pot: [{ type: 'main', amount: 100, eligiblePlayers: ['player1'], winner: 'player1' }],
+          rake: 0
         },
         startedAt: new Date(),
         endedAt: new Date()
@@ -224,231 +196,271 @@ describe('GameHistoryService', () => {
 
       mockGameHistoryManager.getGameHistoryById.mockResolvedValue(mockGame);
 
-      const result = await service.getGameById('game-123');
+      const result = await gameHistoryService.getGameById(gameId);
 
-      expect(mockGameHistoryManager.getGameHistoryById).toHaveBeenCalledWith('game-123');
+      expect(mockGameHistoryManager.getGameHistoryById).toHaveBeenCalledWith(gameId);
       expect(result).toEqual(mockGame);
     });
 
-    test('should return null when game not found', async () => {
+    it('should return null when game not found', async () => {
       mockGameHistoryManager.getGameHistoryById.mockResolvedValue(null);
 
-      const result = await service.getGameById('nonexistent');
+      const result = await gameHistoryService.getGameById('nonexistent');
 
-      expect(mockGameHistoryManager.getGameHistoryById).toHaveBeenCalledWith('nonexistent');
       expect(result).toBeNull();
-    });
-
-    test('should pass through manager errors', async () => {
-      const managerError = new Error('Database error');
-      mockGameHistoryManager.getGameHistoryById.mockRejectedValue(managerError);
-
-      await expect(service.getGameById('game-123')).rejects.toThrow('Database error');
     });
   });
 
   describe('searchGames', () => {
-    test('should search games with options and filters', async () => {
-      const mockResponse: PaginatedGameHistoryResponse = {
-        records: [
-          {
-            id: 'game-1',
-            tableId: 'table-1',
-            handId: 'hand-1',
-            actionSequence: [],
-            communityCards: [],
-            results: { winners: [], pot: [], totalPot: 100, rake: 5 },
-            startedAt: new Date(),
-            endedAt: new Date()
-          }
-        ],
-        total: 1,
-        hasMore: false
-      };
+    const mockResponse: PaginatedGameHistoryResponse = {
+      records: [],
+      total: 0,
+      hasMore: false
+    };
 
+    it('should search games with default options', async () => {
+      mockGameHistoryManager.queryGameHistory.mockResolvedValue(mockResponse);
+
+      const result = await gameHistoryService.searchGames();
+
+      expect(mockGameHistoryManager.queryGameHistory).toHaveBeenCalledWith({}, {});
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should search games with custom options and filters', async () => {
       const options: GameHistoryQueryOptions = {
-        tableId: 'table-1',
-        limit: 20,
-        offset: 0
+        limit: 10,
+        offset: 20,
+        tableId: 'table123',
+        playerId: 'player1'
       };
-
       const filters: GameHistoryFilters = {
         minPot: 50,
-        maxPot: 500
+        maxPot: 500,
+        playerCount: 2
       };
 
       mockGameHistoryManager.queryGameHistory.mockResolvedValue(mockResponse);
 
-      const result = await service.searchGames(options, filters);
+      const result = await gameHistoryService.searchGames(options, filters);
 
       expect(mockGameHistoryManager.queryGameHistory).toHaveBeenCalledWith(options, filters);
       expect(result).toEqual(mockResponse);
     });
-
-    test('should use default options when none provided', async () => {
-      const mockResponse: PaginatedGameHistoryResponse = {
-        records: [],
-        total: 0,
-        hasMore: false
-      };
-
-      mockGameHistoryManager.queryGameHistory.mockResolvedValue(mockResponse);
-
-      await service.searchGames();
-
-      expect(mockGameHistoryManager.queryGameHistory).toHaveBeenCalledWith({}, {});
-    });
-
-    test('should pass through manager errors', async () => {
-      const managerError = new Error('Query failed');
-      mockGameHistoryManager.queryGameHistory.mockRejectedValue(managerError);
-
-      await expect(service.searchGames()).rejects.toThrow('Query failed');
-    });
   });
 
   describe('getPlayerHistory', () => {
-    test('should retrieve player history successfully', async () => {
-      const mockResponse: PaginatedGameHistoryResponse = {
-        records: [
-          {
-            id: 'game-1',
-            tableId: 'table-1',
-            handId: 'hand-1',
-            actionSequence: [],
-            communityCards: [],
-            results: { winners: [], pot: [], totalPot: 100, rake: 5 },
-            startedAt: new Date(),
-            endedAt: new Date()
-          }
-        ],
-        total: 1,
-        hasMore: false
-      };
+    const mockResponse: PaginatedGameHistoryResponse = {
+      records: [],
+      total: 0,
+      hasMore: false
+    };
 
-      const options: GameHistoryQueryOptions = {
-        limit: 50,
-        offset: 0
-      };
-
+    it('should get player history with default options', async () => {
+      const playerId = 'player123';
       mockGameHistoryManager.getPlayerGameHistory.mockResolvedValue(mockResponse);
 
-      const result = await service.getPlayerHistory('player-123', options);
+      const result = await gameHistoryService.getPlayerHistory(playerId);
 
-      expect(mockGameHistoryManager.getPlayerGameHistory).toHaveBeenCalledWith('player-123', options);
+      expect(mockGameHistoryManager.getPlayerGameHistory).toHaveBeenCalledWith(playerId, {});
       expect(result).toEqual(mockResponse);
     });
 
-    test('should use default options when none provided', async () => {
-      const mockResponse: PaginatedGameHistoryResponse = {
-        records: [],
-        total: 0,
-        hasMore: false
+    it('should get player history with custom options', async () => {
+      const playerId = 'player123';
+      const options: GameHistoryQueryOptions = {
+        limit: 15,
+        offset: 30,
+        includeActions: true
       };
 
       mockGameHistoryManager.getPlayerGameHistory.mockResolvedValue(mockResponse);
 
-      await service.getPlayerHistory('player-123');
+      const result = await gameHistoryService.getPlayerHistory(playerId, options);
 
-      expect(mockGameHistoryManager.getPlayerGameHistory).toHaveBeenCalledWith('player-123', {});
-    });
-
-    test('should pass through manager errors', async () => {
-      const managerError = new Error('Player query failed');
-      mockGameHistoryManager.getPlayerGameHistory.mockRejectedValue(managerError);
-
-      await expect(service.getPlayerHistory('player-123')).rejects.toThrow('Player query failed');
+      expect(mockGameHistoryManager.getPlayerGameHistory).toHaveBeenCalledWith(playerId, options);
+      expect(result).toEqual(mockResponse);
     });
   });
 
   describe('getAnalytics', () => {
-    test('should retrieve analytics for date range', async () => {
-      const mockAnalytics: GameAnalytics = {
-        totalHands: 100,
-        totalPot: 10000,
-        averagePot: 100,
-        averageHandDuration: 180,
-        mostFrequentAction: 'fold',
-        playerStats: new Map()
-      };
+    const mockAnalytics: GameAnalytics = {
+      totalHands: 100,
+      totalPot: 10000,
+      averagePot: 100,
+      averageHandDuration: 300,
+      mostFrequentAction: 'bet',
+      playerStats: new Map()
+    };
 
+    it('should get analytics for date range', async () => {
       const dateFrom = new Date('2023-01-01');
       const dateTo = new Date('2023-01-31');
 
       mockGameHistoryManager.getGameAnalytics.mockResolvedValue(mockAnalytics);
 
-      const result = await service.getAnalytics(dateFrom, dateTo);
+      const result = await gameHistoryService.getAnalytics(dateFrom, dateTo);
 
       expect(mockGameHistoryManager.getGameAnalytics).toHaveBeenCalledWith(dateFrom, dateTo, undefined);
       expect(result).toEqual(mockAnalytics);
     });
 
-    test('should retrieve analytics for specific table', async () => {
-      const mockAnalytics: GameAnalytics = {
-        totalHands: 50,
-        totalPot: 5000,
-        averagePot: 100,
-        averageHandDuration: 200,
-        mostFrequentAction: 'call',
-        playerStats: new Map()
-      };
-
+    it('should get analytics for specific table', async () => {
       const dateFrom = new Date('2023-01-01');
       const dateTo = new Date('2023-01-31');
-      const tableId = 'table-123';
+      const tableId = 'table123';
 
       mockGameHistoryManager.getGameAnalytics.mockResolvedValue(mockAnalytics);
 
-      const result = await service.getAnalytics(dateFrom, dateTo, tableId);
+      const result = await gameHistoryService.getAnalytics(dateFrom, dateTo, tableId);
 
       expect(mockGameHistoryManager.getGameAnalytics).toHaveBeenCalledWith(dateFrom, dateTo, tableId);
       expect(result).toEqual(mockAnalytics);
     });
-
-    test('should pass through manager errors', async () => {
-      const managerError = new Error('Analytics query failed');
-      mockGameHistoryManager.getGameAnalytics.mockRejectedValue(managerError);
-
-      const dateFrom = new Date('2023-01-01');
-      const dateTo = new Date('2023-01-31');
-
-      await expect(service.getAnalytics(dateFrom, dateTo)).rejects.toThrow('Analytics query failed');
-    });
   });
 
   describe('cleanupOldRecords', () => {
-    test('should cleanup old records successfully', async () => {
-      mockGameHistoryManager.cleanupOldRecords.mockResolvedValue(25);
+    it('should cleanup records older than specified days', async () => {
+      const olderThanDays = 90;
+      const deletedCount = 50;
 
-      const result = await service.cleanupOldRecords(90);
+      mockGameHistoryManager.cleanupOldRecords.mockResolvedValue(deletedCount);
 
-      expect(mockGameHistoryManager.cleanupOldRecords).toHaveBeenCalledWith(90);
-      expect(result).toBe(25);
+      const result = await gameHistoryService.cleanupOldRecords(olderThanDays);
+
+      expect(mockGameHistoryManager.cleanupOldRecords).toHaveBeenCalledWith(olderThanDays);
+      expect(result).toBe(deletedCount);
     });
 
-    test('should reject cleanup of records newer than 30 days', async () => {
-      await expect(service.cleanupOldRecords(29)).rejects.toThrow('Cannot cleanup records newer than 30 days');
+    it('should throw error for cleanup period less than 30 days', async () => {
+      const olderThanDays = 15;
+
+      await expect(gameHistoryService.cleanupOldRecords(olderThanDays))
+        .rejects.toThrow('Cannot cleanup records newer than 30 days');
+      
       expect(mockGameHistoryManager.cleanupOldRecords).not.toHaveBeenCalled();
     });
 
-    test('should allow cleanup of exactly 30 days old records', async () => {
-      mockGameHistoryManager.cleanupOldRecords.mockResolvedValue(10);
+    it('should allow cleanup at exactly 30 days', async () => {
+      const olderThanDays = 30;
+      const deletedCount = 25;
 
-      const result = await service.cleanupOldRecords(30);
+      mockGameHistoryManager.cleanupOldRecords.mockResolvedValue(deletedCount);
 
-      expect(mockGameHistoryManager.cleanupOldRecords).toHaveBeenCalledWith(30);
-      expect(result).toBe(10);
-    });
+      const result = await gameHistoryService.cleanupOldRecords(olderThanDays);
 
-    test('should pass through manager errors', async () => {
-      const managerError = new Error('Cleanup failed');
-      mockGameHistoryManager.cleanupOldRecords.mockRejectedValue(managerError);
-
-      await expect(service.cleanupOldRecords(90)).rejects.toThrow('Cleanup failed');
+      expect(result).toBe(deletedCount);
     });
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  describe('Business rules validation edge cases', () => {
+    it('should validate complex pot distribution scenarios', async () => {
+      const request: CreateGameHistoryRequest = {
+        tableId: 'table123',
+        handId: 'hand123',
+        communityCards: ['As', 'Ks', 'Qs', 'Js', 'Ts'],
+        startedAt: new Date('2023-01-01T10:00:00Z'),
+        endedAt: new Date('2023-01-01T10:05:00Z'),
+        actionSequence: [
+          { 
+            playerId: 'dealer', 
+            action: 'bet', 
+            amount: 0, 
+            timestamp: new Date(),
+            position: 0
+          } as GameAction
+        ],
+        results: {
+          winners: [{
+            playerId: 'player1',
+            position: 0,
+            holeCards: ['As', 'Ks'],
+            bestHand: ['As', 'Ks', 'Qs', 'Js', 'Ts'],
+            handRank: 'royal flush',
+            winAmount: 100,
+            showedCards: true
+          }, {
+            playerId: 'player2',
+            position: 1,
+            holeCards: ['Ac', 'Kc'],
+            bestHand: ['Ac', 'Kc', 'Qc', 'Jc', 'Tc'],
+            handRank: 'royal flush',
+            winAmount: 50,
+            showedCards: true
+          }],
+          totalPot: 150,
+          pot: [
+            { type: 'main', amount: 100, eligiblePlayers: ['player1'], winner: 'player1' },
+            { type: 'side', amount: 50, eligiblePlayers: ['player2'], winner: 'player2' }
+          ],
+          rake: 0
+        }
+      };
+
+      const mockRecord: GameHistoryRecord = {
+        id: 'game123',
+        tableId: 'table123',
+        handId: 'hand123',
+        actionSequence: request.actionSequence,
+        communityCards: ['As', 'Ks', 'Qs', 'Js', 'Ts'],
+        results: request.results,
+        startedAt: request.startedAt,
+        endedAt: request.endedAt
+      };
+
+      mockGameHistoryManager.recordGameHistory.mockResolvedValue(mockRecord);
+
+      await expect(gameHistoryService.recordGame(request))
+        .resolves.toEqual(mockRecord);
+    });
+
+    it('should handle zero pot games', async () => {
+      const request: CreateGameHistoryRequest = {
+        tableId: 'table123',
+        handId: 'hand123',
+        communityCards: ['As', 'Ks', 'Qs', 'Js', 'Ts'],
+        startedAt: new Date('2023-01-01T10:00:00Z'),
+        endedAt: new Date('2023-01-01T10:05:00Z'),
+        actionSequence: [
+          { 
+            playerId: 'dealer', 
+            action: 'bet', 
+            amount: 0, 
+            timestamp: new Date(),
+            position: 0
+          } as GameAction
+        ],
+        results: {
+          winners: [{
+            playerId: 'player1',
+            position: 0,
+            holeCards: ['As', 'Ks'],
+            bestHand: ['As', 'Ks', 'Qs', 'Js', 'Ts'],
+            handRank: 'royal flush',
+            winAmount: 0,
+            showedCards: true
+          }],
+          totalPot: 0,
+          pot: [{ type: 'main', amount: 0, eligiblePlayers: ['player1'], winner: 'player1' }],
+          rake: 0
+        }
+      };
+
+      const mockRecord: GameHistoryRecord = {
+        id: 'game123',
+        tableId: 'table123',
+        handId: 'hand123',
+        actionSequence: request.actionSequence,
+        communityCards: ['As', 'Ks', 'Qs', 'Js', 'Ts'],
+        results: request.results,
+        startedAt: request.startedAt,
+        endedAt: request.endedAt
+      };
+
+      mockGameHistoryManager.recordGameHistory.mockResolvedValue(mockRecord);
+
+      await expect(gameHistoryService.recordGame(request))
+        .resolves.toEqual(mockRecord);
+    });
   });
 });

@@ -1,168 +1,598 @@
 import { GameService } from '../game-service';
 import { GameManager } from '../../database/game-manager';
-import { ActiveGameRecord, CreateRoomInput, GameRoomRecord } from '../../../types/game';
+import { validateTournamentConfig } from '../../tournament/tournament-utils';
+import { Pool } from 'pg';
+import {
+  ActiveGameRecord,
+  CreateRoomInput,
+  GameRoomRecord,
+  Paginated,
+  StartGameInput,
+  UpdateActiveGameInput
+} from '../../../types/game';
 
-// Mock GameManager so GameService delegates without touching DB
-jest.mock('../../database/game-manager', () => {
-  return {
-    GameManager: jest.fn().mockImplementation(() => ({
-      getRoomById: jest.fn(async (_roomId: string) => ({
-        id: _roomId,
-        name: 'Room',
-        gameType: 'poker',
-        maxPlayers: 6,
-        blindLevels: {},
-        createdBy: 'u1',
-        createdAt: new Date(),
-        status: 'waiting',
-  configuration: { bettingMode: 'pot-limit', requireRunItTwiceUnanimous: true },
-      })),
-      createRoom: jest.fn(async (input: CreateRoomInput): Promise<GameRoomRecord> => ({
-        id: 'room-1',
-        name: input.name,
-        gameType: input.gameType,
-        maxPlayers: input.maxPlayers,
-        blindLevels: input.blindLevels ?? {},
-        createdBy: input.createdBy,
-        createdAt: new Date(),
-        status: 'waiting',
-        configuration: input.configuration ?? null,
-      })),
-      listRooms: jest.fn(async (_p: number, _l: number) => ({
-        items: [],
-        total: 0,
-        page: _p,
-        limit: _l,
-        totalPages: 0,
-      })),
-      startGame: jest.fn(async (): Promise<ActiveGameRecord> => ({
-        id: 'ag-1',
-        roomId: 'room-1',
-        currentHandId: null,
-        dealerPosition: 0,
-        currentPlayerPosition: 0,
-        pot: 0,
-        state: null,
-        lastActionAt: new Date(),
-      })),
-      updateActiveGame: jest.fn(async (partial: any): Promise<ActiveGameRecord> => ({
-        id: partial.id,
-        roomId: 'room-1',
-        currentHandId: partial.currentHandId ?? null,
-        dealerPosition: partial.dealerPosition ?? 0,
-        currentPlayerPosition: partial.currentPlayerPosition ?? 0,
-        pot: partial.pot ?? 0,
-        state: partial.state ?? null,
-        lastActionAt: new Date(),
-      })),
-      endGame: jest.fn(async () => {}),
-      getActiveGameByRoom: jest.fn(async (_roomId: string): Promise<ActiveGameRecord | null> => ({
-        id: 'ag-1',
-        roomId: _roomId,
-        currentHandId: null,
-        dealerPosition: 0,
-        currentPlayerPosition: 0,
-        pot: 0,
-        state: null,
-        lastActionAt: new Date(),
-      })),
-    })),
-  };
-});
+// Mock dependencies
+jest.mock('../../database/game-manager');
+jest.mock('../../tournament/tournament-utils');
 
 describe('GameService', () => {
-  const getMgr = () => (GameManager as unknown as jest.Mock).mock.results[(GameManager as unknown as jest.Mock).mock.results.length - 1].value as any;
+  let gameService: GameService;
+  let mockGameManager: jest.Mocked<GameManager>;
+  let mockPool: jest.Mocked<Pool>;
+  let mockValidateTournamentConfig: jest.MockedFunction<typeof validateTournamentConfig>;
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    mockPool = {} as jest.Mocked<Pool>;
+
+    mockGameManager = {
+      createRoom: jest.fn(),
+      listRooms: jest.fn(),
+      startGame: jest.fn(),
+      updateActiveGame: jest.fn(),
+      endGame: jest.fn(),
+      getActiveGameByRoom: jest.fn(),
+      getRoomById: jest.fn(),
+    } as any;
+
+    mockValidateTournamentConfig = validateTournamentConfig as jest.MockedFunction<typeof validateTournamentConfig>;
+
+    (GameManager as jest.MockedClass<typeof GameManager>).mockImplementation(() => mockGameManager);
+    
+    gameService = new GameService(mockPool);
   });
 
-  it('createRoom validates required fields and delegates', async () => {
-    const svc = new GameService({} as any);
-    const mgr = getMgr();
+  describe('Constructor', () => {
+    it('should create an instance with Pool', () => {
+      expect(gameService).toBeInstanceOf(GameService);
+      expect(GameManager).toHaveBeenCalledWith(mockPool);
+    });
+  });
 
-    const input: CreateRoomInput = {
-      name: 'Table 1',
-      gameType: 'poker',
+  describe('createRoom', () => {
+    const validRoomInput: CreateRoomInput = {
+      name: 'Test Room',
+      gameType: 'texas_holdem',
       maxPlayers: 6,
-      blindLevels: {},
-      createdBy: 'u1',
-      configuration: { ante: 0 },
+      blindLevels: { small: 10, big: 20 },
+      createdBy: 'user123',
+      configuration: {}
     };
 
-    const room = await svc.createRoom(input);
-    expect(mgr.createRoom).toHaveBeenCalledWith(input);
-    expect(room.status).toBe('waiting');
+    const mockRoomRecord: GameRoomRecord = {
+      id: 'room123',
+      name: 'Test Room',
+      gameType: 'texas_holdem',
+      maxPlayers: 6,
+      blindLevels: { small: 10, big: 20 },
+      createdBy: 'user123',
+      createdAt: new Date(),
+      status: 'waiting',
+      configuration: {}
+    };
 
-    await expect(svc.createRoom({ ...input, name: '  ' })).rejects.toThrow('Missing or invalid name');
-    await expect(svc.createRoom({ ...input, gameType: '' })).rejects.toThrow('Missing or invalid gameType');
-    await expect(svc.createRoom({ ...input, maxPlayers: undefined as any })).rejects.toThrow('Missing or invalid maxPlayers');
-    await expect(svc.createRoom({ ...input, createdBy: '' as any })).rejects.toThrow('Missing or invalid createdBy');
+    it('should create room successfully', async () => {
+      mockGameManager.createRoom.mockResolvedValue(mockRoomRecord);
+
+      const result = await gameService.createRoom(validRoomInput);
+
+      expect(mockGameManager.createRoom).toHaveBeenCalledWith(validRoomInput);
+      expect(result).toEqual(mockRoomRecord);
+    });
+
+    it('should throw error for missing name', async () => {
+      const input = { ...validRoomInput, name: '' };
+
+      await expect(gameService.createRoom(input))
+        .rejects.toThrow('Missing or invalid name');
+      
+      expect(mockGameManager.createRoom).not.toHaveBeenCalled();
+    });
+
+    it('should throw error for undefined name', async () => {
+      const input = { ...validRoomInput, name: undefined as any };
+
+      await expect(gameService.createRoom(input))
+        .rejects.toThrow('Missing or invalid name');
+    });
+
+    it('should throw error for whitespace name', async () => {
+      const input = { ...validRoomInput, name: '   ' };
+
+      await expect(gameService.createRoom(input))
+        .rejects.toThrow('Missing or invalid name');
+    });
+
+    it('should throw error for missing gameType', async () => {
+      const input = { ...validRoomInput, gameType: '' as any };
+
+      await expect(gameService.createRoom(input))
+        .rejects.toThrow('Missing or invalid gameType');
+    });
+
+    it('should throw error for invalid maxPlayers', async () => {
+      const input = { ...validRoomInput, maxPlayers: NaN };
+
+      await expect(gameService.createRoom(input))
+        .rejects.toThrow('Missing or invalid maxPlayers');
+    });
+
+    it('should throw error for undefined maxPlayers', async () => {
+      const input = { ...validRoomInput, maxPlayers: undefined as any };
+
+      await expect(gameService.createRoom(input))
+        .rejects.toThrow('Missing or invalid maxPlayers');
+    });
+
+    it('should throw error for missing createdBy', async () => {
+      const input = { ...validRoomInput, createdBy: '' };
+
+      await expect(gameService.createRoom(input))
+        .rejects.toThrow('Missing or invalid createdBy');
+    });
+
+    it('should validate tournament configuration when present', async () => {
+      const inputWithTournament: CreateRoomInput = {
+        ...validRoomInput,
+        configuration: {
+          tournament: {
+            config: { buyIn: 100, startingChips: 1000 }
+          }
+        }
+      };
+
+      mockValidateTournamentConfig.mockReturnValue({
+        valid: true,
+        errors: []
+      });
+      mockGameManager.createRoom.mockResolvedValue(mockRoomRecord);
+
+      const result = await gameService.createRoom(inputWithTournament);
+
+      expect(mockValidateTournamentConfig).toHaveBeenCalledWith({ buyIn: 100, startingChips: 1000 });
+      expect(mockGameManager.createRoom).toHaveBeenCalledWith(inputWithTournament);
+      expect(result).toEqual(mockRoomRecord);
+    });
+
+    it('should throw error for invalid tournament configuration', async () => {
+      const inputWithTournament: CreateRoomInput = {
+        ...validRoomInput,
+        configuration: {
+          tournament: {
+            config: { invalidField: true }
+          }
+        }
+      };
+
+      mockValidateTournamentConfig.mockReturnValue({
+        valid: false,
+        errors: ['Invalid buy-in amount', 'Missing starting chips']
+      });
+
+      await expect(gameService.createRoom(inputWithTournament))
+        .rejects.toThrow('Invalid tournament config: Invalid buy-in amount, Missing starting chips');
+      
+      expect(mockGameManager.createRoom).not.toHaveBeenCalled();
+    });
+
+    it('should handle tournament preset without config', async () => {
+      const inputWithPreset: CreateRoomInput = {
+        ...validRoomInput,
+        configuration: {
+          tournament: {
+            preset: 'standard'
+          }
+        }
+      };
+
+      mockGameManager.createRoom.mockResolvedValue(mockRoomRecord);
+
+      const result = await gameService.createRoom(inputWithPreset);
+
+      expect(mockValidateTournamentConfig).not.toHaveBeenCalled();
+      expect(mockGameManager.createRoom).toHaveBeenCalledWith(inputWithPreset);
+      expect(result).toEqual(mockRoomRecord);
+    });
   });
 
-  it('listRooms normalizes pagination (defaults, invalid, and over max)', async () => {
-    const svc = new GameService({} as any);
-    const mgr = getMgr();
+  describe('listRooms', () => {
+    const mockResponse: Paginated<GameRoomRecord> = {
+      items: [],
+      total: 0,
+      page: 1,
+      limit: 20,
+      totalPages: 0
+    };
 
-    // Defaults -> (1,20)
-    await svc.listRooms();
-    expect(mgr.listRooms).toHaveBeenLastCalledWith(1, 20);
+    it('should list rooms with default pagination', async () => {
+      mockGameManager.listRooms.mockResolvedValue(mockResponse);
 
-    // Invalid page and limit -> fallback
-    await svc.listRooms(-2 as any, 0 as any);
-    expect(mgr.listRooms).toHaveBeenLastCalledWith(1, 20);
+      const result = await gameService.listRooms();
 
-    // Over max limit -> 20
-    await svc.listRooms(3, 500);
-    expect(mgr.listRooms).toHaveBeenLastCalledWith(3, 20);
+      expect(mockGameManager.listRooms).toHaveBeenCalledWith(1, 20);
+      expect(result).toEqual(mockResponse);
+    });
 
-    // Within max -> used as-is
-    await svc.listRooms(2, 100);
-    expect(mgr.listRooms).toHaveBeenLastCalledWith(2, 100);
+    it('should list rooms with custom pagination', async () => {
+      mockGameManager.listRooms.mockResolvedValue(mockResponse);
+
+      const result = await gameService.listRooms(2, 10);
+
+      expect(mockGameManager.listRooms).toHaveBeenCalledWith(2, 10);
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should normalize invalid page to 1', async () => {
+      mockGameManager.listRooms.mockResolvedValue(mockResponse);
+
+      await gameService.listRooms(-1, 10);
+
+      expect(mockGameManager.listRooms).toHaveBeenCalledWith(1, 10);
+    });
+
+    it('should normalize invalid limit to 20', async () => {
+      mockGameManager.listRooms.mockResolvedValue(mockResponse);
+
+      await gameService.listRooms(1, -1);
+
+      expect(mockGameManager.listRooms).toHaveBeenCalledWith(1, 20);
+    });
+
+    it('should cap limit at 100', async () => {
+      mockGameManager.listRooms.mockResolvedValue(mockResponse);
+
+      await gameService.listRooms(1, 150);
+
+      expect(mockGameManager.listRooms).toHaveBeenCalledWith(1, 20);
+    });
   });
 
-  it('startGame validates inputs and delegates', async () => {
-    const svc = new GameService({} as any);
-    const mgr = getMgr();
+  describe('startGame', () => {
+    const validStartGameInput: StartGameInput = {
+      roomId: 'room123',
+      dealerPosition: 0,
+      currentPlayerPosition: 1,
+      state: { phase: 'pre-flop' }
+    };
 
-  await svc.startGame({ roomId: 'room-1', dealerPosition: 1, currentPlayerPosition: 2 });
-  // Expect service to fetch room config and include bettingMode and RIT unanimity policy in state
-  expect(mgr.getRoomById).toHaveBeenCalledWith('room-1');
-  expect(mgr.startGame).toHaveBeenCalledWith({ roomId: 'room-1', dealerPosition: 1, currentPlayerPosition: 2, state: { bettingMode: 'pot-limit', requireRunItTwiceUnanimous: true } });
+    const mockActiveGame: ActiveGameRecord = {
+      id: 'game123',
+      roomId: 'room123',
+      currentHandId: null,
+      dealerPosition: 0,
+      currentPlayerPosition: 1,
+      pot: 0,
+      state: { phase: 'pre-flop' },
+      lastActionAt: new Date()
+    };
 
-    await expect(svc.startGame({ roomId: '', dealerPosition: 1, currentPlayerPosition: 2 })).rejects.toThrow('Missing or invalid roomId');
-    await expect(svc.startGame({ roomId: 'room-1', dealerPosition: NaN as any, currentPlayerPosition: 2 })).rejects.toThrow('Missing or invalid dealerPosition');
-    await expect(svc.startGame({ roomId: 'room-1', dealerPosition: 1, currentPlayerPosition: undefined as any })).rejects.toThrow('Missing or invalid currentPlayerPosition');
+    const mockRoom: GameRoomRecord = {
+      id: 'room123',
+      name: 'Test Room',
+      gameType: 'texas_holdem',
+      maxPlayers: 6,
+      blindLevels: { small: 10, big: 20 },
+      createdBy: 'user123',
+      createdAt: new Date(),
+      status: 'waiting',
+      configuration: {}
+    };
+
+    it('should start game successfully', async () => {
+      mockGameManager.getRoomById.mockResolvedValue(mockRoom);
+      mockGameManager.startGame.mockResolvedValue(mockActiveGame);
+
+      const result = await gameService.startGame(validStartGameInput);
+
+      expect(mockGameManager.getRoomById).toHaveBeenCalledWith('room123');
+      expect(mockGameManager.startGame).toHaveBeenCalledWith(validStartGameInput);
+      expect(result).toEqual(mockActiveGame);
+    });
+
+    it('should apply betting mode from room configuration', async () => {
+      const roomWithConfig = {
+        ...mockRoom,
+        configuration: { bettingMode: 'pot-limit' }
+      };
+      
+      mockGameManager.getRoomById.mockResolvedValue(roomWithConfig);
+      mockGameManager.startGame.mockResolvedValue(mockActiveGame);
+
+      await gameService.startGame(validStartGameInput);
+
+      expect(mockGameManager.startGame).toHaveBeenCalledWith({
+        ...validStartGameInput,
+        state: {
+          phase: 'pre-flop',
+          bettingMode: 'pot-limit'
+        }
+      });
+    });
+
+    it('should apply run-it-twice requirement from room configuration', async () => {
+      const roomWithConfig = {
+        ...mockRoom,
+        configuration: { requireRunItTwiceUnanimous: true }
+      };
+      
+      mockGameManager.getRoomById.mockResolvedValue(roomWithConfig);
+      mockGameManager.startGame.mockResolvedValue(mockActiveGame);
+
+      await gameService.startGame(validStartGameInput);
+
+      expect(mockGameManager.startGame).toHaveBeenCalledWith({
+        ...validStartGameInput,
+        state: {
+          phase: 'pre-flop',
+          requireRunItTwiceUnanimous: true
+        }
+      });
+    });
+
+    it('should apply variant from room configuration', async () => {
+      const roomWithConfig = {
+        ...mockRoom,
+        configuration: { variant: 'omaha' }
+      };
+      
+      mockGameManager.getRoomById.mockResolvedValue(roomWithConfig);
+      mockGameManager.startGame.mockResolvedValue(mockActiveGame);
+
+      await gameService.startGame(validStartGameInput);
+
+      expect(mockGameManager.startGame).toHaveBeenCalledWith({
+        ...validStartGameInput,
+        state: {
+          phase: 'pre-flop',
+          variant: 'omaha'
+        }
+      });
+    });
+
+    it('should not override no-limit betting mode (default)', async () => {
+      const roomWithConfig = {
+        ...mockRoom,
+        configuration: { bettingMode: 'no-limit' }
+      };
+      
+      mockGameManager.getRoomById.mockResolvedValue(roomWithConfig);
+      mockGameManager.startGame.mockResolvedValue(mockActiveGame);
+
+      await gameService.startGame(validStartGameInput);
+
+      expect(mockGameManager.startGame).toHaveBeenCalledWith(validStartGameInput);
+    });
+
+    it('should handle undefined state', async () => {
+      const inputWithoutState = {
+        ...validStartGameInput,
+        state: undefined
+      };
+      
+      const roomWithConfig = {
+        ...mockRoom,
+        configuration: { bettingMode: 'pot-limit' }
+      };
+      
+      mockGameManager.getRoomById.mockResolvedValue(roomWithConfig);
+      mockGameManager.startGame.mockResolvedValue(mockActiveGame);
+
+      await gameService.startGame(inputWithoutState);
+
+      expect(mockGameManager.startGame).toHaveBeenCalledWith({
+        ...inputWithoutState,
+        state: { bettingMode: 'pot-limit' }
+      });
+    });
+
+    it('should throw error for missing roomId', async () => {
+      const input = { ...validStartGameInput, roomId: '' };
+
+      await expect(gameService.startGame(input))
+        .rejects.toThrow('Missing or invalid roomId');
+      
+      expect(mockGameManager.startGame).not.toHaveBeenCalled();
+    });
+
+    it('should throw error for invalid dealerPosition', async () => {
+      const input = { ...validStartGameInput, dealerPosition: NaN };
+
+      await expect(gameService.startGame(input))
+        .rejects.toThrow('Missing or invalid dealerPosition');
+    });
+
+    it('should throw error for invalid currentPlayerPosition', async () => {
+      const input = { ...validStartGameInput, currentPlayerPosition: undefined as any };
+
+      await expect(gameService.startGame(input))
+        .rejects.toThrow('Missing or invalid currentPlayerPosition');
+    });
   });
 
-  it('updateActiveGame requires id and delegates', async () => {
-    const svc = new GameService({} as any);
-    const mgr = getMgr();
+  describe('updateActiveGame', () => {
+    const validUpdateInput: UpdateActiveGameInput = {
+      id: 'game123',
+      state: { phase: 'flop' },
+      currentPlayerPosition: 2
+    };
 
-    await svc.updateActiveGame({ id: 'ag-1', pot: 100 });
-    expect(mgr.updateActiveGame).toHaveBeenCalledWith({ id: 'ag-1', pot: 100 });
+    const mockUpdatedGame: ActiveGameRecord = {
+      id: 'game123',
+      roomId: 'room123',
+      currentHandId: null,
+      dealerPosition: 0,
+      currentPlayerPosition: 2,
+      pot: 0,
+      state: { phase: 'flop' },
+      lastActionAt: new Date()
+    };
 
-    await expect(svc.updateActiveGame({ id: '  ' } as any)).rejects.toThrow('Missing or invalid id');
+    it('should update active game successfully', async () => {
+      mockGameManager.updateActiveGame.mockResolvedValue(mockUpdatedGame);
+
+      const result = await gameService.updateActiveGame(validUpdateInput);
+
+      expect(mockGameManager.updateActiveGame).toHaveBeenCalledWith(validUpdateInput);
+      expect(result).toEqual(mockUpdatedGame);
+    });
+
+    it('should throw error for missing id', async () => {
+      const input = { ...validUpdateInput, id: '' };
+
+      await expect(gameService.updateActiveGame(input))
+        .rejects.toThrow('Missing or invalid id');
+      
+      expect(mockGameManager.updateActiveGame).not.toHaveBeenCalled();
+    });
+
+    it('should throw error for undefined id', async () => {
+      const input = { ...validUpdateInput, id: undefined as any };
+
+      await expect(gameService.updateActiveGame(input))
+        .rejects.toThrow('Missing or invalid id');
+    });
   });
 
-  it('endGame requires id and delegates', async () => {
-    const svc = new GameService({} as any);
-    const mgr = getMgr();
+  describe('endGame', () => {
+    it('should end game successfully', async () => {
+      mockGameManager.endGame.mockResolvedValue();
 
-    await svc.endGame('ag-1');
-    expect(mgr.endGame).toHaveBeenCalledWith('ag-1');
+      await gameService.endGame('game123');
 
-    await expect(svc.endGame('')).rejects.toThrow('Missing or invalid id');
+      expect(mockGameManager.endGame).toHaveBeenCalledWith('game123');
+    });
+
+    it('should throw error for missing id', async () => {
+      await expect(gameService.endGame(''))
+        .rejects.toThrow('Missing or invalid id');
+      
+      expect(mockGameManager.endGame).not.toHaveBeenCalled();
+    });
+
+    it('should throw error for undefined id', async () => {
+      await expect(gameService.endGame(undefined as any))
+        .rejects.toThrow('Missing or invalid id');
+    });
   });
 
-  it('getActiveGameByRoom requires roomId and delegates', async () => {
-    const svc = new GameService({} as any);
-    const mgr = getMgr();
+  describe('getActiveGameByRoom', () => {
+    const mockActiveGame: ActiveGameRecord = {
+      id: 'game123',
+      roomId: 'room123',
+      currentHandId: null,
+      dealerPosition: 0,
+      currentPlayerPosition: 1,
+      pot: 0,
+      state: { phase: 'pre-flop' },
+      lastActionAt: new Date()
+    };
 
-    const res = await svc.getActiveGameByRoom('room-1');
-    expect(mgr.getActiveGameByRoom).toHaveBeenCalledWith('room-1');
-    expect(res?.roomId).toBe('room-1');
+    it('should get active game by room without caller', async () => {
+      mockGameManager.getActiveGameByRoom.mockResolvedValue(mockActiveGame);
 
-    await expect(svc.getActiveGameByRoom('  ')).rejects.toThrow('Missing or invalid roomId');
+      const result = await gameService.getActiveGameByRoom('room123');
+
+      expect(mockGameManager.getActiveGameByRoom).toHaveBeenCalledWith('room123');
+      expect(result).toEqual(mockActiveGame);
+    });
+
+    it('should get active game by room with caller', async () => {
+      mockGameManager.getActiveGameByRoom.mockResolvedValue(mockActiveGame);
+
+      const result = await gameService.getActiveGameByRoom('room123', 'user456');
+
+      expect(mockGameManager.getActiveGameByRoom).toHaveBeenCalledWith('room123', 'user456');
+      expect(result).toEqual(mockActiveGame);
+    });
+
+    it('should return null when no active game exists', async () => {
+      mockGameManager.getActiveGameByRoom.mockResolvedValue(null);
+
+      const result = await gameService.getActiveGameByRoom('room123');
+
+      expect(result).toBeNull();
+    });
+
+    it('should throw error for missing roomId', async () => {
+      await expect(gameService.getActiveGameByRoom(''))
+        .rejects.toThrow('Missing or invalid roomId');
+      
+      expect(mockGameManager.getActiveGameByRoom).not.toHaveBeenCalled();
+    });
+
+    it('should throw error for undefined roomId', async () => {
+      await expect(gameService.getActiveGameByRoom(undefined as any))
+        .rejects.toThrow('Missing or invalid roomId');
+    });
+  });
+
+  describe('Validation helpers', () => {
+    it('should validate non-string values in require', async () => {
+      const input = {
+        name: 123 as any,
+        gameType: 'texas_holdem',
+        maxPlayers: 6,
+        blindLevels: { small: 10, big: 20 },
+        createdBy: 'user123'
+      };
+
+      await expect(gameService.createRoom(input))
+        .rejects.toThrow('Missing or invalid name');
+    });
+
+    it('should validate null values in require', async () => {
+      const input = {
+        name: null as any,
+        gameType: 'texas_holdem',
+        maxPlayers: 6,
+        blindLevels: { small: 10, big: 20 },
+        createdBy: 'user123'
+      };
+
+      await expect(gameService.createRoom(input))
+        .rejects.toThrow('Missing or invalid name');
+    });
+
+    it('should validate infinite values in requireNumber', async () => {
+      const input = {
+        name: 'Test Room',
+        gameType: 'texas_holdem',
+        maxPlayers: Infinity,
+        blindLevels: { small: 10, big: 20 },
+        createdBy: 'user123'
+      };
+
+      await expect(gameService.createRoom(input))
+        .rejects.toThrow('Missing or invalid maxPlayers');
+    });
+  });
+
+  describe('Pagination normalization', () => {
+    it('should handle zero page values', async () => {
+      mockGameManager.listRooms.mockResolvedValue({
+        items: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+        totalPages: 0
+      });
+
+      await gameService.listRooms(0, 20);
+      expect(mockGameManager.listRooms).toHaveBeenCalledWith(1, 20);
+    });
+
+    it('should handle NaN limit values', async () => {
+      mockGameManager.listRooms.mockResolvedValue({
+        items: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+        totalPages: 0
+      });
+
+      await gameService.listRooms(1, NaN);
+      expect(mockGameManager.listRooms).toHaveBeenCalledWith(1, 20);
+    });
   });
 });

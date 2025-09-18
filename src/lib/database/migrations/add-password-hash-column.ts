@@ -44,14 +44,10 @@ export const ADD_PASSWORD_HASH_COLUMN: MigrationConfig = {
   ],
   rollback: [
     {
-      type: 'custom',
-      table: 'users',
-      details: { sql: 'DROP INDEX IF EXISTS idx_users_email_password' }
+      sql: 'DROP INDEX IF EXISTS idx_users_email_password'
     },
     {
-      type: 'custom',
-      table: 'users',
-      details: { sql: 'ALTER TABLE users DROP COLUMN IF EXISTS password_hash' }
+      sql: 'ALTER TABLE users DROP COLUMN IF EXISTS password_hash'
     }
   ]
 };

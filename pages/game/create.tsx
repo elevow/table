@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { tournamentPresets } from '../../src/lib/tournament/tournament-utils';
@@ -18,18 +18,31 @@ export default function CreateGameRoomPage() {
   const [requireRitUnanimous, setRequireRitUnanimous] = useState(false);
   const [createdBy, setCreatedBy] = useState('u1');
   const [submitting, setSubmitting] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enableTournament, setEnableTournament] = useState(false);
   const [presetKey, setPresetKey] = useState<string>('freezeout_default');
   const presetOptions = useMemo(() => Object.entries(tournamentPresets), []);
   const selectedTournamentConfig: TournamentConfig | null = useMemo(() => enableTournament ? tournamentPresets[presetKey]?.build() : null, [enableTournament, presetKey]);
 
+  // Debug router state
+  useEffect(() => {
+    console.log('Router state:', {
+      pathname: router.pathname,
+      asPath: router.asPath,
+      isReady: router.isReady,
+      query: router.query
+    });
+  }, [router]);
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+    
     try {
-  const res = await fetch('/api/games/rooms/create', {
+      console.log('Creating game room...');
+      const res = await fetch('/api/games/rooms/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -42,21 +55,87 @@ export default function CreateGameRoomPage() {
             variant,
             bettingMode,
             requireRunItTwiceUnanimous: requireRitUnanimous,
-    tournament: enableTournament ? { preset: presetKey, config: selectedTournamentConfig } : undefined,
+            tournament: enableTournament ? { preset: presetKey, config: selectedTournamentConfig } : undefined,
           },
         }),
       });
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.error || `Failed to create room (${res.status})`);
       }
+
       const room = await res.json();
-      // navigate to the dynamic game route; this repo uses /game/[id]
-      await router.push(`/game/${room.id}`);
+      console.log('Room created successfully:', room);
+      console.log('Room ID:', room.id);
+      console.log('Navigating to:', `/game/${room.id}`);
+      
+      // Set navigation state for user feedback
+      setIsNavigating(true);
+      
+      // Check if router is available
+      if (!router) {
+        console.error('Router not available, using window.location');
+        if (typeof window !== 'undefined') {
+          window.location.href = `/game/${room.id}`;
+        }
+        return;
+      }
+      
+      // Add a small delay to ensure the room is fully created
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Try multiple navigation approaches
+      const navigationTarget = `/game/${room.id}`;
+      let navigationSuccessful = false;
+      
+      // Method 1: Try router.push with timeout
+      try {
+        console.log('Attempting router.push...');
+        
+        // Set up a timeout for navigation
+        const navigationPromise = router.push(navigationTarget);
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Navigation timeout')), 3000);
+        });
+        
+        await Promise.race([navigationPromise, timeoutPromise]);
+        
+        // Wait a bit to see if navigation actually happened
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Check if navigation was successful
+        if (typeof window !== 'undefined') {
+          const currentPath = window.location.pathname;
+          console.log('Current path after router.push:', currentPath);
+          
+          if (currentPath === navigationTarget) {
+            console.log('✅ Navigation successful via router.push');
+            navigationSuccessful = true;
+          }
+        }
+      } catch (navError) {
+        console.warn('Router.push failed or timed out:', navError);
+      }
+      
+      // Method 2: Fallback to window.location if router.push didn't work
+      if (!navigationSuccessful && typeof window !== 'undefined') {
+        console.log('🔄 Using window.location fallback...');
+        window.location.href = navigationTarget;
+        navigationSuccessful = true;
+      }
+      
+      // Method 3: Final fallback - reload with new URL
+      if (!navigationSuccessful && typeof window !== 'undefined') {
+        console.log('🔄 Using window.location.replace fallback...');
+        window.location.replace(navigationTarget);
+      }
     } catch (err: any) {
+      console.error('Room creation error:', err);
       setError(err?.message || 'Failed to create room');
     } finally {
       setSubmitting(false);
+      setIsNavigating(false);
     }
   };
 
@@ -200,9 +279,14 @@ export default function CreateGameRoomPage() {
           />
         </div>
         {error && <p className="text-red-600 text-sm">{error}</p>}
-        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50" disabled={submitting}>
-          {submitting ? 'Creating…' : 'Create room'}
+        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50" disabled={submitting || isNavigating}>
+          {isNavigating ? 'Joining room...' : submitting ? 'Creating…' : 'Create room'}
         </button>
+        {isNavigating && (
+          <p className="text-blue-600 text-sm mt-2 animate-pulse">
+            ✨ Room created successfully! Taking you to the game...
+          </p>
+        )}
       </form>
     </div>
   );

@@ -18,7 +18,11 @@ module.exports = {
   },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    'nanoid': '<rootDir>/node_modules/nanoid/index.cjs',
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!(nanoid|nanoid/.*)/)',
+  ],
   setupFilesAfterEnv: [],
   collectCoverage: true,
   coverageDirectory: 'coverage',
@@ -41,5 +45,5 @@ module.exports = {
       statements: 80
     }
   },
-  coverageReporters: ['text', 'lcov', 'html']
+  coverageReporters: ['text', 'lcov', 'html', 'json-summary']
 };

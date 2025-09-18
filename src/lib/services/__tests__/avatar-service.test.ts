@@ -1,55 +1,291 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { AvatarService } from '../avatar-service';
+import { AvatarManager } from '../../database/avatar-manager';
+import { Pool } from 'pg';
+import {
+  AvatarRecord,
+  AvatarVersionRecord,
+  CreateAvatarRequest,
+  PaginatedAvatarsResponse
+} from '../../../types/avatar';
 
-const mockPool = {} as any;
+// Mock the avatar manager
+jest.mock('../../database/avatar-manager');
 
-// Mock AvatarManager inside the service by mocking its module
-jest.mock('../../database/avatar-manager', () => {
-  return {
-    AvatarManager: jest.fn().mockImplementation(() => ({
-  createAvatar: jest.fn(async () => ({ id: 'a-1', userId: 'u-1', status: 'pending', originalUrl: 'http://img/orig.png', variants: { s: 'http://img/s.png' }, version: 1, createdAt: new Date() })),
-  updateAvatar: jest.fn(async (_id: string, upd: any) => ({ id: 'a-1', userId: 'u-1', status: upd.status, originalUrl: 'http://img/orig.png', variants: { s: 'http://img/s.png' }, version: 1, createdAt: new Date(), moderatedAt: new Date(), moderatorId: upd.moderatorId })),
-  addAvatarVersion: jest.fn(async () => ({ id: 'av-2', avatarId: 'a-1', version: 2, url: 'http://img/v2.png', createdAt: new Date() })),
-  listVersions: jest.fn(async () => ([{ id: 'av-1', avatarId: 'a-1', version: 1, url: 'http://img/v1.png', createdAt: new Date() }])),
-  getLatestAvatarForUser: jest.fn(async () => ({ id: 'a-1', userId: 'u-1', status: 'approved', originalUrl: 'http://img/orig.png', variants: { s: 'http://img/s.png' }, version: 2, createdAt: new Date() })),
-  searchAvatars: jest.fn(async () => ({ avatars: [{ id: 'a-1' }], total: 1, page: 1, limit: 10, totalPages: 1 }))
-    }))
-  };
-});
-
-describe('AvatarService (US-018)', () => {
-  let service: AvatarService;
+describe('AvatarService', () => {
+  let avatarService: AvatarService;
+  let mockPool: jest.Mocked<Pool>;
+  let mockAvatarManager: jest.Mocked<AvatarManager>;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new AvatarService(mockPool as any);
+    
+    mockPool = {
+      query: jest.fn(),
+      connect: jest.fn(),
+      end: jest.fn(),
+    } as any;
+
+    mockAvatarManager = {
+      createAvatar: jest.fn(),
+      updateAvatar: jest.fn(),
+      addAvatarVersion: jest.fn(),
+      listVersions: jest.fn(),
+      getLatestAvatarForUser: jest.fn(),
+      searchAvatars: jest.fn(),
+    } as any;
+
+    (AvatarManager as jest.MockedClass<typeof AvatarManager>).mockImplementation(() => mockAvatarManager);
+    
+    avatarService = new AvatarService(mockPool);
   });
 
-  it('uploads avatar', async () => {
-    const res = await service.uploadAvatar({ userId: 'u-1', originalUrl: 'http://img/orig.png', variants: { s: 'http://img/s.png' } });
-    expect(res.status).toBe('pending');
+  describe('Constructor', () => {
+    it('should create an instance with AvatarManager', () => {
+      expect(avatarService).toBeInstanceOf(AvatarService);
+      expect(AvatarManager).toHaveBeenCalledWith(mockPool);
+    });
   });
 
-  it('approves avatar', async () => {
-    const res = await service.approveAvatar('a-1', 'mod-1');
-    expect(res.status).toBe('approved');
-    expect(res.moderatorId).toBe('mod-1');
+  describe('uploadAvatar', () => {
+    it('should create a new avatar with pending status', async () => {
+      const createRequest: CreateAvatarRequest = {
+        userId: 'user123',
+        originalUrl: 'https://example.com/avatar.jpg',
+        variants: { 'small': 'https://example.com/avatar-small.jpg', 'medium': 'https://example.com/avatar-medium.jpg' }
+      };
+
+      const expectedAvatar: AvatarRecord = {
+        id: 'avatar123',
+        userId: 'user123',
+        originalUrl: 'https://example.com/avatar.jpg',
+        variants: { 'small': 'https://example.com/avatar-small.jpg', 'medium': 'https://example.com/avatar-medium.jpg' },
+        status: 'pending',
+        version: 1,
+        createdAt: new Date(),
+        moderatorId: null,
+        moderatedAt: null
+      };
+
+      mockAvatarManager.createAvatar.mockResolvedValue(expectedAvatar);
+
+      const result = await avatarService.uploadAvatar(createRequest);
+
+      expect(mockAvatarManager.createAvatar).toHaveBeenCalledWith(createRequest);
+      expect(result).toEqual(expectedAvatar);
+    });
   });
 
-  it('rejects avatar', async () => {
-    const res = await service.rejectAvatar('a-1', 'mod-1');
-    expect(res.status).toBe('rejected');
+  describe('approveAvatar', () => {
+    it('should approve an avatar with moderator info', async () => {
+      const avatarId = 'avatar123';
+      const moderatorId = 'mod123';
+      const mockDate = new Date();
+      
+      const approvedAvatar: AvatarRecord = {
+        id: avatarId,
+        userId: 'user123',
+        originalUrl: 'https://example.com/avatar.jpg',
+        variants: { 'small': 'https://example.com/avatar-small.jpg' },
+        status: 'approved',
+        version: 1,
+        createdAt: new Date(),
+        moderatorId: moderatorId,
+        moderatedAt: mockDate
+      };
+
+      mockAvatarManager.updateAvatar.mockResolvedValue(approvedAvatar);
+
+      const result = await avatarService.approveAvatar(avatarId, moderatorId);
+
+      expect(mockAvatarManager.updateAvatar).toHaveBeenCalledWith(avatarId, {
+        status: 'approved',
+        moderatorId,
+        moderatedAt: expect.any(Date)
+      });
+      expect(result).toEqual(approvedAvatar);
+    });
   });
 
-  it('adds and lists versions', async () => {
-    const v = await service.addVersion('a-1', 'http://img/v2.png');
-    expect(v.version).toBe(2);
-    const list = await service.listVersions('a-1');
-    expect(list.length).toBe(1);
+  describe('rejectAvatar', () => {
+    it('should reject an avatar with moderator info', async () => {
+      const avatarId = 'avatar123';
+      const moderatorId = 'mod123';
+      const mockDate = new Date();
+      
+      const rejectedAvatar: AvatarRecord = {
+        id: avatarId,
+        userId: 'user123',
+        originalUrl: 'https://example.com/avatar.jpg',
+        variants: { 'small': 'https://example.com/avatar-small.jpg' },
+        status: 'rejected',
+        version: 1,
+        createdAt: new Date(),
+        moderatorId: moderatorId,
+        moderatedAt: mockDate
+      };
+
+      mockAvatarManager.updateAvatar.mockResolvedValue(rejectedAvatar);
+
+      const result = await avatarService.rejectAvatar(avatarId, moderatorId);
+
+      expect(mockAvatarManager.updateAvatar).toHaveBeenCalledWith(avatarId, {
+        status: 'rejected',
+        moderatorId,
+        moderatedAt: expect.any(Date)
+      });
+      expect(result).toEqual(rejectedAvatar);
+    });
   });
 
-  it('gets latest avatar for user', async () => {
-    const latest = await service.getLatestForUser('u-1');
-    expect(latest?.version).toBe(2);
+  describe('addVersion', () => {
+    it('should add a new avatar version', async () => {
+      const avatarId = 'avatar123';
+      const url = 'https://example.com/avatar-v2.jpg';
+      
+      const expectedVersion: AvatarVersionRecord = {
+        id: 'version123',
+        avatarId: avatarId,
+        url: url,
+        version: 2,
+        createdAt: new Date()
+      };
+
+      mockAvatarManager.addAvatarVersion.mockResolvedValue(expectedVersion);
+
+      const result = await avatarService.addVersion(avatarId, url);
+
+      expect(mockAvatarManager.addAvatarVersion).toHaveBeenCalledWith(avatarId, url);
+      expect(result).toEqual(expectedVersion);
+    });
+  });
+
+  describe('listVersions', () => {
+    it('should list all versions for an avatar', async () => {
+      const avatarId = 'avatar123';
+      
+      const expectedVersions: AvatarVersionRecord[] = [
+        {
+          id: 'version1',
+          avatarId: avatarId,
+          url: 'https://example.com/avatar-v1.jpg',
+          version: 1,
+          createdAt: new Date('2023-01-01')
+        },
+        {
+          id: 'version2',
+          avatarId: avatarId,
+          url: 'https://example.com/avatar-v2.jpg',
+          version: 2,
+          createdAt: new Date('2023-01-02')
+        }
+      ];
+
+      mockAvatarManager.listVersions.mockResolvedValue(expectedVersions);
+
+      const result = await avatarService.listVersions(avatarId);
+
+      expect(mockAvatarManager.listVersions).toHaveBeenCalledWith(avatarId);
+      expect(result).toEqual(expectedVersions);
+    });
+  });
+
+  describe('getLatestForUser', () => {
+    it('should return latest avatar for user', async () => {
+      const userId = 'user123';
+      
+      const expectedAvatar: AvatarRecord = {
+        id: 'avatar123',
+        userId: userId,
+        originalUrl: 'https://example.com/avatar.jpg',
+        variants: { 'small': 'https://example.com/avatar-small.jpg' },
+        status: 'approved',
+        version: 1,
+        createdAt: new Date(),
+        moderatorId: 'mod123',
+        moderatedAt: new Date()
+      };
+
+      mockAvatarManager.getLatestAvatarForUser.mockResolvedValue(expectedAvatar);
+
+      const result = await avatarService.getLatestForUser(userId);
+
+      expect(mockAvatarManager.getLatestAvatarForUser).toHaveBeenCalledWith(userId);
+      expect(result).toEqual(expectedAvatar);
+    });
+
+    it('should return null when no avatar found', async () => {
+      const userId = 'user123';
+      
+      mockAvatarManager.getLatestAvatarForUser.mockResolvedValue(null);
+
+      const result = await avatarService.getLatestForUser(userId);
+
+      expect(mockAvatarManager.getLatestAvatarForUser).toHaveBeenCalledWith(userId);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('search', () => {
+    it('should search avatars with all parameters', async () => {
+      const userId = 'user123';
+      const status = 'approved';
+      const page = 1;
+      const limit = 10;
+      
+      const expectedResponse: PaginatedAvatarsResponse = {
+        avatars: [
+          {
+            id: 'avatar123',
+            userId: userId,
+            originalUrl: 'https://example.com/avatar.jpg',
+            variants: { 'small': 'https://example.com/avatar-small.jpg' },
+            status: 'approved',
+            version: 1,
+            createdAt: new Date(),
+            moderatorId: 'mod123',
+            moderatedAt: new Date()
+          }
+        ],
+        total: 1,
+        page: page,
+        limit: limit,
+        totalPages: 1
+      };
+
+      mockAvatarManager.searchAvatars.mockResolvedValue(expectedResponse);
+
+      const result = await avatarService.search(userId, status, page, limit);
+
+      expect(mockAvatarManager.searchAvatars).toHaveBeenCalledWith(
+        { userId, status },
+        page,
+        limit
+      );
+      expect(result).toEqual(expectedResponse);
+    });
+
+    it('should search avatars with undefined parameters', async () => {
+      const page = 1;
+      const limit = 10;
+      
+      const expectedResponse: PaginatedAvatarsResponse = {
+        avatars: [],
+        total: 0,
+        page: page,
+        limit: limit,
+        totalPages: 0
+      };
+
+      mockAvatarManager.searchAvatars.mockResolvedValue(expectedResponse);
+
+      const result = await avatarService.search(undefined, undefined, page, limit);
+
+      expect(mockAvatarManager.searchAvatars).toHaveBeenCalledWith(
+        { userId: undefined, status: undefined },
+        page,
+        limit
+      );
+      expect(result).toEqual(expectedResponse);
+    });
   });
 });

@@ -29,18 +29,27 @@ const Home: NextPage = () => {
         body: JSON.stringify(body)
       });
       
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
       
       if (data.success) {
         // Store token in localStorage for session management
-        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('auth_token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
-        router.push('/dashboard');
+        
+        // Try router.push first, with fallback to window.location
+        try {
+          await router.push('/dashboard');
+        } catch (routerError) {
+          window.location.href = '/dashboard';
+        }
       } else {
         setError(data.error || 'Authentication failed');
       }
     } catch (error) {
-      console.error('Auth error:', error);
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);

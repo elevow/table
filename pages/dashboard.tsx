@@ -23,8 +23,8 @@ const Dashboard: NextPage = () => {
   const { avatarData, loading: avatarLoading } = useUserAvatar('user-123');
   
   const handleAvatarClick = () => {
-    // Navigate to profile or show profile menu
-    router.push('/profile');
+    // Navigate to profile page
+    window.location.href = '/profile';
   };
   
   useEffect(() => {

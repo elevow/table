@@ -270,14 +270,6 @@ export default function CreateGameRoomPage() {
             </div>
           )}
         </div>
-        <div>
-          <label className="block text-sm font-medium">Created by (user id)</label>
-          <input
-            className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            value={createdBy}
-            onChange={e => setCreatedBy(e.target.value)}
-          />
-        </div>
         {error && <p className="text-red-600 text-sm">{error}</p>}
         <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50" disabled={submitting || isNavigating}>
           {isNavigating ? 'Joining room...' : submitting ? 'Creating…' : 'Create room'}

@@ -185,33 +185,88 @@ export default function GamePage() {
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Critical component loaded immediately */}
-          <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-            <GameBoard
-              gameId={String(id)}
-              headerSlot={(
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={inviteeId}
-                    onChange={e => setInviteeId(e.target.value)}
-                    placeholder="Friend user ID"
-                    className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400"
-                  />
-                  <button
-                    onClick={handleInvite}
-                    disabled={inviteLoading || !inviteeId.trim()}
-                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-medium px-3 py-1 rounded"
-                    title="Invite to game"
-                  >
-                    {inviteLoading ? 'Inviting…' : 'Invite to game'}
-                  </button>
-                  {inviteStatus && (
-                    <span className="text-xs text-gray-600 dark:text-gray-400" aria-live="polite">{inviteStatus}</span>
-                  )}
+          {/* Poker Table - Green Felt Design */}
+          <div className="lg:col-span-2 relative">
+            {/* Green felt table surface */}
+            <div className="relative bg-gradient-to-br from-green-700 via-green-800 to-green-900 rounded-full mx-auto shadow-2xl border-8 border-amber-800" 
+                 style={{
+                   width: '100%',
+                   maxWidth: '800px',
+                   height: '400px',
+                   background: 'radial-gradient(ellipse at center, #16a34a 0%, #15803d 50%, #14532d 100%)',
+                   boxShadow: 'inset 0 0 50px rgba(0,0,0,0.3), 0 10px 30px rgba(0,0,0,0.4)'
+                 }}>
+              
+              {/* Table rail/border */}
+              <div className="absolute inset-0 rounded-full border-4 border-amber-700 bg-gradient-to-r from-amber-800 via-amber-700 to-amber-800"
+                   style={{
+                     background: 'linear-gradient(45deg, #92400e, #b45309, #92400e)',
+                     clipPath: 'polygon(0 0, 100% 0, 90% 100%, 10% 100%)',
+                     transform: 'scale(1.02)'
+                   }}>
+              </div>
+              
+              {/* Inner felt playing surface */}
+              <div className="absolute inset-4 rounded-full bg-gradient-to-br from-green-600 to-green-800"
+                   style={{
+                     background: 'radial-gradient(ellipse at center, #22c55e 10%, #16a34a 60%, #15803d 100%)',
+                     boxShadow: 'inset 0 0 30px rgba(0,0,0,0.2)'
+                   }}>
+                
+                {/* Table markings/branding */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center text-green-300 opacity-20 select-none">
+                    <div className="text-6xl font-bold tracking-wider">TABLE</div>
+                    <div className="text-sm tracking-widest mt-2">POKER ROOM</div>
+                  </div>
                 </div>
-              )}
-            />
+                
+                {/* Player positions - evenly spaced around table */}
+                {/* P1 - Top center */}
+                <div className="absolute top-2 left-1/2 transform -translate-x-1/2 w-16 h-16 bg-gray-700 rounded-full border-2 border-gray-600 flex items-center justify-center text-white text-xs font-semibold opacity-70">
+                  P1
+                </div>
+                {/* P2 - Top right */}
+                <div className="absolute top-8 right-8 w-16 h-16 bg-gray-700 rounded-full border-2 border-gray-600 flex items-center justify-center text-white text-xs font-semibold opacity-70"
+                     style={{ transform: 'translate(25%, -25%)' }}>
+                  P2
+                </div>
+                {/* P3 - Bottom right */}
+                <div className="absolute bottom-8 right-8 w-16 h-16 bg-gray-700 rounded-full border-2 border-gray-600 flex items-center justify-center text-white text-xs font-semibold opacity-70"
+                     style={{ transform: 'translate(25%, 25%)' }}>
+                  P3
+                </div>
+                {/* P4 - Bottom center */}
+                <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 w-16 h-16 bg-gray-700 rounded-full border-2 border-gray-600 flex items-center justify-center text-white text-xs font-semibold opacity-70">
+                  P4
+                </div>
+                {/* P5 - Bottom left */}
+                <div className="absolute bottom-8 left-8 w-16 h-16 bg-gray-700 rounded-full border-2 border-gray-600 flex items-center justify-center text-white text-xs font-semibold opacity-70"
+                     style={{ transform: 'translate(-25%, 25%)' }}>
+                  P5
+                </div>
+                {/* P6 - Top left */}
+                <div className="absolute top-8 left-8 w-16 h-16 bg-gray-700 rounded-full border-2 border-gray-600 flex items-center justify-center text-white text-xs font-semibold opacity-70"
+                     style={{ transform: 'translate(-25%, -25%)' }}>
+                  P6
+                </div>
+                
+                {/* Community cards area */}
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex gap-2">
+                  {[1,2,3,4,5].map(i => (
+                    <div key={i} className="w-12 h-16 bg-gray-800 border border-gray-600 rounded-md opacity-30"></div>
+                  ))}
+                </div>
+                
+                {/* Pot area */}
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-2 mt-20 text-white text-center">
+                  <div className="bg-gray-800 bg-opacity-70 px-3 py-1 rounded text-sm font-semibold">
+                    Pot: $0
+                  </div>
+                </div>
+                
+              </div>
+            </div>
           </div>
 
           {/* Timer HUD */}

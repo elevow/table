@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import Image from 'next/image';
 
 interface AvatarProps {
   size?: 'sm' | 'md' | 'lg';
@@ -17,41 +18,43 @@ const Avatar: React.FC<AvatarProps> = ({
   className = '',
   onClick
 }) => {
+  const [imageError, setImageError] = useState(false);
+  
   const sizeClasses = {
     sm: 'w-8 h-8 text-sm',
     md: 'w-10 h-10 text-base',
     lg: 'w-12 h-12 text-lg'
   };
 
+  const sizePixels = {
+    sm: 32,
+    md: 40,
+    lg: 48
+  };
+
   const baseClasses = `
     inline-flex items-center justify-center 
     rounded-full bg-gray-200 dark:bg-gray-700 
     text-gray-600 dark:text-gray-300 
-    font-medium overflow-hidden
+    font-medium overflow-hidden relative
     ${onClick ? 'cursor-pointer hover:bg-gray-300 dark:hover:bg-gray-600' : ''}
     ${sizeClasses[size]}
     ${className}
   `.trim().replace(/\s+/g, ' ');
 
   // If we have an image source, try to display it
-  if (src) {
+  if (src && !imageError) {
     return (
       <div className={baseClasses} onClick={onClick}>
-        <img 
+        <Image 
           src={src} 
           alt={alt} 
-          className="w-full h-full object-cover rounded-full"
-          onError={(e) => {
-            // If image fails to load, hide it and show fallback
-            (e.target as HTMLImageElement).style.display = 'none';
-          }}
+          width={sizePixels[size]}
+          height={sizePixels[size]}
+          className="object-cover rounded-full"
+          onError={() => setImageError(true)}
+          unoptimized={src.startsWith('data:')} // Don't optimize data URLs
         />
-        {/* Fallback content in case image fails */}
-        <div className="w-full h-full flex items-center justify-center">
-          {fallback || (
-            <UserIcon className="w-1/2 h-1/2" />
-          )}
-        </div>
       </div>
     );
   }

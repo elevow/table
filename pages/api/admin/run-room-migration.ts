@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { ConfigDrivenMigrationManager } from '../../../src/lib/database/config-driven-migration';
 import { SchemaEvolutionManager } from '../../../src/lib/database/schema-evolution';
 import { TransactionManager } from '../../../src/lib/database/transaction-manager';
-import { getDatabase } from '../../../src/lib/database/connection';
+import { getDbPool } from '../../../src/lib/database/database-connection';
 import { ROOM_CODE_MIGRATION } from '../../../src/lib/database/migrations/room-code-migration';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log('🔄 Starting room code migration...');
     
     // Get database connection
-    const pool = getDatabase();
+    const pool = getDbPool();
     
     // Test connection
     await pool.query('SELECT NOW()');

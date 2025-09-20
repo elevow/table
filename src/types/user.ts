@@ -1,10 +1,13 @@
 // US-017: Core User Profile - Types
 
+export type UserRole = 'admin' | 'player' | 'guest';
+
 export interface UserRecord {
   id: string;
   email: string;
   username: string;
   passwordHash?: string | null; // Optional for OAuth users
+  role: UserRole;
   createdAt: Date;
   lastLogin?: Date | null;
   authProvider?: string | null;
@@ -18,6 +21,7 @@ export interface CreateUserRequest {
   username: string;
   password?: string; // For email/password registration
   passwordHash?: string; // Pre-hashed password
+  role?: UserRole; // Default to 'player' if not specified
   authProvider?: string;
   authProviderId?: string;
   metadata?: Record<string, any>;
@@ -27,6 +31,7 @@ export interface UpdateUserRequest {
   email?: string;
   username?: string;
   passwordHash?: string; // For password changes
+  role?: UserRole; // Role can be updated
   lastLogin?: Date;
   isVerified?: boolean;
   metadata?: Record<string, any>;

@@ -84,7 +84,8 @@ describe('UserService', () => {
         passwordHash: 'hashedpassword',
         createdAt: new Date(),
         isVerified: false,
-        lastLogin: null
+        lastLogin: null,
+        role: 'player'
       };
 
       (mockBcrypt.hash as jest.Mock).mockResolvedValue('hashedpassword');
@@ -115,7 +116,8 @@ describe('UserService', () => {
         passwordHash: null,
         createdAt: new Date(),
         isVerified: false,
-        lastLogin: null
+        lastLogin: null,
+        role: 'player'
       };
 
       mockUserManager.createUser.mockResolvedValue(expectedUser);
@@ -138,7 +140,8 @@ describe('UserService', () => {
         passwordHash: 'hashedpassword',
         createdAt: new Date(),
         isVerified: true,
-        lastLogin: new Date()
+        lastLogin: new Date(),
+        role: 'player'
       };
 
       mockUserManager.getUserById.mockResolvedValue(expectedUser);
@@ -172,7 +175,8 @@ describe('UserService', () => {
         passwordHash: 'hashedpassword',
         createdAt: new Date(),
         isVerified: true,
-        lastLogin: new Date()
+        lastLogin: new Date(),
+        role: 'player'
       };
 
       mockUserManager.getUserByEmail.mockResolvedValue(expectedUser);
@@ -194,7 +198,8 @@ describe('UserService', () => {
         passwordHash: 'hashedpassword',
         createdAt: new Date(),
         isVerified: true,
-        lastLogin: new Date()
+        lastLogin: new Date(),
+        role: 'player'
       };
 
       mockUserManager.getUserByUsername.mockResolvedValue(expectedUser);
@@ -221,7 +226,8 @@ describe('UserService', () => {
         passwordHash: 'hashedpassword',
         createdAt: new Date(),
         isVerified: true,
-        lastLogin: new Date()
+        lastLogin: new Date(),
+        role: 'player'
       };
 
       mockUserManager.updateUser.mockResolvedValue(updatedUser);
@@ -308,7 +314,8 @@ describe('UserService', () => {
       passwordHash: 'oldhashedpassword',
       createdAt: new Date(),
       isVerified: true,
-      lastLogin: new Date()
+      lastLogin: new Date(),
+      role: 'player'
     };
 
     it('should change password successfully', async () => {
@@ -404,7 +411,8 @@ describe('UserService', () => {
         passwordHash: 'hashedpassword',
         createdAt: new Date(),
         isVerified: true,
-        lastLogin: new Date()
+        lastLogin: new Date(),
+        role: 'player'
       };
 
       mockUserManager.getUserByEmail.mockResolvedValue(user);

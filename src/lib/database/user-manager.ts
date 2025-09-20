@@ -194,6 +194,7 @@ export class UserManager {
       email: row.email,
       username: row.username,
       passwordHash: row.password_hash,
+      role: row.role || 'player', // Default to 'player' if role field doesn't exist
       createdAt: row.created_at,
       lastLogin: row.last_login,
       authProvider: row.auth_provider,

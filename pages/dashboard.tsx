@@ -1,19 +1,13 @@
 import type { NextPage } from 'next';
 import Head from 'next/head';
 import { useEffect, useRef, useState } from 'react';
-import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { getPrefetcher } from '../src/utils/code-splitting';
 import { useComponentPerformance } from '../src/utils/performance-monitor';
 import { useUserAvatar } from '../src/hooks/useUserAvatar';
 import Avatar from '../src/components/Avatar';
 import AdminRoomsPanel from '../src/components/AdminRoomsPanel';
-
-// Use dynamic import for the Game component to demonstrate code splitting
-const GameBoard = dynamic(() => import('../src/components/GameBoard'), {
-  loading: () => <div className="loading-skeleton">Loading game board...</div>,
-  ssr: false, // Disable SSR for this component
-});
+import CombinedPlayerStats from '../src/components/CombinedPlayerStats';
 
 const Dashboard: NextPage = () => {
   const router = useRouter();
@@ -185,14 +179,11 @@ const Dashboard: NextPage = () => {
           </div>
         </div>
         
-        {/* Preview of the game board with lazy loading */}
-        <div className="game-preview mb-8">
-          <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Preview</h2>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <GameBoard gameId="preview" />
-          </div>
+        {/* Combined Player Statistics */}
+        <div className="mb-8">
+          <CombinedPlayerStats />
         </div>
-
+        
         {/* Admin Panel - Only visible to admin users */}
         <AdminRoomsPanel />
         

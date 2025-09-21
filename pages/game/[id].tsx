@@ -223,7 +223,8 @@ export default function GamePage() {
                 
                 {/* Player positions - evenly spaced around table */}
                 {/* P1 - Top center */}
-                <div className="absolute top-2 left-1/2 transform -translate-x-1/2 w-16 h-16 bg-gray-700 rounded-full border-2 border-gray-600 flex items-center justify-center text-white text-xs font-semibold opacity-70">
+                <div className="absolute top-1 left-1/2 transform -translate-x-1/2 w-16 h-16 bg-gray-700 rounded-full border-2 border-gray-600 flex items-center justify-center text-white text-xs font-semibold opacity-70"
+                     style={{ transform: 'translate(-50%, -75%)' }}>
                   P1
                 </div>
                 {/* P2 - Top right */}
@@ -237,7 +238,8 @@ export default function GamePage() {
                   P3
                 </div>
                 {/* P4 - Bottom center */}
-                <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 w-16 h-16 bg-gray-700 rounded-full border-2 border-gray-600 flex items-center justify-center text-white text-xs font-semibold opacity-70">
+                <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-16 h-16 bg-gray-700 rounded-full border-2 border-gray-600 flex items-center justify-center text-white text-xs font-semibold opacity-70"
+                     style={{ transform: 'translate(-50%, 75%)' }}>
                   P4
                 </div>
                 {/* P5 - Bottom left */}

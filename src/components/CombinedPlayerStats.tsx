@@ -43,6 +43,7 @@ function CombinedPlayerStats() {
   });
 
   const [isLoading, setIsLoading] = useState(true);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const parseTimeToMinutes = (timeString: string): number => {
     // Parse formats like "2h 30m", "45m", "1h", etc.
@@ -65,6 +66,41 @@ function CombinedPlayerStats() {
       return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
     }
     return `${mins}m`;
+  };
+
+  const resetAllStatistics = () => {
+    // Remove all session statistics from localStorage
+    const sessionKeys = Object.keys(localStorage).filter(key => 
+      key.startsWith('session_stats_')
+    );
+    
+    sessionKeys.forEach(key => {
+      localStorage.removeItem(key);
+    });
+
+    // Reset the displayed stats
+    setCombinedStats({
+      totalHandsPlayed: 0,
+      totalHandsWon: 0,
+      totalWinnings: 0,
+      totalLosses: 0,
+      biggestPotEver: 0,
+      overallWinRate: 0,
+      averageFoldRate: 0,
+      totalSessions: 0,
+      totalTimePlayedMinutes: 0,
+      netWinnings: 0,
+    });
+
+    setShowResetConfirm(false);
+  };
+
+  const handleResetClick = () => {
+    setShowResetConfirm(true);
+  };
+
+  const cancelReset = () => {
+    setShowResetConfirm(false);
   };
 
   useEffect(() => {
@@ -164,9 +200,48 @@ function CombinedPlayerStats() {
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-        Overall Player Statistics
-      </h3>
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          Overall Player Statistics
+        </h3>
+        {combinedStats.totalSessions > 0 && (
+          <button
+            onClick={handleResetClick}
+            className="text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 px-3 py-1 rounded border border-red-200 hover:border-red-300 dark:border-red-500 dark:hover:border-red-400 transition-colors"
+          >
+            Reset Statistics
+          </button>
+        )}
+      </div>
+      
+      {showResetConfirm && (
+        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">
+                Reset All Statistics?
+              </h4>
+              <p className="text-xs text-red-600 dark:text-red-300">
+                This will permanently delete all session data. This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex space-x-2 ml-4">
+              <button
+                onClick={resetAllStatistics}
+                className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition-colors"
+              >
+                Yes, Reset
+              </button>
+              <button
+                onClick={cancelReset}
+                className="text-xs bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {combinedStats.totalSessions === 0 ? (
         <div className="text-gray-600 dark:text-gray-400 text-center py-8">

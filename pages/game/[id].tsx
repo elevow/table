@@ -253,13 +253,6 @@ export default function GamePage() {
                   P6
                 </div>
                 
-                {/* Community cards area */}
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex gap-2">
-                  {[1,2,3,4,5].map(i => (
-                    <div key={i} className="w-12 h-16 bg-gray-800 border border-gray-600 rounded-md opacity-30"></div>
-                  ))}
-                </div>
-                
                 {/* Pot area */}
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-2 mt-20 text-white text-center">
                   <div className="bg-gray-800 bg-opacity-70 px-3 py-1 rounded text-sm font-semibold">

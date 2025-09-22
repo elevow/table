@@ -108,7 +108,7 @@ export default function GamePage() {
     return (
       <div
         key={seatNumber}
-        className={`absolute w-16 h-16 rounded-full border-2 flex items-center justify-center text-white text-xs font-semibold transition-all duration-200 ${position} ${
+        className={`absolute w-16 h-16 rounded-full border-2 flex items-center justify-center text-white text-xs font-semibold ${position} ${
           isEmpty
             ? canClaim
               ? 'bg-gray-600 border-gray-500 hover:bg-gray-500 hover:border-gray-400 cursor-pointer opacity-60 hover:opacity-80'

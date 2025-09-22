@@ -26,7 +26,7 @@ const GameSettings = dynamic(() => import('../../src/components/GameSettings'), 
 });
 
 // Component with granular code splitting
-const PlayerStats = dynamic(() => import('../../src/components/PlayerStats'), {
+const CombinedTimerStats = dynamic(() => import('../../src/components/CombinedTimerStats'), {
   loading: () => <div className="skeleton-loader stats-loader" />,
 });
 
@@ -264,16 +264,15 @@ export default function GamePage() {
             </div>
           </div>
 
-          {/* Timer HUD */}
+          {/* Combined Timer and Statistics */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
             {id && playerId && (
-              <TimerHUD tableId={String(id)} playerId={playerId} />
+              <CombinedTimerStats 
+                tableId={String(id)} 
+                playerId={playerId} 
+                gameId={String(id)} 
+              />
             )}
-          </div>
-          
-          {/* Player stats (important info, loaded early) */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
-            <PlayerStats gameId={String(id)} />
           </div>
           
           {/* Less critical component in viewport */}

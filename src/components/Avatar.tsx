@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import Image from 'next/image';
 
 interface AvatarProps {
   size?: 'sm' | 'md' | 'lg';
@@ -18,6 +17,7 @@ const Avatar: React.FC<AvatarProps> = ({
   className = '',
   onClick
 }) => {
+
   const [imageError, setImageError] = useState(false);
   
   const sizeClasses = {
@@ -46,14 +46,14 @@ const Avatar: React.FC<AvatarProps> = ({
   if (src && !imageError) {
     return (
       <div className={baseClasses} onClick={onClick}>
-        <Image 
+        <img 
           src={src} 
           alt={alt} 
           width={sizePixels[size]}
           height={sizePixels[size]}
-          className="object-cover rounded-full"
+          className="object-cover rounded-full w-full h-full"
           onError={() => setImageError(true)}
-          unoptimized={src.startsWith('data:')} // Don't optimize data URLs
+          loading="lazy"
         />
       </div>
     );

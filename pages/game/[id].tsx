@@ -1,5 +1,5 @@
 import { useRouter } from 'next/router';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
 import { useComponentPerformance } from '../../src/utils/performance-monitor';
@@ -187,10 +187,9 @@ export default function GamePage() {
     };
 
     return (
-      <>
+      <React.Fragment key={seatNumber}>
         {/* Main seat */}
         <div
-          key={seatNumber}
           className={`absolute w-16 h-16 rounded-full border-2 flex flex-col items-center justify-center text-white text-xs font-semibold ${position} ${
             isEmpty
               ? canClaim
@@ -250,7 +249,7 @@ export default function GamePage() {
             </div>
           </div>
         )}
-      </>
+      </React.Fragment>
     );
   };
 

@@ -1,7 +1,7 @@
 import type { NextPage } from 'next';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useUserAvatar } from '../src/hooks/useUserAvatar';
 import Avatar from '../src/components/Avatar';
 
@@ -12,9 +12,48 @@ const Profile: NextPage = () => {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   
-  // For now, using a mock userId - in a real app this would come from authentication
-  const userId = 'user-123';
+  // User authentication state
+  const [userId, setUserId] = useState<string>('user-123'); // fallback
   const { avatarData, refreshAvatar, updateAvatarData } = useUserAvatar(userId);
+
+  // Get authenticated user ID on component mount
+  useEffect(() => {
+    const getAuthenticatedUserId = async () => {
+      try {
+        const authToken = localStorage.getItem('auth_token');
+        if (authToken) {
+          const response = await fetch('/api/auth/me', {
+            headers: {
+              'Authorization': `Bearer ${authToken}`
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Profile - Using authenticated user ID:', data.userId);
+            setUserId(data.userId);
+          } else {
+            console.log('Profile - Authentication failed, using fallback userId');
+          }
+        } else {
+          console.log('Profile - No auth token, using fallback userId');
+        }
+      } catch (error) {
+        console.error('Profile - Error getting authenticated user ID:', error);
+      }
+    };
+    
+    getAuthenticatedUserId();
+  }, []);
+
+  // Debug logging for userId tracking
+  useEffect(() => {
+    console.log('=== Profile Page Avatar Debug ===');
+    console.log('Profile page userId:', userId);
+    console.log('Auth token in localStorage:', localStorage.getItem('auth_token')?.slice(0, 20) + '...');
+    console.log('Avatar data for this userId:', avatarData);
+    console.log('=== End Profile Page Debug ===');
+  }, [userId, avatarData]);
 
   const handleAvatarUpload = useCallback(async (file: File) => {
     if (!file) return;
@@ -32,8 +71,20 @@ const Profile: NextPage = () => {
         reader.readAsDataURL(file);
       });
       
-      // For now, we'll use a mock userId - in a real app this would come from authentication
-      const userId = '550e8400-e29b-41d4-a716-446655440000'; // Valid UUID format for testing
+      // Get the current user ID from authentication
+      // This will be handled by the server-side authentication in the upload endpoint
+      const userId = 'current-user'; // Placeholder - server will use authenticated user
+      
+      // Get authentication token from localStorage
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      
+      console.log('=== Avatar Upload Debug ===');
+      console.log('Starting avatar upload...');
+      console.log('Client-side userId (placeholder):', userId);
+      console.log('Auth token exists:', !!authToken);
+      console.log('Auth token preview:', authToken?.slice(0, 20) + '...');
+      console.log('File size:', file.size, 'bytes');
+      console.log('=== Upload Starting ===');
       
       // Create variants (different sizes) - in a real app, you might generate these on the server
       const variants = {
@@ -42,14 +93,18 @@ const Profile: NextPage = () => {
         large: base64  // 128x128
       };
       
-      // Upload the avatar using JSON (using mock for now)
-      const response = await fetch('/api/avatars/upload-mock', {
+      if (!authToken) {
+        throw new Error('Please log in to upload an avatar');
+      }
+      
+      // Upload the avatar using the real endpoint
+      const response = await fetch('/api/avatars/upload', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify({
-          userId,
           originalUrl: base64,
           variants
         }),
@@ -61,6 +116,14 @@ const Profile: NextPage = () => {
       }
       
       const result = await response.json();
+      
+      console.log('=== Avatar Upload Success ===');
+      console.log('Upload response:', result);
+      console.log('Avatar ID returned:', result.id);
+      console.log('Avatar URL returned:', result.url);
+      console.log('Server processed for authenticated user (check server logs)');
+      console.log('=== Upload Complete ===');
+      
       setUploadSuccess('Avatar uploaded successfully!');
       
       // Update the avatar data in the hook
@@ -234,7 +297,10 @@ const Profile: NextPage = () => {
                 </h3>
                 
                 <div className="space-y-2">
-                  <button className="w-full text-left px-4 py-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+                  <button 
+                    onClick={() => router.push('/account-settings')}
+                    className="w-full text-left px-4 py-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                  >
                     <span className="text-gray-900 dark:text-gray-100">Account Settings</span>
                   </button>
                   

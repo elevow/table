@@ -117,7 +117,7 @@ export default async function handler(
         ORDER BY ordinal_position
       `);
       
-      console.log('Available columns in game_rooms table:', schemaResult.rows.map(row => row.column_name));
+      // console.log('Available columns in game_rooms table:', schemaResult.rows.map(row => row.column_name));
 
       // Get rooms with basic columns that should exist
       const roomsResult = await client.query(`

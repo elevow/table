@@ -12,7 +12,7 @@ export function getSocket(): Socket | null {
   // For now, disable socket connections to prevent navigation blocking
   // TODO: Re-enable once navigation issues are resolved
   if (process.env.NODE_ENV === 'development' && !isTestEnvironment) {
-    console.log('🔌 Socket.IO disabled in development to prevent navigation issues');
+    // console.log('🔌 Socket.IO disabled in development to prevent navigation issues');
     return null;
   }
   

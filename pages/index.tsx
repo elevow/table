@@ -36,17 +36,36 @@ const Home: NextPage = () => {
       const data = await response.json();
       
       if (data.success) {
+        console.log('Login successful, data:', data);
+        
         // Store token in localStorage for session management
         localStorage.setItem('auth_token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
+        console.log('Auth data stored in localStorage');
         
         // Try router.push first, with fallback to window.location
+        console.log('Attempting navigation to dashboard...');
         try {
-          await router.push('/dashboard');
+          const navigationPromise = router.push('/dashboard');
+          console.log('Router.push called, awaiting...');
+          
+          // Set a timeout for fallback navigation
+          const timeoutId = setTimeout(() => {
+            console.log('Router navigation timeout, using window.location.href');
+            window.location.href = '/dashboard';
+          }, 2000);
+          
+          await navigationPromise;
+          console.log('Router navigation successful');
+          clearTimeout(timeoutId);
+          
         } catch (routerError) {
+          console.error('Router navigation failed:', routerError);
+          console.log('Using window.location.href fallback');
           window.location.href = '/dashboard';
         }
       } else {
+        console.log('Login failed:', data);
         setError(data.error || 'Authentication failed');
       }
     } catch (error) {

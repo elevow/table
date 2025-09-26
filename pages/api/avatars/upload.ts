@@ -2,6 +2,12 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
 import { AvatarService } from '../../../src/lib/services/avatar-service';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
+import { requireAuth } from '../../../src/lib/auth/auth-utils';
+
+// Temporarily disable SSL certificate verification for development
+if (process.env.NODE_ENV === 'development') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -10,15 +16,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!rl.allowed) return res.status(429).json({ error: 'Upload limit exceeded. Try again later.' });
 
   try {
-    const { userId, originalUrl, variants } = req.body;
+    // Get authenticated user ID from session
+    const authenticatedUserId = await requireAuth(req);
+    
+    console.log('=== Avatar Upload API Debug ===');
+    console.log('Authenticated userId from session:', authenticatedUserId);
+    console.log('This userId will be saved to database');
+    console.log('=== Upload API Processing ===');
+    
+    const { originalUrl, variants } = req.body;
 
-    if (!userId || !originalUrl || !variants) {
+    if (!originalUrl || !variants) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const pool = new Pool();
+    // Use proper database configuration with SSL fix for self-signed certificates
+    const connectionString = process.env.POOL_DATABASE_URL || process.env.DATABASE_URL;
+    
+    // Parse connection string to modify SSL mode
+    let modifiedConnectionString = connectionString;
+    if (connectionString?.includes('sslmode=require')) {
+      modifiedConnectionString = connectionString.replace('sslmode=require', 'sslmode=prefer');
+    }
+    
+    const pool = new Pool({
+      connectionString: modifiedConnectionString,
+      ssl: connectionString?.includes('supabase') ? { 
+        rejectUnauthorized: false
+      } : false
+    });
+    
     const service = new AvatarService(pool as any);
-    const avatar = await service.uploadAvatar({ userId, originalUrl, variants });
+    const avatar = await service.uploadAvatar({ userId: authenticatedUserId, originalUrl, variants });
+    
+    // Close the pool connection
+    await pool.end();
     
     return res.status(201).json({ 
       id: avatar.id, 

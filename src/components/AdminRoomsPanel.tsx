@@ -55,10 +55,10 @@ export default function AdminRoomsPanel() {
           },
         });
 
-        console.log('AdminRoomsPanel: Admin check response status:', response.status);
+        // console.log('AdminRoomsPanel: Admin check response status:', response.status);
         
         if (response.ok) {
-          console.log('AdminRoomsPanel: User is admin!');
+          // console.log('AdminRoomsPanel: User is admin!');
           setIsAdmin(true);
         } else {
           const errorText = await response.text();

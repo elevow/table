@@ -146,7 +146,7 @@ export class PerformanceMonitor {
     
     if (metricsToSend.length > 0) {
       // In a real implementation, you would send these to your analytics service
-  console.log(`Sending ${metricsToSend.length} performance metrics`);
+  // console.log(`Sending ${metricsToSend.length} performance metrics`);
       
       // Mark as sent
       metricsToSend.forEach(m => this.sent.add(`${m.name}-${m.startTime}`));

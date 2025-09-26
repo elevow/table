@@ -6,7 +6,11 @@ import getLatestHandler from '../../../pages/api/avatars/user/[userId]';
 import updateHandler from '../../../pages/api/avatars/[avatarId]';
 
 // Mocks: pg Pool, rate limiter, and AvatarService used inside handlers
-jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({})) }));
+jest.mock('pg', () => ({ 
+  Pool: jest.fn().mockImplementation(() => ({
+    end: jest.fn().mockResolvedValue(undefined)
+  }))
+}));
 
 jest.mock('../../../src/lib/api/rate-limit', () => ({
   rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 })
@@ -22,6 +26,13 @@ const mockServiceInstance: any = {
 
 jest.mock('../../../src/lib/services/avatar-service', () => ({
   AvatarService: jest.fn().mockImplementation(() => mockServiceInstance)
+}));
+
+// Mock auth utils
+jest.mock('../../../src/lib/auth/auth-utils', () => ({
+  requireAuth: jest.fn(() => Promise.resolve('authenticated-user-123')),
+  getAuthenticatedUserId: jest.fn(() => Promise.resolve('authenticated-user-123')),
+  getAuthToken: jest.fn(() => 'mock-token')
 }));
 
 function createRes() {
@@ -51,7 +62,7 @@ describe('Avatar API routes', () => {
     const avatar = { id: 'a1', originalUrl: 'http://img/orig.jpg', variants: { thumb: 'http://img/t.jpg' }, status: 'active' } as any;
     mockServiceInstance.uploadAvatar.mockResolvedValue(avatar);
 
-    const req = createReq('POST', { userId: 'u1', originalUrl: avatar.originalUrl, variants: avatar.variants });
+    const req = createReq('POST', { originalUrl: avatar.originalUrl, variants: avatar.variants });
     const res = createRes();
 
     await uploadHandler(req as any, res as any);
@@ -61,7 +72,7 @@ describe('Avatar API routes', () => {
   });
 
   test('POST /api/avatars/upload validation error', async () => {
-    const req = createReq('POST', { userId: 'u1' });
+    const req = createReq('POST', { /* missing originalUrl and variants */ });
     const res = createRes();
 
     await uploadHandler(req as any, res as any);

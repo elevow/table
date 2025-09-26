@@ -19,8 +19,39 @@ const Dashboard: NextPage = () => {
   const [isValidating, setIsValidating] = useState(false);
   const [validationMessage, setValidationMessage] = useState('');
   
-  // For now, using a mock userId - in a real app this would come from authentication
-  const { avatarData, loading: avatarLoading } = useUserAvatar('user-123');
+  // User authentication state
+  const [userId, setUserId] = useState<string>('user-123'); // fallback
+  const { avatarData, loading: avatarLoading } = useUserAvatar(userId);
+  
+  // Get authenticated user ID on component mount
+  useEffect(() => {
+    const getAuthenticatedUserId = async () => {
+      try {
+        const authToken = localStorage.getItem('auth_token');
+        if (authToken) {
+          const response = await fetch('/api/auth/me', {
+            headers: {
+              'Authorization': `Bearer ${authToken}`
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Dashboard - Using authenticated user ID:', data.userId);
+            setUserId(data.userId);
+          } else {
+            console.log('Dashboard - Authentication failed, using fallback userId');
+          }
+        } else {
+          console.log('Dashboard - No auth token, using fallback userId');
+        }
+      } catch (error) {
+        console.error('Dashboard - Error getting authenticated user ID:', error);
+      }
+    };
+    
+    getAuthenticatedUserId();
+  }, []);
   
   const handleAvatarClick = () => {
     // Navigate to profile page
@@ -40,6 +71,7 @@ const Dashboard: NextPage = () => {
     setValidationMessage('');
     
     try {
+      console.log('Attempting to validate room code:', roomCode.trim());
       const response = await fetch('/api/games/validate-room', {
         method: 'POST',
         headers: {
@@ -49,17 +81,47 @@ const Dashboard: NextPage = () => {
       });
       
       const data = await response.json();
+      console.log('API Response status:', response.status, 'Data:', data);
       
       if (response.ok) {
         if (data.joinable) {
           // Room exists and is joinable - navigate to the game
-          router.push(`/game/${data.room.id}`);
+          console.log('Attempting to navigate to:', `/game/${data.room.id}`);
+          
+          try {
+            // Use window.location as backup if router fails
+            const navigationPromise = router.push(`/game/${data.room.id}`);
+            
+            // Set a timeout to check if navigation completed
+            const timeoutId = setTimeout(() => {
+              console.log('Navigation timeout - trying window.location.href');
+              window.location.href = `/game/${data.room.id}`;
+            }, 2000);
+            
+            // Handle the navigation promise
+            navigationPromise.then(() => {
+              console.log('Navigation completed successfully');
+              clearTimeout(timeoutId);
+            }).catch((error) => {
+              console.error('Navigation error:', error);
+              clearTimeout(timeoutId);
+              // Fallback to window.location
+              console.log('Router failed, using window.location.href');
+              window.location.href = `/game/${data.room.id}`;
+            });
+          } catch (error) {
+            console.error('Router push failed:', error);
+            // Direct navigation fallback
+            window.location.href = `/game/${data.room.id}`;
+          }
         } else {
           // Room exists but not joinable
+          console.log('Room not joinable. Reason:', data.reason);
           setValidationMessage(`Cannot join room: ${data.reason}`);
         }
       } else {
         // Room not found or other error
+        console.log('API request failed. Status:', response.status, 'Data:', data);
         setValidationMessage(data.message || data.error || 'Room not found');
       }
     } catch (error) {

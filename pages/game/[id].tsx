@@ -412,7 +412,7 @@ export default function GamePage() {
 
     // Join table and personal room
     if (socket && id && typeof id === 'string') {
-      socket.emit('join_table', { tableId: id, playerId: pid });
+      socket.emit('join_table', { tableId: id, playerId: playerId });
     }
 
     // Load game routes data only when needed

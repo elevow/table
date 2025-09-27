@@ -1,5 +1,5 @@
 import { useRouter } from 'next/router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
 import { useComponentPerformance } from '../../src/utils/performance-monitor';
@@ -56,6 +56,9 @@ export default function GamePage() {
   // Avatar data for current player
   const { avatarData: currentPlayerAvatar, loading: avatarLoading, error: avatarError } = useUserAvatar(playerId);
   
+  // Avatar cache for all players (including other seated players)
+  const [playerAvatars, setPlayerAvatars] = useState<Record<string, string>>({});
+  
   // Debug logging for avatar data
   useEffect(() => {
     console.log('=== Avatar Debug Start ===');
@@ -70,13 +73,51 @@ export default function GamePage() {
     }
   }, [playerId, currentPlayerAvatar, avatarLoading, avatarError]);
   
+  // Function to load avatar for any player
+  const loadPlayerAvatar = useCallback(async (playerIdToLoad: string) => {
+    if (playerAvatars[playerIdToLoad]) {
+      return; // Already loaded
+    }
+    
+    try {
+      const response = await fetch(`/api/avatars/user/${playerIdToLoad}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.url) {
+          setPlayerAvatars(prev => ({
+            ...prev,
+            [playerIdToLoad]: data.url
+          }));
+          return;
+        }
+      }
+      
+      // If no avatar found, generate default
+      const shortId = playerIdToLoad.slice(-3).toUpperCase();
+      const defaultAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(shortId)}&background=6b7280&color=fff&size=128`;
+      setPlayerAvatars(prev => ({
+        ...prev,
+        [playerIdToLoad]: defaultAvatarUrl
+      }));
+    } catch (error) {
+      console.warn('Failed to load avatar for player:', playerIdToLoad, error);
+      // Generate default avatar on error
+      const shortId = playerIdToLoad.slice(-3).toUpperCase();
+      const defaultAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(shortId)}&background=6b7280&color=fff&size=128`;
+      setPlayerAvatars(prev => ({
+        ...prev,
+        [playerIdToLoad]: defaultAvatarUrl
+      }));
+    }
+  }, [playerAvatars]);
+  
   // Helper function to get avatar src for a player
   const getPlayerAvatarSrc = (playerIdForAvatar: string) => {
-    // console.log('Getting avatar for player:', playerIdForAvatar, 'current playerId:', playerId);
+    console.log('Getting avatar for player:', playerIdForAvatar, 'current playerId:', playerId);
     
     // For current player, use the loaded avatar data if available
     if (playerIdForAvatar === playerId && currentPlayerAvatar?.url) {
-      // console.log('Returning current player avatar:', currentPlayerAvatar.url);
+      console.log('Returning current player avatar:', currentPlayerAvatar.url);
       return currentPlayerAvatar.url;
     }
     
@@ -88,10 +129,17 @@ export default function GamePage() {
       return `https://ui-avatars.com/api/?name=${encodeURIComponent(shortId)}&background=0d8abc&color=fff&size=128`;
     }
     
-    // For other players, generate default avatars too
-    console.log('Generating default avatar for other player');
+    // For other players, use cached avatar if available
+    if (playerAvatars[playerIdForAvatar]) {
+      console.log('Returning cached avatar for other player:', playerIdForAvatar, playerAvatars[playerIdForAvatar]);
+      return playerAvatars[playerIdForAvatar];
+    }
+    
+    // If avatar not loaded yet, generate temporary default and trigger load
+    console.log('Avatar not loaded yet for other player, generating temporary default and triggering load');
+    loadPlayerAvatar(playerIdForAvatar);
     const shortId = playerIdForAvatar.slice(-3).toUpperCase();
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(shortId)}&background=6b7280&color=fff&size=128`;
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(shortId)}&background=9ca3af&color=fff&size=128`;
   };
   
   // Seat management state
@@ -101,6 +149,18 @@ export default function GamePage() {
   const [currentPlayerSeat, setCurrentPlayerSeat] = useState<number | null>(null);
   const [userRole, setUserRole] = useState<'admin' | 'player' | 'guest'>('guest');
   const [playerChips, setPlayerChips] = useState<number>(0);
+  
+  // Load avatars for all seated players
+  useEffect(() => {
+    const seatedPlayerIds = Object.values(seatAssignments)
+      .filter(assignment => assignment !== null)
+      .map(assignment => assignment!.playerId)
+      .filter(id => id !== playerId); // Exclude current player
+    
+    seatedPlayerIds.forEach(id => {
+      loadPlayerAvatar(id);
+    });
+  }, [seatAssignments, playerId, loadPlayerAvatar]);
   
   // Seat management functions
   const claimSeat = (seatNumber: number) => {
@@ -129,13 +189,22 @@ export default function GamePage() {
     localStorage.setItem(`seats_${id}`, JSON.stringify(newAssignments));
     localStorage.setItem(`chips_${playerId}_${id}`, startingChips.toString());
 
-    // TODO: In a real implementation, broadcast to other players via socket
-    // socket?.emit('claim_seat', { tableId: id, seatNumber, playerId, playerName, chips: startingChips });
+    // Broadcast to other players via socket
+    if (socket) {
+      socket.emit('claim_seat', { 
+        tableId: id, 
+        seatNumber, 
+        playerId, 
+        playerName, 
+        chips: startingChips 
+      });
+    }
   };
 
   const standUp = () => {
     if (!currentPlayerSeat) return;
 
+    const seatToVacate = currentPlayerSeat;
     const newAssignments = {
       ...seatAssignments,
       [currentPlayerSeat]: null
@@ -149,8 +218,14 @@ export default function GamePage() {
     localStorage.setItem(`seats_${id}`, JSON.stringify(newAssignments));
     localStorage.removeItem(`chips_${playerId}_${id}`);
 
-    // TODO: In a real implementation, broadcast to other players via socket
-    // socket?.emit('stand_up', { tableId: id, seatNumber: currentPlayerSeat, playerId });
+    // Broadcast to other players via socket
+    if (socket) {
+      socket.emit('stand_up', { 
+        tableId: id, 
+        seatNumber: seatToVacate, 
+        playerId 
+      });
+    }
   };
 
   // Render seat component with adjacent player info
@@ -471,6 +546,96 @@ export default function GamePage() {
     determineRole();
   }, []); // Empty dependency array - only run once on mount
 
+  // Initialize socket connection - run once on mount
+  useEffect(() => {
+    if (!playerId || !id) return;
+
+    let currentSocket: any = null;
+
+    const initSocket = async () => {
+      try {
+        const socketInstance = await getSocket();
+        if (!socketInstance) {
+          console.error('Failed to get socket instance');
+          return;
+        }
+        
+        currentSocket = socketInstance;
+        setSocket(socketInstance);
+
+        // Join the game room
+        socketInstance.emit('join_table', { tableId: id, playerId: playerId });
+
+        // Listen for seat updates from other players
+        const handleSeatClaimed = (data: { seatNumber: number; playerId: string; playerName: string; chips: number }) => {
+          console.log('Received seat_claimed:', data);
+          setSeatAssignments(prev => ({
+            ...prev,
+            [data.seatNumber]: {
+              playerId: data.playerId,
+              playerName: data.playerName,
+              chips: data.chips
+            }
+          }));
+          
+          // Update current player seat if this player claimed it
+          if (data.playerId === playerId) {
+            setCurrentPlayerSeat(data.seatNumber);
+            setPlayerChips(data.chips);
+          }
+        };
+
+        const handleSeatVacated = (data: { seatNumber: number; playerId: string }) => {
+          console.log('Received seat_vacated:', data);
+          setSeatAssignments(prev => ({
+            ...prev,
+            [data.seatNumber]: null
+          }));
+          
+          // Update current player seat if this player stood up
+          if (data.playerId === playerId) {
+            setCurrentPlayerSeat(null);
+            setPlayerChips(0);
+          }
+        };
+
+        const handleSeatState = (data: { seats: Record<number, { playerId: string; playerName: string; chips: number } | null> }) => {
+          console.log('Received seat_state:', data);
+          setSeatAssignments(data.seats);
+          
+          // Find current player's seat
+          const playerSeat = Object.entries(data.seats).find(([_, assignment]) => assignment?.playerId === playerId);
+          if (playerSeat) {
+            const [seatNumber, assignment] = playerSeat;
+            setCurrentPlayerSeat(parseInt(seatNumber));
+            setPlayerChips(assignment?.chips || 0);
+          }
+        };
+
+        socketInstance.on('seat_claimed', handleSeatClaimed);
+        socketInstance.on('seat_vacated', handleSeatVacated);
+        socketInstance.on('seat_state', handleSeatState);
+
+        // Request current seat state when joining
+        socketInstance.emit('get_seat_state', { tableId: id });
+
+      } catch (error) {
+        console.error('Failed to initialize socket:', error);
+      }
+    };
+
+    initSocket();
+
+    return () => {
+      // Clean up socket listeners when component unmounts
+      if (currentSocket) {
+        currentSocket.off('seat_claimed');
+        currentSocket.off('seat_vacated');
+        currentSocket.off('seat_state');
+      }
+    };
+  }, [playerId, id]); // Only depend on playerId and id
+
   // Load seat assignments - separate useEffect to prevent infinite loops
   useEffect(() => {
     if (!id || !playerId) return; // Wait for both id and playerId to be available
@@ -644,40 +809,6 @@ export default function GamePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               <span className="whitespace-nowrap">Settings</span>
-            </button>
-            <button
-              onClick={() => {
-                // Clear all game-related localStorage data for debugging
-                localStorage.removeItem(`seats_${id}`);
-                localStorage.removeItem(`chips_${playerId}_${id}`);
-                // Reset state
-                setSeatAssignments({
-                  1: null, 2: null, 3: null, 4: null, 5: null, 6: null
-                });
-                setCurrentPlayerSeat(null);
-                setPlayerChips(20);
-                console.log('Cleared all seat data for debugging');
-                alert('Seat data cleared. Refresh page to see clean state.');
-              }}
-              className="bg-gray-600 hover:bg-gray-700 dark:bg-gray-500 dark:hover:bg-gray-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto"
-              title="Clear corrupted seat data for debugging"
-            >
-              🔧 Debug Clear
-            </button>
-            
-            <button
-              onClick={() => {
-                // Nuclear option - clear ALL localStorage
-                if (confirm('This will clear ALL localStorage data and reload. Are you sure?')) {
-                  console.log('Before clear - localStorage keys:', Object.keys(localStorage));
-                  localStorage.clear();
-                  window.location.reload();
-                }
-              }}
-              className="bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto ml-2"
-              title="Clear ALL localStorage data (nuclear option)"
-            >
-              💣 Clear All
             </button>
           </div>
         </div>

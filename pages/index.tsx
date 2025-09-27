@@ -29,11 +29,13 @@ const Home: NextPage = () => {
         body: JSON.stringify(body)
       });
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
       const data = await response.json();
+      
+      if (!response.ok) {
+        // Handle API error responses (4xx, 5xx)
+        setError(data.error || `HTTP error! status: ${response.status}`);
+        return;
+      }
       
       if (data.success) {
         console.log('Login successful, data:', data);

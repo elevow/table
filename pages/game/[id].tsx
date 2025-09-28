@@ -150,6 +150,20 @@ export default function GamePage() {
   const [userRole, setUserRole] = useState<'admin' | 'player' | 'guest'>('guest');
   const [playerChips, setPlayerChips] = useState<number>(0);
   
+  // Helper functions for game state
+  const getSeatedPlayersCount = () => {
+    return Object.values(seatAssignments).filter(assignment => assignment !== null).length;
+  };
+  
+  const canStartGame = () => {
+    const seatedCount = getSeatedPlayersCount();
+    return seatedCount >= 2 && currentPlayerSeat !== null; // Need 2+ players and current player must be seated
+  };
+  
+  // Game state
+  const [gameStarted, setGameStarted] = useState(false);
+  const [pokerGameState, setPokerGameState] = useState<any>(null);
+  
   // Load avatars for all seated players
   useEffect(() => {
     const seatedPlayerIds = Object.values(seatAssignments)
@@ -228,6 +242,106 @@ export default function GamePage() {
     }
   };
 
+  // Start game handler
+  const handleStartGame = () => {
+    if (!canStartGame()) {
+      console.warn('Cannot start game: insufficient players or player not seated');
+      return;
+    }
+    
+    console.log('Starting game with', getSeatedPlayersCount(), 'players');
+    setGameStarted(true);
+    
+    // Emit start game event via socket
+    if (socket) {
+      socket.emit('start_game', { 
+        tableId: id, 
+        playerId,
+        seatedPlayers: Object.entries(seatAssignments)
+          .filter(([_, assignment]) => assignment !== null)
+          .map(([seatNumber, assignment]) => ({
+            seatNumber: parseInt(seatNumber),
+            playerId: assignment!.playerId,
+            playerName: assignment!.playerName,
+            chips: assignment!.chips
+          }))
+      });
+    }
+  };
+
+  // Poker action handlers
+  const handlePokerAction = (action: string, amount?: number) => {
+    if (!socket || !pokerGameState || !playerId) {
+      console.warn('Cannot perform action: missing socket, game state, or player ID');
+      return;
+    }
+
+    console.log(`Performing ${action}${amount ? ` for ${amount}` : ''}`);
+    
+    socket.emit('player_action', {
+      tableId: id,
+      playerId: playerId,
+      action: action,
+      amount: amount
+    });
+  };
+
+  const handleFold = () => handlePokerAction('fold');
+  const handleCheck = () => handlePokerAction('check');
+  const handleCall = () => {
+    if (pokerGameState?.currentBet) {
+      const playerInGame = pokerGameState.players.find((p: any) => p.id === playerId);
+      const callAmount = pokerGameState.currentBet - (playerInGame?.currentBet || 0);
+      handlePokerAction('call', callAmount);
+    }
+  };
+  const handleBet = (amount: number) => handlePokerAction('bet', amount);
+  const handleRaise = (amount: number) => handlePokerAction('raise', amount);
+
+  // Get current player's hole cards
+  const getCurrentPlayerCards = () => {
+    if (!pokerGameState || !playerId) return [];
+    const player = pokerGameState.players.find((p: any) => p.id === playerId);
+    return player?.holeCards || [];
+  };
+
+  // Get position for current player's hole cards based on their seat
+  const getCurrentPlayerCardsPosition = () => {
+    if (!currentPlayerSeat) return 'bottom-8 left-1/2 transform -translate-x-1/2';
+    
+    // Find the current player's rotated position
+    const rotatedPositions = getRotatedSeatPositions();
+    const currentSeatData = rotatedPositions.find(pos => pos.seatNumber === currentPlayerSeat);
+    
+    if (!currentSeatData) return 'bottom-8 left-1/2 transform -translate-x-1/2';
+    
+    const position = currentSeatData.position;
+    
+    // Position cards closer to the player's seat
+    if (position.includes('top-1') && position.includes('left-1/2')) {
+      // Top center seat - cards below the seat
+      return 'top-16 left-1/2 transform -translate-x-1/2';
+    } else if (position.includes('top-8') && position.includes('right-8')) {
+      // Top-right seat - cards to the left of the seat
+      return 'top-12 right-16';
+    } else if (position.includes('bottom-8') && position.includes('right-8')) {
+      // Bottom-right seat - cards to the left of the seat
+      return 'bottom-12 right-16';
+    } else if (position.includes('bottom-1') && position.includes('left-1/2')) {
+      // Bottom center seat (your position) - cards above the seat
+      return 'bottom-16 left-1/2 transform -translate-x-1/2';
+    } else if (position.includes('bottom-8') && position.includes('left-8')) {
+      // Bottom-left seat - cards to the right of the seat
+      return 'bottom-12 left-16';
+    } else if (position.includes('top-8') && position.includes('left-8')) {
+      // Top-left seat - cards to the right of the seat
+      return 'top-12 left-16';
+    }
+    
+    // Fallback to bottom center
+    return 'bottom-8 left-1/2 transform -translate-x-1/2';
+  };
+
   // Render seat component with adjacent player info
   const renderSeat = (seatNumber: number, position: string, style?: React.CSSProperties) => {
     const assignment = seatAssignments[seatNumber];
@@ -260,6 +374,8 @@ export default function GamePage() {
       // Fallback
       return '-bottom-24 left-1/2 transform -translate-x-1/2';
     };
+
+
 
     return (
       <React.Fragment key={seatNumber}>
@@ -612,9 +728,34 @@ export default function GamePage() {
           }
         };
 
+        const handleGameStart = (data: { startedBy: string; playerName: string; seatedPlayers: any[]; gameState?: any }) => {
+          console.log('Game started by:', data.startedBy, data.playerName);
+          console.log('Seated players:', data.seatedPlayers);
+          console.log('Initial game state:', data.gameState);
+          setGameStarted(true);
+          
+          if (data.gameState) {
+            setPokerGameState(data.gameState);
+          }
+        };
+
+        const handleGameStateUpdate = (data: { gameState: any; lastAction?: any }) => {
+          console.log('Game state update:', data.gameState);
+          console.log('Last action:', data.lastAction);
+          setPokerGameState(data.gameState);
+        };
+
+        const handleActionFailed = (data: { error: string; playerId?: string; action?: string }) => {
+          console.error('Action failed:', data);
+          // You could show a toast notification here
+        };
+
         socketInstance.on('seat_claimed', handleSeatClaimed);
         socketInstance.on('seat_vacated', handleSeatVacated);
         socketInstance.on('seat_state', handleSeatState);
+        socketInstance.on('game_started', handleGameStart);
+        socketInstance.on('game_state_update', handleGameStateUpdate);
+        socketInstance.on('action_failed', handleActionFailed);
 
         // Request current seat state when joining
         socketInstance.emit('get_seat_state', { tableId: id });
@@ -632,6 +773,9 @@ export default function GamePage() {
         currentSocket.off('seat_claimed');
         currentSocket.off('seat_vacated');
         currentSocket.off('seat_state');
+        currentSocket.off('game_started');
+        currentSocket.off('game_state_update');
+        currentSocket.off('action_failed');
       }
     };
   }, [playerId, id]); // Only depend on playerId and id
@@ -772,6 +916,14 @@ export default function GamePage() {
                 </span>
               </div>
             )}
+            {gameStarted && (
+              <div className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/20 px-3 py-2 rounded-lg">
+                <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+                <span className="text-blue-700 dark:text-blue-300 font-medium">
+                  Game Started - {getSeatedPlayersCount()} players
+                </span>
+              </div>
+            )}
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
             {currentPlayerSeat && (
@@ -785,6 +937,19 @@ export default function GamePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                 </svg>
                 <span className="whitespace-nowrap">Stand Up (P{currentPlayerSeat})</span>
+              </button>
+            )}
+            {canStartGame() && !gameStarted && (
+              <button
+                onClick={handleStartGame}
+                className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto"
+                title={`Start the game with ${getSeatedPlayersCount()} players`}
+                aria-label="Start game"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                <span className="whitespace-nowrap">Start Game ({getSeatedPlayersCount()})</span>
               </button>
             )}
             <button
@@ -850,13 +1015,108 @@ export default function GamePage() {
                 {/* Pot area */}
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-2 mt-20 text-white text-center">
                   <div className="bg-gray-800 bg-opacity-70 px-3 py-1 rounded text-sm font-semibold">
-                    Pot: $0
+                    Pot: ${pokerGameState?.pot || 0}
                   </div>
+                  {pokerGameState?.stage && (
+                    <div className="bg-blue-800 bg-opacity-70 px-2 py-1 rounded text-xs font-medium mt-1">
+                      {pokerGameState.stage.charAt(0).toUpperCase() + pokerGameState.stage.slice(1)}
+                    </div>
+                  )}
                 </div>
+
+                {/* Community Cards */}
+                {pokerGameState?.communityCards && pokerGameState.communityCards.length > 0 && (
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex gap-1">
+                    {pokerGameState.communityCards.map((card: any, index: number) => (
+                      <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold">
+                        <div>{card.rank}</div>
+                        <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>
+                          {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Current Player's Hole Cards - positioned closer to their seat */}
+                {gameStarted && pokerGameState && getCurrentPlayerCards().length > 0 && currentPlayerSeat && (
+                  <div className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20`}>
+                    {getCurrentPlayerCards().map((card: any, index: number) => (
+                      <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-lg">
+                        <div>{card.rank}</div>
+                        <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>
+                          {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 
               </div>
             </div>
           </div>
+
+          {/* Poker Action Panel */}
+          {gameStarted && pokerGameState && pokerGameState.activePlayer === playerId && (
+            <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Your Turn</h3>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleFold}
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition-colors"
+                >
+                  Fold
+                </button>
+                
+                {pokerGameState.currentBet === 0 ? (
+                  <button
+                    onClick={handleCheck}
+                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors"
+                  >
+                    Check
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleCall}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors"
+                  >
+                    Call ${pokerGameState.currentBet}
+                  </button>
+                )}
+                
+                <button
+                  onClick={() => handleBet(pokerGameState.bigBlind || 2)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors"
+                >
+                  Bet ${pokerGameState.bigBlind || 2}
+                </button>
+                
+                <button
+                  onClick={() => handleRaise((pokerGameState.currentBet || 0) + (pokerGameState.bigBlind || 2))}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors"
+                >
+                  Raise to ${(pokerGameState.currentBet || 0) + (pokerGameState.bigBlind || 2)}
+                </button>
+              </div>
+              
+              <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                <p>Current Bet: ${pokerGameState.currentBet || 0} | Pot: ${pokerGameState.pot || 0}</p>
+                <p>Your Stack: ${pokerGameState.players.find((p: any) => p.id === playerId)?.stack || 0}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Game Status Display */}
+          {gameStarted && pokerGameState && pokerGameState.activePlayer !== playerId && (
+            <div className="lg:col-span-2 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-md p-4 mt-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Game Status</h3>
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                <p>Waiting for {pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'} to act...</p>
+                <p>Current Bet: ${pokerGameState.currentBet || 0} | Pot: ${pokerGameState.pot || 0}</p>
+                <p>Stage: {pokerGameState.stage}</p>
+              </div>
+            </div>
+          )}
 
           {/* Combined Timer and Statistics */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">

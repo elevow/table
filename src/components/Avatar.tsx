@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Image from 'next/image';
 
 interface AvatarProps {
   size?: 'sm' | 'md' | 'lg';
@@ -46,7 +47,7 @@ const Avatar: React.FC<AvatarProps> = ({
   if (src && !imageError) {
     return (
       <div className={baseClasses} onClick={onClick}>
-        <img 
+        <Image 
           src={src} 
           alt={alt} 
           width={sizePixels[size]}
@@ -54,6 +55,7 @@ const Avatar: React.FC<AvatarProps> = ({
           className="object-cover rounded-full w-full h-full"
           onError={() => setImageError(true)}
           loading="lazy"
+          unoptimized={true} // For external URLs like UI avatars
         />
       </div>
     );

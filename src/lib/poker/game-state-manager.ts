@@ -9,7 +9,7 @@ export class GameStateManager {
     this.state.stage = stage;
     // Determine start position by variant/stage
     let startPosition = 0;
-  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
+    if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
       // US-053: In Stud, third street starts with bring-in (lowest upcard); simplify to position 0 for now
       // Later streets normally start with highest upcards; for MVP tests we start at position 0
       startPosition = 0;

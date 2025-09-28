@@ -36,14 +36,14 @@ export class BettingManager {
   }
 
   public postBlinds(players: Player[]): { pot: number; currentBet: number } {
-    // Find players by position
+    // Find players by position - position 1 is always small blind, position 2 is always big blind
     const smallBlindPlayer = players.find(p => p.position === 1);
-    if (!smallBlindPlayer) throw new Error('Could not find small blind player');
-    const sbAmount = this.placeBet(smallBlindPlayer, this.smallBlind);
-
-    // Post big blind
     const bigBlindPlayer = players.find(p => p.position === 2);
+    
+    if (!smallBlindPlayer) throw new Error('Could not find small blind player');
     if (!bigBlindPlayer) throw new Error('Could not find big blind player');
+    
+    const sbAmount = this.placeBet(smallBlindPlayer, this.smallBlind);
     const bbAmount = this.placeBet(bigBlindPlayer, this.bigBlind);
 
     return {

@@ -165,7 +165,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         const players = sortedSeatedPlayers.map((seated, index) => ({
           id: seated.playerId,
           name: seated.playerName,
-          position: index, // Always use 0-based indexing: 0, 1, 2, ...
+          position: index + 1, // Use 1-based indexing: 1, 2, 3, ... (position 1 = small blind, position 2 = big blind)
           stack: seated.chips || 20, // Default $20 stack
           currentBet: 0,
           hasActed: false,

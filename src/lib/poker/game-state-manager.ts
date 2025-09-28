@@ -7,14 +7,14 @@ export class GameStateManager {
 
   public startBettingRound(stage: GameStage): void {
     this.state.stage = stage;
-    // Determine start position by variant/stage
-    let startPosition = 0;
+    // Determine start position by variant/stage (using 1-based positions)
+    let startPosition = 1;
     if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
-      // US-053: In Stud, third street starts with bring-in (lowest upcard); simplify to position 0 for now
-      // Later streets normally start with highest upcards; for MVP tests we start at position 0
-      startPosition = 0;
+      // US-053: In Stud, third street starts with bring-in (lowest upcard); simplify to position 1 for now
+      // Later streets normally start with highest upcards; for MVP tests we start at position 1
+      startPosition = 1;
     } else {
-      startPosition = stage === 'preflop' ? 0 : 1;
+      startPosition = stage === 'preflop' ? 1 : 2;
     }
 
     const activePlayer = this.state.players.find(p => p.position === startPosition);
@@ -65,7 +65,8 @@ export class GameStateManager {
     const numPlayers = this.state.players.length;
     
     do {
-      pos = (pos + 1) % numPlayers;
+      // Convert to 0-based for modulo, then back to 1-based for position lookup
+      pos = ((pos - 1 + 1) % numPlayers) + 1;
       const player = this.state.players.find(p => p.position === pos);
       
       if (player && !player.isFolded && !player.isAllIn && 

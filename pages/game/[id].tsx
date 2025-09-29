@@ -307,39 +307,39 @@ export default function GamePage() {
 
   // Get position for current player's hole cards based on their seat
   const getCurrentPlayerCardsPosition = () => {
-    if (!currentPlayerSeat) return 'bottom-8 left-1/2 transform -translate-x-1/2';
+    if (!currentPlayerSeat) return 'bottom-6 left-1/2 transform -translate-x-1/2';
     
     // Find the current player's rotated position
     const rotatedPositions = getRotatedSeatPositions();
     const currentSeatData = rotatedPositions.find(pos => pos.seatNumber === currentPlayerSeat);
     
-    if (!currentSeatData) return 'bottom-8 left-1/2 transform -translate-x-1/2';
+    if (!currentSeatData) return 'bottom-6 left-1/2 transform -translate-x-1/2';
     
     const position = currentSeatData.position;
     
-    // Position cards closer to the player's seat
+    // Position cards closer to the edge of the table (further from center)
     if (position.includes('top-1') && position.includes('left-1/2')) {
-      // Top center seat - cards below the seat
-      return 'top-16 left-1/2 transform -translate-x-1/2';
+      // Top center seat - cards closer to top edge
+      return 'top-8 left-1/2 transform -translate-x-1/2';
     } else if (position.includes('top-8') && position.includes('right-8')) {
-      // Top-right seat - cards to the left of the seat
-      return 'top-12 right-16';
+      // Top-right seat - cards closer to top-right edge
+      return 'top-2 right-8';
     } else if (position.includes('bottom-8') && position.includes('right-8')) {
-      // Bottom-right seat - cards to the left of the seat
-      return 'bottom-12 right-16';
+      // Bottom-right seat - cards closer to bottom-right edge
+      return 'bottom-2 right-8';
     } else if (position.includes('bottom-1') && position.includes('left-1/2')) {
-      // Bottom center seat (your position) - cards above the seat
-      return 'bottom-16 left-1/2 transform -translate-x-1/2';
+      // Bottom center seat (your position) - cards closer to bottom edge
+      return 'bottom-8 left-1/2 transform -translate-x-1/2';
     } else if (position.includes('bottom-8') && position.includes('left-8')) {
-      // Bottom-left seat - cards to the right of the seat
-      return 'bottom-12 left-16';
+      // Bottom-left seat - cards closer to bottom-left edge
+      return 'bottom-2 left-8';
     } else if (position.includes('top-8') && position.includes('left-8')) {
-      // Top-left seat - cards to the right of the seat
-      return 'top-12 left-16';
+      // Top-left seat - cards closer to top-left edge
+      return 'top-2 left-8';
     }
     
-    // Fallback to bottom center
-    return 'bottom-8 left-1/2 transform -translate-x-1/2';
+    // Fallback to bottom center (closer to edge)
+    return 'bottom-2 left-1/2 transform -translate-x-1/2';
   };
 
   // Render seat component with adjacent player info
@@ -1013,15 +1013,10 @@ export default function GamePage() {
                 )}
                 
                 {/* Pot area */}
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-2 mt-20 text-white text-center">
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-white text-center">
                   <div className="bg-gray-800 bg-opacity-70 px-3 py-1 rounded text-sm font-semibold">
                     Pot: ${pokerGameState?.pot || 0}
                   </div>
-                  {pokerGameState?.stage && (
-                    <div className="bg-blue-800 bg-opacity-70 px-2 py-1 rounded text-xs font-medium mt-1">
-                      {pokerGameState.stage.charAt(0).toUpperCase() + pokerGameState.stage.slice(1)}
-                    </div>
-                  )}
                 </div>
 
                 {/* Community Cards */}
@@ -1113,7 +1108,6 @@ export default function GamePage() {
               <div className="text-sm text-gray-600 dark:text-gray-400">
                 <p>Waiting for {pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'} to act...</p>
                 <p>Current Bet: ${pokerGameState.currentBet || 0} | Pot: ${pokerGameState.pot || 0}</p>
-                <p>Stage: {pokerGameState.stage}</p>
               </div>
             </div>
           )}

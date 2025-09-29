@@ -168,7 +168,8 @@ describe('PokerEngine', () => {
       let state = engine.getState();
 
       // Complete preflop round with calls
-      while (state.stage === 'preflop') {
+      let guard = 50; // Safety guard to prevent infinite loops
+      while (state.stage === 'preflop' && guard-- > 0) {
         if (state.activePlayer) {
           engine.handleAction(createAction('call', state.activePlayer, state.currentBet));
         }
@@ -246,7 +247,8 @@ describe('PokerEngine', () => {
       let state = engine.getState();
 
       // Only first player calls, others fold
-      while (state.stage === 'preflop') {
+      let guard2 = 50; // Safety guard to prevent infinite loops
+      while (state.stage === 'preflop' && guard2-- > 0) {
         if (state.activePlayer) {
           const action = state.activePlayer === players[0].id ? 'call' : 'fold';
           engine.handleAction(createAction(action, state.activePlayer, state.currentBet));
@@ -272,7 +274,8 @@ describe('PokerEngine', () => {
       let state = engine.getState();
 
       // Complete all betting rounds with calls
-      while (state.stage !== 'showdown') {
+      let guard3 = 100; // Safety guard to prevent infinite loops
+      while (state.stage !== 'showdown' && guard3-- > 0) {
         if (state.activePlayer) {
           engine.handleAction(createAction('call', state.activePlayer, state.currentBet));
         }

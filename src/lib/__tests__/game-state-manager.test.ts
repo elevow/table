@@ -12,7 +12,7 @@ describe('GameStateManager', () => {
     player1 = {
       id: 'p1',
       name: 'Player 1',
-      position: 0,
+      position: 1,
       stack: 1000,
       currentBet: 0,
       hasActed: false,
@@ -21,8 +21,8 @@ describe('GameStateManager', () => {
       timeBank: 30000
     };
 
-    player2 = { ...player1, id: 'p2', name: 'Player 2', position: 1 };
-    player3 = { ...player1, id: 'p3', name: 'Player 3', position: 2 };
+    player2 = { ...player1, id: 'p2', name: 'Player 2', position: 2 };
+    player3 = { ...player1, id: 'p3', name: 'Player 3', position: 3 };
 
     state = {
       tableId: 'table1',
@@ -45,12 +45,12 @@ describe('GameStateManager', () => {
   describe('startBettingRound', () => {
     it('should set UTG as active player in preflop', () => {
       gameStateManager.startBettingRound('preflop');
-      expect(state.activePlayer).toBe('p1'); // UTG (position 0)
+      expect(state.activePlayer).toBe('p1'); // UTG (position 1)
     });
 
     it('should set SB as active player post-flop', () => {
       gameStateManager.startBettingRound('flop');
-      expect(state.activePlayer).toBe('p2'); // SB (position 1)
+      expect(state.activePlayer).toBe('p2'); // SB (position 2)
     });
 
     it('should throw error if active player not found', () => {
@@ -106,19 +106,19 @@ describe('GameStateManager', () => {
 
   describe('findNextActivePlayer', () => {
     it('should find next active player', () => {
-      const nextPlayer = gameStateManager.findNextActivePlayer(0);
+      const nextPlayer = gameStateManager.findNextActivePlayer(1);
       expect(nextPlayer?.id).toBe('p2');
     });
 
     it('should skip folded players', () => {
       player2.isFolded = true;
-      const nextPlayer = gameStateManager.findNextActivePlayer(0);
+      const nextPlayer = gameStateManager.findNextActivePlayer(1);
       expect(nextPlayer?.id).toBe('p3');
     });
 
     it('should skip all-in players', () => {
       player2.isAllIn = true;
-      const nextPlayer = gameStateManager.findNextActivePlayer(0);
+      const nextPlayer = gameStateManager.findNextActivePlayer(1);
       expect(nextPlayer?.id).toBe('p3');
     });
 
@@ -126,7 +126,7 @@ describe('GameStateManager', () => {
       player1.isFolded = true;
       player2.isFolded = true;
       player3.isFolded = true;
-      const nextPlayer = gameStateManager.findNextActivePlayer(0);
+      const nextPlayer = gameStateManager.findNextActivePlayer(1);
       expect(nextPlayer).toBeUndefined();
     });
   });

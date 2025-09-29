@@ -240,6 +240,11 @@ jest.spyOn(document.body, 'removeChild').mockImplementation((node: Node) => {
 describe('GameAnalyticsDashboard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   describe('Basic Rendering', () => {

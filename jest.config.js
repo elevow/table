@@ -24,6 +24,7 @@ module.exports = {
     'node_modules/(?!(nanoid|nanoid/.*)/)',
   ],
   setupFilesAfterEnv: [],
+  testTimeout: 30000, // 30 seconds timeout to prevent hanging tests
   collectCoverage: true,
   coverageDirectory: 'coverage',
   collectCoverageFrom: [

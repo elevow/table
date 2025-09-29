@@ -736,6 +736,39 @@ export default function GamePage() {
           
           if (data.gameState) {
             setPokerGameState(data.gameState);
+            
+            // Update seat assignments with initial stack values from game state
+            if (data.gameState.players) {
+              setSeatAssignments(prev => {
+                const updated = { ...prev };
+                
+                // Update each seat's chip count based on the poker game state
+                data.gameState.players.forEach((player: any) => {
+                  // Find the seat number for this player
+                  const seatEntry = Object.entries(prev).find(([_, assignment]) => 
+                    assignment?.playerId === player.id
+                  );
+                  
+                  if (seatEntry) {
+                    const [seatNumber, assignment] = seatEntry;
+                    if (assignment) {
+                      updated[parseInt(seatNumber)] = {
+                        ...assignment,
+                        chips: player.stack // Update with current stack from game state
+                      };
+                    }
+                  }
+                });
+                
+                return updated;
+              });
+              
+              // Update current player's chip count
+              const currentPlayer = data.gameState.players.find((p: any) => p.id === playerId);
+              if (currentPlayer) {
+                setPlayerChips(currentPlayer.stack);
+              }
+            }
           }
         };
 
@@ -743,6 +776,39 @@ export default function GamePage() {
           console.log('Game state update:', data.gameState);
           console.log('Last action:', data.lastAction);
           setPokerGameState(data.gameState);
+          
+          // Update seat assignments with current stack values from game state
+          if (data.gameState && data.gameState.players) {
+            setSeatAssignments(prev => {
+              const updated = { ...prev };
+              
+              // Update each seat's chip count based on the poker game state
+              data.gameState.players.forEach((player: any) => {
+                // Find the seat number for this player
+                const seatEntry = Object.entries(prev).find(([_, assignment]) => 
+                  assignment?.playerId === player.id
+                );
+                
+                if (seatEntry) {
+                  const [seatNumber, assignment] = seatEntry;
+                  if (assignment) {
+                    updated[parseInt(seatNumber)] = {
+                      ...assignment,
+                      chips: player.stack // Update with current stack from game state
+                    };
+                  }
+                }
+              });
+              
+              return updated;
+            });
+            
+            // Update current player's chip count
+            const currentPlayer = data.gameState.players.find((p: any) => p.id === playerId);
+            if (currentPlayer) {
+              setPlayerChips(currentPlayer.stack);
+            }
+          }
         };
 
         const handleActionFailed = (data: { error: string; playerId?: string; action?: string }) => {

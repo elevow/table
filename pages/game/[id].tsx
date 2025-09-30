@@ -356,30 +356,67 @@ export default function GamePage() {
     const isEmpty = !assignment;
     const canClaim = isEmpty && userRole !== 'guest' && !currentPlayerSeat;
 
-    // Determine info box position based on the ROTATED seat position - OUTSIDE the table
-    const getInfoBoxPosition = (currentPosition: string) => {
-      // Map the rotated position classes to info box positions OUTSIDE the table boundary
-      if (currentPosition.includes('top-1') && currentPosition.includes('left-1/2')) {
-        // Top center seat - info well above the table
-        return '-top-24 left-1/2 transform -translate-x-1/2';
-      } else if (currentPosition.includes('top-8') && currentPosition.includes('right-8')) {
-        // Top-right seat - info far to the right
-        return 'top-2 -right-40';
-      } else if (currentPosition.includes('bottom-8') && currentPosition.includes('right-8')) {
-        // Bottom-right seat - info far to the right
-        return 'bottom-2 -right-40';
-      } else if (currentPosition.includes('bottom-1') && currentPosition.includes('left-1/2')) {
-        // Bottom center seat (your position) - info well below the table
-        return '-bottom-24 left-1/2 transform -translate-x-1/2';
-      } else if (currentPosition.includes('bottom-8') && currentPosition.includes('left-8')) {
-        // Bottom-left seat - info far to the left
-        return 'bottom-2 -left-40';
-      } else if (currentPosition.includes('top-8') && currentPosition.includes('left-8')) {
-        // Top-left seat - info far to the left
-        return 'top-2 -left-40';
+    // Determine info box position based on seat coordinates - RIGHT NEXT to each seat
+    const getInfoBoxPosition = (currentPosition: string, seatStyle?: React.CSSProperties) => {
+      // If we have style coordinates, use them to determine position
+      if (seatStyle && seatStyle.left && seatStyle.top) {
+        const leftPercent = parseFloat(seatStyle.left.toString().replace('%', ''));
+        const topPercent = parseFloat(seatStyle.top.toString().replace('%', ''));
+        
+        // More precise positioning based on 8 directions around the table
+        if (topPercent < 25) {
+          // Top area
+          if (leftPercent < 35) {
+            // Top-left - info touching table edge
+            return '-top-2 -left-2';
+          } else if (leftPercent > 65) {
+            // Top-right - info touching table edge
+            return '-top-2 -right-2';
+          } else {
+            // Top-center - info pushed above table edge
+            return '-top-20 left-1/2 transform -translate-x-1/2';
+          }
+        } else if (topPercent > 75) {
+          // Bottom area
+          if (leftPercent < 35) {
+            // Bottom-left - info touching table edge
+            return '-bottom-2 -left-2';
+          } else if (leftPercent > 65) {
+            // Bottom-right - info touching table edge
+            return '-bottom-2 -right-2';
+          } else {
+            // Bottom-center - info pushed below table edge
+            return '-bottom-20 left-1/2 transform -translate-x-1/2';
+          }
+        } else {
+          // Middle area (left/right sides)
+          if (leftPercent < 50) {
+            // Left side - info touching table edge
+            return 'top-0 -left-2';
+          } else {
+            // Right side - info touching table edge
+            return 'top-0 -right-2';
+          }
+        }
       }
-      // Fallback
-      return '-bottom-24 left-1/2 transform -translate-x-1/2';
+      
+      // Fallback to CSS class-based positioning for backwards compatibility
+      if (currentPosition.includes('top-1') && currentPosition.includes('left-1/2')) {
+        return '-top-16 left-1/2 transform -translate-x-1/2';
+      } else if (currentPosition.includes('top-8') && currentPosition.includes('right-8')) {
+        return 'top-0 -right-32';
+      } else if (currentPosition.includes('bottom-8') && currentPosition.includes('right-8')) {
+        return 'bottom-0 -right-32';
+      } else if (currentPosition.includes('bottom-1') && currentPosition.includes('left-1/2')) {
+        return '-bottom-16 left-1/2 transform -translate-x-1/2';
+      } else if (currentPosition.includes('bottom-8') && currentPosition.includes('left-8')) {
+        return 'bottom-0 -left-32';
+      } else if (currentPosition.includes('top-8') && currentPosition.includes('left-8')) {
+        return 'top-0 -left-32';
+      }
+      
+      // Default fallback
+      return '-bottom-16 left-1/2 transform -translate-x-1/2';
     };
 
 
@@ -430,7 +467,7 @@ export default function GamePage() {
         {/* Player info box - only show if seat is occupied */}
         {!isEmpty && assignment && (
           <div
-            className={`absolute ${getInfoBoxPosition(position)} z-10`}
+            className={`absolute ${getInfoBoxPosition(position, style)} z-10`}
             style={{ pointerEvents: 'none' }}
           >
             <div className={`px-3 py-2 rounded-lg shadow-lg border-2 text-xs ${
@@ -444,6 +481,19 @@ export default function GamePage() {
               <div className="text-green-600 dark:text-green-400 font-bold">
                 ${assignment.chips || 20} chips
               </div>
+              {/* Show additional game state info if player is in active game */}
+              {pokerGameState && (() => {
+                const gamePlayer = pokerGameState.players?.find((p: any) => p.id === assignment.playerId);
+                return gamePlayer && (
+                  <div className="text-xs mt-1">
+                    {gamePlayer.folded && <span className="text-red-500">Folded</span>}
+                    {gamePlayer.isAllIn && <span className="text-yellow-500">All-in</span>}
+                    {gamePlayer.currentBet > 0 && !gamePlayer.folded && (
+                      <span className="text-blue-500">Bet: ${gamePlayer.currentBet}</span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

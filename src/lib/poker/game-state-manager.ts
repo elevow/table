@@ -7,6 +7,16 @@ export class GameStateManager {
 
   public startBettingRound(stage: GameStage): void {
     this.state.stage = stage;
+    
+    // Reset betting state for new rounds (except preflop which has blinds)
+    if (stage !== 'preflop' && stage !== 'third') {
+      this.state.currentBet = 0;
+      this.state.players.forEach(player => {
+        player.currentBet = 0;
+        player.hasActed = false;
+      });
+    }
+    
     // Determine start position by variant/stage (using 1-based positions)
     let startPosition = 1;
     if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {

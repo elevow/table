@@ -142,9 +142,16 @@ export default function GamePage() {
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(shortId)}&background=9ca3af&color=fff&size=128`;
   };
   
-  // Seat management state
-  const [seatAssignments, setSeatAssignments] = useState<Record<number, { playerId: string; playerName: string; chips: number } | null>>({
-    1: null, 2: null, 3: null, 4: null, 5: null, 6: null
+  // Room info state
+  const [maxPlayers, setMaxPlayers] = useState<number>(6); // Default to 6, will be updated from room info
+  
+  // Seat management state - initialize dynamically based on maxPlayers
+  const [seatAssignments, setSeatAssignments] = useState<Record<number, { playerId: string; playerName: string; chips: number } | null>>(() => {
+    const seats: Record<number, { playerId: string; playerName: string; chips: number } | null> = {};
+    for (let i = 1; i <= maxPlayers; i++) {
+      seats[i] = null;
+    }
+    return seats;
   });
   const [currentPlayerSeat, setCurrentPlayerSeat] = useState<number | null>(null);
   const [userRole, setUserRole] = useState<'admin' | 'player' | 'guest'>('guest');
@@ -444,43 +451,141 @@ export default function GamePage() {
     );
   };
 
+  // Generate seat positions dynamically based on maxPlayers
+  const generateSeatPositions = (numSeats: number) => {
+    const positions = [];
+    for (let i = 0; i < numSeats; i++) {
+      const angle = (i * 2 * Math.PI) / numSeats - Math.PI / 2; // Start from top and go clockwise
+      const radiusX = 52; // Push avatars well beyond the table edge horizontally
+      const radiusY = 48; // Push avatars well beyond the table edge vertically
+      
+      const x = 50 + radiusX * Math.cos(angle); // Center at 50% + radius
+      const y = 50 + radiusY * Math.sin(angle); // Center at 50% + radius
+      
+      positions.push({
+        seatNumber: i + 1,
+        position: '',
+        style: {
+          position: 'absolute' as const,
+          left: `${x}%`,
+          top: `${y}%`,
+          transform: 'translate(-50%, -50%)'
+        }
+      });
+    }
+    return positions;
+  };
+
   // Calculate rotated seat positions
   const getRotatedSeatPositions = () => {
-    // Default positions mapping: visual position -> seat data
-    const defaultPositions = [
-      { seatNumber: 1, position: 'top-1 left-1/2 transform -translate-x-1/2', style: { transform: 'translate(-50%, -75%)' } },
-      { seatNumber: 2, position: 'top-8 right-8', style: { transform: 'translate(25%, -25%)' } },
-      { seatNumber: 3, position: 'bottom-8 right-8', style: { transform: 'translate(25%, 25%)' } },
-      { seatNumber: 4, position: 'bottom-1 left-1/2 transform -translate-x-1/2', style: { transform: 'translate(-50%, 75%)' } },
-      { seatNumber: 5, position: 'bottom-8 left-8', style: { transform: 'translate(-25%, 25%)' } },
-      { seatNumber: 6, position: 'top-8 left-8', style: { transform: 'translate(-25%, -25%)' } }
-    ];
+    // Generate positions dynamically based on maxPlayers
+    const defaultPositions = generateSeatPositions(maxPlayers);
 
     // If user has no seat, use default positions
     if (!currentPlayerSeat) {
       return defaultPositions;
     }
 
-    // Calculate rotation offset to put current player's seat in position 4 (bottom center)
-    const targetPosition = 3; // Index 3 = position 4 (bottom center)
+    // Always place the current player at the bottom-center position
+    // We'll create a custom bottom-center position and arrange others around it
     const currentSeatIndex = currentPlayerSeat - 1; // Convert to 0-based index
-    const rotationOffset = (targetPosition - currentSeatIndex + 6) % 6;
-
-    // Create rotated positions
-    const rotatedPositions = [];
-    for (let i = 0; i < 6; i++) {
-      const originalIndex = (i - rotationOffset + 6) % 6;
-      const originalSeat = originalIndex + 1; // Convert back to 1-based
-      rotatedPositions.push({
-        seatNumber: originalSeat,
-        position: defaultPositions[i].position,
-        style: defaultPositions[i].style
-      });
+    
+    // Create custom positions with current player at bottom center
+    const customPositions = [];
+    
+    // First, place current player at exact bottom center (90 degrees)
+    customPositions.push({
+      seatNumber: currentPlayerSeat,
+      position: '',
+      style: {
+        position: 'absolute' as const,
+        left: '50%',
+        top: '98%', // Bottom center of table area
+        transform: 'translate(-50%, -50%)'
+      }
+    });
+    
+    // Then arrange other players around the table, excluding current player's original position
+    let positionIndex = 0;
+    for (let i = 0; i < maxPlayers; i++) {
+      if (i !== currentSeatIndex) { // Skip current player's original position
+        // Use the default positions but skip the bottom-center-ish one for others
+        let targetDefaultIndex = positionIndex;
+        
+        // For 3 players, we want to avoid putting others too close to bottom
+        // Distribute them more evenly around the remaining positions
+        if (maxPlayers === 3) {
+          // Place other two players at top-left and top-right areas
+          const angle = positionIndex === 0 ? -150 * Math.PI / 180 : -30 * Math.PI / 180; // -150° and -30°
+          const radiusX = 52;
+          const radiusY = 48;
+          const x = 50 + radiusX * Math.cos(angle);
+          const y = 50 + radiusY * Math.sin(angle);
+          
+          customPositions.push({
+            seatNumber: i + 1,
+            position: '',
+            style: {
+              position: 'absolute' as const,
+              left: `${x}%`,
+              top: `${y}%`,
+              transform: 'translate(-50%, -50%)'
+            }
+          });
+        } else {
+          // For other player counts, use default positions but skip bottom area
+          while (targetDefaultIndex < defaultPositions.length && 
+                 (targetDefaultIndex === Math.floor(maxPlayers / 2) || 
+                  targetDefaultIndex === currentSeatIndex)) {
+            targetDefaultIndex++;
+          }
+          if (targetDefaultIndex >= defaultPositions.length) {
+            targetDefaultIndex = positionIndex;
+          }
+          
+          customPositions.push({
+            seatNumber: i + 1,
+            position: defaultPositions[targetDefaultIndex].position,
+            style: defaultPositions[targetDefaultIndex].style
+          });
+        }
+        positionIndex++;
+      }
     }
 
-    return rotatedPositions;
+    return customPositions;
   };
   
+  // Fetch room information to get maxPlayers
+  useEffect(() => {
+    const fetchRoomInfo = async () => {
+      if (!id) return;
+      
+      try {
+        const response = await fetch(`/api/games/rooms/${id}`);
+        if (response.ok) {
+          const roomData = await response.json();
+          const roomMaxPlayers = roomData.maxPlayers || 6;
+          setMaxPlayers(roomMaxPlayers);
+          console.log(`Room ${id} supports ${roomMaxPlayers} players`);
+          
+          // Re-initialize seat assignments with correct number of seats
+          const seats: Record<number, { playerId: string; playerName: string; chips: number } | null> = {};
+          for (let i = 1; i <= roomMaxPlayers; i++) {
+            seats[i] = null;
+          }
+          setSeatAssignments(seats);
+        } else {
+          console.warn('Failed to fetch room info, using default 6 seats');
+        }
+      } catch (error) {
+        console.error('Error fetching room info:', error);
+      }
+    };
+    
+    fetchRoomInfo();
+  }, [id]);
+
   // Initialize player ID only once on component mount
   useEffect(() => {
     const initializePlayerId = async () => {
@@ -857,7 +962,7 @@ export default function GamePage() {
         
         // Clean up seat data - ensure proper structure
         const cleanSeats: Record<number, { playerId: string; playerName: string; chips: number } | null> = {};
-        for (let i = 1; i <= 6; i++) {
+        for (let i = 1; i <= maxPlayers; i++) {
           const seat = parsed[i];
           if (seat && typeof seat === 'object' && seat.playerId && seat.playerName) {
             // Ensure we only keep the expected properties
@@ -900,13 +1005,15 @@ export default function GamePage() {
         console.warn('Error loading seat assignments:', error);
         // Clear corrupted data
         localStorage.removeItem(`seats_${id}`);
-        // Reset to empty seats
-        setSeatAssignments({
-          1: null, 2: null, 3: null, 4: null, 5: null, 6: null
-        });
+        // Reset to empty seats dynamically
+        const emptySeats: Record<number, { playerId: string; playerName: string; chips: number } | null> = {};
+        for (let i = 1; i <= maxPlayers; i++) {
+          emptySeats[i] = null;
+        }
+        setSeatAssignments(emptySeats);
       }
     }
-  }, [id, playerId]); // Only depend on id and playerId - run when these change
+  }, [id, playerId, maxPlayers]); // Include maxPlayers in dependencies
 
   // Toggle settings component
   const toggleSettings = () => {
@@ -1078,16 +1185,9 @@ export default function GamePage() {
                   renderSeat(seatData.seatNumber, seatData.position, seatData.style)
                 )}
                 
-                {/* Pot area */}
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-white text-center">
-                  <div className="bg-gray-800 bg-opacity-70 px-3 py-1 rounded text-sm font-semibold">
-                    Pot: ${pokerGameState?.pot || 0}
-                  </div>
-                </div>
-
                 {/* Community Cards */}
                 {pokerGameState?.communityCards && pokerGameState.communityCards.length > 0 && (
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex gap-1">
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-8 flex gap-1">
                     {pokerGameState.communityCards.map((card: any, index: number) => (
                       <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold">
                         <div>{card.rank}</div>
@@ -1098,6 +1198,13 @@ export default function GamePage() {
                     ))}
                   </div>
                 )}
+
+                {/* Pot area - positioned below the community cards */}
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-8 text-white text-center">
+                  <div className="bg-gray-800 bg-opacity-70 px-3 py-1 rounded text-sm font-semibold">
+                    Pot: ${pokerGameState?.pot || 0}
+                  </div>
+                </div>
 
                 {/* Current Player's Hole Cards - positioned closer to their seat */}
                 {gameStarted && pokerGameState && getCurrentPlayerCards().length > 0 && currentPlayerSeat && (
@@ -1129,7 +1236,7 @@ export default function GamePage() {
                   Fold
                 </button>
                 
-                {pokerGameState.currentBet === 0 ? (
+                {(pokerGameState.currentBet || 0) === 0 ? (
                   <button
                     onClick={handleCheck}
                     className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors"

@@ -75,6 +75,11 @@ export class GameService {
     return this.manager.getActiveGameByRoom(roomId);
   }
 
+  async getRoomById(roomId: string): Promise<GameRoomRecord | null> {
+    this.require(roomId, 'roomId');
+    return this.manager.getRoomById(roomId);
+  }
+
   private require(value: string | undefined, name: string): void {
     if (!value || typeof value !== 'string' || value.trim() === '') {
       throw new Error(`Missing or invalid ${name}`);

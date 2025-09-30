@@ -12,8 +12,8 @@ interface NextApiResponseServerIO extends NextApiResponse {
   };
 }
 
-// In-memory seat storage (in production, this would be in a database)
-const gameSeats: Map<string, Record<number, { playerId: string; playerName: string; chips: number } | null>> = new Map();
+// Import shared game seats management
+import * as GameSeats from '../../src/lib/shared/game-seats';
 
 // Initialize seat management handlers
 function initializeSeatHandlers(res: NextApiResponseServerIO) {
@@ -46,14 +46,8 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       console.log('Seat claim request:', data);
       const { tableId, seatNumber, playerId, playerName, chips } = data;
       
-      // Initialize game seats if not exists
-      if (!gameSeats.has(tableId)) {
-        gameSeats.set(tableId, {
-          1: null, 2: null, 3: null, 4: null, 5: null, 6: null
-        });
-      }
-      
-      const seats = gameSeats.get(tableId)!;
+      // Initialize and get game seats for this table
+      const seats = GameSeats.initializeRoomSeats(tableId);
       
       // Check if seat is available
       if (seats[seatNumber] !== null) {
@@ -79,7 +73,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       
       // Claim the seat
       seats[seatNumber] = { playerId, playerName, chips };
-      gameSeats.set(tableId, seats);
+      GameSeats.setRoomSeats(tableId, seats);
       
       // Broadcast to all players in the table
       io.to(`table_${tableId}`).emit('seat_claimed', {
@@ -97,8 +91,8 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       console.log('Stand up request:', data);
       const { tableId, seatNumber, playerId } = data;
       
-      const seats = gameSeats.get(tableId);
-      if (!seats) {
+      const seats = GameSeats.getRoomSeats(tableId);
+      if (!seats || Object.keys(seats).length === 0) {
         socket.emit('stand_up_failed', { error: 'Table not found' });
         return;
       }
@@ -111,7 +105,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       
       // Vacate the seat
       seats[seatNumber] = null;
-      gameSeats.set(tableId, seats);
+      GameSeats.setRoomSeats(tableId, seats);
       
       // Broadcast to all players in the table
       io.to(`table_${tableId}`).emit('seat_vacated', {
@@ -127,14 +121,8 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       console.log('Seat state request:', data);
       const { tableId } = data;
       
-      // Initialize if not exists
-      if (!gameSeats.has(tableId)) {
-        gameSeats.set(tableId, {
-          1: null, 2: null, 3: null, 4: null, 5: null, 6: null
-        });
-      }
-      
-      const seats = gameSeats.get(tableId)!;
+      // Initialize if not exists and get seats
+      const seats = GameSeats.initializeRoomSeats(tableId);
       
       // Send current seat state to requesting client
       socket.emit('seat_state', { seats });

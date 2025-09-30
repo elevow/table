@@ -119,17 +119,31 @@ export default async function handler(
       
       // console.log('Available columns in game_rooms table:', schemaResult.rows.map(row => row.column_name));
 
-      // Get rooms with basic columns that should exist
+      // Get all rooms from database
       const roomsResult = await client.query(`
         SELECT *
-        FROM game_rooms r
-        ORDER BY r.created_at DESC
+        FROM game_rooms
+        ORDER BY created_at DESC
         LIMIT $1 OFFSET $2
       `, [limit, offset]);
 
+      // Get real-time player counts from shared game seats module
+      const { getCurrentPlayerCount } = await import('../../../src/lib/shared/game-seats');
+      
+      // Enhance rooms with real-time player count
+      const enhancedRooms = roomsResult.rows.map(room => {
+        const roomId = room.id;
+        const currentPlayers = getCurrentPlayerCount(roomId);
+
+        return {
+          ...room,
+          current_players: currentPlayers
+        };
+      });
+
       return res.status(200).json({
         success: true,
-        rooms: roomsResult.rows,
+        rooms: enhancedRooms,
         total,
         page,
         limit

@@ -358,6 +358,15 @@ export default function GamePage() {
 
     // Determine info box position based on seat coordinates - RIGHT NEXT to each seat
     const getInfoBoxPosition = (currentPosition: string, seatStyle?: React.CSSProperties) => {
+      // Special case: for the current player, show info card to the right of their avatar
+      // We know the current player's avatar is anchored at bottom-center (left: 50%, top: 104%)
+      // so we offset horizontally to the right with a translate to avoid overlap.
+      if (isCurrentPlayer) {
+        // Position info box so its left edge touches the avatar circle's right edge (w-16 => 64px, half=32px + 2px border)
+        // Use calc to place left at 50% + 34px; keep vertical centering relative to avatar center
+        return 'left-[calc(50%+34px)] top-[104%] transform -translate-y-1/2';
+      }
+
       // If we have style coordinates, use them to determine position
       if (seatStyle && seatStyle.left && seatStyle.top) {
         const leftPercent = parseFloat(seatStyle.left.toString().replace('%', ''));
@@ -1131,14 +1140,7 @@ export default function GamePage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Game: {id}</h1>
-            {currentPlayerSeat && (
-              <div className="flex items-center gap-2 bg-green-100 dark:bg-green-900/20 px-3 py-2 rounded-lg">
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span className="text-green-700 dark:text-green-300 font-medium">
-                  Seated at P{currentPlayerSeat} - ${playerChips} in chips
-                </span>
-              </div>
-            )}
+            {/* Removed seated info banner at user request */}
             {gameStarted && (
               <div className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/20 px-3 py-2 rounded-lg">
                 <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
@@ -1186,18 +1188,7 @@ export default function GamePage() {
               </svg>
               <span className="whitespace-nowrap">Leave Game</span>
             </button>
-            <button
-              onClick={() => router.push('/account-settings')}
-              className="bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto"
-              title="Manage your account settings"
-              aria-label="Account settings"
-            >
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span className="whitespace-nowrap">Settings</span>
-            </button>
+            {/* Removed top Settings button at user request */}
           </div>
         </div>
         

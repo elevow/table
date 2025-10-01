@@ -559,7 +559,7 @@ export default function GamePage() {
       style: {
         position: 'absolute' as const,
         left: '50%',
-        top: '98%', // Bottom center of table area
+        top: '104%', // Lowered to avoid overlap with hole cards
         transform: 'translate(-50%, -50%)'
       }
     });
@@ -1141,14 +1141,7 @@ export default function GamePage() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Game: {id}</h1>
             {/* Removed seated info banner at user request */}
-            {gameStarted && (
-              <div className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/20 px-3 py-2 rounded-lg">
-                <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
-                <span className="text-blue-700 dark:text-blue-300 font-medium">
-                  Game Started - {getSeatedPlayersCount()} players
-                </span>
-              </div>
-            )}
+            {/* Removed game started banner at user request */}
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
             {currentPlayerSeat && (

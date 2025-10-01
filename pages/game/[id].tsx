@@ -314,38 +314,9 @@ export default function GamePage() {
 
   // Get position for current player's hole cards based on their seat
   const getCurrentPlayerCardsPosition = () => {
+    // Place the current player's cards centered near the bottom of the felt,
+    // lowered to just touch the top of the avatar positioned below the table.
     if (!currentPlayerSeat) return 'bottom-6 left-1/2 transform -translate-x-1/2';
-    
-    // Find the current player's rotated position
-    const rotatedPositions = getRotatedSeatPositions();
-    const currentSeatData = rotatedPositions.find(pos => pos.seatNumber === currentPlayerSeat);
-    
-    if (!currentSeatData) return 'bottom-6 left-1/2 transform -translate-x-1/2';
-    
-    const position = currentSeatData.position;
-    
-    // Position cards closer to the edge of the table (further from center)
-    if (position.includes('top-1') && position.includes('left-1/2')) {
-      // Top center seat - cards closer to top edge
-      return 'top-8 left-1/2 transform -translate-x-1/2';
-    } else if (position.includes('top-8') && position.includes('right-8')) {
-      // Top-right seat - cards closer to top-right edge
-      return 'top-2 right-8';
-    } else if (position.includes('bottom-8') && position.includes('right-8')) {
-      // Bottom-right seat - cards closer to bottom-right edge
-      return 'bottom-2 right-8';
-    } else if (position.includes('bottom-1') && position.includes('left-1/2')) {
-      // Bottom center seat (your position) - cards closer to bottom edge
-      return 'bottom-8 left-1/2 transform -translate-x-1/2';
-    } else if (position.includes('bottom-8') && position.includes('left-8')) {
-      // Bottom-left seat - cards closer to bottom-left edge
-      return 'bottom-2 left-8';
-    } else if (position.includes('top-8') && position.includes('left-8')) {
-      // Top-left seat - cards closer to top-left edge
-      return 'top-2 left-8';
-    }
-    
-    // Fallback to bottom center (closer to edge)
     return 'bottom-2 left-1/2 transform -translate-x-1/2';
   };
 
@@ -454,7 +425,7 @@ export default function GamePage() {
                   : 'You already have a seat'
               : isCurrentPlayer
                 ? 'Your seat - click Stand Up button to leave'
-                : `${assignment.playerName} - $${assignment.chips || 0} in chips`
+                : `${assignment.playerName} - $${assignment.chips || 0}`
           }
         >
           {isEmpty ? (
@@ -488,7 +459,7 @@ export default function GamePage() {
                 {assignment.playerName || `Player ${seatNumber}`}
               </div>
               <div className="text-green-600 dark:text-green-400 font-bold">
-                ${assignment.chips || 20} chips
+                ${assignment.chips || 20}
               </div>
               {/* Show additional game state info if player is in active game */}
               {pokerGameState && (() => {
@@ -506,6 +477,43 @@ export default function GamePage() {
             </div>
           </div>
         )}
+
+        {/* Face-down hole cards for other players still in hand */}
+        {gameStarted && pokerGameState && !isEmpty && assignment && !isCurrentPlayer && (() => {
+          const gamePlayer = pokerGameState.players?.find((p: any) => p.id === assignment.playerId);
+          if (!gamePlayer || gamePlayer.folded) return null;
+
+          // Compute position offset based on seat location (push cards slightly further from table center)
+          let cardStyle: React.CSSProperties | undefined = undefined;
+          if (style && style.left && style.top) {
+            const leftStr = style.left.toString();
+            const topStr = style.top.toString();
+            const leftPercent = parseFloat(leftStr.replace('%', ''));
+            const topPercent = parseFloat(topStr.replace('%', ''));
+            // Move cards toward the table center (opposite side of avatar)
+            const dx = leftPercent >= 50 ? -36 : 36;
+            const dy = topPercent >= 50 ? -36 : 36;
+            cardStyle = {
+              position: 'absolute',
+              left: `calc(${leftStr} + ${dx}px)`,
+              top: `calc(${topStr} + ${dy}px)`,
+              transform: 'translate(-50%, -50%)'
+            };
+          }
+
+          return (
+            <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (hidden)">
+              <div className="flex gap-1">
+                <div className="w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center">
+                  <div className="w-6 h-10 rounded bg-blue-600/50 border border-blue-400"></div>
+                </div>
+                <div className="w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center -ml-3 rotate-3">
+                  <div className="w-6 h-10 rounded bg-blue-600/50 border border-blue-400"></div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </React.Fragment>
     );
   };

@@ -289,6 +289,13 @@ export class PokerEngine {
     this.state.currentBet = currentBet;
     this.state.minRaise = minRaise;
 
+    // If folding leaves only one player, end hand immediately with win by fold
+    const remainingAfterAction = this.state.players.filter(p => !p.isFolded);
+    if (remainingAfterAction.length === 1) {
+      this.determineWinner();
+      return;
+    }
+
     // Find next player or move to next stage
     const nextPlayer = this.gameStateManager.findNextActivePlayer(player.position);
     
@@ -428,11 +435,12 @@ export class PokerEngine {
       this.log(`- Current bets: ${this.state.players.map(p => `${p.id}: ${p.currentBet}`).join(', ')}`);
       this.log(`- Player stacks: ${this.state.players.map(p => `${p.id}: ${p.stack}`).join(', ')}`);
 
-      // Winner gets the entire pot plus their own bet back
-      const totalWinnings = this.state.pot;
-      this.log(`Stack before winnings: ${winner.id} had ${winner.stack}`);
-      winner.stack += totalWinnings;
-      this.log(`Stack after winnings: ${winner.id} now has ${winner.stack}`);
+      // Compute conservation baseline; if pot is zero, include outstanding bets (e.g., blinds posted but not yet moved to pot)
+      const betsTotal = this.state.players.reduce((sum, p) => sum + (p.currentBet || 0), 0);
+      const potBefore = this.state.pot;
+      const stacksTotal = this.state.players.reduce((sum, p) => sum + p.stack, 0);
+      const includeOutstandingBets = potBefore === 0 ? betsTotal : 0;
+      const initialTotal = stacksTotal + potBefore + includeOutstandingBets;
 
       // Clear current bets and pot
       this.state.players.forEach(p => {
@@ -442,14 +450,22 @@ export class PokerEngine {
       this.log(`Clearing pot: ${this.state.pot} -> 0`);
       this.state.pot = 0;
 
-      // Set stage to indicate hand is over
+      // Award delta to winner so totals match baseline
+      const finalTotalBeforeAward = this.state.players.reduce((sum, p) => sum + p.stack, 0);
+      const delta = initialTotal - finalTotalBeforeAward;
+      if (delta !== 0) {
+        this.log(`Awarding ${delta} to winner ${winner.id} to settle pot.`);
+        winner.stack += delta;
+      }
+
+      // Finalize hand
       this.state.stage = 'showdown';
       this.state.activePlayer = '';
 
       // Debug: verify total chips
       const totalChips = this.state.players.reduce((sum, p) => sum + p.stack, 0);
-      this.log(`Win by fold - Awarded pot to winner ${winner.id} (final stack: ${winner.stack})`);
-      this.log(`Total chips after win by fold: ${totalChips}`);
+      this.log(`Win by fold - Winner ${winner.id} final stack: ${winner.stack}`);
+      this.log(`Total chips after win by fold: ${totalChips} (should equal baseline ${initialTotal})`);
       return;
     }
 
@@ -942,6 +958,14 @@ export class PokerEngine {
 
   public getState(): TableState {
     return { ...this.state };
+  }
+
+  // Public safety: ensure immediate win-by-fold if only one player remains active
+  public ensureWinByFoldIfSingle(): void {
+    const active = this.state.players.filter(p => !p.isFolded);
+    if (active.length === 1 && this.state.stage !== 'showdown') {
+      this.determineWinner();
+    }
   }
 
   // US-030: Verify RNG security chain matches seeds stored

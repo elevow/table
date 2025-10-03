@@ -117,7 +117,7 @@ export default function GamePage() {
     
     // For current player, use the loaded avatar data if available
     if (playerIdForAvatar === playerId && currentPlayerAvatar?.url) {
-      console.log('Returning current player avatar:', currentPlayerAvatar.url);
+      // console.log('Returning current player avatar:', currentPlayerAvatar.url);
       return currentPlayerAvatar.url;
     }
     
@@ -131,7 +131,7 @@ export default function GamePage() {
     
     // For other players, use cached avatar if available
     if (playerAvatars[playerIdForAvatar]) {
-      console.log('Returning cached avatar for other player:', playerIdForAvatar, playerAvatars[playerIdForAvatar]);
+      // console.log('Returning cached avatar for other player:', playerIdForAvatar, playerAvatars[playerIdForAvatar]);
       return playerAvatars[playerIdForAvatar];
     }
     
@@ -312,6 +312,12 @@ export default function GamePage() {
     return player?.holeCards || [];
   };
 
+  // Defensive: compute remaining non-folded players from current state
+  const getActiveNonFoldedPlayers = useCallback(() => {
+    if (!pokerGameState?.players) return [] as any[];
+    return pokerGameState.players.filter((p: any) => !(p.folded || p.isFolded));
+  }, [pokerGameState]);
+
   // Get position for current player's hole cards based on their seat
   const getCurrentPlayerCardsPosition = () => {
     // Place the current player's cards centered near the bottom of the felt,
@@ -481,7 +487,8 @@ export default function GamePage() {
         {/* Face-down hole cards for other players still in hand */}
         {gameStarted && pokerGameState && !isEmpty && assignment && !isCurrentPlayer && (() => {
           const gamePlayer = pokerGameState.players?.find((p: any) => p.id === assignment.playerId);
-          if (!gamePlayer || gamePlayer.folded) return null;
+          const hasFolded = !!(gamePlayer?.folded || gamePlayer?.isFolded);
+          if (!gamePlayer || hasFolded) return null;
 
           // Compute position offset based on seat location (push cards slightly further from table center)
           let cardStyle: React.CSSProperties | undefined = undefined;
@@ -908,6 +915,15 @@ export default function GamePage() {
           
           if (data.gameState) {
             setPokerGameState(data.gameState);
+            try {
+              const gs = data.gameState || {};
+              const players = Array.isArray(gs.players) ? gs.players : [];
+              const activeCount = players.filter((p: any) => !(p?.isFolded || (p as any)?.folded)).length;
+              if (activeCount === 1 && gs.stage !== 'showdown') {
+                console.log('[client safety] One active at game start; requesting settlement');
+                socketInstance.emit('force_settlement', { tableId: id });
+              }
+            } catch {}
             
             // Update seat assignments with initial stack values from game state
             if (data.gameState.players) {
@@ -948,6 +964,17 @@ export default function GamePage() {
           console.log('Game state update:', data.gameState);
           console.log('Last action:', data.lastAction);
           setPokerGameState(data.gameState);
+          try {
+            const gs = data.gameState || {};
+            const players = Array.isArray(gs.players) ? gs.players : [];
+            const activeCount = players.filter((p: any) => !(p?.isFolded || (p as any)?.folded)).length;
+            if (activeCount === 1 && gs.stage !== 'showdown') {
+              console.log('[client safety] One active player remains but stage is', gs.stage, '→ requesting settlement');
+              socketInstance.emit('force_settlement', { tableId: id });
+            }
+          } catch (e) {
+            console.warn('Safety check failed:', e);
+          }
           
           // Update seat assignments with current stack values from game state
           if (data.gameState && data.gameState.players) {
@@ -1249,25 +1276,29 @@ export default function GamePage() {
                 </div>
 
                 {/* Current Player's Hole Cards - positioned closer to their seat */}
-                {gameStarted && pokerGameState && getCurrentPlayerCards().length > 0 && currentPlayerSeat && (
-                  <div className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20`}>
-                    {getCurrentPlayerCards().map((card: any, index: number) => (
-                      <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-lg">
-                        <div>{card.rank}</div>
-                        <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>
-                          {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                {gameStarted && pokerGameState && getCurrentPlayerCards().length > 0 && currentPlayerSeat && (() => {
+                  const me = pokerGameState.players?.find((p: any) => p.id === playerId);
+                  const isFolded = !!(me?.folded || me?.isFolded);
+                  return (
+                    <div className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
+                      {getCurrentPlayerCards().map((card: any, index: number) => (
+                        <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-lg">
+                          <div>{card.rank}</div>
+                          <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>
+                            {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  );
+                })()}
                 
               </div>
             </div>
           </div>
 
-          {/* Poker Action Panel */}
-          {gameStarted && pokerGameState && pokerGameState.activePlayer === playerId && (
+          {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && (
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Your Turn</h3>
               <div className="flex flex-wrap gap-2">
@@ -1316,14 +1347,30 @@ export default function GamePage() {
             </div>
           )}
 
-          {/* Game Status Display */}
-          {gameStarted && pokerGameState && pokerGameState.activePlayer !== playerId && (
+          {/* Game Status Display (only before showdown); hide if only one non-folded remains */}
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer !== playerId && (
             <div className="lg:col-span-2 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-md p-4 mt-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Game Status</h3>
               <div className="text-sm text-gray-600 dark:text-gray-400">
                 <p>Waiting for {pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'} to act...</p>
                 <p>Current Bet: ${pokerGameState.currentBet || 0} | Pot: ${pokerGameState.pot || 0}</p>
               </div>
+            </div>
+          )}
+
+          {/* Showdown result banner or single-remaining defensive winner */}
+          {gameStarted && pokerGameState && (pokerGameState.stage === 'showdown' || getActiveNonFoldedPlayers().length === 1) && (
+            <div className="lg:col-span-2 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 rounded-lg shadow-md p-4 mt-4">
+              {(() => {
+                const remaining = getActiveNonFoldedPlayers();
+                const winner = remaining[0];
+                return (
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{winner?.name || 'Winner'}</span>
+                    <span>wins the pot</span>
+                  </div>
+                );
+              })()}
             </div>
           )}
 

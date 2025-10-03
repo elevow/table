@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, memo } from 'react';
+import { useEffect, useMemo, useState, memo, useRef } from 'react';
 
 // Timer types
 type TimerState = {
@@ -15,7 +15,7 @@ interface SessionStats {
   handsWon: number;
   totalWinnings: number;
   totalLosses: number;
-  biggestPot: number;
+  biggestPotWon: number;
   foldRate: number;
   sessionStartTime: Date;
   timeInSession: string;
@@ -33,6 +33,12 @@ function CombinedTimerStats({ tableId, playerId, gameId }: CombinedHUDProps) {
   const [timer, setTimer] = useState<TimerState>(undefined);
   const [now, setNow] = useState<number>(Date.now());
   const [bank, setBank] = useState<number>(0);
+  // Hand tracking refs for session stat updates
+  const lastStageRef = useRef<string | undefined>(undefined);
+  const lastPotRef = useRef<number>(0);
+  const lastStacksRef = useRef<Record<string, number>>({});
+  // New: per-hand baseline stacks captured at hand start (stack + currentBet)
+  const handStartStacksRef = useRef<Record<string, number>>({});
 
   // Session stats states
   const [sessionStats, setSessionStats] = useState<SessionStats>({
@@ -40,7 +46,7 @@ function CombinedTimerStats({ tableId, playerId, gameId }: CombinedHUDProps) {
     handsWon: 0,
     totalWinnings: 0,
     totalLosses: 0,
-    biggestPot: 0,
+    biggestPotWon: 0,
     foldRate: 0,
     sessionStartTime: new Date(),
     timeInSession: '0m'
@@ -68,15 +74,115 @@ function CombinedTimerStats({ tableId, playerId, gameId }: CombinedHUDProps) {
   useEffect(() => {
     const onTimer = (state?: any) => setTimer(state);
     const onBank = ({ amount }: { amount: number }) => setBank(amount);
+    // Hand/session stat updater: listen for game lifecycle
+    const onGameStarted = (data: { gameState?: any }) => {
+      const gs = data?.gameState;
+      if (gs) {
+        // Initialize tracking snapshots from initial state
+        lastStageRef.current = gs.stage;
+        lastPotRef.current = gs.pot || 0;
+        const stacks: Record<string, number> = {};
+        (gs.players || []).forEach((p: any) => (stacks[p.id] = p.stack || 0));
+        lastStacksRef.current = stacks;
+        // Initialize hand-start baselines: approximate start-of-hand as (stack + currentBet)
+        const handStart: Record<string, number> = {};
+        (gs.players || []).forEach((p: any) => (handStart[p.id] = (p.stack || 0) + (p.currentBet || 0)));
+        handStartStacksRef.current = handStart;
+      } else {
+        lastStageRef.current = undefined;
+        lastPotRef.current = 0;
+        lastStacksRef.current = {};
+        handStartStacksRef.current = {};
+      }
+    };
+
+    const onGameStateUpdate = (payload: { gameState: any }) => {
+      const gs = payload?.gameState;
+      if (!gs) return;
+
+      const prevStage = lastStageRef.current;
+      const currStage = gs.stage;
+      const prevPot = lastPotRef.current || 0;
+
+      // Detect new hand start: transition to preflop (reset hand-start baseline)
+      if (currStage === 'preflop' && prevStage !== 'preflop') {
+        const handStart: Record<string, number> = {};
+        (gs.players || []).forEach((p: any) => (handStart[p.id] = (p.stack || 0) + (p.currentBet || 0)));
+        try { console.log('[stats] New hand baseline set', handStart); } catch {}
+        handStartStacksRef.current = handStart;
+      }
+
+      // When a hand transitions into showdown, treat as hand completion
+      if (prevStage !== 'showdown' && currStage === 'showdown') {
+        try {
+          const stacksNow: Record<string, number> = {};
+          (gs.players || []).forEach((p: any) => (stacksNow[p.id] = p.stack || 0));
+          // Prefer per-hand baseline (stack + currentBet at hand start); fallback to last-stage snapshot
+          const myBaseline = handStartStacksRef.current[playerId];
+          const myPrev = typeof myBaseline === 'number' ? myBaseline : lastStacksRef.current[playerId];
+          const myNow = stacksNow[playerId];
+          if (typeof myPrev === 'number' && typeof myNow === 'number') {
+            const delta = myNow - myPrev;
+            // Biggest Pot Won: only track positive winnings for the hand
+            const wonAmount = delta > 0 ? delta : 0;
+            const iFolded = !!(gs.players?.find((p: any) => p.id === playerId)?.folded || gs.players?.find((p: any) => p.id === playerId)?.isFolded);
+            try { console.log('[stats] Hand complete. baseline:', myPrev, 'now:', myNow, 'delta:', delta, 'wonAmount:', wonAmount, 'folded:', iFolded); } catch {}
+
+            setSessionStats(prev => {
+              const next = { ...prev };
+              next.handsPlayed = (prev.handsPlayed || 0) + 1;
+              if (delta > 0) {
+                next.handsWon = (prev.handsWon || 0) + 1;
+                next.totalWinnings = (prev.totalWinnings || 0) + delta;
+                next.biggestPotWon = Math.max((prev as any).biggestPotWon || 0, wonAmount);
+              } else if (delta < 0) {
+                next.totalLosses = (prev.totalLosses || 0) + Math.abs(delta);
+                // Do not update biggestPotWon on losses
+              } else {
+                // No net change; do not update biggestPotWon
+              }
+              // Approximate fold rate similar to PlayerStats component
+              // Prefer using folded flag when available; otherwise fall back to (handsPlayed - handsWon)/handsPlayed
+              if (iFolded) {
+                const foldsSoFar = Math.round(((prev.foldRate || 0) / 100) * (prev.handsPlayed || 0));
+                const newFolds = foldsSoFar + 1;
+                next.foldRate = Math.floor((newFolds / next.handsPlayed) * 100);
+              } else {
+                next.foldRate = Math.floor(((next.handsPlayed - next.handsWon) / next.handsPlayed) * 100);
+              }
+
+              // Persist
+              try {
+                localStorage.setItem(`session_stats_${gameId}`, JSON.stringify(next));
+              } catch {}
+              return next;
+            });
+          }
+        } catch (e) {
+          console.warn('Failed to update session stats on showdown:', e);
+        }
+      }
+
+      // Update snapshots for next transition
+      lastStageRef.current = currStage;
+      lastPotRef.current = gs.pot || 0;
+      const stacks: Record<string, number> = {};
+      (gs.players || []).forEach((p: any) => (stacks[p.id] = p.stack || 0));
+      lastStacksRef.current = stacks;
+    };
     
     if (!socket) return;
     socket.on('timer_update', onTimer);
     socket.on('timebank_update', onBank);
+    socket.on('game_started', onGameStarted);
+    socket.on('game_state_update', onGameStateUpdate);
     return () => {
       socket?.off('timer_update', onTimer);
       socket?.off('timebank_update', onBank);
+      socket?.off('game_started', onGameStarted);
+      socket?.off('game_state_update', onGameStateUpdate);
     };
-  }, [socket]);
+  }, [socket, gameId, playerId]);
 
   // Timer countdown
   useEffect(() => {
@@ -91,17 +197,25 @@ function CombinedTimerStats({ tableId, playerId, gameId }: CombinedHUDProps) {
         const savedStats = localStorage.getItem(`session_stats_${gameId}`);
         if (savedStats) {
           const parsed = JSON.parse(savedStats);
-          setSessionStats({
-            ...parsed,
-            sessionStartTime: new Date(parsed.sessionStartTime)
-          });
+          // Migrate older schemas: if biggestPotWon is missing, initialize to 0 (do not reuse legacy 'biggestPot')
+          const migrated: SessionStats = {
+            handsPlayed: parsed.handsPlayed ?? 0,
+            handsWon: parsed.handsWon ?? 0,
+            totalWinnings: parsed.totalWinnings ?? 0,
+            totalLosses: parsed.totalLosses ?? 0,
+            biggestPotWon: typeof parsed.biggestPotWon === 'number' ? parsed.biggestPotWon : 0,
+            foldRate: parsed.foldRate ?? 0,
+            sessionStartTime: new Date(parsed.sessionStartTime ?? new Date()),
+            timeInSession: parsed.timeInSession ?? '0m'
+          };
+          setSessionStats(migrated);
         } else {
           const newSession = {
             handsPlayed: 0,
             handsWon: 0,
             totalWinnings: 0,
             totalLosses: 0,
-            biggestPot: 0,
+            biggestPotWon: 0,
             foldRate: 0,
             sessionStartTime: new Date(),
             timeInSession: '0m'
@@ -166,6 +280,13 @@ function CombinedTimerStats({ tableId, playerId, gameId }: CombinedHUDProps) {
 
   const calculateNetWinnings = () => {
     return sessionStats.totalWinnings - sessionStats.totalLosses;
+  };
+
+  const formatCurrency = (val: number) => {
+    // Ensure negatives show with a leading minus: -$5 rather than $-5
+    const abs = Math.abs(val);
+    const formatted = `$${abs}`;
+    return val < 0 ? `-${formatted}` : formatted;
   };
 
   if (statsLoading) {
@@ -233,14 +354,14 @@ function CombinedTimerStats({ tableId, playerId, gameId }: CombinedHUDProps) {
           <div className="bg-indigo-50 dark:bg-indigo-900/20 p-2 rounded">
             <div className="text-xs text-gray-600 dark:text-gray-400">Net</div>
             <div className={`font-bold ${calculateNetWinnings() >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              ${calculateNetWinnings()}
+              {formatCurrency(calculateNetWinnings())}
             </div>
           </div>
 
           <div className="bg-purple-50 dark:bg-purple-900/20 p-2 rounded">
-            <div className="text-xs text-gray-600 dark:text-gray-400">Biggest Pot</div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">Biggest Pot Won</div>
             <div className="font-bold text-purple-600 dark:text-purple-400">
-              ${sessionStats.biggestPot}
+              {formatCurrency(Math.max(0, sessionStats.biggestPotWon || 0))}
             </div>
           </div>
         </div>

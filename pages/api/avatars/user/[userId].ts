@@ -44,7 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log('=== Avatar Retrieval Result ===');
     console.log('Query result for userId', userId + ':', avatar ? 'Found avatar' : 'No avatar found');
     if (avatar) {
-      console.log('Avatar data found:', { id: avatar.id, url: avatar.originalUrl, status: avatar.status });
+      // console.log('Avatar data found:', { id: avatar.id, url: avatar.originalUrl, status: avatar.status });
     }
     console.log('=== End Retrieval Result ===');
     

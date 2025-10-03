@@ -237,9 +237,22 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         
         // Process the action through the poker engine
         pokerEngine.handleAction(playerAction);
-        
+        // Defensive: if action caused everyone else to fold, end hand immediately
+        if (typeof pokerEngine.ensureWinByFoldIfSingle === 'function') {
+          pokerEngine.ensureWinByFoldIfSingle();
+        }
         // Get updated game state
-        const gameState = pokerEngine.getState();
+        let gameState = pokerEngine.getState();
+        // Extra safety: if we still have only one active player but stage hasn't advanced, finalize now
+        const activeCount = (gameState.players || []).filter((p: any) => !(p.isFolded || (p as any).folded)).length;
+        if (activeCount === 1 && gameState.stage !== 'showdown') {
+          console.log(`[safety] Forcing win-by-fold settlement (stage=${gameState.stage}, pot=${gameState.pot}, currentBet=${gameState.currentBet})`);
+          if (typeof pokerEngine.ensureWinByFoldIfSingle === 'function') {
+            pokerEngine.ensureWinByFoldIfSingle();
+            gameState = pokerEngine.getState();
+            console.log(`[safety] Post-settlement (stage=${gameState.stage}, pot=${gameState.pot}, currentBet=${gameState.currentBet})`);
+          }
+        }
         
         // Broadcast updated game state to all players
         io.to(`table_${tableId}`).emit('game_state_update', {
@@ -261,6 +274,34 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           playerId: playerId,
           action: action
         });
+      }
+    });
+
+    // Allow clients to explicitly request settlement when only one player remains (defensive fallback)
+    socket.on('force_settlement', (data: { tableId: string }) => {
+      try {
+        const { tableId } = data || ({} as any);
+        if (!tableId) return;
+        if (!(global as any).activeGames || !(global as any).activeGames.has(tableId)) {
+          return;
+        }
+        const pokerEngine = (global as any).activeGames.get(tableId);
+        if (typeof pokerEngine.ensureWinByFoldIfSingle === 'function') {
+          const before = pokerEngine.getState();
+          const activeCount = (before.players || []).filter((p: any) => !(p.isFolded || (p as any).folded)).length;
+          if (activeCount === 1 && before.stage !== 'showdown') {
+            console.log(`[client] force_settlement requested; applying (stage=${before.stage}, pot=${before.pot})`);
+            pokerEngine.ensureWinByFoldIfSingle();
+            const after = pokerEngine.getState();
+            io.to(`table_${tableId}`).emit('game_state_update', {
+              gameState: after,
+              lastAction: { action: 'force_settlement' },
+              timestamp: new Date().toISOString()
+            });
+          }
+        }
+      } catch (err) {
+        console.error('force_settlement failed:', err);
       }
     });
 

@@ -18,10 +18,96 @@ import * as GameSeats from '../../src/lib/shared/game-seats';
 // Initialize seat management handlers
 function initializeSeatHandlers(res: NextApiResponseServerIO) {
   const io = res.socket.server.io;
-  
-  if (!io || io._seatHandlersAdded) return;
+  if (!io) return;
+
+  // Support hot-reload: version the handlers and rebind when changed
+  const HANDLERS_VERSION = 2; // bump to force reinit after code changes
+  if (io._handlersVersion !== HANDLERS_VERSION) {
+    if (io._seatHandlersAdded) {
+      try {
+        console.log(`Rebinding Socket.IO handlers (old version=${io._handlersVersion}, new=${HANDLERS_VERSION})`);
+        io.removeAllListeners('connection');
+      } catch (e) {
+        console.warn('Failed to remove previous connection listeners:', e);
+      }
+      io._seatHandlersAdded = false;
+    }
+    io._handlersVersion = HANDLERS_VERSION;
+  } else if (io._seatHandlersAdded) {
+    // Already initialized with current version
+    return;
+  }
   
   console.log('Adding seat management handlers...');
+
+  // Auto next-hand scheduler (per table)
+  const NEXT_HAND_DELAY_MS = 5000;
+  if (!(global as any).nextHandTimers) {
+    (global as any).nextHandTimers = new Map<string, NodeJS.Timeout>();
+  }
+  const nextHandTimers: Map<string, NodeJS.Timeout> = (global as any).nextHandTimers;
+
+  const scheduleNextHand = (tableId: string) => {
+    try {
+      // Ensure a game exists and we're not already scheduled
+      if (!(global as any).activeGames || !(global as any).activeGames.has(tableId)) {
+        console.log(`[auto] Not scheduling: no active game for table ${tableId}`);
+        return;
+      }
+      if (nextHandTimers.has(tableId)) {
+        console.log(`[auto] Not scheduling: timer already exists for table ${tableId}`);
+        return;
+      }
+
+      const engine = (global as any).activeGames.get(tableId);
+      const state = engine?.getState?.() || {};
+      // Only schedule from showdown state
+      if (state.stage !== 'showdown') {
+        console.log(`[auto] Not scheduling: stage is ${state.stage}, require showdown (table ${tableId})`);
+        return;
+      }
+      const schedulePlayers = Array.isArray(state.players) ? state.players.length : 0;
+      console.log(`[auto] Scheduling next hand in ${NEXT_HAND_DELAY_MS}ms (table ${tableId}); players=${schedulePlayers}`);
+
+      const timer = setTimeout(() => {
+        try {
+          if (!(global as any).activeGames || !(global as any).activeGames.has(tableId)) return;
+          const engineNow = (global as any).activeGames.get(tableId);
+          const curr = engineNow?.getState?.() || {};
+          // If a new hand already started, skip
+          if (curr.stage !== 'showdown') {
+            console.log(`[auto] Timer fired but stage is ${curr.stage}; skipping start (table ${tableId})`);
+            return;
+          }
+          const players = Array.isArray(curr.players) ? curr.players : [];
+          // Require at least two players to continue
+          if (players.length < 2) {
+            console.log(`[auto] Timer fired but not enough players (${players.length}) to start next hand (table ${tableId})`);
+            return;
+          }
+
+          // Start next hand (rotates dealer -> blinds)
+          console.log(`[auto] Starting next hand for table ${tableId}`);
+          engineNow.startNewHand();
+          const newState = engineNow.getState();
+          io.to(`table_${tableId}`).emit('game_state_update', {
+            gameState: newState,
+            lastAction: { action: 'auto_next_hand' },
+            timestamp: new Date().toISOString(),
+          });
+          console.log(`[auto] Emitted game_state_update auto_next_hand (stage=${newState?.stage}, pot=${newState?.pot}) for table ${tableId}`);
+        } catch (e) {
+          console.error('Auto next hand failed:', e);
+        } finally {
+          nextHandTimers.delete(tableId);
+        }
+      }, NEXT_HAND_DELAY_MS);
+
+      nextHandTimers.set(tableId, timer);
+    } catch (err) {
+      console.error('scheduleNextHand error:', err);
+    }
+  };
   
   io.on('connection', (socket: any) => {
     console.log('Client connected for seat management:', socket.id);
@@ -266,6 +352,11 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         });
         
         console.log(`Player ${playerId} performed ${action}${amount ? ` for ${amount}` : ''} at table ${tableId}`);
+
+        // If hand is over, schedule next hand
+        if (gameState?.stage === 'showdown') {
+          scheduleNextHand(tableId);
+        }
         
       } catch (error: any) {
         console.error('Error processing player action:', error);
@@ -298,10 +389,46 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
               lastAction: { action: 'force_settlement' },
               timestamp: new Date().toISOString()
             });
+            // If hand is over, schedule next hand
+            if (after?.stage === 'showdown') {
+              scheduleNextHand(tableId);
+            }
           }
         }
       } catch (err) {
         console.error('force_settlement failed:', err);
+      }
+    });
+
+    // Client fallback: request starting the next hand after a delay on their side
+    socket.on('request_next_hand', (data: { tableId: string }) => {
+      try {
+        const { tableId } = data || ({} as any);
+        if (!tableId) return;
+        if (!(global as any).activeGames || !(global as any).activeGames.has(tableId)) return;
+        const engine = (global as any).activeGames.get(tableId);
+        const state = engine?.getState?.() || {};
+        console.log(`[auto] request_next_hand received (stage=${state?.stage}, players=${Array.isArray(state?.players) ? state.players.length : 0}) for table ${tableId}`);
+        if (state.stage !== 'showdown') {
+          console.log(`[auto] request_next_hand ignored: stage=${state.stage} (table ${tableId})`);
+          return;
+        }
+        const players = Array.isArray(state.players) ? state.players : [];
+        if (players.length < 2) {
+          console.log(`[auto] request_next_hand ignored: not enough players (${players.length}) (table ${tableId})`);
+          return;
+        }
+        console.log(`[auto] request_next_hand accepted: starting next hand now (table ${tableId})`);
+        engine.startNewHand();
+        const newState = engine.getState();
+        io.to(`table_${tableId}`).emit('game_state_update', {
+          gameState: newState,
+          lastAction: { action: 'request_next_hand' },
+          timestamp: new Date().toISOString(),
+        });
+        console.log(`[auto] Emitted game_state_update request_next_hand (stage=${newState?.stage}, pot=${newState?.pot}) for table ${tableId}`);
+      } catch (err) {
+        console.error('request_next_hand failed:', err);
       }
     });
 
@@ -347,6 +474,12 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
     console.log('Socket.IO server initialized successfully');
   } else {
     console.log('Socket.IO server already running');
+    // Re-run handler initialization to support hot-reload / new event bindings
+    try {
+      initializeSeatHandlers(res);
+    } catch (e) {
+      console.warn('Re-initialization of seat handlers failed:', e);
+    }
   }
 
   // Send success response

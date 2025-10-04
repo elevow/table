@@ -24,6 +24,23 @@
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "Build TypeScript (tsc)",
+			"type": "shell",
+			"command": "npm test --silent -- -i",
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Run tests (in-band)",
+			"type": "shell",
+			"command": "npm test --silent -- -i",
+			"isBackground": false,
+			"group": "build"
 		}
 	]
 }

@@ -113,7 +113,7 @@ export default function GamePage() {
   
   // Helper function to get avatar src for a player
   const getPlayerAvatarSrc = (playerIdForAvatar: string) => {
-    console.log('Getting avatar for player:', playerIdForAvatar, 'current playerId:', playerId);
+    // console.log('Getting avatar for player:', playerIdForAvatar, 'current playerId:', playerId);
     
     // For current player, use the loaded avatar data if available
     if (playerIdForAvatar === playerId && currentPlayerAvatar?.url) {
@@ -170,6 +170,8 @@ export default function GamePage() {
   // Game state
   const [gameStarted, setGameStarted] = useState(false);
   const [pokerGameState, setPokerGameState] = useState<any>(null);
+  // Auto next-hand fallback timer ref
+  const autoNextHandTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Load avatars for all seated players
   useEffect(() => {
@@ -182,6 +184,46 @@ export default function GamePage() {
       loadPlayerAvatar(id);
     });
   }, [seatAssignments, playerId, loadPlayerAvatar]);
+
+  // Client-side fallback: after showdown, request next hand after 5s if server didn't start it
+  useEffect(() => {
+    // Guard: need socket, table id, and a valid game state
+    if (!socket || !id || typeof id !== 'string') return;
+
+    // Clear any previous timer when stage changes
+    if (autoNextHandTimerRef.current) {
+      clearTimeout(autoNextHandTimerRef.current);
+      autoNextHandTimerRef.current = null;
+    }
+
+    const stage = pokerGameState?.stage;
+    if (stage === 'showdown') {
+      // Schedule a single-shot fallback after 5 seconds
+      autoNextHandTimerRef.current = setTimeout(() => {
+        try {
+          // Double-check we're still at showdown before emitting
+          if (pokerGameState?.stage === 'showdown') {
+            console.log('[client auto] Requesting next hand after 5s');
+            socket.emit('request_next_hand', { tableId: id });
+          }
+        } catch (e) {
+          console.warn('Auto next-hand request failed:', e);
+        } finally {
+          if (autoNextHandTimerRef.current) {
+            clearTimeout(autoNextHandTimerRef.current);
+            autoNextHandTimerRef.current = null;
+          }
+        }
+      }, 5000);
+    }
+
+    return () => {
+      if (autoNextHandTimerRef.current) {
+        clearTimeout(autoNextHandTimerRef.current);
+        autoNextHandTimerRef.current = null;
+      }
+    };
+  }, [pokerGameState?.stage, socket, id]);
   
   // Seat management functions
   const claimSeat = (seatNumber: number) => {

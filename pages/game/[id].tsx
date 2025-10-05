@@ -33,11 +33,7 @@ const CombinedTimerStats = dynamic(() => import('../../src/components/CombinedTi
   loading: () => <div className="skeleton-loader stats-loader" />,
 });
 
-// Rabbit Hunt Preview panel (SSR-safe)
-const RabbitHuntPreviewPanel = dynamic(() => import('../../src/components/RabbitHuntPreviewPanel'), {
-  loading: () => <div className="skeleton-loader rabbit-panel-loader" />,
-  ssr: true,
-});
+// Rabbit Hunt Preview panel removed per user request
 
 export default function GamePage() {
   const router = useRouter();
@@ -1422,8 +1418,14 @@ export default function GamePage() {
               <CombinedTimerStats 
                 tableId={String(id)} 
                 playerId={playerId} 
-                gameId={String(id)} 
+                gameId={String(id)}
+                onShowSettings={toggleSettings}
               />
+            )}
+            {showSettings && (
+              <div className="mt-4">
+                <GameSettings gameId={String(id)} />
+              </div>
             )}
           </div>
           
@@ -1431,23 +1433,8 @@ export default function GamePage() {
           <div ref={chatPanelRef} className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6">
             <ChatPanel gameId={String(id)} playerId={playerId} />
           </div>
-          
-          {/* Rabbit Hunt Preview Panel */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6">
-            <RabbitHuntPreviewPanel roomId={String(id)} />
-          </div>
 
-          {/* On-demand loaded component */}
-          <div ref={settingsRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6">
-            <button 
-              onClick={toggleSettings}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded"
-            >
-              {showSettings ? 'Hide Settings' : 'Show Settings'}
-            </button>
-            
-            {showSettings && <GameSettings gameId={String(id)} />}
-          </div>
+          {/* Settings panel moved next to stats above; bottom button removed */}
         </div>
       </div>
     </div>

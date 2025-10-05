@@ -14,6 +14,7 @@ function GameSettings({ gameId }: GameSettingsProps) {
     chatEnabled: true,
     notificationsEnabled: true,
     autoFoldEnabled: false,
+    rabbitHuntEnabled: false,
     timeBank: 30,
   });
   
@@ -21,8 +22,22 @@ function GameSettings({ gameId }: GameSettingsProps) {
     // Log when the component is loaded to demonstrate code splitting
     // console.log('GameSettings component loaded for game:', gameId);
     
-    // In a real implementation, this would load saved user settings
+    // Load saved settings for this game if present
+    try {
+      const raw = localStorage.getItem(`game_settings_${gameId}`);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        setSettings(prev => ({ ...prev, ...saved }));
+      }
+    } catch {}
   }, [gameId]);
+
+  // Persist settings when they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(`game_settings_${gameId}`, JSON.stringify(settings));
+    } catch {}
+  }, [gameId, settings]);
   
   const handleSettingChange = (setting: string, value: boolean | number) => {
     setSettings(prev => ({ ...prev, [setting]: value }));
@@ -70,6 +85,16 @@ function GameSettings({ gameId }: GameSettingsProps) {
               onChange={(e) => handleSettingChange('autoFoldEnabled', e.target.checked)}
             />
             Auto-fold when inactive
+          </label>
+        </div>
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.rabbitHuntEnabled}
+              onChange={(e) => handleSettingChange('rabbitHuntEnabled', e.target.checked)}
+            />
+            Rabbit Hunt (preview)
           </label>
         </div>
         <div className="setting-item">

@@ -25,9 +25,10 @@ interface CombinedHUDProps {
   tableId: string;
   playerId: string;
   gameId: string;
+  onShowSettings?: () => void;
 }
 
-function CombinedTimerStats({ tableId, playerId, gameId }: CombinedHUDProps) {
+function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings }: CombinedHUDProps) {
   // Timer states
   const [socket, setSocket] = useState<any>(null);
   const [timer, setTimer] = useState<TimerState>(undefined);
@@ -300,29 +301,6 @@ function CombinedTimerStats({ tableId, playerId, gameId }: CombinedHUDProps) {
 
   return (
     <div className="space-y-4">
-      {/* Timer and Bank Section */}
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
-          Game Timer
-        </h3>
-        <div className="flex items-center gap-3 text-sm">
-          <div className={`px-2 py-1 rounded ${timer?.warning ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200' : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'}`}>
-            Time left: {seconds}s
-          </div>
-          <div className="px-2 py-1 rounded bg-blue-50 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-            Bank: {bank / 1000}s
-          </div>
-          {isMyTurn && bank > 0 && (
-            <button
-              className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-              onClick={useTimeBank}
-            >
-              Use Time Bank
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Session Statistics Section */}
       <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
         <div className="flex items-center justify-between mb-3">
@@ -370,6 +348,17 @@ function CombinedTimerStats({ tableId, playerId, gameId }: CombinedHUDProps) {
           <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
             Started at {sessionStats.sessionStartTime.toLocaleTimeString()}
           </div>
+        </div>
+
+        {/* Settings button placed below Session Statistics */}
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            onClick={onShowSettings}
+            className="px-3 py-2 rounded bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600"
+          >
+            Show Settings
+          </button>
         </div>
       </div>
     </div>

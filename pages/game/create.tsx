@@ -41,6 +41,18 @@ export default function CreateGameRoomPage() {
     setError(null);
     
     try {
+      // Basic client-side validation for blinds
+      if (!Number.isFinite(smallBlind) || smallBlind < 0.01) {
+        setError('Small blind must be at least 0.01');
+        setSubmitting(false);
+        return;
+      }
+      if (!Number.isFinite(bigBlind) || bigBlind < Math.max(0.02, smallBlind * 2)) {
+        setError(`Big blind must be at least 2× the small blind (${(smallBlind * 2).toFixed(2)})`);
+        setSubmitting(false);
+        return;
+      }
+
       console.log('Creating game room...');
       const res = await fetch('/api/games/rooms/create', {
         method: 'POST',
@@ -171,9 +183,10 @@ export default function CreateGameRoomPage() {
             <input
               type="number"
               className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              min={1}
+              min={0.01}
+              step={0.01}
               value={smallBlind}
-              onChange={e => setSmallBlind(parseInt(e.target.value || '0', 10))}
+              onChange={e => setSmallBlind(parseFloat(e.target.value || '0'))}
             />
           </div>
           <div>
@@ -181,9 +194,10 @@ export default function CreateGameRoomPage() {
             <input
               type="number"
               className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              min={2}
+              min={Math.max(0.02, Number((smallBlind * 2).toFixed(2)))}
+              step={0.01}
               value={bigBlind}
-              onChange={e => setBigBlind(parseInt(e.target.value || '0', 10))}
+              onChange={e => setBigBlind(parseFloat(e.target.value || '0'))}
             />
           </div>
         </div>

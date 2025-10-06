@@ -590,82 +590,56 @@ export default function GamePage() {
 
   // Calculate rotated seat positions
   const getRotatedSeatPositions = () => {
-    // Generate positions dynamically based on maxPlayers
-    const defaultPositions = generateSeatPositions(maxPlayers);
-
-    // If user has no seat, use default positions
+    // If user has no seat, use default circular positions
     if (!currentPlayerSeat) {
-      return defaultPositions;
+      return generateSeatPositions(maxPlayers);
     }
 
-    // Always place the current player at the bottom-center position
-    // We'll create a custom bottom-center position and arrange others around it
-    const currentSeatIndex = currentPlayerSeat - 1; // Convert to 0-based index
-    
-    // Create custom positions with current player at bottom center
-    const customPositions = [];
-    
-    // First, place current player at exact bottom center (90 degrees)
-    customPositions.push({
-      seatNumber: currentPlayerSeat,
-      position: '',
-      style: {
-        position: 'absolute' as const,
-        left: '50%',
-        top: '104%', // Lowered to avoid overlap with hole cards
-        transform: 'translate(-50%, -50%)'
+    // Perfect rotation relative to current player's seat:
+    // - Anchor current seat at bottom-center (50%, 104%)
+    // - Rotate all other seats evenly around the ellipse so relative spacing is preserved
+    const n = Math.max(1, maxPlayers);
+    const currentSeatIndex = currentPlayerSeat - 1; // 0-based index
+    const radiusX = 52;
+    const radiusY = 48;
+
+    const positions: { seatNumber: number; position: string; style: React.CSSProperties }[] = [];
+
+    for (let i = 0; i < n; i++) {
+      if (i === currentSeatIndex) {
+        // Pin current player to bottom-center and lower slightly outside the table
+        positions.push({
+          seatNumber: i + 1,
+          position: '',
+          style: {
+            position: 'absolute' as const,
+            left: '50%',
+            top: '104%',
+            transform: 'translate(-50%, -50%)'
+          }
+        });
+        continue;
       }
-    });
-    
-    // Then arrange other players around the table, excluding current player's original position
-    let positionIndex = 0;
-    for (let i = 0; i < maxPlayers; i++) {
-      if (i !== currentSeatIndex) { // Skip current player's original position
-        // Use the default positions but skip the bottom-center-ish one for others
-        let targetDefaultIndex = positionIndex;
-        
-        // For 3 players, we want to avoid putting others too close to bottom
-        // Distribute them more evenly around the remaining positions
-        if (maxPlayers === 3) {
-          // Place other two players at top-left and top-right areas
-          const angle = positionIndex === 0 ? -150 * Math.PI / 180 : -30 * Math.PI / 180; // -150° and -30°
-          const radiusX = 52;
-          const radiusY = 48;
-          const x = 50 + radiusX * Math.cos(angle);
-          const y = 50 + radiusY * Math.sin(angle);
-          
-          customPositions.push({
-            seatNumber: i + 1,
-            position: '',
-            style: {
-              position: 'absolute' as const,
-              left: `${x}%`,
-              top: `${y}%`,
-              transform: 'translate(-50%, -50%)'
-            }
-          });
-        } else {
-          // For other player counts, use default positions but skip bottom area
-          while (targetDefaultIndex < defaultPositions.length && 
-                 (targetDefaultIndex === Math.floor(maxPlayers / 2) || 
-                  targetDefaultIndex === currentSeatIndex)) {
-            targetDefaultIndex++;
-          }
-          if (targetDefaultIndex >= defaultPositions.length) {
-            targetDefaultIndex = positionIndex;
-          }
-          
-          customPositions.push({
-            seatNumber: i + 1,
-            position: defaultPositions[targetDefaultIndex].position,
-            style: defaultPositions[targetDefaultIndex].style
-          });
+
+      // Rotate indices so current seat maps to angle π/2 (bottom center)
+      const rotatedIndex = (i - currentSeatIndex + n) % n; // 0..n-1
+      const angle = (rotatedIndex * 2 * Math.PI) / n + Math.PI / 2; // base at bottom
+      const x = 50 + radiusX * Math.cos(angle);
+      const y = 50 + radiusY * Math.sin(angle);
+
+      positions.push({
+        seatNumber: i + 1,
+        position: '',
+        style: {
+          position: 'absolute' as const,
+          left: `${x}%`,
+          top: `${y}%`,
+          transform: 'translate(-50%, -50%)'
         }
-        positionIndex++;
-      }
+      });
     }
 
-    return customPositions;
+    return positions;
   };
   
   // Fetch room information to get maxPlayers

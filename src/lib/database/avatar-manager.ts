@@ -43,11 +43,19 @@ export class AvatarManager {
   }
 
   async getLatestAvatarForUser(userId: string): Promise<AvatarRecord | null> {
-    const res = await this.pool.query(
-      'SELECT * FROM avatars WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
-      [userId]
-    );
-    return res.rows[0] ? this.mapRowToAvatar(res.rows[0]) : null;
+    try {
+      const res = await this.pool.query(
+        'SELECT * FROM avatars WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
+        [userId]
+      );
+      return res.rows[0] ? this.mapRowToAvatar(res.rows[0]) : null;
+    } catch (e: any) {
+      // Gracefully handle invalid UUID cast errors from Postgres
+      if (e && (e.code === '22P02' || /invalid input syntax for type uuid/i.test(e.message || ''))) {
+        return null;
+      }
+      throw e;
+    }
   }
 
   async updateAvatar(id: string, updates: UpdateAvatarRequest): Promise<AvatarRecord> {

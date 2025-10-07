@@ -1,4 +1,6 @@
 /** @type {import('ts-jest').JestConfigWithTsJest} */
+const isStrictCoverage = !!process.env.CI || process.env.STRICT_COVERAGE === 'true';
+
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'jsdom',
@@ -37,14 +39,24 @@ module.exports = {
     '!src/components/**/*.tsx', // Exclude React components from coverage for now
     '!src/examples/**', // Exclude example files from coverage
   ],
-  coverageThreshold: {
-    global: {
-  // Relax branch coverage threshold while keeping others strict
-  branches: 64,
-      functions: 80,
-      lines: 80,
-      statements: 80
-    }
-  },
+  coverageThreshold: isStrictCoverage
+    ? {
+        global: {
+          // Relax branch coverage threshold while keeping others strict
+          branches: 64,
+          functions: 80,
+          lines: 80,
+          statements: 80,
+        },
+      }
+    : {
+        // When running locally or focused tests, don’t fail the run due to global thresholds
+        global: {
+          branches: 0,
+          functions: 0,
+          lines: 0,
+          statements: 0,
+        },
+      },
   coverageReporters: ['text', 'lcov', 'html', 'json-summary']
 };

@@ -2,6 +2,8 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { Server as SocketServer } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import { WebSocketManager } from '../../src/lib/websocket-manager';
+import { GameService } from '../../src/lib/services/game-service';
+import { getPool } from '../../src/lib/database/pool';
 
 // Extend the response type to include the socket server
 interface NextApiResponseServerIO extends NextApiResponse {
@@ -217,7 +219,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
     });
 
     // Handle game start requests
-    socket.on('start_game', (data: { tableId: string; playerId: string; seatedPlayers: any[] }) => {
+  socket.on('start_game', async (data: { tableId: string; playerId: string; seatedPlayers: any[] }) => {
       console.log('Game start request:', data);
       const { tableId, playerId, seatedPlayers } = data;
       
@@ -249,10 +251,35 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           holeCards: []
         }));
         
-        // Create poker engine instance with standard blind structure
-        const smallBlind = 1; // $1 small blind
-        const bigBlind = 2;   // $2 big blind
-        
+        // Determine blinds from room configuration if available
+        let smallBlind = 1;
+        let bigBlind = 2;
+        try {
+          // Attempt to load room by id using GameService
+          const pool = getPool();
+          const service = new GameService(pool as any);
+          const room = await service.getRoomById(tableId);
+          if (room && room.blindLevels) {
+            const bl = room.blindLevels as any;
+            // Support either { sb, bb } or { small, big } shapes
+            const sb = Number(bl.sb ?? bl.small);
+            const bb = Number(bl.bb ?? bl.big);
+            if (Number.isFinite(sb) && Number.isFinite(bb) && sb > 0 && bb >= sb * 2) {
+              smallBlind = parseFloat(sb.toFixed(2));
+              bigBlind = parseFloat(bb.toFixed(2));
+            } else if (Number.isFinite(sb) && Number.isFinite(bb) && sb > 0 && bb > sb) {
+              // Looser validation if exact 2x isn't enforced in room config
+              smallBlind = parseFloat(sb.toFixed(2));
+              bigBlind = parseFloat(bb.toFixed(2));
+            } else {
+              console.warn(`Invalid room blindLevels for table ${tableId}; using defaults 1/2`, bl);
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to load room-configured blinds; defaulting to 1/2:', e);
+        }
+
+        // Create poker engine instance with resolved blind structure
         const pokerEngine = new PokerEngine(tableId, players, smallBlind, bigBlind, {
           variant: 'texas-holdem', // Default to Texas Hold'em
           bettingMode: 'no-limit'

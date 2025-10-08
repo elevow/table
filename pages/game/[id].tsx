@@ -356,6 +356,62 @@ export default function GamePage() {
     return pokerGameState.players.filter((p: any) => !(p.folded || p.isFolded));
   }, [pokerGameState]);
 
+  // Helpers for No-Limit bet/raise controls
+  const getMe = useCallback(() => {
+    if (!pokerGameState?.players || !playerId) return null as any;
+    return pokerGameState.players.find((p: any) => p.id === playerId) || null;
+  }, [pokerGameState, playerId]);
+
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+  const getMinBet = () => {
+    const bb = Number(pokerGameState?.bigBlind || 0) || 0;
+    const me = getMe();
+    const stack = Number(me?.stack || 0) || 0;
+    // If short-stacked, min becomes all-in (short bet allowed)
+    return Math.min(Math.max(bb, 0.01), stack + Number(me?.currentBet || 0));
+  };
+
+  const getBetBounds = () => {
+    const me = getMe();
+    const prev = Number(me?.currentBet || 0);
+    const stack = Number(me?.stack || 0);
+    const min = getMinBet();
+    const max = prev + stack; // total target for all-in
+    return { min: Number(min.toFixed(2)), max: Number(max.toFixed(2)) };
+  };
+
+  const getRaiseBounds = () => {
+    const state = pokerGameState as any;
+    const me = getMe();
+    const currentBet = Number(state?.currentBet || 0);
+    const minRaise = Number(state?.minRaise || 0);
+    const prev = Number(me?.currentBet || 0);
+    const stack = Number(me?.stack || 0);
+    // Minimum legal raise total is currentBet + minRaise; allow short all-in if not enough chips
+    const minTotal = currentBet + minRaise;
+    const maxTotal = prev + stack;
+    const min = Math.min(minTotal, maxTotal);
+    const max = maxTotal;
+    return { min: Number(min.toFixed(2)), max: Number(max.toFixed(2)) };
+  };
+
+  // Local state for inputs
+  const [betInput, setBetInput] = useState<number>(0);
+  const [raiseInput, setRaiseInput] = useState<number>(0);
+
+  // Update defaults when it's our turn or state changes
+  useEffect(() => {
+    if (!pokerGameState || pokerGameState.activePlayer !== playerId) return;
+    if ((pokerGameState.currentBet || 0) === 0) {
+      const { min, max } = getBetBounds();
+      setBetInput(clamp(min, min, max));
+    } else {
+      const { min, max } = getRaiseBounds();
+      setRaiseInput(clamp(min, min, max));
+    }
+  }, [pokerGameState, playerId]);
+
   // Get position for current player's hole cards based on their seat
   const getCurrentPlayerCardsPosition = () => {
     // Place the current player's cards centered near the bottom of the felt,
@@ -1337,19 +1393,119 @@ export default function GamePage() {
                   </button>
                 )}
                 
-                <button
-                  onClick={() => handleBet(pokerGameState.bigBlind || 2)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors"
-                >
-                  Bet ${pokerGameState.bigBlind || 2}
-                </button>
-                
-                <button
-                  onClick={() => handleRaise((pokerGameState.currentBet || 0) + (pokerGameState.bigBlind || 2))}
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors"
-                >
-                  Raise to ${(pokerGameState.currentBet || 0) + (pokerGameState.bigBlind || 2)}
-                </button>
+                {/* No-Limit betting controls */}
+                {((pokerGameState?.bettingMode || 'no-limit') === 'no-limit') && (
+                  (pokerGameState.currentBet || 0) === 0 ? (
+                    <div className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-900/30 p-3 rounded-md w-full">
+                      <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Bet amount</div>
+                      {(() => {
+                        const { min, max } = getBetBounds();
+                        const bb = Number(pokerGameState.bigBlind || 0) || 0;
+                        const pot = Number(pokerGameState.pot || 0) || 0;
+                        return (
+                          <>
+                            <input
+                              type="range"
+                              min={min}
+                              max={Math.max(min, max)}
+                              step={0.01}
+                              value={clamp(betInput, min, max)}
+                              onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
+                            />
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={min}
+                                max={max}
+                                step={0.01}
+                                value={Number(clamp(betInput, min, max)).toFixed(2)}
+                                onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
+                                className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                              />
+                              <div className="flex flex-wrap gap-2">
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(min)}>Min</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(betInput + bb, min, max))}>+BB</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(pot / 2, min, max))}>1/2 Pot</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(pot, min, max))}>Pot</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(max)}>All-in</button>
+                              </div>
+                              {(() => {
+                                const me = getMe();
+                                const prev = Number(me?.currentBet || 0);
+                                const stack = Number(me?.stack || 0);
+                                const sel = clamp(betInput, min, max);
+                                const isAllIn = Math.abs(sel - max) < 0.005;
+                                const add = Math.max(0, sel - prev);
+                                const onClick = () => handleBet(Number(sel.toFixed(2)));
+                                const label = isAllIn ? `All-in $${stack.toFixed(2)}` : `Bet $${add.toFixed(2)}`;
+                                return (
+                                  <button onClick={onClick} className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
+                                    {label}
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-900/30 p-3 rounded-md w-full">
+                      <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Raise to</div>
+                      {(() => {
+                        const { min, max } = getRaiseBounds();
+                        const bb = Number(pokerGameState.bigBlind || 0) || 0;
+                        const pot = Number(pokerGameState.pot || 0) || 0;
+                        const curr = Number(pokerGameState.currentBet || 0) || 0;
+                        return (
+                          <>
+                            <input
+                              type="range"
+                              min={min}
+                              max={Math.max(min, max)}
+                              step={0.01}
+                              value={clamp(raiseInput, min, max)}
+                              onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
+                            />
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={min}
+                                max={max}
+                                step={0.01}
+                                value={Number(clamp(raiseInput, min, max)).toFixed(2)}
+                                onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
+                                className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                              />
+                              <div className="flex flex-wrap gap-2">
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp((curr + (pokerGameState.minRaise || bb)), min, max))}>+MinRaise</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(curr + (bb * 2), min, max))}>+2BB</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(curr + (bb * 3), min, max))}>+3BB</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(pot, min, max))}>Pot</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(max)}>All-in</button>
+                              </div>
+                              {(() => {
+                                const me = getMe();
+                                const prev = Number(me?.currentBet || 0);
+                                const stack = Number(me?.stack || 0);
+                                const sel = clamp(raiseInput, min, max);
+                                const isAllIn = Math.abs(sel - max) < 0.005;
+                                const add = Math.max(0, sel - prev);
+                                const onClick = () => handleRaise(Number(sel.toFixed(2)));
+                                const label = isAllIn ? `All-in $${stack.toFixed(2)}` : `Raise to $${sel.toFixed(2)} (+$${add.toFixed(2)})`;
+                                return (
+                                  <button onClick={onClick} className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
+                                    {label}
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )
+                )}
               </div>
               
               <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">

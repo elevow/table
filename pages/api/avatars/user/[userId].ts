@@ -22,13 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log('This is the userId that will be queried in database');
     console.log('=== Retrieval API Processing ===');
     
-    // Defensive: our avatars.user_id column is UUID. If the provided userId is not a valid UUID,
-    // short-circuit with 404 to avoid Postgres 22P02 (invalid input syntax for type uuid).
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
-    if (!isUuid) {
-      console.warn('Avatar API - Non-UUID userId provided; returning 404:', userId);
-      return res.status(404).json({ error: 'Not found' });
-    }
+    // Let the service/data layer handle invalid UUIDs gracefully; return 404 only if no avatar found.
     
     // Use proper database configuration with SSL fix for self-signed certificates
     const connectionString = process.env.POOL_DATABASE_URL || process.env.DATABASE_URL;

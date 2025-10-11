@@ -177,7 +177,7 @@ export class PokerEngine {
       this.gameStateManager.startBettingRound('third');
     } else {
       this.dealHoleCards();
-      this.postBlinds();
+  this.postBlinds();
       this.gameStateManager.startBettingRound('preflop');
     }
   }
@@ -213,7 +213,7 @@ export class PokerEngine {
       bet: p.currentBet
     })));
     
-    const { pot, currentBet } = this.bettingManager.postBlinds(this.state.players);
+  const { pot, currentBet } = this.bettingManager.postBlinds(this.state.players, this.state.dealerPosition);
     this.log(`Blind amounts: pot=${pot}, currentBet=${currentBet}`);
     
     // Add blind bets to pot

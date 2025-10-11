@@ -116,7 +116,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
 
     // Handle joining a table
     socket.on('join_table', (data: { tableId: string; playerId: string }) => {
-      console.log('Player joining table:', data);
+      // console.log('Player joining table:', data);
       const { tableId, playerId } = data;
       
       // Join the table room
@@ -126,12 +126,12 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       socket.tableId = tableId;
       socket.playerId = playerId;
       
-      console.log(`Player ${playerId} joined table ${tableId}`);
+      // console.log(`Player ${playerId} joined table ${tableId}`);
     });
 
     // Handle seat claim requests
     socket.on('claim_seat', (data: { tableId: string; seatNumber: number; playerId: string; playerName: string; chips: number }) => {
-      console.log('Seat claim request:', data);
+      // console.log('Seat claim request:', data);
       const { tableId, seatNumber, playerId, playerName, chips } = data;
       
       // Initialize and get game seats for this table

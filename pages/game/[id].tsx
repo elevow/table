@@ -396,6 +396,42 @@ export default function GamePage() {
     return { min: Number(min.toFixed(2)), max: Number(max.toFixed(2)) };
   };
 
+  // Determine dealer/small blind/big blind tokens for a player based on current game state
+  const getPlayerToken = useCallback((playerIdForToken: string): 'D' | 'SB' | 'BB' | null => {
+    try {
+      const gs = pokerGameState;
+      if (!gs || !Array.isArray(gs.players) || gs.players.length < 2) return null;
+
+      const players = gs.players as Array<{ id: string; position?: number }>;
+      const dealerIdx = Number(gs.dealerPosition);
+      if (!Number.isFinite(dealerIdx)) return null;
+      const n = players.length;
+
+      const dealerId = players[dealerIdx]?.id;
+      if (!dealerId) return null;
+
+      if (n === 2) {
+        // Heads-up: dealer posts SB; other posts BB
+        const sbId = dealerId;
+        const bbId = players[(dealerIdx + 1) % n]?.id;
+        if (playerIdForToken === dealerId) return 'D';
+        if (playerIdForToken === sbId) return 'SB';
+        if (playerIdForToken === bbId) return 'BB';
+        return null;
+      }
+
+      // Ring games (3+): SB/BB are left of dealer so tokens rotate every hand
+      const sbId = players[(dealerIdx + 1) % n]?.id;
+      const bbId = players[(dealerIdx + 2) % n]?.id;
+      if (playerIdForToken === dealerId) return 'D';
+      if (playerIdForToken === sbId) return 'SB';
+      if (playerIdForToken === bbId) return 'BB';
+      return null;
+    } catch {
+      return null;
+    }
+  }, [pokerGameState]);
+
   // Local state for inputs
   const [betInput, setBetInput] = useState<number>(0);
   const [raiseInput, setRaiseInput] = useState<number>(0);
@@ -505,7 +541,7 @@ export default function GamePage() {
       <React.Fragment key={seatNumber}>
         {/* Main seat */}
         <div
-          className={`absolute w-16 h-16 rounded-full border-2 flex flex-col items-center justify-center text-white text-xs font-semibold ${position} ${
+          className={`absolute w-16 h-16 rounded-full border-2 flex flex-col items-center justify-center text-white text-xs font-semibold relative ${position} ${
             isEmpty
               ? canClaim
                 ? 'bg-gray-600 border-gray-500 hover:bg-gray-500 hover:border-gray-400 cursor-pointer opacity-60 hover:opacity-80'
@@ -540,6 +576,25 @@ export default function GamePage() {
                 className="w-12 h-12 rounded-full border-2 border-white shadow-sm"
                 alt={assignment.playerName || `Player ${seatNumber}`}
               />
+              {(() => {
+                const token = getPlayerToken(assignment.playerId);
+                if (!token) return null;
+                const styleMap: Record<'D' | 'SB' | 'BB', string> = {
+                  D: 'bg-white text-gray-900 border-gray-300',
+                  SB: 'bg-sky-600 text-white border-sky-400',
+                  BB: 'bg-indigo-700 text-white border-indigo-500',
+                };
+                return (
+                  <div
+                    className={`absolute -top-2 -right-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold border shadow ${styleMap[token]}`}
+                    title={token === 'D' ? 'Dealer' : token === 'SB' ? 'Small Blind' : 'Big Blind'}
+                    aria-label={token === 'D' ? 'Dealer' : token === 'SB' ? 'Small Blind' : 'Big Blind'}
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    {token}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

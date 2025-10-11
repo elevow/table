@@ -17,18 +17,46 @@ export class GameStateManager {
       });
     }
     
-    // Determine start position by variant/stage (using 1-based positions)
-    let startPosition = 1;
+    // Determine who acts first
+    // Default legacy mapping (fallback): preflop -> position 1; postflop -> position 2
+    let activePlayer: Player | undefined;
     if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
-      // US-053: In Stud, third street starts with bring-in (lowest upcard); simplify to position 1 for now
-      // Later streets normally start with highest upcards; for MVP tests we start at position 1
-      startPosition = 1;
+      // US-053: Simplified bring-in/door card rules not fully implemented; start with position 1
+      activePlayer = this.state.players.find(p => p.position === 1);
+    } else if (typeof this.state.dealerPosition === 'number' && this.state.players.length >= 2) {
+      const n = this.state.players.length;
+      const isHeadsUp = n === 2;
+      if (isHeadsUp) {
+        // HU rules: dealer posts SB and acts first preflop; postflop non-dealer (BB) acts first
+        if (stage === 'preflop') {
+          activePlayer = this.state.players[this.state.dealerPosition];
+        } else {
+          activePlayer = this.state.players[(this.state.dealerPosition + 1) % n];
+        }
+      } else {
+        // 3+ players: preflop first to act is left of the big blind; postflop is left of dealer (SB)
+        if (stage === 'preflop') {
+          const bbIndex = (this.state.dealerPosition + 2) % n; // BB relative to dealer
+          const firstIndex = (bbIndex + 1) % n; // left of BB
+          activePlayer = this.state.players[firstIndex];
+        } else {
+          const firstIndex = (this.state.dealerPosition + 1) % n; // left of dealer (SB)
+          activePlayer = this.state.players[firstIndex];
+        }
+      }
     } else {
-      startPosition = stage === 'preflop' ? 1 : 2;
+      // Legacy fallback when dealerPosition not provided
+      const legacyStartPos = stage === 'preflop' ? 1 : 2;
+      activePlayer = this.state.players.find(p => p.position === legacyStartPos);
     }
 
-    const activePlayer = this.state.players.find(p => p.position === startPosition);
     if (!activePlayer) throw new Error('Could not find active player');
+    if (process.env.DEBUG_POKER === 'true') {
+      const n = this.state.players.length;
+      const mode = n === 2 ? 'HU' : 'RING';
+      // eslint-disable-next-line no-console
+      console.log(`[DEBUG] Start ${stage}: dealerIdx=${this.state.dealerPosition} players=${n} (${mode}) firstToAct=${activePlayer.id} (pos=${(activePlayer as any).position})`);
+    }
     this.state.activePlayer = activePlayer.id;
   }
 
@@ -67,6 +95,10 @@ export class GameStateManager {
 
   public rotateDealerButton(): number {
     this.state.dealerPosition = (this.state.dealerPosition + 1) % this.state.players.length;
+    if (process.env.DEBUG_POKER === 'true') {
+      // eslint-disable-next-line no-console
+      console.log(`[DEBUG] Dealer rotated -> new dealerIdx=${this.state.dealerPosition} (playerId=${this.state.players[this.state.dealerPosition]?.id})`);
+    }
     return this.state.dealerPosition;
   }
 

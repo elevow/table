@@ -35,16 +35,47 @@ export class BettingManager {
     return delta;
   }
 
-  public postBlinds(players: Player[]): { pot: number; currentBet: number } {
-    // Find players by position - position 1 is always small blind, position 2 is always big blind
-    const smallBlindPlayer = players.find(p => p.position === 1);
-    const bigBlindPlayer = players.find(p => p.position === 2);
-    
+  public postBlinds(players: Player[], dealerPosition?: number): { pot: number; currentBet: number } {
+    // Prefer dealer-relative blind assignment if dealerPosition is provided
+    let smallBlindPlayer: Player | undefined;
+    let bigBlindPlayer: Player | undefined;
+
+    if (typeof dealerPosition === 'number' && players.length === 2) {
+      // Heads-up: dealer posts small blind; other posts big blind
+      const n = players.length;
+      smallBlindPlayer = players[dealerPosition];
+      bigBlindPlayer = players[(dealerPosition + 1) % n];
+    } else if (
+      typeof dealerPosition === 'number' && players.length >= 3 && process.env.ENABLE_DEALER_RELATIVE_BLINDS_RING === 'true'
+    ) {
+      // Ring games (opt-in): assign blinds relative to dealer
+      const n = players.length;
+      const sbIndex = (dealerPosition + 1) % n;
+      const bbIndex = (dealerPosition + 2) % n;
+      smallBlindPlayer = players[sbIndex];
+      bigBlindPlayer = players[bbIndex];
+    } else {
+      // Backward-compatible fallback by fixed positions (legacy tests/flows)
+      smallBlindPlayer = players.find(p => p.position === 1);
+      bigBlindPlayer = players.find(p => p.position === 2);
+    }
+
     if (!smallBlindPlayer) throw new Error('Could not find small blind player');
     if (!bigBlindPlayer) throw new Error('Could not find big blind player');
-    
+
+    if (process.env.DEBUG_POKER === 'true') {
+      const mode = players.length === 2 ? 'HU' : 'RING';
+      // eslint-disable-next-line no-console
+      console.log(`[DEBUG] Blinds (${mode}) dealerIdx=${typeof dealerPosition==='number'?dealerPosition:'n/a'} | SB=${smallBlindPlayer.id} (pos=${smallBlindPlayer.position}) BB=${bigBlindPlayer.id} (pos=${bigBlindPlayer.position})`);
+    }
+
     const sbAmount = this.placeBet(smallBlindPlayer, this.smallBlind);
     const bbAmount = this.placeBet(bigBlindPlayer, this.bigBlind);
+
+    if (process.env.DEBUG_POKER === 'true') {
+      // eslint-disable-next-line no-console
+      console.log(`[DEBUG] Posted blinds: SB ${smallBlindPlayer.id}=${sbAmount} BB ${bigBlindPlayer.id}=${bbAmount} -> potDelta=${sbAmount+bbAmount}`);
+    }
 
     return {
       pot: sbAmount + bbAmount,

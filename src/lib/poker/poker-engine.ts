@@ -13,6 +13,8 @@ export class PokerEngine {
   private bettingManager: BettingManager;
   private gameStateManager: GameStateManager;
   private debugEnabled: boolean;
+  // Players marked for removal at the next hand start
+  private removedPlayers: Set<string> = new Set();
   // Tracks how many community cards have been previewed (rabbit hunt) this hand
   private rabbitPreviewed: number = 0;
   // Optional RIT persistence hook
@@ -163,6 +165,19 @@ export class PokerEngine {
   }
 
   public startNewHand(): void {
+    // Before starting, drop any players flagged for removal and re-index positions
+    if (this.removedPlayers.size > 0) {
+      const remaining = this.state.players.filter(p => !this.removedPlayers.has(p.id));
+      // Re-index positions contiguously starting at 1
+      this.state.players = remaining.map((p, i) => ({ ...p, position: i + 1 }));
+      // Normalize dealer position to current players length
+      if (this.state.players.length > 0) {
+        this.state.dealerPosition = ((this.state.dealerPosition % this.state.players.length) + this.state.players.length) % this.state.players.length;
+      } else {
+        this.state.dealerPosition = 0;
+      }
+      // Do not clear removedPlayers here in case multiple successive starts need pruning
+    }
     this.deckManager.resetDeck();
     this.gameStateManager.resetPlayerStates();
     this.gameStateManager.rotateDealerButton();
@@ -179,6 +194,35 @@ export class PokerEngine {
       this.dealHoleCards();
   this.postBlinds();
       this.gameStateManager.startBettingRound('preflop');
+    }
+  }
+
+  // Force-fold a player immediately; if it's their turn, route through standard action logic
+  public forceFold(playerId: string): void {
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player) return;
+    if (player.isFolded) return;
+    // If it's their turn, use normal action path for proper sequencing
+    if (this.state.activePlayer === playerId) {
+      const action: PlayerAction = { type: 'fold', playerId, tableId: this.state.tableId, timestamp: Date.now() } as any;
+      this.handleAction(action);
+      return;
+    }
+    // Otherwise, mark folded out-of-turn
+    player.isFolded = true;
+    player.hasActed = true;
+    // If only one player remains, end hand immediately
+    const active = this.state.players.filter(p => !p.isFolded);
+    if (active.length === 1 && this.state.stage !== 'showdown') {
+      this.determineWinner();
+    }
+  }
+
+  // Mark a player to be removed at next hand start and fold them now if hand in progress
+  public removePlayer(playerId: string): void {
+    this.removedPlayers.add(playerId);
+    if (this.state.stage !== 'showdown') {
+      this.forceFold(playerId);
     }
   }
 

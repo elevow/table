@@ -23,7 +23,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
   if (!io) return;
 
   // Support hot-reload: version the handlers and rebind when changed
-  const HANDLERS_VERSION = 4; // bump to force reinit after code changes
+  const HANDLERS_VERSION = 5; // bump to force reinit after code changes
   if (io._handlersVersion !== HANDLERS_VERSION) {
     if (io._seatHandlersAdded) {
       try {
@@ -191,7 +191,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         return;
       }
       
-      // Vacate the seat
+  // Vacate the seat
       seats[seatNumber] = null;
       GameSeats.setRoomSeats(tableId, seats);
       
@@ -202,6 +202,34 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       });
       
       console.log(`Seat ${seatNumber} vacated by ${playerId} at table ${tableId}`);
+
+      // If a game is active, auto-fold the standing player and mark for removal next hand
+      try {
+        if ((global as any).activeGames && (global as any).activeGames.has(tableId)) {
+          const engine = (global as any).activeGames.get(tableId);
+          if (engine && typeof engine.removePlayer === 'function') {
+            engine.removePlayer(playerId);
+            let gameState = engine.getState();
+            // Safety: if only one remains, settle now
+            const activeCount = (gameState.players || []).filter((p: any) => !(p.isFolded || (p as any).folded)).length;
+            if (activeCount === 1 && gameState.stage !== 'showdown' && typeof engine.ensureWinByFoldIfSingle === 'function') {
+              engine.ensureWinByFoldIfSingle();
+              gameState = engine.getState();
+            }
+            io.to(`table_${tableId}`).emit('game_state_update', {
+              gameState,
+              lastAction: { playerId, action: 'auto_fold_on_stand_up' },
+              timestamp: new Date().toISOString(),
+            });
+            // If hand ended, schedule next
+            if (gameState?.stage === 'showdown') {
+              scheduleNextHand(tableId);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Auto-fold on stand_up failed:', e);
+      }
     });
 
     // Handle seat state requests
@@ -216,6 +244,64 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       socket.emit('seat_state', { seats });
       
       console.log(`Sent seat state for table ${tableId}:`, seats);
+    });
+
+    // Handle player leaving the table (auto-fold if mid-hand)
+    socket.on('leave_table', (tableIdRaw: string) => {
+      try {
+        const tableId = tableIdRaw || socket.tableId;
+        const playerId = socket.playerId;
+        if (!tableId || !playerId) return;
+
+        // Leave Socket.IO room
+        socket.leave(`table_${tableId}`);
+
+        // Vacate seat if seated
+        try {
+          const seats = GameSeats.getRoomSeats(tableId);
+          if (seats) {
+            const entry = Object.entries(seats).find(([, a]) => a?.playerId === playerId);
+            if (entry) {
+              const [seatStr] = entry;
+              const seatNumber = parseInt(seatStr, 10);
+              seats[seatNumber] = null;
+              GameSeats.setRoomSeats(tableId, seats);
+              io.to(`table_${tableId}`).emit('seat_vacated', { seatNumber, playerId });
+              console.log(`Player ${playerId} left; vacated seat ${seatNumber} at table ${tableId}`);
+            }
+          }
+        } catch (e) {
+          console.warn('leave_table seat cleanup failed:', e);
+        }
+
+        // If a game is active, auto-fold the leaving player and mark for removal next hand
+        try {
+          if ((global as any).activeGames && (global as any).activeGames.has(tableId)) {
+            const engine = (global as any).activeGames.get(tableId);
+            if (engine && typeof engine.removePlayer === 'function') {
+              engine.removePlayer(playerId);
+              let gameState = engine.getState();
+              const activeCount = (gameState.players || []).filter((p: any) => !(p.isFolded || (p as any).folded)).length;
+              if (activeCount === 1 && gameState.stage !== 'showdown' && typeof engine.ensureWinByFoldIfSingle === 'function') {
+                engine.ensureWinByFoldIfSingle();
+                gameState = engine.getState();
+              }
+              io.to(`table_${tableId}`).emit('game_state_update', {
+                gameState,
+                lastAction: { playerId, action: 'auto_fold_on_leave' },
+                timestamp: new Date().toISOString(),
+              });
+              if (gameState?.stage === 'showdown') {
+                scheduleNextHand(tableId);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Auto-fold on leave_table failed:', e);
+        }
+      } catch (err) {
+        console.error('leave_table handler error:', err);
+      }
     });
 
     // Handle game start requests

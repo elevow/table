@@ -9,6 +9,7 @@ import { createInvite } from '../../src/services/friends-ui';
 import { determineUserRole } from '../../src/utils/roleUtils';
 import { useUserAvatar } from '../../src/hooks/useUserAvatar';
 import Avatar from '../../src/components/Avatar';
+import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
 
 // Dynamic import with loading state
 const GameBoard = dynamic(() => import('../../src/components/GameBoard'), {
@@ -396,6 +397,44 @@ export default function GamePage() {
     return { min: Number(min.toFixed(2)), max: Number(max.toFixed(2)) };
   };
 
+  // Pot-Limit helpers
+  const getPotLimitPlayersShape = () => {
+    const arr = Array.isArray(pokerGameState?.players) ? pokerGameState.players : [];
+    return arr.map((p: any) => ({
+      currentBet: Number(p?.currentBet || 0),
+      isFolded: !!(p?.isFolded || p?.folded),
+      isAllIn: !!p?.isAllIn,
+    }));
+  };
+
+  const getPotLimitBetBounds = () => {
+    const me = getMe();
+    if (!me) return { min: 0, max: 0 };
+    const prev = Number(me.currentBet || 0);
+    const stack = Number(me.stack || 0);
+    const pot = Number(pokerGameState?.pot || 0) || 0;
+    const plc = PotLimitCalculator.calculateMaxBet(pot, 0, getPotLimitPlayersShape(), prev);
+    const maxTotal = Math.min(prev + stack, plc.maxBet);
+    const bb = Number(pokerGameState?.bigBlind || 0) || 0.01;
+    const min = Math.min(Math.max(bb, 0.01), maxTotal);
+    return { min: Number(min.toFixed(2)), max: Number(maxTotal.toFixed(2)) };
+  };
+
+  const getPotLimitRaiseBounds = () => {
+    const me = getMe();
+    if (!me) return { min: 0, max: 0 };
+    const prev = Number(me.currentBet || 0);
+    const stack = Number(me.stack || 0);
+    const pot = Number(pokerGameState?.pot || 0) || 0;
+    const currentBet = Number(pokerGameState?.currentBet || 0) || 0;
+    const minRaise = Number(pokerGameState?.minRaise || 0) || 0;
+    const plc = PotLimitCalculator.calculateMaxBet(pot, currentBet, getPotLimitPlayersShape(), prev);
+    const maxTotal = Math.min(prev + stack, plc.maxBet);
+    const minTotal = currentBet + minRaise;
+    const min = Math.min(minTotal, maxTotal);
+    return { min: Number(min.toFixed(2)), max: Number(maxTotal.toFixed(2)) };
+  };
+
   // Determine dealer/small blind/big blind tokens for a player based on current game state
   const getPlayerToken = useCallback((playerIdForToken: string): 'D' | 'SB' | 'BB' | null => {
     try {
@@ -445,11 +484,12 @@ export default function GamePage() {
   // Update defaults when it's our turn or state changes
   useEffect(() => {
     if (!pokerGameState || pokerGameState.activePlayer !== playerId) return;
+    const mode = (pokerGameState?.bettingMode || 'no-limit') as 'no-limit' | 'pot-limit';
     if ((pokerGameState.currentBet || 0) === 0) {
-      const { min, max } = getBetBounds();
+      const { min, max } = mode === 'no-limit' ? getBetBounds() : getPotLimitBetBounds();
       setBetInput(clamp(min, min, max));
     } else {
-      const { min, max } = getRaiseBounds();
+      const { min, max } = mode === 'no-limit' ? getRaiseBounds() : getPotLimitRaiseBounds();
       setRaiseInput(clamp(min, min, max));
     }
   }, [pokerGameState, playerId]);
@@ -1601,6 +1641,114 @@ export default function GamePage() {
                                 const add = Math.max(0, sel - prev);
                                 const onClick = () => handleRaise(Number(sel.toFixed(2)));
                                 const label = isAllIn ? `All-in $${stack.toFixed(2)}` : `Raise to $${sel.toFixed(2)} (+$${add.toFixed(2)})`;
+                                return (
+                                  <button onClick={onClick} className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
+                                    {label}
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )
+                )}
+
+                {/* Pot-Limit betting controls */}
+                {((pokerGameState?.bettingMode || 'no-limit') === 'pot-limit') && (
+                  (pokerGameState.currentBet || 0) === 0 ? (
+                    <div className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-900/30 p-3 rounded-md w-full">
+                      <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Bet amount (Pot-Limit)</div>
+                      {(() => {
+                        const { min, max } = getPotLimitBetBounds();
+                        const bb = Number(pokerGameState.bigBlind || 0) || 0;
+                        const pot = Number(pokerGameState.pot || 0) || 0;
+                        return (
+                          <>
+                            <input
+                              type="range"
+                              min={min}
+                              max={Math.max(min, max)}
+                              step={0.01}
+                              value={clamp(betInput, min, max)}
+                              onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
+                            />
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={min}
+                                max={max}
+                                step={0.01}
+                                value={Number(clamp(betInput, min, max)).toFixed(2)}
+                                onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
+                                className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                              />
+                              <div className="flex flex-wrap gap-2">
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(min)}>Min</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(betInput + bb, min, max))}>+BB</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(pot / 2, min, max))}>1/2 Pot</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(max)}>Pot</button>
+                              </div>
+                              {(() => {
+                                const me = getMe();
+                                const prev = Number(me?.currentBet || 0);
+                                const sel = clamp(betInput, min, max);
+                                const add = Math.max(0, sel - prev);
+                                const onClick = () => handleBet(Number(sel.toFixed(2)));
+                                const label = `Bet $${add.toFixed(2)}`;
+                                return (
+                                  <button onClick={onClick} className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
+                                    {label}
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-900/30 p-3 rounded-md w-full">
+                      <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Raise to (Pot-Limit)</div>
+                      {(() => {
+                        const { min, max } = getPotLimitRaiseBounds();
+                        const bb = Number(pokerGameState.bigBlind || 0) || 0;
+                        const pot = Number(pokerGameState.pot || 0) || 0;
+                        const curr = Number(pokerGameState.currentBet || 0) || 0;
+                        return (
+                          <>
+                            <input
+                              type="range"
+                              min={min}
+                              max={Math.max(min, max)}
+                              step={0.01}
+                              value={clamp(raiseInput, min, max)}
+                              onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
+                            />
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={min}
+                                max={max}
+                                step={0.01}
+                                value={Number(clamp(raiseInput, min, max)).toFixed(2)}
+                                onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
+                                className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                              />
+                              <div className="flex flex-wrap gap-2">
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp((curr + (pokerGameState.minRaise || bb)), min, max))}>+MinRaise</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(curr + (bb * 2), min, max))}>+2BB</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(curr + (bb * 3), min, max))}>+3BB</button>
+                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(max)}>Pot</button>
+                              </div>
+                              {(() => {
+                                const me = getMe();
+                                const prev = Number(me?.currentBet || 0);
+                                const sel = clamp(raiseInput, min, max);
+                                const add = Math.max(0, sel - prev);
+                                const onClick = () => handleRaise(Number(sel.toFixed(2)));
+                                const label = `Raise to $${sel.toFixed(2)} (+$${add.toFixed(2)})`;
                                 return (
                                   <button onClick={onClick} className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}

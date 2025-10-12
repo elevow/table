@@ -23,7 +23,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
   if (!io) return;
 
   // Support hot-reload: version the handlers and rebind when changed
-  const HANDLERS_VERSION = 2; // bump to force reinit after code changes
+  const HANDLERS_VERSION = 3; // bump to force reinit after code changes
   if (io._handlersVersion !== HANDLERS_VERSION) {
     if (io._seatHandlersAdded) {
       try {
@@ -251,9 +251,11 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           holeCards: []
         }));
         
-        // Determine blinds from room configuration if available
+        // Determine blinds and variant/mode from room configuration if available
         let smallBlind = 1;
         let bigBlind = 2;
+        let variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' = 'texas-holdem';
+        let bettingMode: 'no-limit' | 'pot-limit' = 'no-limit';
         try {
           // Attempt to load room by id using GameService
           const pool = getPool();
@@ -275,14 +277,25 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
               console.warn(`Invalid room blindLevels for table ${tableId}; using defaults 1/2`, bl);
             }
           }
+          // Pull variant and betting mode from room configuration if provided
+          const cfg = (room?.configuration || {}) as any;
+          if (cfg.variant === 'omaha' || cfg.variant === 'omaha-hi-lo' || cfg.variant === 'texas-holdem') {
+            variant = cfg.variant;
+          }
+          if (cfg.bettingMode === 'no-limit' || cfg.bettingMode === 'pot-limit') {
+            bettingMode = cfg.bettingMode;
+          } else if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+            // Default Omaha variants to pot-limit when not explicitly set
+            bettingMode = 'pot-limit';
+          }
         } catch (e) {
           console.warn('Failed to load room-configured blinds; defaulting to 1/2:', e);
         }
 
         // Create poker engine instance with resolved blind structure
         const pokerEngine = new PokerEngine(tableId, players, smallBlind, bigBlind, {
-          variant: 'texas-holdem', // Default to Texas Hold'em
-          bettingMode: 'no-limit'
+          variant,
+          bettingMode
         });
         
         // Start a new hand
@@ -310,7 +323,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           timestamp: new Date().toISOString()
         });
         
-        console.log(`Texas Hold'em game started at table ${tableId} by ${playerName} (${playerId}) with ${seatedPlayers.length} players`);
+  console.log(`${variant} game started at table ${tableId} by ${playerName} (${playerId}) with ${seatedPlayers.length} players (mode=${bettingMode}, blinds=${smallBlind}/${bigBlind})`);
         console.log('Initial game state:', {
           stage: gameState.stage,
           activePlayer: gameState.activePlayer,

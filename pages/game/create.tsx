@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import { tournamentPresets } from '../../src/lib/tournament/tournament-utils';
 import type { TournamentConfig } from '../../src/types/tournament';
 
-type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo';
+type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo';
 type BettingMode = 'no-limit' | 'pot-limit';
 
 export default function CreateGameRoomPage() {
@@ -15,7 +15,6 @@ export default function CreateGameRoomPage() {
   const [bigBlind, setBigBlind] = useState(2);
   const [variant, setVariant] = useState<Variant>('texas-holdem');
   const [bettingMode, setBettingMode] = useState<BettingMode>('no-limit');
-  const [requireRitUnanimous, setRequireRitUnanimous] = useState(false);
   const [createdBy, setCreatedBy] = useState('u1');
   const [submitting, setSubmitting] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -66,7 +65,6 @@ export default function CreateGameRoomPage() {
           configuration: {
             variant,
             bettingMode,
-            requireRunItTwiceUnanimous: requireRitUnanimous,
             tournament: enableTournament ? { preset: presetKey, config: selectedTournamentConfig } : undefined,
           },
         }),
@@ -212,6 +210,8 @@ export default function CreateGameRoomPage() {
               <option value="texas-holdem">Texas Hold&apos;em</option>
               <option value="omaha">Omaha</option>
               <option value="omaha-hi-lo">Omaha Hi-Lo (8 or Better)</option>
+              <option value="seven-card-stud">Seven-Card Stud</option>
+              <option value="seven-card-stud-hi-lo">Seven-Card Stud Hi-Lo (8 or Better)</option>
             </select>
           </div>
           <div>
@@ -225,17 +225,7 @@ export default function CreateGameRoomPage() {
               <option value="pot-limit">Pot Limit</option>
             </select>
           </div>
-          <div className="flex items-end">
-            <label className="inline-flex items-center space-x-2">
-              <input
-                type="checkbox"
-                className="w-4 h-4 accent-blue-600 dark:accent-blue-500"
-                checked={requireRitUnanimous}
-                onChange={e => setRequireRitUnanimous(e.target.checked)}
-              />
-              <span className="text-sm">Require unanimous RIT consent</span>
-            </label>
-          </div>
+          {/* Removed Require unanimous RIT consent checkbox per request */}
         </div>
         <div className="border-t pt-4 space-y-3">
           <label className="inline-flex items-center space-x-2">

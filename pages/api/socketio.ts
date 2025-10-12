@@ -23,7 +23,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
   if (!io) return;
 
   // Support hot-reload: version the handlers and rebind when changed
-  const HANDLERS_VERSION = 3; // bump to force reinit after code changes
+  const HANDLERS_VERSION = 4; // bump to force reinit after code changes
   if (io._handlersVersion !== HANDLERS_VERSION) {
     if (io._seatHandlersAdded) {
       try {
@@ -254,7 +254,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         // Determine blinds and variant/mode from room configuration if available
         let smallBlind = 1;
         let bigBlind = 2;
-        let variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' = 'texas-holdem';
+  let variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' = 'texas-holdem';
         let bettingMode: 'no-limit' | 'pot-limit' = 'no-limit';
         try {
           // Attempt to load room by id using GameService
@@ -279,7 +279,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           }
           // Pull variant and betting mode from room configuration if provided
           const cfg = (room?.configuration || {}) as any;
-          if (cfg.variant === 'omaha' || cfg.variant === 'omaha-hi-lo' || cfg.variant === 'texas-holdem') {
+          if (cfg.variant === 'omaha' || cfg.variant === 'omaha-hi-lo' || cfg.variant === 'texas-holdem' || cfg.variant === 'seven-card-stud' || cfg.variant === 'seven-card-stud-hi-lo') {
             variant = cfg.variant;
           }
           if (cfg.bettingMode === 'no-limit' || cfg.bettingMode === 'pot-limit') {

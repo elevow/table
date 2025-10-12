@@ -351,6 +351,20 @@ export default function GamePage() {
     return player?.holeCards || [];
   };
 
+  // Variant helpers
+  const isStudVariant = () => {
+    const v = pokerGameState?.variant;
+    return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo';
+  };
+
+  const getStudCardsForPlayer = (pid: string) => {
+    const st = (pokerGameState as any)?.studState?.playerCards?.[pid];
+    return {
+      down: Array.isArray(st?.downCards) ? st.downCards : [],
+      up: Array.isArray(st?.upCards) ? st.upCards : [],
+    } as { down: any[]; up: any[] };
+  };
+
   // Defensive: compute remaining non-folded players from current state
   const getActiveNonFoldedPlayers = useCallback(() => {
     if (!pokerGameState?.players) return [] as any[];
@@ -726,7 +740,7 @@ export default function GamePage() {
           </div>
         )}
 
-        {/* Face-down hole cards for other players still in hand */}
+        {/* Opponent cards rendering (variant-aware) */}
         {gameStarted && pokerGameState && !isEmpty && assignment && !isCurrentPlayer && (() => {
           const gamePlayer = pokerGameState.players?.find((p: any) => p.id === assignment.playerId);
           const hasFolded = !!(gamePlayer?.folded || gamePlayer?.isFolded);
@@ -750,6 +764,32 @@ export default function GamePage() {
             };
           }
 
+          if (isStudVariant()) {
+            const { down, up } = getStudCardsForPlayer(assignment.playerId);
+            return (
+              <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent stud cards">
+                <div className="flex items-center gap-1">
+                  {/* Down cards (face down) */}
+                  {down.map((_, i) => (
+                    <div key={`down-${i}`} className="w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center">
+                      <div className="w-6 h-10 rounded bg-blue-600/50 border border-blue-400"></div>
+                    </div>
+                  ))}
+                  {/* Up cards (face up) */}
+                  {up.map((card: any, i: number) => (
+                    <div key={`up-${i}`} className="bg-white rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow">
+                      <div>{card.rank}</div>
+                      <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>
+                        {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          // Hold'em/Omaha opponents: show two face-down backs
           return (
             <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (hidden)">
               <div className="flex gap-1">
@@ -1491,13 +1531,36 @@ export default function GamePage() {
                   </div>
                 </div>
 
-                {/* Current Player's Hole Cards - positioned closer to their seat */}
-                {gameStarted && pokerGameState && getCurrentPlayerCards().length > 0 && currentPlayerSeat && (() => {
+                {/* Current Player's Cards */}
+                {gameStarted && pokerGameState && currentPlayerSeat && (() => {
                   const me = pokerGameState.players?.find((p: any) => p.id === playerId);
+                  if (!me) return null;
                   const isFolded = !!(me?.folded || me?.isFolded);
+
+                  if (isStudVariant()) {
+                    const { down, up } = getStudCardsForPlayer(playerId);
+                    // Show ALL of my cards face-up (no face-down backs for the current player)
+                    const all = [...down, ...up];
+                    return (
+                      <div className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
+                        {all.map((card: any, i: number) => (
+                          <div key={`me-card-${i}`} className="bg-white rounded border text-xs p-1 w-10 h-14 flex flex-col items-center justify-center text-black font-bold shadow-lg">
+                            <div>{card.rank}</div>
+                            <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>
+                              {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  // Hold'em/Omaha: show hole cards
+                  const holes = getCurrentPlayerCards();
+                  if (!holes || holes.length === 0) return null;
                   return (
                     <div className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
-                      {getCurrentPlayerCards().map((card: any, index: number) => (
+                      {holes.map((card: any, index: number) => (
                         <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-lg">
                           <div>{card.rank}</div>
                           <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>

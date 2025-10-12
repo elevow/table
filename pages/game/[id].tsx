@@ -435,6 +435,12 @@ export default function GamePage() {
   // Local state for inputs
   const [betInput, setBetInput] = useState<number>(0);
   const [raiseInput, setRaiseInput] = useState<number>(0);
+  // Auto-fold preference (when it's not our turn, fold immediately when it becomes our turn)
+  const [autoFold, setAutoFold] = useState<boolean>(false);
+  // Auto-call preference (when it's not our turn, call immediately when it becomes our turn)
+  const [autoCall, setAutoCall] = useState<boolean>(false);
+  // Auto-check preference (when it's not our turn, check immediately when it becomes our turn and no bet is required)
+  const [autoCheck, setAutoCheck] = useState<boolean>(false);
 
   // Update defaults when it's our turn or state changes
   useEffect(() => {
@@ -447,6 +453,53 @@ export default function GamePage() {
       setRaiseInput(clamp(min, min, max));
     }
   }, [pokerGameState, playerId]);
+
+  // If Auto Fold is enabled and it's our turn, immediately fold and clear the checkbox
+  useEffect(() => {
+    if (!autoFold) return;
+    const gs = pokerGameState;
+    if (!gs || gs.stage === 'showdown') return;
+    if (gs.activePlayer !== playerId) return;
+    const me = gs.players?.find((p: any) => p.id === playerId);
+    if (!me || me.isFolded) return;
+    // Execute fold and clear autoFold to prevent repeated triggers
+    handleFold();
+    setAutoFold(false);
+  }, [autoFold, pokerGameState?.activePlayer, pokerGameState?.stage, playerId]);
+
+  // If Auto Call is enabled and it's our turn, immediately call (even if amount is 0) and clear the checkbox
+  useEffect(() => {
+    if (!autoCall) return;
+    const gs = pokerGameState;
+    if (!gs || gs.stage === 'showdown') return;
+    if (gs.activePlayer !== playerId) return;
+    // If auto-fold is also enabled, give fold priority and let autoCall wait or be toggled off by user
+    if (autoFold) return;
+    const me = gs.players?.find((p: any) => p.id === playerId);
+    if (!me || me.isFolded) return;
+    const neededAmount = Math.max(0, Number(gs.currentBet || 0) - Number(me.currentBet || 0));
+    // If no bet is required and autoCheck is enabled, prefer check over a zero-call
+    if (neededAmount === 0 && autoCheck) return;
+    handlePokerAction('call', neededAmount);
+    setAutoCall(false);
+  }, [autoCall, autoFold, pokerGameState?.activePlayer, pokerGameState?.currentBet, pokerGameState?.stage, playerId]);
+
+  // If Auto Check is enabled and it's our turn with no bet required, immediately check and clear the checkbox
+  useEffect(() => {
+    if (!autoCheck) return;
+    const gs = pokerGameState;
+    if (!gs || gs.stage === 'showdown') return;
+    if (gs.activePlayer !== playerId) return;
+    // If auto-fold is enabled, fold has priority.
+    if (autoFold) return;
+    const me = gs.players?.find((p: any) => p.id === playerId);
+    if (!me || me.isFolded) return;
+    const neededAmount = Math.max(0, Number(gs.currentBet || 0) - Number(me.currentBet || 0));
+    if (neededAmount === 0) {
+      handleCheck();
+      setAutoCheck(false);
+    }
+  }, [autoCheck, autoFold, pokerGameState?.activePlayer, pokerGameState?.currentBet, pokerGameState?.stage, playerId]);
 
   // Get position for current player's hole cards based on their seat
   const getCurrentPlayerCardsPosition = () => {
@@ -1573,8 +1626,42 @@ export default function GamePage() {
           {/* Game Status Display (only before showdown); hide if only one non-folded remains */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer !== playerId && (
             <div className="lg:col-span-2 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-md p-4 mt-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Game Status</h3>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Game Status</h3>
+                <div className="flex items-center gap-4">
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200" title="If checked, you will fold immediately when it becomes your turn">
+                    <input
+                      type="checkbox"
+                      checked={autoFold}
+                      onChange={(e) => setAutoFold(e.target.checked)}
+                      className="h-4 w-4 accent-red-600"
+                      aria-label="Enable auto fold"
+                    />
+                    <span>Auto Fold</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200" title="If checked, you will check immediately when it becomes your turn and no bet is required">
+                    <input
+                      type="checkbox"
+                      checked={autoCheck}
+                      onChange={(e) => setAutoCheck(e.target.checked)}
+                      className="h-4 w-4 accent-blue-600"
+                      aria-label="Enable auto check"
+                    />
+                    <span>Auto Check</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200" title="If checked, you will call immediately when it becomes your turn">
+                    <input
+                      type="checkbox"
+                      checked={autoCall}
+                      onChange={(e) => setAutoCall(e.target.checked)}
+                      className="h-4 w-4 accent-green-600"
+                      aria-label="Enable auto call"
+                    />
+                    <span>Auto Call</span>
+                  </label>
+                </div>
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">
                 <p>Waiting for {pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'} to act...</p>
                 <p>Current Bet: ${pokerGameState.currentBet || 0} | Pot: ${pokerGameState.pot || 0}</p>
               </div>

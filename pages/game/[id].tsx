@@ -10,6 +10,7 @@ import { determineUserRole } from '../../src/utils/roleUtils';
 import { useUserAvatar } from '../../src/hooks/useUserAvatar';
 import Avatar from '../../src/components/Avatar';
 import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
+import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 
 // Dynamic import with loading state
 const GameBoard = dynamic(() => import('../../src/components/GameBoard'), {
@@ -364,6 +365,66 @@ export default function GamePage() {
       up: Array.isArray(st?.upCards) ? st.upCards : [],
     } as { down: any[]; up: any[] };
   };
+
+  // Compute a friendly hand name for the current player, variant-aware
+  const getMyHandName = useCallback((): string | null => {
+    try {
+      if (!pokerGameState || !playerId) return null;
+      const variant = pokerGameState?.variant as string | undefined;
+      // If player not found, bail
+      const me = pokerGameState.players?.find((p: any) => p.id === playerId);
+      if (!me) return null;
+
+      // Utility: quick label for partial info (when <5 cards known)
+      const partialLabel = (cards: any[]): string | null => {
+        if (!Array.isArray(cards) || cards.length === 0) return null;
+        const byRank: Record<string, number> = {};
+        cards.forEach((c: any) => { byRank[c?.rank] = (byRank[c?.rank] || 0) + 1; });
+        const counts = Object.entries(byRank).sort((a, b) => b[1] - a[1]);
+        if (counts[0]?.[1] === 4) return `Four of a Kind (${counts[0][0]})`;
+        if (counts[0]?.[1] === 3) return `Three of a Kind (${counts[0][0]})`;
+        if (counts[0]?.[1] === 2) {
+          const pairs = counts.filter(([, n]) => n === 2);
+          if (pairs.length >= 2) return 'Two Pair';
+          return `Pair of ${counts[0][0]}s`;
+        }
+        const order: Record<string, number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
+        const top = [...cards].sort((a, b) => (order[b.rank] || 0) - (order[a.rank] || 0))[0];
+        return top?.rank ? `${top.rank === 'A' ? 'Ace' : top.rank === 'K' ? 'King' : top.rank === 'Q' ? 'Queen' : top.rank === 'J' ? 'Jack' : top.rank} High` : null;
+      };
+
+      // Stud: use my stud cards (down + up) as my private cards; no community
+      if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo') {
+        const { down, up } = getStudCardsForPlayer(playerId);
+        const all = [...(down || []), ...(up || [])];
+        if (!all || all.length === 0) return null;
+        if (all.length < 5) return partialLabel(all);
+        // Use generic ranking; solver will pick best from available cards
+        const ranking = HandEvaluator.getHandRanking(all, []);
+        return ranking?.name || null;
+      }
+
+      // Hold'em/Omaha style: use hole + community
+      const holes = Array.isArray(me?.holeCards) ? me.holeCards : [];
+      const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
+      if (!holes || holes.length === 0) return null;
+      const known = [...holes, ...board];
+      if (known.length < 5) return partialLabel(known);
+
+      if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+        // Prefer Omaha evaluator (exactly 2+3 when possible)
+        const ranking = HandEvaluator.getOmahaHandRanking(holes, board);
+        return ranking?.name || null;
+      }
+
+      // Default: generic
+      const ranking = HandEvaluator.getHandRanking(holes, board);
+      return ranking?.name || null;
+    } catch (e) {
+      console.warn('Hand name computation failed:', e);
+      return null;
+    }
+  }, [pokerGameState, playerId]);
 
   // Defensive: compute remaining non-folded players from current state
   const getActiveNonFoldedPlayers = useCallback(() => {
@@ -1580,6 +1641,12 @@ export default function GamePage() {
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && (
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Your Turn</h3>
+              {(() => {
+                const name = getMyHandName();
+                return name ? (
+                  <div className="mb-3 text-sm text-gray-700 dark:text-gray-200">Your Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{name}</span></div>
+                ) : null;
+              })()}
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={handleFold}
@@ -1875,6 +1942,12 @@ export default function GamePage() {
               <div className="text-sm text-gray-600 dark:text-gray-300">
                 <p>Waiting for {pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'} to act...</p>
                 <p>Current Bet: ${pokerGameState.currentBet || 0} | Pot: ${pokerGameState.pot || 0}</p>
+                {(() => {
+                  const name = getMyHandName();
+                  return name ? (
+                    <p className="mt-1">Your Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{name}</span></p>
+                  ) : null;
+                })()}
               </div>
             </div>
           )}

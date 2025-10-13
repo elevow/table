@@ -93,6 +93,20 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'five-card-stud': {
+    variant: 'five-card-stud',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [
+      { type: 'hand-info' },
+      { type: 'stud-exposed-cards' },
+    ],
+    helpContent: {
+      title: 'Five‑Card Stud',
+      summary: 'No community cards; players receive 1 down and 4 up cards and make the best 5‑card hand.',
+      bullets: ['Bring‑in on first betting round', 'Betting on each street', 'No final down card on last street'],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
 };
 
 export function getVariantUI(variant: GameVariant): VariantUI {

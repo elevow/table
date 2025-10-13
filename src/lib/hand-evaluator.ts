@@ -43,17 +43,45 @@ export class HandEvaluator {
   }
 
   static evaluateHand(holeCards: Card[], communityCards: Card[]): { hand: Hand; cards: Card[] } {
-    const allCards = [...holeCards, ...communityCards];
+    // Filter invalid cards defensively
+    const allCardsRaw = [...(holeCards || []), ...(communityCards || [])];
+    const allCards: Card[] = allCardsRaw.filter((c: any) => c && c.rank && c.suit) as Card[];
+
+    // If fewer than 2 valid cards, return a safe High Card fallback and avoid solver
+    if (allCards.length < 2) {
+      const weight: Record<Card['rank'], number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
+      const sorted = [...allCards].sort((a, b) => weight[b.rank] - weight[a.rank]);
+      const best = sorted.slice(0, Math.min(5, sorted.length));
+      const top = best[0]?.rank || '';
+      const labelMap: Record<Card['rank'], string> = { '2': 'Two', '3': 'Three', '4': 'Four', '5': 'Five', '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine', '10': 'Ten', 'J': 'Jack', 'Q': 'Queen', 'K': 'King', 'A': 'Ace' } as any;
+      return { hand: { rank: 1, name: top ? `${labelMap[top as Card['rank']]} High` : 'High Card', descr: top ? `${labelMap[top as Card['rank']]} High` : 'High Card', cards: [] } as any, cards: best };
+    }
+
     const cardStrings = this.cardsToString(allCards);
-    const hand = pokersolver.solve(cardStrings);
+    const validStr = (s: string) => typeof s === 'string' && /^(?:10|[2-9TJQKA])[hdcs]$/.test(s);
+    const allValid = cardStrings.length >= 2 && cardStrings.every(validStr);
+    let hand: any;
+    try {
+      hand = allValid ? pokersolver.solve(cardStrings) : undefined;
+      if (!hand) throw new Error('invalid card strings for solver');
+    } catch (e) {
+      // Fallback to High Card if solver fails
+      const weight: Record<Card['rank'], number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
+      const sorted = [...allCards].sort((a, b) => weight[b.rank] - weight[a.rank]);
+      const best = sorted.slice(0, 5);
+      const top = best[0]?.rank || '';
+      const labelMap: Record<Card['rank'], string> = { '2': 'Two', '3': 'Three', '4': 'Four', '5': 'Five', '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine', '10': 'Ten', 'J': 'Jack', 'Q': 'Queen', 'K': 'King', 'A': 'Ace' } as any;
+      return { hand: { rank: 1, name: top ? `${labelMap[top as Card['rank']]} High` : 'High Card', descr: top ? `${labelMap[top as Card['rank']]} High` : 'High Card', cards: [] } as any, cards: best };
+    }
     
-    // Map the cards in the winning hand back to our Card objects
-  const winningCards = hand.cards.map((solverCard: any) => {
+    // Map the cards in the winning hand back to our Card objects; if mapping fails, synthesize a card
+    const winningCards = hand.cards.map((solverCard: any) => {
       const rank = solverCard.value === 'T' ? '10' : solverCard.value;
-      return allCards.find(card => 
-        card.rank === rank && 
-        card.suit === Object.keys(this.suitMap).find(key => this.suitMap[key] === solverCard.suit)
-      )!;
+      const suit = Object.keys(this.suitMap).find(key => this.suitMap[key] === solverCard.suit) as Card['suit'] | undefined;
+      return (
+        allCards.find(card => card.rank === (rank as any) && card.suit === suit) ||
+        ({ rank: rank as any, suit: (suit || 'hearts') as any })
+      );
     });
 
     return { hand, cards: winningCards };

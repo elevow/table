@@ -69,9 +69,41 @@ export class HandEvaluator {
   }
 
   static evaluateHand(holeCards: Card[], communityCards: Card[]): { hand: HandInterface; cards: Card[] } {
-    const allCards = [...holeCards, ...communityCards];
+    // Filter out any invalid/undefined cards defensively
+    const allCardsRaw = [...(holeCards || []), ...(communityCards || [])];
+    const allCards: Card[] = allCardsRaw.filter((c: any) => c && c.rank && c.suit) as Card[];
+
+    // If fewer than 5 valid cards, return a minimal High Card evaluation without calling solver
+    if (allCards.length < 5) {
+      const weight: Record<Card['rank'], number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
+      const sorted = [...allCards].sort((a, b) => weight[b.rank] - weight[a.rank]);
+      const best = sorted.slice(0, Math.min(5, sorted.length));
+      const top = best[0]?.rank || '';
+      const labelMap: Record<Card['rank'], string> = { '2': 'Two', '3': 'Three', '4': 'Four', '5': 'Five', '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine', '10': 'Ten', 'J': 'Jack', 'Q': 'Queen', 'K': 'King', 'A': 'Ace' } as any;
+      const descr = top ? `${labelMap[top as Card['rank']]} High` : 'High Card';
+      return { hand: { rank: 1, description: descr, cards: [] }, cards: best };
+    }
+
     const cardStrings = this.cardsToString(allCards);
-    const hand = pokersolver.solve(cardStrings);
+    // Validate strings: ensure all are truthy and roughly valid (rank + suit); accept '10' and 'T'
+    const validStr = (s: string) => typeof s === 'string' && /^(?:10|[2-9TJQKA])[hdcs]$/.test(s);
+    const allValid = cardStrings.length >= 2 && cardStrings.every(validStr);
+    let hand: any;
+    try {
+      hand = allValid ? pokersolver.solve(cardStrings) : undefined;
+      if (!hand) throw new Error('invalid card strings for solver');
+    } catch (err) {
+      // As a fallback, pick the top 5 ranks and return a defensive High Card hand
+      const weight: Record<Card['rank'], number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
+      const sorted = [...allCards].sort((a, b) => weight[b.rank] - weight[a.rank]);
+      const best = sorted.slice(0, 5);
+      const top = best[0]?.rank || '';
+      const labelMap: Record<Card['rank'], string> = { '2': 'Two', '3': 'Three', '4': 'Four', '5': 'Five', '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine', '10': 'Ten', 'J': 'Jack', 'Q': 'Queen', 'K': 'King', 'A': 'Ace' } as any;
+      return {
+        hand: { rank: 1, description: top ? `${labelMap[top as Card['rank']]} High` : 'High Card', cards: [] },
+        cards: best
+      };
+    }
     
     // Map the cards in the winning hand back to our Card objects
     const winningCards = hand.cards.map((solverCard: PokerSolverCard) => {
@@ -228,7 +260,33 @@ export class HandEvaluator {
    * because the underlying solver already encodes them in order of cards.
    */
   static getHandRanking(holeCards: Card[], communityCards: Card[]): HandRanking {
-    const { hand, cards } = this.evaluateHand(holeCards, communityCards);
+    const holes = holeCards || [];
+    const board = communityCards || [];
+    const total = holes.length + board.length;
+    // Defensive: for non-board games (e.g., stud) or partial info, avoid solver on <5
+    if (total < 5) {
+      // Use evaluateHand to benefit from its internal guards/labels for simple cases
+      const { hand, cards } = this.evaluateHand(holes, board);
+      // Map minimal result into HandRanking shape
+      const weight: Record<Card['rank'], number> = {
+        '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
+      };
+      const all = [...holes, ...board];
+      const key = (c: Card) => `${c.rank}-${c.suit}`;
+      const bestKeys = new Set(cards.map(key));
+      const kickers = all.filter(c => !bestKeys.has(key(c))).sort((a, b) => weight[b.rank] - weight[a.rank]);
+      const name = (hand as any).description || (hand as any).descr || (hand as any).name || 'High Card';
+      const rankNumber = typeof (hand as any).rank === 'number' ? (hand as any).rank : 1;
+      return {
+        rank: rankNumber,
+        name,
+        cards,
+        kickers,
+        strength: rankNumber,
+      };
+    }
+
+    const { hand, cards } = this.evaluateHand(holes, board);
 
     // Map pokersolver description -> our HandRank enum
     const desc = String(hand.description || '').toLowerCase();

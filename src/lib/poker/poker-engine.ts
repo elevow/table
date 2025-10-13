@@ -28,7 +28,7 @@ export class PokerEngine {
     bettingMode: 'no-limit' as 'no-limit' | 'pot-limit',
     runItTwicePersistence: undefined as | { handId?: string; onOutcome?: (input: RunItTwiceOutcomeInput) => Promise<void> } | undefined,
   requireRunItTwiceUnanimous: false as boolean,
-  variant: undefined as undefined | 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo',
+  variant: undefined as undefined | 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud',
   };
 
   constructor(tableId: string, players: Player[], smallBlind: number, bigBlind: number, options?: Partial<typeof PokerEngine.defaultOptions>) {
@@ -66,6 +66,14 @@ export class PokerEngine {
     // Apply betting mode to betting manager
     this.bettingManager.setMode(opts.bettingMode);
     this.gameStateManager = new GameStateManager(this.state);
+  }
+
+  // Treat a player as inactive if either engine or external flag marks them folded
+  private isPlayerActive(p: Player): boolean {
+    return !(p as any).folded && !p.isFolded;
+  }
+  private getActivePlayers(): Player[] {
+    return this.state.players.filter(p => this.isPlayerActive(p));
   }
 
   // Private logging methods that respect environment variables
@@ -185,7 +193,7 @@ export class PokerEngine {
   this.ritConsents.clear();
   // Reset rabbit preview tracking for new hand
   this.rabbitPreviewed = 0;
-  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
       this.dealStudInitial();
       // Stud uses bring-in instead of blinds
       this.computeStudBringIn();
@@ -307,6 +315,19 @@ export class PokerEngine {
 
     // Save player's current bet amount before processing action
     const oldBet = player.currentBet;
+
+    // Fast-path: for folds, pre-mark and settle immediately if this leaves a single active player
+    if (action.type === 'fold') {
+      this.log(`Fast-path fold by ${player.id} at stage=${this.state.stage}`);
+      player.isFolded = true;
+      player.hasActed = true;
+      const remaining = this.getActivePlayers();
+      if (remaining.length === 1) {
+        this.determineWinner();
+        return;
+      }
+      // If more than one remain, continue with normal action processing for consistency
+    }
     
     // Process the action
     const { pot, currentBet, minRaise } = this.bettingManager.processAction(
@@ -326,15 +347,17 @@ export class PokerEngine {
         this.log(`Added ${pot} to pot from player ${player.id} (old bet: ${oldBet}, new bet: ${player.currentBet}, new total pot: ${this.state.pot})`);
       }
     } else if (action.type === 'fold') {
-      // When folding, current bet stays in place (doesn't go to pot yet)
+      // Already pre-marked above; ensure flags remain set
       this.log(`Player ${player.id} folded with current bet of ${player.currentBet}`);
+      player.isFolded = true;
+      player.hasActed = true;
     }
 
     this.state.currentBet = currentBet;
     this.state.minRaise = minRaise;
 
     // If folding leaves only one player, end hand immediately with win by fold
-    const remainingAfterAction = this.state.players.filter(p => !p.isFolded);
+    const remainingAfterAction = this.getActivePlayers();
     if (remainingAfterAction.length === 1) {
       this.determineWinner();
       return;
@@ -347,7 +370,7 @@ export class PokerEngine {
       this.state.activePlayer = nextPlayer.id;
     } else {
       // Check if only one player remains (win by fold)
-      const activePlayers = this.state.players.filter(p => !p.isFolded);
+      const activePlayers = this.getActivePlayers();
       if (activePlayers.length === 1) {
         this.determineWinner();
         return;
@@ -355,17 +378,49 @@ export class PokerEngine {
 
       const nextStage = this.gameStateManager.moveToNextStage();
 
-  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
         switch (nextStage) {
           case 'fourth':
           case 'fifth':
+            this.dealStudUpCards(1);
+            break;
           case 'sixth':
+            // Five-card stud also deals an up card on sixth (sequence: 1 down + 1 up initially, then up on 4th/5th/6th)
             this.dealStudUpCards(1);
             break;
           case 'seventh':
-            this.dealStudDownCards(1);
+            if (this.state.variant !== 'five-card-stud') this.dealStudDownCards(1);
             break;
           case 'showdown':
+            // Defensive: ensure all active stud players have enough cards; otherwise, correct the flow by dealing the missing street
+            try {
+              // If only one player remains active at this exact moment, settle immediately (do not deal any further stud cards)
+              const stillActive = this.getActivePlayers();
+              if (stillActive.length === 1) {
+                this.determineWinner();
+                return;
+              }
+              const actives = this.getActivePlayers();
+              const counts = actives.map(p => {
+                const st = this.state.studState?.playerCards[p.id];
+                return (st?.downCards?.length || 0) + (st?.upCards?.length || 0);
+              });
+              const minCount = counts.length ? Math.min(...counts) : 0;
+              if (this.state.variant === 'five-card-stud' && minCount < 5) {
+                // We still owe an up card on sixth street; deal and keep betting
+                this.dealStudUpCards(1);
+                this.gameStateManager.startBettingRound('sixth');
+                return;
+              }
+              if ((this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') && minCount < 7) {
+                // Owe the seventh card (down); deal and keep betting
+                this.dealStudDownCards(1);
+                this.gameStateManager.startBettingRound('seventh');
+                return;
+              }
+            } catch (e) {
+              // If any error occurs, fall back to determining winner to avoid deadlock
+            }
             this.determineWinner();
             return;
         }
@@ -384,6 +439,12 @@ export class PokerEngine {
         }
       }
 
+      // Final safety: if only one player remains before starting the next round, settle now
+      const actives = this.getActivePlayers();
+      if (actives.length <= 1) {
+        this.determineWinner();
+        return;
+      }
       this.gameStateManager.startBettingRound(nextStage);
     }
   }
@@ -400,23 +461,43 @@ export class PokerEngine {
 
   private dealStudInitial(): void {
     this.ensureStudState();
-    // Deal two down cards, then one up card to each player
-    for (let r = 0; r < 2; r++) {
+    if (this.state.variant === 'five-card-stud') {
+      // Five-card stud: 1 down, then one up to start (total 2 cards initially)
       for (const p of this.state.players) {
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].downCards.push(c);
       }
-    }
-    for (const p of this.state.players) {
-      const c = this.deckManager.dealCard();
-      if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
-      if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
+      for (const p of this.state.players) {
+        const c = this.deckManager.dealCard();
+        if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
+        if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
+      }
+    } else {
+      // Seven-card stud: 2 down, 1 up initially
+      for (let r = 0; r < 2; r++) {
+        for (const p of this.state.players) {
+          const c = this.deckManager.dealCard();
+          if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
+          if (c) this.state.studState!.playerCards[p.id].downCards.push(c);
+        }
+      }
+      for (const p of this.state.players) {
+        const c = this.deckManager.dealCard();
+        if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
+        if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
+      }
     }
   }
 
   private dealStudUpCards(count: number): void {
     this.ensureStudState();
+    // Do not deal further up cards if hand is effectively over (one active player)
+    const active = this.getActivePlayers();
+    if (active.length <= 1) {
+      this.log(`[STUD] Skipping dealStudUpCards(${count}): only one active remains`);
+      return;
+    }
     for (let k = 0; k < count; k++) {
       for (const p of this.state.players) {
         const c = this.deckManager.dealCard();
@@ -428,6 +509,12 @@ export class PokerEngine {
 
   private dealStudDownCards(count: number): void {
     this.ensureStudState();
+    // Do not deal further down cards if hand is effectively over (one active player)
+    const active = this.getActivePlayers();
+    if (active.length <= 1) {
+      this.log(`[STUD] Skipping dealStudDownCards(${count}): only one active remains`);
+      return;
+    }
     for (let k = 0; k < count; k++) {
       for (const p of this.state.players) {
         const c = this.deckManager.dealCard();
@@ -443,12 +530,23 @@ export class PokerEngine {
     const weight: Record<Card['rank'], number> = {
       'A': 14,'K': 13,'Q': 12,'J': 11,'10': 10,'9': 9,'8': 8,'7': 7,'6': 6,'5': 5,'4': 4,'3': 3,'2': 2,
     };
+    const suitWeight: Record<Card['suit'], number> = { clubs: 1, diamonds: 2, hearts: 3, spades: 4 };
     let chosen: { id: string; val: number } | null = null;
+    const debug: Array<{ id: string; up?: Card; rankW?: number; suitW?: number }> = [];
     for (const p of this.state.players) {
       const up = this.state.studState!.playerCards[p.id]?.upCards?.[0];
       if (!up) continue;
       const val = weight[up.rank];
+      debug.push({ id: p.id, up, rankW: val, suitW: suitWeight[up.suit] });
       if (!chosen || val < chosen.val) chosen = { id: p.id, val };
+      else if (val === chosen.val) {
+        // Tie-break by suit (lowest suit brings in): clubs < diamonds < hearts < spades
+        const currUp = up;
+        const chosenUp = this.state.studState!.playerCards[chosen.id]?.upCards?.[0];
+        if (chosenUp && suitWeight[currUp.suit] < suitWeight[chosenUp.suit]) {
+          chosen = { id: p.id, val };
+        }
+      }
     }
     const amount = Math.max(1, Math.floor(this.state.smallBlind));
     if (chosen) {
@@ -459,18 +557,24 @@ export class PokerEngine {
       this.state.pot += pay;
       // Do not set table currentBet for bring-in in this simplified implementation
       this.state.studState!.bringIn = { amount: pay, player: player.id };
+      if (process.env.DEBUG_POKER === 'true') {
+        // eslint-disable-next-line no-console
+        console.log(`[DEBUG] Stud bring-in computed: player=${player.id} amount=${pay} upcards=`, debug);
+      }
     }
   }
 
   private determineWinner(): void {
-    // If Run It Twice is enabled and we have reached showdown condition, execute RIT flow
-    if (this.state.runItTwice?.enabled) {
-      this.executeRunItTwice();
-      return;
-    }
-    const activePlayers = this.state.players.filter(p => !p.isFolded);
-    
-    // If only one player remains, they win
+    // Normalize: if any player has external folded flag, reflect it in engine state
+    this.state.players.forEach(p => {
+      if ((p as any).folded && !p.isFolded) {
+        p.isFolded = true;
+      }
+    });
+    // Start from all non-folded players
+  let activePlayers = this.getActivePlayers();
+
+    // Immediate resolution: if only one player remains, settle win by fold without dealing any more cards
     if (activePlayers.length === 1) {
       const winner = activePlayers[0];
       this.log(`-------- Win by Fold --------`);
@@ -487,30 +591,67 @@ export class PokerEngine {
       const initialTotal = stacksTotal + potBefore + includeOutstandingBets;
 
       // Clear current bets and pot
-      this.state.players.forEach(p => {
-        this.log(`Clearing bet for player ${p.id}: ${p.currentBet} -> 0`);
-        p.currentBet = 0;
-      });
+      this.state.players.forEach(p => { this.log(`Clearing bet for player ${p.id}: ${p.currentBet} -> 0`); p.currentBet = 0; });
       this.log(`Clearing pot: ${this.state.pot} -> 0`);
       this.state.pot = 0;
 
       // Award delta to winner so totals match baseline
       const finalTotalBeforeAward = this.state.players.reduce((sum, p) => sum + p.stack, 0);
       const delta = initialTotal - finalTotalBeforeAward;
-      if (delta !== 0) {
-        this.log(`Awarding ${delta} to winner ${winner.id} to settle pot.`);
-        winner.stack += delta;
-      }
+      if (delta !== 0) { this.log(`Awarding ${delta} to winner ${winner.id} to settle pot.`); winner.stack += delta; }
 
       // Finalize hand
       this.state.stage = 'showdown';
       this.state.activePlayer = '';
-
-      // Debug: verify total chips
       const totalChips = this.state.players.reduce((sum, p) => sum + p.stack, 0);
       this.log(`Win by fold - Winner ${winner.id} final stack: ${winner.stack}`);
       this.log(`Total chips after win by fold: ${totalChips} (should equal baseline ${initialTotal})`);
       return;
+    }
+
+    // If Run It Twice is enabled and we have reached showdown condition, execute RIT flow
+    if (this.state.runItTwice?.enabled) {
+      this.executeRunItTwice();
+      return;
+    }
+    // Defensive: for Stud variants, exclude players who do not have enough stud cards
+    // This can occur if a player joined mid-hand or had no cards dealt due to an edge case.
+    if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
+      const eligible = activePlayers.filter(p => {
+        const st = this.state.studState?.playerCards[p.id];
+        const down = st?.downCards?.length || 0;
+        const up = st?.upCards?.length || 0;
+        return (down + up) >= 5; // require at least 5 total cards to evaluate
+      });
+      // If no one qualifies (should not happen), fall back to original active players to avoid empty distributions
+      if (eligible.length > 0) {
+        activePlayers = eligible;
+      }
+    }
+    
+    // Defensive: for stud variants, if somehow we reached here prematurely without enough cards, correct the flow
+    if (this.state.variant === 'five-card-stud' || this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
+      try {
+        const counts = activePlayers.map(p => {
+          const st = this.state.studState?.playerCards[p.id];
+          return (st?.downCards?.length || 0) + (st?.upCards?.length || 0);
+        });
+        const minCount = counts.length ? Math.min(...counts) : 0;
+        if (this.state.variant === 'five-card-stud' && minCount < 5) {
+          this.log(`[STUD] Premature showdown guard (5-card): minCount=${minCount} < 5; dealing sixth up card and resuming betting.`);
+          this.dealStudUpCards(1);
+          this.gameStateManager.startBettingRound('sixth');
+          return;
+        }
+        if ((this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') && minCount < 7) {
+          this.log(`[STUD] Premature showdown guard (7-card): minCount=${minCount} < 7; dealing seventh down card and resuming betting.`);
+          this.dealStudDownCards(1);
+          this.gameStateManager.startBettingRound('seventh');
+          return;
+        }
+      } catch (e) {
+        // fall through to evaluation if any unexpected error
+      }
     }
 
   // Evaluate hands and distribute pots (US-033: multi-way all-in resolution with side pots)
@@ -745,8 +886,8 @@ export class PokerEngine {
       return;
     }
 
-    // Stud showdown path: evaluate with 7-card sets (best 5 of 7)
-    if (this.state.variant === 'seven-card-stud') {
+  // Stud showdown path: evaluate with stud cards (best 5 from available)
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'five-card-stud') {
       const rankWeight: Record<Card['rank'], number> = {
         '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14,
       };
@@ -1006,7 +1147,7 @@ export class PokerEngine {
 
   // Public safety: ensure immediate win-by-fold if only one player remains active
   public ensureWinByFoldIfSingle(): void {
-    const active = this.state.players.filter(p => !p.isFolded);
+    const active = this.getActivePlayers();
     if (active.length === 1 && this.state.stage !== 'showdown') {
       this.determineWinner();
     }

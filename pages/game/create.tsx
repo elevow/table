@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import { tournamentPresets } from '../../src/lib/tournament/tournament-utils';
 import type { TournamentConfig } from '../../src/types/tournament';
 
-type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo';
+type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud';
 type BettingMode = 'no-limit' | 'pot-limit';
 
 export default function CreateGameRoomPage() {
@@ -212,6 +212,7 @@ export default function CreateGameRoomPage() {
               <option value="omaha-hi-lo">Omaha Hi-Lo (8 or Better)</option>
               <option value="seven-card-stud">Seven-Card Stud</option>
               <option value="seven-card-stud-hi-lo">Seven-Card Stud Hi-Lo (8 or Better)</option>
+              <option value="five-card-stud">Five-Card Stud</option>
             </select>
           </div>
           <div>

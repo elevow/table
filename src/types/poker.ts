@@ -44,7 +44,7 @@ export interface TableState {
   minRaise: number;
   lastRaise: number;
   // Optional game variant; when set to 'omaha' or 'omaha-hi-lo', rules and dealing are adapted accordingly
-  variant?: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo';
+  variant?: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud';
   // Betting mode for the table: 'no-limit' (default) or 'pot-limit'
   bettingMode?: 'no-limit' | 'pot-limit';
   // Policy: when true, Run It Twice requires unanimous consent from all active players

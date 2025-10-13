@@ -355,7 +355,7 @@ export default function GamePage() {
   // Variant helpers
   const isStudVariant = () => {
     const v = pokerGameState?.variant;
-    return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo';
+    return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud';
   };
 
   const getStudCardsForPlayer = (pid: string) => {
@@ -394,7 +394,7 @@ export default function GamePage() {
       };
 
       // Stud: use my stud cards (down + up) as my private cards; no community
-      if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo') {
+      if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
         const { down, up } = getStudCardsForPlayer(playerId);
         const all = [...(down || []), ...(up || [])];
         if (!all || all.length === 0) return null;

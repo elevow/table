@@ -6,6 +6,19 @@ export class GameStateManager {
   ) {}
 
   public startBettingRound(stage: GameStage): void {
+    // If there are no players at all, this is an invalid state for starting a round
+    if (!this.state.players || this.state.players.length === 0) {
+      throw new Error('Could not find active player');
+    }
+    // Safety: if only one player remains, do not start another round; go to showdown immediately
+    const activeCount = this.state.players.filter(p => !(p as any).folded && !p.isFolded).length;
+    if (activeCount <= 1) {
+      // eslint-disable-next-line no-console
+      console.log(`[DEBUG] Prevented starting ${stage}: only one active remains; forcing showdown`);
+      this.state.stage = 'showdown';
+      this.state.activePlayer = '';
+      return;
+    }
     this.state.stage = stage;
     
     // Reset betting state for new rounds (except preflop which has blinds)
@@ -20,9 +33,77 @@ export class GameStateManager {
     // Determine who acts first
     // Default legacy mapping (fallback): preflop -> position 1; postflop -> position 2
     let activePlayer: Player | undefined;
-    if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
-      // US-053: Simplified bring-in/door card rules not fully implemented; start with position 1
-      activePlayer = this.state.players.find(p => p.position === 1);
+    if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
+      // Stud rules: on third street, bring-in (lowest upcard) acts first; on later streets, highest showing upcards acts first.
+  const isActive = (p: Player) => !(p as any).folded && !p.isFolded && !p.isAllIn;
+  const actives = this.state.players.filter(isActive);
+  const weight: Record<any, number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
+  const suitWeight: Record<string, number> = { clubs: 1, diamonds: 2, hearts: 3, spades: 4 };
+
+      if (stage === 'third') {
+        // Prefer computed bring-in
+        const bringInId = this.state.studState?.bringIn?.player;
+        const bringInPlayer = bringInId ? actives.find(p => p.id === bringInId) : undefined;
+        if (bringInPlayer) {
+          activePlayer = bringInPlayer;
+          if (process.env.DEBUG_POKER === 'true') {
+            const up = this.state.studState?.playerCards[activePlayer.id]?.upCards?.[0];
+            // eslint-disable-next-line no-console
+            console.log(`[DEBUG] Stud third street firstToAct=bring-in ${activePlayer.id} up=${up?.rank}${up?.suit?.[0]}`);
+          }
+        } else {
+          // Compute from first upcard when bring-in not recorded
+          let chosen: Player | undefined;
+          let minVal = Infinity;
+          for (const p of actives) {
+            const up = this.state.studState?.playerCards[p.id]?.upCards?.[0];
+            if (!up) continue;
+            const v = weight[up.rank as any] ?? 99;
+            if (v < minVal) { minVal = v; chosen = p; }
+            else if (v === minVal && chosen) {
+              const upChosen = this.state.studState?.playerCards[chosen.id]?.upCards?.[0];
+              if (upChosen && suitWeight[up.suit] < suitWeight[upChosen.suit]) {
+                chosen = p;
+              }
+            }
+          }
+          activePlayer = chosen || actives[0];
+          if (process.env.DEBUG_POKER === 'true' && activePlayer) {
+            const up = this.state.studState?.playerCards[activePlayer.id]?.upCards?.[0];
+            // eslint-disable-next-line no-console
+            console.log(`[DEBUG] Stud third street firstToAct=computed ${activePlayer.id} up=${up?.rank}${up?.suit?.[0]}`);
+          }
+        }
+      } else {
+        // Later streets: choose highest upcard among active players; tie-breaker by lowest position
+        let chosen: Player | undefined;
+        let maxVal = -1;
+        for (const p of actives) {
+          const ups = this.state.studState?.playerCards[p.id]?.upCards || [];
+          const best = ups.reduce((m, c) => Math.max(m, weight[(c?.rank as any)] ?? -1), -1);
+          if (best > maxVal) { maxVal = best; chosen = p; }
+          else if (best === maxVal && chosen) {
+            // Tie-break by suit of highest upcard; if still tied, fallback to seat position
+            const bestUpP = ups.find(u => weight[(u?.rank as any)] === best);
+            const upsChosen = this.state.studState?.playerCards[chosen.id]?.upCards || [];
+            const bestUpChosen = upsChosen.find(u => weight[(u?.rank as any)] === best);
+            if (bestUpP && bestUpChosen) {
+              const swP = suitWeight[String(bestUpP.suit)];
+              const swC = suitWeight[String(bestUpChosen.suit)];
+              if (swP > swC) {
+                chosen = p;
+              } else if (swP === swC && typeof p.position === 'number' && p.position < (chosen.position as number)) {
+                chosen = p;
+              }
+            }
+          }
+        }
+        activePlayer = chosen || actives[0];
+      }
+      if (process.env.DEBUG_POKER === 'true') {
+        // eslint-disable-next-line no-console
+        console.log(`[DEBUG] Stud first-to-act (${stage}) -> ${activePlayer?.id}`);
+      }
     } else if (typeof this.state.dealerPosition === 'number' && this.state.players.length >= 2) {
       const n = this.state.players.length;
       const isHeadsUp = n === 2;
@@ -61,8 +142,16 @@ export class GameStateManager {
   }
 
   public moveToNextStage(): GameStage {
+    // Safety: if only one player remains active, jump directly to showdown
+    const activeCount = this.state.players.filter(p => !(p as any).folded && !p.isFolded).length;
+    if (activeCount <= 1) {
+      this.state.stage = 'showdown';
+      return 'showdown';
+    }
   const stages: GameStage[] = (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo')
-      ? ['third', 'fourth', 'fifth', 'sixth', 'seventh', 'showdown']
+    ? ['third', 'fourth', 'fifth', 'sixth', 'seventh', 'showdown']
+    : (this.state.variant === 'five-card-stud')
+    ? ['third', 'fourth', 'fifth', 'sixth', 'showdown']
       : ['preflop', 'flop', 'turn', 'river', 'showdown'];
     const currentIndex = stages.indexOf(this.state.stage);
     
@@ -86,7 +175,7 @@ export class GameStateManager {
     this.state.pot = 0;
     this.state.currentBet = 0;
     this.state.communityCards = [];
-  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
       this.state.studState = { playerCards: {} };
     } else {
       this.state.studState = undefined;

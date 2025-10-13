@@ -23,7 +23,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
   if (!io) return;
 
   // Support hot-reload: version the handlers and rebind when changed
-  const HANDLERS_VERSION = 5; // bump to force reinit after code changes
+  const HANDLERS_VERSION = 6; // bump to force reinit after code changes
   if (io._handlersVersion !== HANDLERS_VERSION) {
     if (io._seatHandlersAdded) {
       try {
@@ -88,10 +88,33 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
             return;
           }
 
-          // Start next hand (rotates dealer -> blinds)
+          // Start next hand with a fresh engine instance to ensure latest logic (dev-friendly hot reload)
           console.log(`[auto] Starting next hand for table ${tableId}`);
-          engineNow.startNewHand();
-          const newState = engineNow.getState();
+          try { delete require.cache[require.resolve('../../src/lib/poker/poker-engine')]; } catch {}
+          const { PokerEngine } = require('../../src/lib/poker/poker-engine');
+          const sb = Number(curr.smallBlind) || 1;
+          const bb = Number(curr.bigBlind) || 2;
+          const variant = curr.variant || 'texas-holdem';
+          const bettingMode = curr.bettingMode || (variant === 'omaha' || variant === 'omaha-hi-lo' ? 'pot-limit' : 'no-limit');
+          // Rebuild players preserving id, name, position, and stack
+          const rebuilt = players.map((p: any) => ({
+            id: p.id,
+            name: p.name || p.id,
+            position: p.position,
+            stack: p.stack,
+            currentBet: 0,
+            hasActed: false,
+            isFolded: false,
+            isAllIn: false,
+            timeBank: p.timeBank ?? 30,
+            holeCards: [],
+          }));
+          const freshEngine = new PokerEngine(tableId, rebuilt, sb, bb, { variant, bettingMode });
+          // Preserve dealer position continuity by setting last dealer and allowing startNewHand() to rotate
+          try { (freshEngine as any).state.dealerPosition = curr.dealerPosition ?? 0; } catch {}
+          freshEngine.startNewHand();
+          (global as any).activeGames.set(tableId, freshEngine);
+          const newState = freshEngine.getState();
           io.to(`table_${tableId}`).emit('game_state_update', {
             gameState: newState,
             lastAction: { action: 'auto_next_hand' },
@@ -316,7 +339,13 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       }
       
       try {
-        // Import poker engine dynamically to avoid build issues
+        // Import poker engine dynamically and clear from require cache to ensure latest code after edits (dev-friendly)
+        try {
+          delete require.cache[require.resolve('../../src/lib/poker/game-state-manager')];
+        } catch {}
+        try {
+          delete require.cache[require.resolve('../../src/lib/poker/poker-engine')];
+        } catch {}
         const { PokerEngine } = require('../../src/lib/poker/poker-engine');
         const { Player } = require('../../src/types/poker');
         
@@ -340,7 +369,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         // Determine blinds and variant/mode from room configuration if available
         let smallBlind = 1;
         let bigBlind = 2;
-  let variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' = 'texas-holdem';
+  let variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' = 'texas-holdem';
         let bettingMode: 'no-limit' | 'pot-limit' = 'no-limit';
         try {
           // Attempt to load room by id using GameService
@@ -365,7 +394,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           }
           // Pull variant and betting mode from room configuration if provided
           const cfg = (room?.configuration || {}) as any;
-          if (cfg.variant === 'omaha' || cfg.variant === 'omaha-hi-lo' || cfg.variant === 'texas-holdem' || cfg.variant === 'seven-card-stud' || cfg.variant === 'seven-card-stud-hi-lo') {
+          if (cfg.variant === 'omaha' || cfg.variant === 'omaha-hi-lo' || cfg.variant === 'texas-holdem' || cfg.variant === 'seven-card-stud' || cfg.variant === 'seven-card-stud-hi-lo' || cfg.variant === 'five-card-stud') {
             variant = cfg.variant;
           }
           if (cfg.bettingMode === 'no-limit' || cfg.bettingMode === 'pot-limit') {
@@ -455,14 +484,113 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         }
         // Get updated game state
         let gameState = pokerEngine.getState();
-        // Extra safety: if we still have only one active player but stage hasn't advanced, finalize now
-        const activeCount = (gameState.players || []).filter((p: any) => !(p.isFolded || (p as any).folded)).length;
+        // Extra safety: if we still have only one active player but stage hasn't advanced, apply a hard-settlement fallback to prevent any further dealing
+        let activeCount = (gameState.players || []).filter((p: any) => !(p.isFolded || (p as any).folded)).length;
         if (activeCount === 1 && gameState.stage !== 'showdown') {
           console.log(`[safety] Forcing win-by-fold settlement (stage=${gameState.stage}, pot=${gameState.pot}, currentBet=${gameState.currentBet})`);
           if (typeof pokerEngine.ensureWinByFoldIfSingle === 'function') {
             pokerEngine.ensureWinByFoldIfSingle();
             gameState = pokerEngine.getState();
             console.log(`[safety] Post-settlement (stage=${gameState.stage}, pot=${gameState.pot}, currentBet=${gameState.currentBet})`);
+          }
+          // If still not settled, perform server-side hard settlement and start next hand using a fresh engine
+          if (gameState.stage !== 'showdown') {
+            try {
+              const playersArr = Array.isArray(gameState.players) ? [...gameState.players] : [];
+              const winner = playersArr.find((p: any) => !(p.isFolded || (p as any).folded));
+              if (winner) {
+                // Compute conservation baseline
+                const betsTotal = playersArr.reduce((sum, p: any) => sum + (p.currentBet || 0), 0);
+                const potBefore = Number(gameState.pot) || 0;
+                const stacksTotal = playersArr.reduce((sum, p: any) => sum + (Number(p.stack) || 0), 0);
+                const includeOutstandingBets = potBefore === 0 ? betsTotal : 0;
+                const initialTotal = stacksTotal + potBefore + includeOutstandingBets;
+                // Clear bets and pot, award delta to winner
+                const clearedPlayers = playersArr.map((p: any) => ({ ...p, currentBet: 0 }));
+                let stacksAfter = clearedPlayers.reduce((sum, p: any) => sum + (Number(p.stack) || 0), 0);
+                let delta = initialTotal - stacksAfter;
+                const adjusted = clearedPlayers.map((p: any) => (
+                  p.id === winner.id ? { ...p, stack: (Number(p.stack) || 0) + delta } : p
+                ));
+                // Rebuild fresh engine with corrected stacks and start next hand immediately
+                try { delete require.cache[require.resolve('../../src/lib/poker/game-state-manager')]; } catch {}
+                try { delete require.cache[require.resolve('../../src/lib/poker/poker-engine')]; } catch {}
+                const { PokerEngine } = require('../../src/lib/poker/poker-engine');
+                const sb = Number(gameState.smallBlind) || 1;
+                const bb = Number(gameState.bigBlind) || 2;
+                const variant = gameState.variant || 'texas-holdem';
+                const bettingMode = gameState.bettingMode || (variant === 'omaha' || variant === 'omaha-hi-lo' ? 'pot-limit' : 'no-limit');
+                const rebuiltPlayers = adjusted.map((p: any) => ({
+                  id: p.id, name: p.name || p.id, position: p.position, stack: p.stack,
+                  currentBet: 0, hasActed: false, isFolded: false, isAllIn: false, timeBank: p.timeBank ?? 30, holeCards: []
+                }));
+                const freshEngine = new PokerEngine(tableId, rebuiltPlayers, sb, bb, { variant, bettingMode });
+                // Continue dealer rotation
+                try { (freshEngine as any).state.dealerPosition = gameState.dealerPosition ?? 0; } catch {}
+                freshEngine.startNewHand();
+                (global as any).activeGames.set(tableId, freshEngine);
+                const newState = freshEngine.getState();
+                io.to(`table_${tableId}`).emit('game_state_update', {
+                  gameState: newState,
+                  lastAction: { action: 'auto_next_hand' },
+                  timestamp: new Date().toISOString()
+                });
+                console.log(`[auto] Emitted game_state_update auto_next_hand (stage=${newState?.stage}, pot=${newState?.pot}) for table ${tableId}`);
+                return; // we've emitted next hand; stop normal emit below
+              }
+            } catch (fallbackErr) {
+              console.warn('Hard settlement fallback failed:', fallbackErr);
+            }
+          }
+        } else if (playerAction.type === 'fold' && gameState.stage !== 'showdown') {
+          // Additional fallback: if the engine instance failed to register the fold yet, assume the acting player is folded
+          try {
+            const playersArr = Array.isArray(gameState.players) ? [...gameState.players] : [];
+            const foldedMap: Record<string, boolean> = {};
+            playersArr.forEach((p: any) => { foldedMap[p.id] = !!(p.isFolded || p.folded); });
+            foldedMap[playerId] = true; // ensure actor is considered folded
+            const actives2 = playersArr.filter((p: any) => !foldedMap[p.id]);
+            if (actives2.length === 1) {
+              console.log('[safety] Post-fold active count=1 but stage not showdown; applying hard-settlement (actor assumed folded)');
+              const winner = actives2[0];
+              // Compute baseline and settle
+              const betsTotal = playersArr.reduce((sum, p: any) => sum + (p.currentBet || 0), 0);
+              const potBefore = Number(gameState.pot) || 0;
+              const stacksTotal = playersArr.reduce((sum, p: any) => sum + (Number(p.stack) || 0), 0);
+              const includeOutstandingBets = potBefore === 0 ? betsTotal : 0;
+              const initialTotal = stacksTotal + potBefore + includeOutstandingBets;
+              const clearedPlayers = playersArr.map((p: any) => ({ ...p, currentBet: 0 }));
+              let stacksAfter = clearedPlayers.reduce((sum, p: any) => sum + (Number(p.stack) || 0), 0);
+              let delta = initialTotal - stacksAfter;
+              const adjusted = clearedPlayers.map((p: any) => (
+                p.id === winner.id ? { ...p, stack: (Number(p.stack) || 0) + delta } : p
+              ));
+              // Rebuild fresh engine and start next hand
+              try { delete require.cache[require.resolve('../../src/lib/poker/poker-engine')]; } catch {}
+              const { PokerEngine } = require('../../src/lib/poker/poker-engine');
+              const sb = Number(gameState.smallBlind) || 1;
+              const bb = Number(gameState.bigBlind) || 2;
+              const variant = gameState.variant || 'texas-holdem';
+              const bettingMode = gameState.bettingMode || (variant === 'omaha' || variant === 'omaha-hi-lo' ? 'pot-limit' : 'no-limit');
+              const rebuiltPlayers = adjusted.map((p: any) => ({
+                id: p.id, name: p.name || p.id, position: p.position, stack: p.stack,
+                currentBet: 0, hasActed: false, isFolded: false, isAllIn: false, timeBank: p.timeBank ?? 30, holeCards: []
+              }));
+              const freshEngine = new PokerEngine(tableId, rebuiltPlayers, sb, bb, { variant, bettingMode });
+              try { (freshEngine as any).state.dealerPosition = gameState.dealerPosition ?? 0; } catch {}
+              freshEngine.startNewHand();
+              (global as any).activeGames.set(tableId, freshEngine);
+              const newState = freshEngine.getState();
+              io.to(`table_${tableId}`).emit('game_state_update', {
+                gameState: newState,
+                lastAction: { action: 'auto_next_hand' },
+                timestamp: new Date().toISOString()
+              });
+              console.log(`[auto] Emitted game_state_update auto_next_hand (stage=${newState?.stage}, pot=${newState?.pot}) for table ${tableId}`);
+              return;
+            }
+          } catch (assumeErr) {
+            console.warn('Assumed-fold settlement failed:', assumeErr);
           }
         }
         

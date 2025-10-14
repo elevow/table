@@ -167,10 +167,50 @@ describe('StateManager', () => {
     it('should handle player leaving a table', () => {
       const tableId = 'table1';
       const leaveHandler = mockSocket.on.mock.calls.find((call: [string, Function]) => call[0] === 'leave_table')?.[1];
+      const joinHandler = mockSocket.on.mock.calls.find((call: [string, Function]) => call[0] === 'join_table')?.[1];
       
+      // Seed a simple table state with one player seated and active
+      const playerId = 'player1';
+      const initialState = {
+        tableId,
+        stage: 'preflop' as const,
+        players: [{
+          id: playerId,
+          name: 'Player 1',
+          position: 1,
+          stack: 1000,
+          currentBet: 0,
+          hasActed: false,
+          isFolded: false,
+          isAllIn: false,
+          timeBank: 30000
+        }],
+        pot: 0,
+        currentBet: 0,
+        communityCards: [],
+        activePlayer: playerId,
+        dealerPosition: 0,
+        smallBlind: 5,
+        bigBlind: 10,
+        minRaise: 20,
+        lastRaise: 0
+      } as TableState;
+      stateManager.updateState(tableId, initialState);
+
+      // Simulate join to register playerId on the socket context
+      if (joinHandler) {
+        joinHandler({ tableId, playerId });
+      }
+
       if (leaveHandler) {
         leaveHandler(tableId);
       }
+
+      // Player should have been auto-folded in state before leaving
+      const state = stateManager.getState(tableId);
+      const player = state?.players.find(p => p.id === playerId);
+      expect(player?.isFolded).toBe(true);
+      // Socket should then leave the room
       expect(mockSocket.leave).toHaveBeenCalledWith(tableId);
     });
 

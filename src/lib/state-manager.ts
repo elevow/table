@@ -2,6 +2,7 @@ import { Server as SocketServer } from 'socket.io';
 import { TableState, PlayerAction } from '../types/poker';
 import { StateUpdate, StateUpdateResponse, StateReconciliation } from '../types/state-update';
 import { StateRecovery } from './state-recovery';
+import { leaveSeat } from './shared/game-seats';
 
 export class StateManager {
   private states: Map<string, TableState> = new Map();
@@ -55,6 +56,26 @@ export class StateManager {
       });
 
       socket.on('leave_table', (tableId: string) => {
+        // Auto-stand: vacate the player's seat first (if seated)
+        if (playerId) {
+          try {
+            leaveSeat(tableId, playerId);
+          } catch (e) {
+            // ignore seat errors; continue
+          }
+          // Auto-fold if player exists in table state
+          const state = this.states.get(tableId);
+          if (state && state.players.some(p => p.id === playerId)) {
+            const autoAction: PlayerAction = {
+              type: 'fold',
+              playerId,
+              tableId,
+              timestamp: Date.now()
+            };
+            this.handleAction(tableId, autoAction);
+          }
+        }
+        // Finally, leave the socket room
         socket.leave(tableId);
       });
 

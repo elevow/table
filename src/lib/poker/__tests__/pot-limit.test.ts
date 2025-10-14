@@ -28,16 +28,47 @@ describe('PotLimitCalculator', () => {
     const currentPot = 300;
     const tableCurrentBet = 100;
     const players = [
-      { currentBet: 20, isFolded: false, isAllIn: false }, // needs 80 to call
+      { currentBet: 20, isFolded: false, isAllIn: false }, // actor needs 80 to call
       { currentBet: 100, isFolded: false, isAllIn: false },
       { currentBet: 100, isFolded: false, isAllIn: false },
     ];
     const res = PotLimitCalculator.calculateMaxBet(currentPot, tableCurrentBet, players, 20);
-    // pendingCalls = 80 (actor) + 0 + 0 = 80
-    // maxRaise = pot(300) + pendingCalls(80) = 380
+    // Only actor's call counts → pendingCalls = 80
+    // maxRaise = pot(300) + actorCall(80) = 380
     // maxBet = tableCurrentBet(100) + 380 = 480
     expect(res.pendingCalls).toBe(80);
     expect(res.maxBet).toBe(480);
+  });
+
+  it('caps to correct pot-size raise preflop with 0.25/0.50 blinds', () => {
+    // SB=0.25, BB=0.50 → pot = 0.75. First to act facing 0.50.
+    const currentPot = 0.75;
+    const tableCurrentBet = 0.50;
+    // Actor has posted nothing yet this round
+    const players = [
+      { currentBet: 0.0, isFolded: false, isAllIn: false }, // actor
+      { currentBet: 0.25, isFolded: false, isAllIn: false }, // SB (already posted)
+      { currentBet: 0.50, isFolded: false, isAllIn: false }, // BB
+    ];
+    const res = PotLimitCalculator.calculateMaxBet(currentPot, tableCurrentBet, players, 0);
+    // Actor call = 0.50 → maxRaise = 0.75 + 0.50 = 1.25 → max total = 0.50 + 1.25 = 1.75
+    expect(Number(res.maxBet.toFixed(2))).toBe(1.75);
+    expect(Number(res.pendingCalls.toFixed(2))).toBe(0.50);
+  });
+
+  it('caps to 1.50 when SB (0.25 posted) acts first facing 0.50 with pot 0.75', () => {
+    // Heads-up scenario: SB is first to act with 0.25 posted; pot = 0.75, current bet = 0.50
+    const currentPot = 0.75;
+    const tableCurrentBet = 0.50;
+    // Acting player's currentBet is 0.25 (SB already posted), others for completeness
+    const players = [
+      { currentBet: 0.25, isFolded: false, isAllIn: false }, // actor (SB)
+      { currentBet: 0.50, isFolded: false, isAllIn: false }, // BB
+    ];
+    const res = PotLimitCalculator.calculateMaxBet(currentPot, tableCurrentBet, players, 0.25);
+    // Actor call = 0.25 → maxRaise = 0.75 + 0.25 = 1.00 → max total = 0.50 + 1.00 = 1.50
+    expect(Number(res.maxBet.toFixed(2))).toBe(1.50);
+    expect(Number(res.pendingCalls.toFixed(2))).toBe(0.25);
   });
 });
 

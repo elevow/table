@@ -7,6 +7,7 @@ interface Room {
   room_code?: string;
   game_type?: string;
   game_variant?: string;
+  configuration?: any;
   max_players: number;
   players_count?: number;
   current_players?: number;
@@ -187,6 +188,58 @@ export default function AdminRoomsPanel() {
     }
   };
 
+  // Map internal variant keys to friendly names
+  const variantLabelMap: Record<string, string> = {
+    'texas-holdem': "Texas Hold'em",
+    'holdem': "Texas Hold'em",
+    'no-limit-holdem': "No-Limit Hold'em",
+    'pot-limit-holdem': "Pot-Limit Hold'em",
+    'fixed-limit-holdem': "Fixed-Limit Hold'em",
+    'omaha': 'Omaha',
+    'omaha-hi-lo': 'Omaha Hi/Lo',
+    'omaha-hilo': 'Omaha Hi/Lo',
+    'seven-card-stud': 'Seven Card Stud',
+    'seven-card-stud-hi-lo': 'Seven Card Stud Hi/Lo',
+    'five-card-stud': 'Five Card Stud',
+    'poker': 'Poker',
+  };
+
+  const bettingLabelMap: Record<string, string> = {
+    'no-limit': 'No-Limit',
+    'pot-limit': 'Pot-Limit',
+    'fixed-limit': 'Fixed-Limit',
+    'limit': 'Limit',
+  };
+
+  const getFriendlyVariant = (room: Room): string => {
+    // Prefer explicit variant from configuration
+    let config: any = (room as any).configuration;
+    if (typeof config === 'string') {
+      try { config = JSON.parse(config); } catch { /* ignore parse errors */ }
+    }
+
+    let variant: string | undefined = (room as any).game_variant || (config?.variant as string | undefined) || (room as any).game_type;
+    if (variant) variant = String(variant).toLowerCase();
+
+    // Some schemas might store variant under configuration.game?.variant
+    if (!variant && config?.game?.variant) {
+      variant = String(config.game.variant).toLowerCase();
+    }
+
+    // If variant is missing or generic 'poker', default to Texas Hold'em
+    let baseLabel = variantLabelMap[variant || ''] || (variant === 'poker' ? "Texas Hold'em" : undefined);
+    if (!baseLabel) {
+      // Fallback: prettify hyphenated variant
+      baseLabel = variant ? variant.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Poker';
+    }
+
+    // Append betting mode if present
+    const bettingMode: string | undefined = (config?.bettingMode || config?.betting_mode) as string | undefined;
+    const bettingLabel = bettingMode ? bettingLabelMap[String(bettingMode).toLowerCase()] : undefined;
+
+    return bettingLabel ? `${baseLabel} (${bettingLabel})` : baseLabel;
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mt-8">
       <div className="flex justify-between items-center mb-6">
@@ -256,8 +309,8 @@ export default function AdminRoomsPanel() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 dark:text-gray-100 capitalize">
-                      {(room.game_variant || room.game_type || 'Unknown')?.replace('-', ' ')}
+                    <div className="text-sm text-gray-900 dark:text-gray-100">
+                      {getFriendlyVariant(room)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">

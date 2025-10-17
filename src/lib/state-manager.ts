@@ -12,6 +12,8 @@ export class StateManager {
   private readonly UPDATE_WINDOW_MS = 1000;
   private io: SocketServer;
   private recovery: StateRecovery;
+  // Optional listeners for state changes (tableId, newFullState, partialUpdate)
+  private listeners: Set<(tableId: string, state: TableState, update: Partial<TableState>) => void> = new Set();
 
   constructor(io: SocketServer) {
     this.io = io;
@@ -155,6 +157,12 @@ export class StateManager {
       };
 
       this.broadcastUpdate(tableId, stateUpdate);
+      // Notify listeners with the merged latest state
+      try {
+        this.listeners.forEach(cb => {
+          try { cb(tableId, newState, update); } catch {}
+        });
+      } catch {}
       return true;
     } catch (error) {
       console.error(`Error updating state for table ${tableId}:`, error);
@@ -205,6 +213,15 @@ export class StateManager {
 
   public getState(tableId: string): TableState | undefined {
     return this.states.get(tableId);
+  }
+
+  // Listener API (optional)
+  public addListener(cb: (tableId: string, state: TableState, update: Partial<TableState>) => void): void {
+    this.listeners.add(cb);
+  }
+
+  public removeListener(cb: (tableId: string, state: TableState, update: Partial<TableState>) => void): void {
+    this.listeners.delete(cb);
   }
 
   public getSequence(tableId: string): number {

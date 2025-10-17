@@ -22,8 +22,31 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
   const io = res.socket.server.io;
   if (!io) return;
 
+  // [auto-runout] env-gated debug helper for this runtime path
+  const autoRunoutDebug = !!process.env.AUTO_RUNOUT_DEBUG;
+  const logAutoRunout = (tableId: string, gameState: any, context: string) => {
+    if (!autoRunoutDebug) return;
+    try {
+      const players = Array.isArray(gameState?.players) ? gameState.players : [];
+      const activeCount = players.filter((p: any) => !(p.isFolded || (p as any).folded)).length;
+      const anyAllIn = players.some((p: any) => !(p.isFolded || (p as any).folded) && p.isAllIn);
+      const nonAllInCount = players.filter((p: any) => !(p.isFolded || (p as any).folded) && !p.isAllIn).length;
+      const communityLen = Array.isArray(gameState?.communityCards) ? gameState.communityCards.length : 0;
+      const need = Math.max(0, 5 - communityLen);
+      const stage = gameState?.stage;
+      console.log('[auto-runout]', context, { tableId, stage, activeCount, anyAllIn, nonAllInCount, need, communityLen });
+      if (activeCount >= 2 && anyAllIn && nonAllInCount <= 1 && need > 0 && stage !== 'showdown') {
+        console.log('[auto-runout] gating met in socketio.ts (note: this route does not auto-reveal streets)');
+      } else {
+        console.log('[auto-runout] gating not met in socketio.ts');
+      }
+    } catch (e) {
+      console.log('[auto-runout] debug error in socketio.ts', e);
+    }
+  };
+
   // Support hot-reload: version the handlers and rebind when changed
-  const HANDLERS_VERSION = 6; // bump to force reinit after code changes
+  const HANDLERS_VERSION = 7; // bump to force reinit after code changes
   if (io._handlersVersion !== HANDLERS_VERSION) {
     if (io._seatHandlersAdded) {
       try {
@@ -48,6 +71,134 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
     (global as any).nextHandTimers = new Map<string, NodeJS.Timeout>();
   }
   const nextHandTimers: Map<string, NodeJS.Timeout> = (global as any).nextHandTimers;
+
+  // Auto-runout timers per table (street reveals)
+  if (!(global as any).autoRunoutTimers) {
+    (global as any).autoRunoutTimers = new Map<string, NodeJS.Timeout[]>();
+  }
+  const autoRunoutTimers: Map<string, NodeJS.Timeout[]> = (global as any).autoRunoutTimers;
+
+  const clearAutoRunout = (tableId: string) => {
+    const arr = autoRunoutTimers.get(tableId);
+    if (arr && arr.length) {
+      console.log('[auto-runout] clearing timers (socketio)', { tableId, count: arr.length });
+      arr.forEach(t => clearTimeout(t));
+    }
+    autoRunoutTimers.delete(tableId);
+  };
+
+  const scheduleAutoRunout = (tableId: string) => {
+    try {
+      // Require active engine
+      if (!(global as any).activeGames || !(global as any).activeGames.has(tableId)) return;
+      const engine = (global as any).activeGames.get(tableId);
+      const state = engine?.getState?.() || {};
+      const variant = state?.variant;
+      if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+        if (autoRunoutDebug) console.log('[auto-runout] skip: variant not supported in socketio', { tableId, variant });
+        return;
+      }
+      const players = Array.isArray(state.players) ? state.players : [];
+      const activeCount = players.filter((p: any) => !(p.isFolded || (p as any).folded)).length;
+      const anyAllIn = players.some((p: any) => !(p.isFolded || (p as any).folded) && p.isAllIn);
+      const nonAllInCount = players.filter((p: any) => !(p.isFolded || (p as any).folded) && !p.isAllIn).length;
+      const communityLen = Array.isArray(state.communityCards) ? state.communityCards.length : 0;
+      const need = Math.max(0, 5 - communityLen);
+      // New: ensure betting is closed — no non-all-in player owes chips (i.e., unmatched against currentBet)
+      const currentBet = Number(state.currentBet) || 0;
+      const owes = players.some((p: any) => !(p.isFolded || (p as any).folded) && !p.isAllIn && (Number(p.currentBet) || 0) < currentBet);
+      if (!(activeCount >= 2 && anyAllIn && nonAllInCount <= 1 && need > 0 && state.stage !== 'showdown' && !owes)) {
+        if (autoRunoutDebug) console.log('[auto-runout] not scheduling (socketio): gating not met', { tableId, activeCount, anyAllIn, nonAllInCount, need, stage: state.stage, owes });
+        return;
+      }
+      if (autoRunoutTimers.has(tableId) && autoRunoutTimers.get(tableId)!.length > 0) {
+        if (autoRunoutDebug) console.log('[auto-runout] not scheduling (socketio): timers already active', { tableId });
+        return;
+      }
+
+      // Prepare engine for deterministic previews
+      try {
+        const known: any[] = [];
+        players.forEach((p: any) => (p.holeCards || []).forEach((c: any) => known.push(c)));
+        const comm = Array.isArray(state.communityCards) ? state.communityCards : [];
+        engine.prepareRabbitPreview?.({ community: comm, known });
+      } catch {}
+
+      // Hide action UI immediately
+      try {
+        const out = { ...state, activePlayer: '' };
+        io.to(`table_${tableId}`).emit('game_state_update', { gameState: out, lastAction: { action: 'auto_runout_lock' }, timestamp: new Date().toISOString() });
+      } catch {}
+
+      const timers: NodeJS.Timeout[] = [];
+      const steps: Array<'flop' | 'turn' | 'river'> = [];
+  if (communityLen < 3) steps.push('flop');
+      if (communityLen < 4) steps.push('turn');
+      if (communityLen < 5) steps.push('river');
+
+      let delay = 5000;
+      for (const street of steps) {
+        const t = setTimeout(() => {
+          try {
+            const currEngine = (global as any).activeGames.get(tableId);
+            const prev = currEngine?.getState?.() || state;
+            if (prev.stage === 'showdown') { clearAutoRunout(tableId); return; }
+            if (autoRunoutDebug) console.log('[auto-runout] revealing (socketio)', { tableId, street });
+            // preview cards and sync engine community
+            const preview = currEngine?.previewRabbitHunt?.(street);
+            const cards = preview?.cards || [];
+            // Clone community BEFORE mutating engine state to avoid duplicating when building payload
+            const baseCommunity = Array.isArray(prev?.communityCards) ? [...prev.communityCards] : [];
+            try {
+              const es = currEngine?.getState?.();
+              if (es && Array.isArray(es.communityCards) && cards.length) {
+                es.communityCards.push(...cards);
+              }
+            } catch {}
+            // Build updated payload with hidden activePlayer
+            const updated = { ...prev };
+            updated.communityCards = [...baseCommunity, ...cards];
+            updated.stage = street === 'flop' ? 'flop' : street === 'turn' ? 'turn' : 'river';
+            (updated as any).activePlayer = '';
+            io.to(`table_${tableId}`).emit('game_state_update', {
+              gameState: updated,
+              lastAction: { action: `auto_runout_${street}` },
+              timestamp: new Date().toISOString()
+            });
+
+            if (street === 'river') {
+              const t2 = setTimeout(() => {
+                try {
+                  const eng = (global as any).activeGames.get(tableId);
+                  if (autoRunoutDebug) console.log('[auto-runout] finalizing showdown (socketio)', { tableId });
+                  try { eng?.finalizeToShowdown?.(); } catch {}
+                  const finalState = eng?.getState?.() || updated;
+                  io.to(`table_${tableId}`).emit('game_state_update', {
+                    gameState: finalState,
+                    lastAction: { action: 'auto_runout_showdown' },
+                    timestamp: new Date().toISOString()
+                  });
+                  if (finalState?.stage === 'showdown') {
+                    scheduleNextHand(tableId);
+                  }
+                } finally {
+                  clearAutoRunout(tableId);
+                }
+              }, 5000);
+              timers.push(t2);
+            }
+          } catch {}
+        }, delay);
+        timers.push(t);
+        delay += 5000;
+      }
+
+      autoRunoutTimers.set(tableId, timers);
+      if (autoRunoutDebug) console.log('[auto-runout] scheduled timers (socketio)', { tableId, steps: steps.join(','), count: timers.length });
+    } catch (e) {
+      console.warn('scheduleAutoRunout (socketio) failed:', e);
+    }
+  };
 
   const scheduleNextHand = (tableId: string) => {
     try {
@@ -314,6 +465,8 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
                 lastAction: { playerId, action: 'auto_fold_on_leave' },
                 timestamp: new Date().toISOString(),
               });
+              // [auto-runout] debug after auto-fold emit
+              logAutoRunout(tableId, gameState, 'after leave_table auto_fold emit');
               if (gameState?.stage === 'showdown') {
                 scheduleNextHand(tableId);
               }
@@ -446,6 +599,8 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           currentBet: gameState.currentBet,
           communityCards: gameState.communityCards.length
         });
+        // [auto-runout] debug: show gating details at hand start
+        logAutoRunout(tableId, gameState, 'after start_game');
         
       } catch (error) {
         console.error('Error starting poker game:', error);
@@ -482,8 +637,10 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         if (typeof pokerEngine.ensureWinByFoldIfSingle === 'function') {
           pokerEngine.ensureWinByFoldIfSingle();
         }
-        // Get updated game state
-        let gameState = pokerEngine.getState();
+  // Get updated game state
+  let gameState = pokerEngine.getState();
+  // [auto-runout] debug after applying action
+  logAutoRunout(tableId, gameState, 'after player_action apply');
         // Extra safety: if we still have only one active player but stage hasn't advanced, apply a hard-settlement fallback to prevent any further dealing
         let activeCount = (gameState.players || []).filter((p: any) => !(p.isFolded || (p as any).folded)).length;
         if (activeCount === 1 && gameState.stage !== 'showdown') {
@@ -594,9 +751,22 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           }
         }
         
+        // Decide if we should lock UI and schedule auto-runout
+        const shouldAuto = (() => {
+          const players = Array.isArray(gameState.players) ? gameState.players : [];
+          const activeCount = players.filter((p: any) => !(p.isFolded || (p as any).folded)).length;
+          const anyAllIn = players.some((p: any) => !(p.isFolded || (p as any).folded) && p.isAllIn);
+          const nonAllInCount = players.filter((p: any) => !(p.isFolded || (p as any).folded) && !p.isAllIn).length;
+          const need = Math.max(0, 5 - (Array.isArray(gameState.communityCards) ? gameState.communityCards.length : 0));
+          const currentBet = Number(gameState.currentBet) || 0;
+          const owes = players.some((p: any) => !(p.isFolded || (p as any).folded) && !p.isAllIn && (Number(p.currentBet) || 0) < currentBet);
+          return activeCount >= 2 && anyAllIn && nonAllInCount <= 1 && need > 0 && gameState.stage !== 'showdown' && !owes;
+        })();
+        const outState = shouldAuto ? { ...gameState, activePlayer: '' } : gameState;
+
         // Broadcast updated game state to all players
         io.to(`table_${tableId}`).emit('game_state_update', {
-          gameState: gameState,
+          gameState: outState,
           lastAction: {
             playerId: playerId,
             action: action,
@@ -604,6 +774,11 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           },
           timestamp: new Date().toISOString()
         });
+        if (shouldAuto) {
+          scheduleAutoRunout(tableId);
+        }
+        // [auto-runout] debug after broadcasting update
+        logAutoRunout(tableId, gameState, 'after emit game_state_update');
         
         console.log(`Player ${playerId} performed ${action}${amount ? ` for ${amount}` : ''} at table ${tableId}`);
 

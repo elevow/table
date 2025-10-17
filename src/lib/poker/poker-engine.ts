@@ -128,12 +128,15 @@ export class PokerEngine {
 
   // US-029: Enable/Configure Run It Twice before showdown (2-4 runs)
   public enableRunItTwice(numberOfRuns: number, seeds?: string[], playerEntropy: string = ''): void {
-    if (numberOfRuns < 2 || numberOfRuns > 4) {
-      throw new Error('Run It Twice supports 2-4 runs');
+    // Determine allowable range dynamically: 1..activePlayers (non-folded)
+    const activePlayers = this.state.players.filter(p => !p.isFolded);
+    const maxRuns = Math.max(1, activePlayers.length);
+    if (numberOfRuns < 1 || numberOfRuns > maxRuns) {
+      throw new Error(`Run It Twice supports 1-${maxRuns} runs for ${activePlayers.length} active players`);
     }
     // Only valid if an all-in has occurred and betting is closed or heading to showdown
     const anyAllIn = this.state.players.some(p => p.isAllIn);
-    if (!anyAllIn) throw new Error('Run It Twice requires an all-in situation');
+  if (!anyAllIn) throw new Error('Run It Twice requires an all-in situation');
     // If unanimity required, ensure all active players have given consent
     if (this.requireRitUnanimous) {
       const active = this.state.players.filter(p => !p.isFolded);
@@ -1143,6 +1146,12 @@ export class PokerEngine {
 
   public getState(): TableState {
     return { ...this.state };
+  }
+
+  // Public: finalize the hand to showdown immediately using current state
+  // This will execute standard distribution or Run It Twice if enabled.
+  public finalizeToShowdown(): void {
+    this.determineWinner();
   }
 
   // Public safety: ensure immediate win-by-fold if only one player remains active

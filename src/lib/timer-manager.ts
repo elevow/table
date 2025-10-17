@@ -195,7 +195,8 @@ export class TimerManager {
 
   public stopTimer(tableId: string): void {
     this.timers.delete(tableId);
-    this.io.to(tableId).emit('timer_update', undefined);
+    // Broadcast removal so clients can clear UI
+    this.io.to(tableId).emit('timer_update', undefined as any);
   }
 
   public getTimerState(tableId: string): TimerState | undefined {

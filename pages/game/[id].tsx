@@ -11,6 +11,7 @@ import { useUserAvatar } from '../../src/hooks/useUserAvatar';
 import Avatar from '../../src/components/Avatar';
 import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
 import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
+// Run It Twice: UI additions rely on optional runItTwice field in game state
 
 // Dynamic import with loading state
 const GameBoard = dynamic(() => import('../../src/components/GameBoard'), {
@@ -510,6 +511,32 @@ export default function GamePage() {
     return { min: Number(min.toFixed(2)), max: Number(maxTotal.toFixed(2)) };
   };
 
+  // --- Run It Twice (RIT) helpers ---
+  const anyAllIn = () => {
+    try {
+      return Array.isArray(pokerGameState?.players) && pokerGameState.players.some((p: any) => p.isAllIn);
+    } catch { return false; }
+  };
+  const bettingClosed = () => {
+    // Approximation: betting is closed if stage is showdown OR all non-folded/all-in have acted & equal bets
+    if (!pokerGameState) return false;
+    if (pokerGameState.stage === 'showdown') return true;
+    // If there is an activePlayer it's likely still betting unless only one remains
+    return false; // conservative; server will enforce
+  };
+  const canOfferRit = () => {
+    if (!pokerGameState) return false;
+    if (pokerGameState?.runItTwice?.enabled) return false; // already enabled
+    if (pokerGameState.stage === 'showdown') return false; // too late
+    if (!anyAllIn()) return false; // need an all-in
+    if (pokerGameState.communityCards?.length >= 5) return false; // full board dealt
+    return true; // server will validate precise timing
+  };
+  const enableRunItTwice = (runs: number) => {
+    if (!socket || !id || typeof id !== 'string') return;
+    socket.emit('enable_run_it_twice', { tableId: id, runs });
+  };
+
   // Determine dealer/small blind/big blind tokens for a player based on current game state
   const getPlayerToken = useCallback((playerIdForToken: string): 'D' | 'SB' | 'BB' | null => {
     try {
@@ -850,7 +877,26 @@ export default function GamePage() {
             );
           }
 
-          // Hold'em/Omaha opponents: show two face-down backs
+          // Hold'em/Omaha opponents: at showdown, reveal hole cards; otherwise show backs
+          const showFaceUp = pokerGameState?.stage === 'showdown' && Array.isArray(gamePlayer.holeCards) && gamePlayer.holeCards.length > 0;
+          if (showFaceUp) {
+            const holes = gamePlayer.holeCards as any[];
+            return (
+              <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (revealed)">
+                <div className="flex gap-1">
+                  {holes.map((card: any, index: number) => (
+                    <div key={index} className="bg-white dark:bg-gray-700 rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black dark:text-gray-100 font-bold shadow">
+                      <div>{card.rank}</div>
+                      <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : ''}>
+                        {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (hidden)">
               <div className="flex gap-1">
@@ -1892,6 +1938,32 @@ export default function GamePage() {
                     </div>
                   )
                 )}
+
+                {/* Run It Twice offer (appears when eligible and not yet enabled) */}
+                {canOfferRit() && (
+                  <div className="flex flex-col gap-2 bg-purple-50 dark:bg-purple-900/30 p-3 rounded-md w-full border border-purple-300 dark:border-purple-600">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-medium text-purple-900 dark:text-purple-200">Run It Twice</div>
+                      <span className="text-[11px] text-purple-700 dark:text-purple-300">All-in detected</span>
+                    </div>
+                    <div className="text-xs text-purple-800 dark:text-purple-300 leading-snug">
+                      Deal the remaining community cards on multiple boards and split the pot by board outcomes.
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {(() => {
+                        const activeCount = getActiveNonFoldedPlayers().length;
+                        const maxRuns = Math.max(1, activeCount);
+                        return Array.from({ length: maxRuns }, (_, i) => i + 1).map(r => (
+                          <button
+                            key={r}
+                            onClick={() => enableRunItTwice(r)}
+                            className="px-3 py-1.5 rounded text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow focus:outline-none focus:ring-2 focus:ring-purple-400"
+                          >{r} Run{r > 1 ? 's' : ''}</button>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
@@ -1953,7 +2025,66 @@ export default function GamePage() {
           )}
 
           {/* Showdown result banner or single-remaining defensive winner */}
-          {gameStarted && pokerGameState && (pokerGameState.stage === 'showdown' || getActiveNonFoldedPlayers().length === 1) && (
+          {gameStarted && pokerGameState && pokerGameState.stage === 'showdown' && pokerGameState.runItTwice?.enabled && pokerGameState.runItTwice.results?.length > 0 && (
+            <div className="lg:col-span-2 bg-purple-50 dark:bg-purple-900/30 border border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-100 rounded-lg shadow-md p-4 mt-4">
+              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                <span className="inline-block px-2 py-0.5 text-xs rounded bg-purple-600 text-white">RIT</span>
+                Run It Twice Results ({pokerGameState.runItTwice.numberOfRuns} Runs)
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {pokerGameState.runItTwice.results.map((res: any, idx: number) => (
+                  <div key={res.boardId || idx} className="rounded-md border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-800 p-3 shadow-sm">
+                    <div className="text-sm font-semibold mb-2">Board {idx + 1}</div>
+                    {(() => {
+                      const board = pokerGameState.runItTwice.boards?.[idx] || [];
+                      return (
+                        <div className="flex gap-1 mb-3">
+                          {board.map((card: any, ci: number) => (
+                            <div key={ci} className="bg-white dark:bg-gray-700 rounded border text-[10px] p-1 w-7 h-10 flex flex-col items-center justify-center text-black dark:text-gray-100 font-bold">
+                              <div>{card.rank}</div>
+                              <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : ''}>
+                                {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                    <div className="space-y-1">
+                      {res.winners.map((w: any) => {
+                        const player = pokerGameState.players.find((p: any) => p.id === w.playerId);
+                        return (
+                          <div key={w.playerId} className="text-xs flex items-center justify-between bg-purple-100 dark:bg-purple-800/40 px-2 py-1 rounded">
+                            <span className="font-medium">{player?.name || w.playerId.slice(0,6)}</span>
+                            <span className="text-purple-700 dark:text-purple-300 font-semibold">+${w.potShare}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 text-sm font-medium">Total Distribution:</div>
+              <div className="mt-1 flex flex-wrap gap-2">
+                {pokerGameState.runItTwice.potDistribution.map((pd: any) => {
+                  const player = pokerGameState.players.find((p: any) => p.id === pd.playerId);
+                  return (
+                    <div key={pd.playerId} className="text-xs px-2 py-1 rounded bg-purple-200 dark:bg-purple-800/60 text-purple-900 dark:text-purple-100 font-semibold">
+                      {player?.name || pd.playerId.slice(0,6)}: ${pd.amount}
+                    </div>
+                  );
+                })}
+              </div>
+              {pokerGameState.runItTwice.rngSecurity && (
+                <div className="mt-4 text-[11px] text-purple-700 dark:text-purple-300">
+                  RNG seeds secured (VRF). Verification available via API.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Fallback simple showdown banner when not RIT */}
+          {gameStarted && pokerGameState && (pokerGameState.stage === 'showdown' || getActiveNonFoldedPlayers().length === 1) && !pokerGameState.runItTwice?.enabled && (
             <div className="lg:col-span-2 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 rounded-lg shadow-md p-4 mt-4">
               {(() => {
                 const remaining = getActiveNonFoldedPlayers();

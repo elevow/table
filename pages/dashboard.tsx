@@ -20,7 +20,8 @@ const Dashboard: NextPage = () => {
   const [validationMessage, setValidationMessage] = useState('');
   
   // User authentication state
-  const [userId, setUserId] = useState<string>('user-123'); // fallback
+  // Default to 'me' so the API can resolve the authenticated user server-side.
+  const [userId, setUserId] = useState<string>('me');
   const { avatarData, loading: avatarLoading } = useUserAvatar(userId);
   
   // Get authenticated user ID on component mount
@@ -40,10 +41,10 @@ const Dashboard: NextPage = () => {
             console.log('Dashboard - Using authenticated user ID:', data.userId);
             setUserId(data.userId);
           } else {
-            console.log('Dashboard - Authentication failed, using fallback userId');
+            console.log('Dashboard - Authentication failed, using server-resolved \"me\"');
           }
         } else {
-          console.log('Dashboard - No auth token, using fallback userId');
+          console.log('Dashboard - No auth token, using server-resolved \"me\"');
         }
       } catch (error) {
         console.error('Dashboard - Error getting authenticated user ID:', error);

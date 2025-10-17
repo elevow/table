@@ -13,8 +13,10 @@ export function useUserAvatar(userId: string) {
   const [avatarData, setAvatarData] = useState<AvatarData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isAlias = userId === 'me' || userId === 'current-user';
 
   const loadFromStorage = useCallback(() => {
+    if (isAlias) return false; // don't cache alias-based requests
     try {
       const stored = localStorage.getItem(`${AVATAR_STORAGE_KEY}_${userId}`);
       if (stored) {
@@ -26,15 +28,16 @@ export function useUserAvatar(userId: string) {
       console.warn('Failed to load avatar from storage:', err);
     }
     return false;
-  }, [userId]);
+  }, [userId, isAlias]);
 
   const saveToStorage = useCallback((data: AvatarData) => {
+    if (isAlias) return; // don't cache alias-based responses
     try {
       localStorage.setItem(`${AVATAR_STORAGE_KEY}_${userId}`, JSON.stringify(data));
     } catch (err) {
       console.warn('Failed to save avatar to storage:', err);
     }
-  }, [userId]);
+  }, [userId, isAlias]);
 
   const fetchAvatar = useCallback(async () => {
     if (!userId) return;
@@ -79,12 +82,14 @@ export function useUserAvatar(userId: string) {
   const refreshAvatar = useCallback(() => {
     // Clear storage and fetch fresh
     try {
-      localStorage.removeItem(`${AVATAR_STORAGE_KEY}_${userId}`);
+      if (!isAlias) {
+        localStorage.removeItem(`${AVATAR_STORAGE_KEY}_${userId}`);
+      }
     } catch (err) {
       console.warn('Failed to clear avatar storage:', err);
     }
     fetchAvatar();
-  }, [fetchAvatar, userId]);
+  }, [fetchAvatar, userId, isAlias]);
 
   useEffect(() => {
     fetchAvatar();

@@ -13,12 +13,12 @@ const Profile: NextPage = () => {
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   
   // User authentication state
-  const [userId, setUserId] = useState<string>('user-123'); // fallback
-  const { avatarData, refreshAvatar, updateAvatarData } = useUserAvatar(userId);
+  const [userId, setUserId] = useState<string>('');
+  const { avatarData, refreshAvatar, updateAvatarData } = useUserAvatar(userId || 'me');
 
   // Get authenticated user ID on component mount
   useEffect(() => {
-    const getAuthenticatedUserId = async () => {
+  const getAuthenticatedUserId = async () => {
       try {
         const authToken = localStorage.getItem('auth_token');
         if (authToken) {
@@ -33,10 +33,10 @@ const Profile: NextPage = () => {
             console.log('Profile - Using authenticated user ID:', data.userId);
             setUserId(data.userId);
           } else {
-            console.log('Profile - Authentication failed, using fallback userId');
+            console.log('Profile - Authentication failed; avatar endpoint will resolve "me" only when authenticated');
           }
         } else {
-          console.log('Profile - No auth token, using fallback userId');
+          console.log('Profile - No auth token; avatar endpoint will resolve "me" only when authenticated');
         }
       } catch (error) {
         console.error('Profile - Error getting authenticated user ID:', error);

@@ -1,7 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
 import { AvatarService } from '../../../../src/lib/services/avatar-service';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
+import { getPool } from '../../../../src/lib/database/pool';
+import { requireAuth } from '../../../../src/lib/auth/auth-utils';
 
 // Temporarily disable SSL certificate verification for development
 if (process.env.NODE_ENV === 'development') {
@@ -15,31 +16,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests. Please slow down.' });
 
   try {
-    const { userId } = req.query as { userId: string };
+    let { userId } = req.query as { userId: string };
     
     console.log('=== Avatar Retrieval API Debug ===');
     console.log('Looking up avatar for userId:', userId);
     console.log('This is the userId that will be queried in database');
     console.log('=== Retrieval API Processing ===');
     
-    // Let the service/data layer handle invalid UUIDs gracefully; return 404 only if no avatar found.
-    
-    // Use proper database configuration with SSL fix for self-signed certificates
-    const connectionString = process.env.POOL_DATABASE_URL || process.env.DATABASE_URL;
-    
-    // Parse connection string to modify SSL mode
-    let modifiedConnectionString = connectionString;
-    if (connectionString?.includes('sslmode=require')) {
-      modifiedConnectionString = connectionString.replace('sslmode=require', 'sslmode=prefer');
+    // Support 'me' to resolve from authenticated session
+    if (userId === 'me' || userId === 'current-user') {
+      try {
+        const authedUserId = await requireAuth(req);
+        userId = authedUserId;
+        console.log('Resolved userId from auth context:', userId);
+      } catch (e) {
+        return res.status(401).json({ error: 'Not authenticated' });
+      }
     }
-    
-    const pool = new Pool({
-      connectionString: modifiedConnectionString,
-      ssl: connectionString?.includes('supabase') ? { 
-        rejectUnauthorized: false
-      } : false
-    });
-    
+
+    // Use shared pool config (honors DB_MODE/local settings)
+    const pool = getPool();
     const service = new AvatarService(pool as any);
     const avatar = await service.getLatestForUser(userId);
     
@@ -49,9 +45,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // console.log('Avatar data found:', { id: avatar.id, url: avatar.originalUrl, status: avatar.status });
     }
     console.log('=== End Retrieval Result ===');
-    
-    // Close the pool connection
-    await pool.end();
     
     if (!avatar) {
       console.log('Avatar API - Returning 404 for userId:', userId);

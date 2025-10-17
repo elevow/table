@@ -12,44 +12,88 @@ try {
 
 let pool: Pool | null = null;
 
-function buildPool(): Pool {
-  // Prefer pooled connection for restricted networks, fallback to direct
-  let connectionString = process.env.POOL_DATABASE_URL || process.env.DIRECT_DATABASE_URL;
-  
-  if (!connectionString) {
-    console.error('Database environment check:');
-    console.error('POOL_DATABASE_URL:', process.env.POOL_DATABASE_URL ? 'SET' : 'NOT SET');
-    console.error('DIRECT_DATABASE_URL:', process.env.DIRECT_DATABASE_URL ? 'SET' : 'NOT SET');
-    throw new Error('Neither POOL_DATABASE_URL nor DIRECT_DATABASE_URL environment variable is set');
+function resolveConnectionString(): { connectionString: string; mode: 'local' | 'supabase' } {
+  const modeRaw = (process.env.DB_MODE || 'auto').toLowerCase();
+  const mode: 'auto' | 'local' | 'supabase' = (['local', 'supabase'].includes(modeRaw) ? modeRaw : 'auto') as any;
+
+  const localUrl = process.env.LOCAL_DATABASE_URL
+    || (process.env.POSTGRES_USER && process.env.POSTGRES_PASSWORD && process.env.POSTGRES_DB
+      ? `postgresql://${process.env.POSTGRES_USER}:${process.env.POSTGRES_PASSWORD}@localhost:5432/${process.env.POSTGRES_DB}`
+      : undefined);
+  const supabasePooled = process.env.POOL_DATABASE_URL;
+  const supabaseDirect = process.env.DIRECT_DATABASE_URL;
+
+  const isProd = process.env.NODE_ENV === 'production';
+
+  if (mode === 'local') {
+    if (localUrl) return { connectionString: localUrl, mode: 'local' };
+    // Fall back to direct if local not set
+    if (supabasePooled || supabaseDirect) {
+      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase' };
+    }
+  } else if (mode === 'supabase') {
+    if (supabasePooled || supabaseDirect) {
+      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase' };
+    }
+    if (localUrl) {
+      return { connectionString: localUrl, mode: 'local' };
+    }
+  } else {
+    // auto
+    if (!isProd && localUrl) {
+      return { connectionString: localUrl, mode: 'local' };
+    }
+    if (supabasePooled || supabaseDirect) {
+      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase' };
+    }
+    if (localUrl) {
+      return { connectionString: localUrl, mode: 'local' };
+    }
   }
-  
-  console.log('NODE_ENV:', process.env.NODE_ENV || 'undefined');
-  console.log('Original connection string:', connectionString.replace(/:[^@]*@/, ':****@'));
-  
-  // In development mode, disable SSL completely to avoid certificate issues
-  if (process.env.NODE_ENV !== 'production') {
-    // Remove any SSL parameters and add sslmode=disable
+
+  // As a last resort, use whatever is set in POOL/DIRECT or throw
+  const fallback = supabasePooled || supabaseDirect;
+  if (fallback) return { connectionString: fallback, mode: 'supabase' };
+  throw new Error('No database URL found. Set LOCAL_DATABASE_URL for local or POOL_DATABASE_URL/DIRECT_DATABASE_URL for Supabase.');
+}
+
+function buildPool(): Pool {
+  const { connectionString: raw, mode } = resolveConnectionString();
+  const isProd = process.env.NODE_ENV === 'production';
+  let connectionString = raw;
+
+  console.log('[db] NODE_ENV:', process.env.NODE_ENV || 'undefined');
+  console.log('[db] DB_MODE:', (process.env.DB_MODE || 'auto').toLowerCase(), '→', mode);
+  console.log('[db] Original connection string:', connectionString.replace(/:[^@]*@/, ':****@'));
+
+  const forceSsl = process.env.DB_FORCE_SSL === 'true';
+
+  // For local mode or any non-production env without DB_FORCE_SSL, disable SSL
+  if (!isProd && !forceSsl) {
     connectionString = connectionString.replace(/[?&]?sslmode=(require|prefer|allow|disable)/g, '');
     connectionString += connectionString.includes('?') ? '&sslmode=disable' : '?sslmode=disable';
-    console.log('Development mode: SSL completely disabled');
-    console.log('Modified connection string:', connectionString.replace(/:[^@]*@/, ':****@'));
+    console.log('[db] Development mode: SSL disabled via connection string');
+    console.log('[db] Modified connection string:', connectionString.replace(/:[^@]*@/, ':****@'));
   }
-  
-  console.log('Final connection string being used:', connectionString.replace(/:[^@]*@/, ':****@'));
-  
-  // Parse connection string to add SSL configuration
-  const config: any = { connectionString };
-  
-  // For development, explicitly disable SSL in the client config as well
-  if (process.env.NODE_ENV !== 'production') {
-    config.ssl = false;
-    console.log('Development mode: SSL client configuration disabled');
+
+  // Ensure search_path includes public, using connection options to avoid per-connection commands
+  const encodedOpt = encodeURIComponent('-c search_path=public');
+  if (!/([?&])options=/.test(connectionString)) {
+    connectionString += connectionString.includes('?') ? `&options=${encodedOpt}` : `?options=${encodedOpt}`;
+  }
+
+  console.log('[db] Final connection string being used:', connectionString.replace(/:[^@]*@/, ':****@'));
+
+  const cfg: any = { connectionString };
+
+  if (!isProd && !forceSsl) {
+    cfg.ssl = false;
+    console.log('[db] Development mode: SSL client configuration disabled');
   } else {
-    // In production, use proper SSL verification
-    config.ssl = { rejectUnauthorized: true };
+    cfg.ssl = { rejectUnauthorized: true };
   }
-  
-  return new Pool(config);
+
+  return new Pool(cfg);
 }
 
 export function getPool(): Pool {

@@ -3,7 +3,7 @@
 
 -- Main players table
 CREATE TABLE IF NOT EXISTS players (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS players (
 
 -- Bankroll history for tracking balance changes
 CREATE TABLE IF NOT EXISTS bankroll_history (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     amount DECIMAL(15,2) NOT NULL,
     balance_before DECIMAL(15,2) NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS bankroll_history (
 
 -- Player game statistics (detailed stats beyond the JSONB field)
 CREATE TABLE IF NOT EXISTS player_game_stats (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     game_type VARCHAR(50) NOT NULL, -- 'texas_holdem', 'omaha', etc.
     stakes_level VARCHAR(50) NOT NULL, -- '1/2', '2/5', etc.
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS player_game_stats (
 
 -- Player achievements and badges
 CREATE TABLE IF NOT EXISTS player_achievements (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     achievement_type VARCHAR(100) NOT NULL,
     achievement_name VARCHAR(200) NOT NULL,
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS player_achievements (
 
 -- Player preferences and settings
 CREATE TABLE IF NOT EXISTS player_preferences (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     category VARCHAR(50) NOT NULL, -- 'ui', 'game', 'notifications', etc.
     preferences JSONB NOT NULL DEFAULT '{}',
@@ -107,12 +107,15 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_players_updated_at ON players;
 CREATE TRIGGER update_players_updated_at BEFORE UPDATE ON players
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_player_game_stats_updated_at ON player_game_stats;
 CREATE TRIGGER update_player_game_stats_updated_at BEFORE UPDATE ON player_game_stats
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_player_preferences_updated_at ON player_preferences;
 CREATE TRIGGER update_player_preferences_updated_at BEFORE UPDATE ON player_preferences
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 

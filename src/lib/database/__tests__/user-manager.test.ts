@@ -25,9 +25,9 @@ describe('UserManager (US-017)', () => {
   it('creates a user with unique email and username', async () => {
     (mockClient.query as unknown as jest.Mock).mockImplementation((q: any) => {
       if (q.includes('BEGIN')) return Promise.resolve({});
-      if (q.includes('SELECT id FROM users WHERE email')) return Promise.resolve({ rows: [] });
-      if (q.includes('SELECT id FROM users WHERE username')) return Promise.resolve({ rows: [] });
-      if (q.includes('INSERT INTO users')) return Promise.resolve({ rows: [{ id: 'u-1', email: 'a@b.com', username: 'alice', created_at: new Date(), is_verified: false }] });
+      if (q.includes('SELECT id FROM public.users WHERE email')) return Promise.resolve({ rows: [] });
+      if (q.includes('SELECT id FROM public.users WHERE username')) return Promise.resolve({ rows: [] });
+      if (q.includes('INSERT INTO public.users')) return Promise.resolve({ rows: [{ id: 'u-1', email: 'a@b.com', username: 'alice', created_at: new Date(), is_verified: false }] });
       if (q.includes('COMMIT')) return Promise.resolve({});
       return Promise.resolve({ rows: [] });
     });
@@ -41,7 +41,7 @@ describe('UserManager (US-017)', () => {
   it('rejects duplicate email', async () => {
     (mockClient.query as unknown as jest.Mock).mockImplementation((q: any) => {
       if (q.includes('BEGIN')) return Promise.resolve({});
-      if (q.includes('SELECT id FROM users WHERE email')) return Promise.resolve({ rows: [{ id: 'u-x' }] });
+      if (q.includes('SELECT id FROM public.users WHERE email')) return Promise.resolve({ rows: [{ id: 'u-x' }] });
       return Promise.resolve({ rows: [] });
     });
     await expect(manager.createUser({ email: 'a@b.com', username: 'alice' } as any)).rejects.toMatchObject({ code: 'EMAIL_EXISTS' });

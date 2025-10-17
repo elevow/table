@@ -76,7 +76,7 @@ export class SessionManager {
       const result = await client.query(
         `SELECT t.*, u.email, u.username, u.is_verified 
          FROM auth_tokens t
-         JOIN users u ON t.user_id = u.id
+         JOIN public.users u ON t.user_id = u.id
          WHERE t.token_hash = $1 AND t.type = 'session' AND t.expires_at > NOW()`,
         [tokenHash]
       );

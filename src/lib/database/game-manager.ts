@@ -52,7 +52,7 @@ export class GameManager {
     let createdByValue: string | null = null;
     if (isValidUuid(input.createdBy)) {
       try {
-        const exists = await this.pool.query(`SELECT 1 FROM users WHERE id = $1 LIMIT 1`, [input.createdBy]);
+  const exists = await this.pool.query(`SELECT 1 FROM public.users WHERE id = $1 LIMIT 1`, [input.createdBy]);
         if (exists.rowCount && exists.rowCount > 0) {
           createdByValue = input.createdBy;
         }

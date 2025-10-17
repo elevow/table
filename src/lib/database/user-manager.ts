@@ -35,29 +35,33 @@ export class UserManager {
 
       // Uniqueness checks
       const [emailCheck, usernameCheck] = await Promise.all([
-        client.query('SELECT id FROM users WHERE email = $1', [req.email]),
-        client.query('SELECT id FROM users WHERE username = $1', [req.username])
+  client.query('SELECT id FROM public.users WHERE email = $1', [req.email]),
+  client.query('SELECT id FROM public.users WHERE username = $1', [req.username])
       ]);
       if (emailCheck.rows.length) throw new UserError('Email already exists', 'EMAIL_EXISTS');
       if (usernameCheck.rows.length) throw new UserError('Username already exists', 'USERNAME_EXISTS');
 
       const id = uuidv4();
       const insert = await client.query(
-        `INSERT INTO users (id, email, username, password_hash, auth_provider, auth_provider_id, metadata)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        `INSERT INTO public.users (id, email, username, password_hash, auth_provider, auth_provider_id, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, email, username, password_hash, auth_provider, auth_provider_id, metadata, created_at, last_login, is_verified`,
         [
-          id, 
-          req.email, 
-          req.username, 
+          id,
+          req.email,
+          req.username,
           req.passwordHash || null,
-          req.authProvider || null, 
-          req.authProviderId || null, 
+          req.authProvider || null,
+          req.authProviderId || null,
           req.metadata ? JSON.stringify(req.metadata) : null
         ]
       );
 
       await client.query('COMMIT');
-      return this.mapRowToUser(insert.rows[0]);
+      const row = insert.rows?.[0];
+      if (!row) {
+        throw new UserError('Insert did not return a row', 'CREATE_FAILED');
+      }
+      return this.mapRowToUser(row);
     } catch (e: any) {
       await client.query('ROLLBACK');
       // Preserve known user errors
@@ -82,21 +86,21 @@ export class UserManager {
     if (callerUserId) {
       const { withRlsUserContext } = await import('./rls-context');
       return withRlsUserContext(this.pool, { userId: callerUserId }, async (client) => {
-        const res = await client.query('SELECT * FROM users WHERE id = $1', [id]);
+  const res = await client.query('SELECT * FROM public.users WHERE id = $1', [id]);
         return res.rows[0] ? this.mapRowToUser(res.rows[0]) : null;
       });
     }
-    const res = await this.pool.query('SELECT * FROM users WHERE id = $1', [id]);
+  const res = await this.pool.query('SELECT * FROM public.users WHERE id = $1', [id]);
     return res.rows[0] ? this.mapRowToUser(res.rows[0]) : null;
   }
 
   async getUserByEmail(email: string): Promise<UserRecord | null> {
-    const res = await this.pool.query('SELECT * FROM users WHERE email = $1', [email]);
+  const res = await this.pool.query('SELECT * FROM public.users WHERE email = $1', [email]);
     return res.rows[0] ? this.mapRowToUser(res.rows[0]) : null;
   }
 
   async getUserByUsername(username: string): Promise<UserRecord | null> {
-    const res = await this.pool.query('SELECT * FROM users WHERE username = $1', [username]);
+  const res = await this.pool.query('SELECT * FROM public.users WHERE username = $1', [username]);
     return res.rows[0] ? this.mapRowToUser(res.rows[0]) : null;
   }
 
@@ -117,10 +121,10 @@ export class UserManager {
     }
     vals.push(id);
     if (callerUserId) {
-      const { withRlsUserContext } = await import('./rls-context');
+  const { withRlsUserContext } = await import('./rls-context');
       const res = await withRlsUserContext(this.pool, { userId: callerUserId }, async (client) => {
         return client.query(
-          `UPDATE users SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+          `UPDATE public.users SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
           vals
         );
       });
@@ -129,7 +133,7 @@ export class UserManager {
       return this.mapRowToUser(row);
     }
     const res = await this.pool.query(
-      `UPDATE users SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+      `UPDATE public.users SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
       vals
     );
     if (!res.rows[0]) throw new UserError('User not found', 'NOT_FOUND');
@@ -167,7 +171,7 @@ export class UserManager {
     if (filters.createdBefore) { clauses.push(`created_at <= $${i++}`); vals.push(filters.createdBefore); }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
-    const count = await this.pool.query(`SELECT COUNT(*) AS total FROM users ${where}`, vals);
+  const count = await this.pool.query(`SELECT COUNT(*) AS total FROM public.users ${where}`, vals);
     const total = parseInt(count.rows?.[0]?.total || '0', 10);
 
     const orderBy = pagination.sortBy || 'created_at';
@@ -175,7 +179,7 @@ export class UserManager {
     const offset = (pagination.page - 1) * pagination.limit;
 
     const list = await this.pool.query(
-      `SELECT * FROM users ${where} ORDER BY ${orderBy} ${order} LIMIT $${i++} OFFSET $${i++}`,
+      `SELECT * FROM public.users ${where} ORDER BY ${orderBy} ${order} LIMIT $${i++} OFFSET $${i++}`,
       [...vals, pagination.limit, offset]
     );
 

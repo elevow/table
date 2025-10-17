@@ -9,7 +9,11 @@
     "lint": "next lint",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:migrate": "node scripts/db-migrate.js",
+    "db:reset": "docker compose down -v && docker compose up -d db && node scripts/db-migrate.js"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.5",

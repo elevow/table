@@ -28,7 +28,7 @@ async function isUserAdmin(req: NextApiRequest): Promise<boolean> {
       ? connectionString?.replace('sslmode=require', 'sslmode=disable')
       : connectionString;
     
-    console.log('Development mode: Using connection without SSL requirement');
+    // console.log('Development mode: Using connection without SSL requirement');
     
     const pool = new Pool({
       connectionString: modifiedConnectionString,
@@ -91,7 +91,7 @@ export default async function handler(
       ? connectionString?.replace('sslmode=require', 'sslmode=disable')
       : connectionString;
     
-    console.log('Development mode: Using connection without SSL requirement');
+    // console.log('Development mode: Using connection without SSL requirement');
     
     const pool = new Pool({
       connectionString: modifiedConnectionString,

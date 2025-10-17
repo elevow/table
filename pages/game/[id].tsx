@@ -57,6 +57,8 @@ export default function GamePage() {
   
   // Avatar cache for all players (including other seated players)
   const [playerAvatars, setPlayerAvatars] = useState<Record<string, string>>({});
+  // Track in-flight avatar loads to avoid duplicate fetches
+  const inFlightAvatarLoadsRef = useRef<Set<string>>(new Set());
   
   // Debug logging for avatar data
   useEffect(() => {
@@ -74,39 +76,36 @@ export default function GamePage() {
   
   // Function to load avatar for any player
   const loadPlayerAvatar = useCallback(async (playerIdToLoad: string) => {
-    if (playerAvatars[playerIdToLoad]) {
-      return; // Already loaded
-    }
-    
+    // Already cached
+    if (playerAvatars[playerIdToLoad]) return;
+    // De-dupe concurrent loads
+    if (inFlightAvatarLoadsRef.current.has(playerIdToLoad)) return;
+    inFlightAvatarLoadsRef.current.add(playerIdToLoad);
+
     try {
       const response = await fetch(`/api/avatars/user/${playerIdToLoad}`);
       if (response.ok) {
         const data = await response.json();
-        if (data.url) {
-          setPlayerAvatars(prev => ({
-            ...prev,
-            [playerIdToLoad]: data.url
-          }));
+        if (data?.url) {
+          setPlayerAvatars(prev => {
+            const next = { ...prev, [playerIdToLoad]: data.url };
+            console.log('[Avatar] Cached URL for', playerIdToLoad, '→', data.url);
+            return next;
+          });
           return;
         }
       }
-      
       // If no avatar found, generate default
       const shortId = playerIdToLoad.slice(-3).toUpperCase();
       const defaultAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(shortId)}&background=6b7280&color=fff&size=128`;
-      setPlayerAvatars(prev => ({
-        ...prev,
-        [playerIdToLoad]: defaultAvatarUrl
-      }));
+      setPlayerAvatars(prev => ({ ...prev, [playerIdToLoad]: defaultAvatarUrl }));
     } catch (error) {
       console.warn('Failed to load avatar for player:', playerIdToLoad, error);
-      // Generate default avatar on error
       const shortId = playerIdToLoad.slice(-3).toUpperCase();
       const defaultAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(shortId)}&background=6b7280&color=fff&size=128`;
-      setPlayerAvatars(prev => ({
-        ...prev,
-        [playerIdToLoad]: defaultAvatarUrl
-      }));
+      setPlayerAvatars(prev => ({ ...prev, [playerIdToLoad]: defaultAvatarUrl }));
+    } finally {
+      inFlightAvatarLoadsRef.current.delete(playerIdToLoad);
     }
   }, [playerAvatars]);
   
@@ -153,6 +152,8 @@ export default function GamePage() {
     return seats;
   });
   const [currentPlayerSeat, setCurrentPlayerSeat] = useState<number | null>(null);
+  const [seatStateReady, setSeatStateReady] = useState<boolean>(false);
+  const [claimingSeat, setClaimingSeat] = useState<number | null>(null);
   const [userRole, setUserRole] = useState<'admin' | 'player' | 'guest'>('guest');
   const [playerChips, setPlayerChips] = useState<number>(0);
   
@@ -227,8 +228,10 @@ export default function GamePage() {
   // Seat management functions
   const claimSeat = (seatNumber: number) => {
     if (userRole === 'guest') return; // Guests cannot claim seats
-    if (seatAssignments[seatNumber]) return; // Seat already taken
+    if (!seatStateReady) return; // Wait for server seat state
+    if (seatAssignments[seatNumber]) return; // Seat already taken locally
     if (currentPlayerSeat) return; // Player already has a seat
+    if (claimingSeat) return; // Already claiming
 
     // Get player name from localStorage, or generate a fallback
     const savedPlayerName = localStorage.getItem('playerName');
@@ -236,22 +239,10 @@ export default function GamePage() {
       const playerNumber = playerId.replace(/\D/g, '').slice(-2) || Math.floor(Math.random() * 99).toString().padStart(2, '0');
       return `Player ${playerNumber}`;
     })();
-    const startingChips = 20; // Give $20 in chips when sitting down
-    
-    const newAssignments = {
-      ...seatAssignments,
-      [seatNumber]: { playerId, playerName, chips: startingChips }
-    };
+    const startingChips = 20; // Initial chips client-side
 
-    setSeatAssignments(newAssignments);
-    setCurrentPlayerSeat(seatNumber);
-    setPlayerChips(startingChips);
-    
-    // Save to localStorage
-    localStorage.setItem(`seats_${id}`, JSON.stringify(newAssignments));
-    localStorage.setItem(`chips_${playerId}_${id}`, startingChips.toString());
-
-    // Broadcast to other players via socket
+    setClaimingSeat(seatNumber);
+    // Request server to claim; do not optimistically set local state
     if (socket) {
       socket.emit('claim_seat', { 
         tableId: id, 
@@ -261,6 +252,10 @@ export default function GamePage() {
         chips: startingChips 
       });
     }
+    // Fallback timeout to clear pending if no response
+    setTimeout(() => {
+      setClaimingSeat(prev => (prev === seatNumber ? null : prev));
+    }, 4000);
   };
 
   const standUp = () => {
@@ -656,7 +651,7 @@ export default function GamePage() {
     const assignment = seatAssignments[seatNumber];
     const isCurrentPlayer = assignment?.playerId === playerId;
     const isEmpty = !assignment;
-    const canClaim = isEmpty && userRole !== 'guest' && !currentPlayerSeat;
+    const canClaim = isEmpty && userRole !== 'guest' && !currentPlayerSeat && seatStateReady && claimingSeat === null;
 
     // Determine info box position based on seat coordinates - RIGHT NEXT to each seat
     const getInfoBoxPosition = (currentPosition: string, seatStyle?: React.CSSProperties) => {
@@ -751,9 +746,15 @@ export default function GamePage() {
             isEmpty
               ? canClaim
                 ? 'Click to claim this seat'
-                : userRole === 'guest'
-                  ? 'Guests cannot claim seats'
-                  : 'You already have a seat'
+                : !seatStateReady
+                  ? 'Please wait… syncing seats'
+                  : claimingSeat === seatNumber
+                    ? 'Claim pending…'
+                    : userRole === 'guest'
+                      ? 'Guests cannot claim seats'
+                      : currentPlayerSeat
+                        ? 'You already have a seat'
+                        : 'Seat not available'
               : isCurrentPlayer
                 ? 'Your seat - click Stand Up button to leave'
                 : `${assignment.playerName} - $${assignment.chips || 0}`
@@ -761,7 +762,7 @@ export default function GamePage() {
         >
           {isEmpty ? (
             <div className="text-center leading-tight text-white text-xs font-semibold">
-              P{seatNumber}
+              {claimingSeat === seatNumber ? 'Claiming…' : <>P{seatNumber}</>}
             </div>
           ) : (
             <div className="w-full h-full flex items-center justify-center">
@@ -1235,11 +1236,28 @@ export default function GamePage() {
               chips: data.chips
             }
           }));
+          try {
+            const nextSeats = {
+              ...seatAssignments,
+              [data.seatNumber]: {
+                playerId: data.playerId,
+                playerName: data.playerName,
+                chips: data.chips,
+              }
+            } as Record<number, { playerId: string; playerName: string; chips: number } | null>;
+            if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(nextSeats));
+          } catch (e) {
+            console.warn('Failed to persist seats on seat_claimed');
+          }
           
           // Update current player seat if this player claimed it
           if (data.playerId === playerId) {
             setCurrentPlayerSeat(data.seatNumber);
             setPlayerChips(data.chips);
+            setClaimingSeat(null);
+            try {
+              if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(data.chips));
+            } catch {}
           }
         };
 
@@ -1249,17 +1267,36 @@ export default function GamePage() {
             ...prev,
             [data.seatNumber]: null
           }));
+          try {
+            const nextSeats = {
+              ...seatAssignments,
+              [data.seatNumber]: null,
+            } as Record<number, { playerId: string; playerName: string; chips: number } | null>;
+            if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(nextSeats));
+          } catch (e) {
+            console.warn('Failed to persist seats on seat_vacated');
+          }
           
           // Update current player seat if this player stood up
           if (data.playerId === playerId) {
             setCurrentPlayerSeat(null);
             setPlayerChips(0);
+            setClaimingSeat(null);
+            try {
+              if (id) localStorage.removeItem(`chips_${playerId}_${id}`);
+            } catch {}
           }
         };
 
         const handleSeatState = (data: { seats: Record<number, { playerId: string; playerName: string; chips: number } | null> }) => {
           console.log('Received seat_state:', data);
           setSeatAssignments(data.seats);
+          setSeatStateReady(true);
+          try {
+            if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats));
+          } catch (e) {
+            console.warn('Failed to persist seats on seat_state');
+          }
           
           // Find current player's seat
           const playerSeat = Object.entries(data.seats).find(([_, assignment]) => assignment?.playerId === playerId);
@@ -1267,6 +1304,9 @@ export default function GamePage() {
             const [seatNumber, assignment] = playerSeat;
             setCurrentPlayerSeat(parseInt(seatNumber));
             setPlayerChips(assignment?.chips || 0);
+            try {
+              if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0));
+            } catch {}
           }
         };
 
@@ -1376,6 +1416,9 @@ export default function GamePage() {
         const handleActionFailed = (data: { error: string; playerId?: string; action?: string }) => {
           console.error('Action failed:', data);
           // You could show a toast notification here
+          if (data?.action === 'claim_seat' && data?.playerId === playerId) {
+            setClaimingSeat(null);
+          }
         };
 
         socketInstance.on('seat_claimed', handleSeatClaimed);

@@ -175,18 +175,7 @@ export default function AdminRoomsPanel() {
     return new Date(dateString).toLocaleString();
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'active':
-        return 'bg-green-100 text-green-800';
-      case 'waiting':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'completed':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-blue-100 text-blue-800';
-    }
-  };
+  // Status color helper removed as column is no longer displayed
 
   // Map internal variant keys to friendly names
   const variantLabelMap: Record<string, string> = {
@@ -286,12 +275,7 @@ export default function AdminRoomsPanel() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   Players
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Creator
-                </th>
+                {/* Status and Creator columns removed */}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   Created
                 </th>
@@ -318,21 +302,7 @@ export default function AdminRoomsPanel() {
                       {(room.current_players || room.players_count || 0)} / {room.max_players}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(room.status)}`}>
-                      {room.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 dark:text-gray-100">
-                      {room.creator_username || 'Unknown'}
-                    </div>
-                    {room.creator_email && (
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {room.creator_email}
-                      </div>
-                    )}
-                  </td>
+                  {/* Status and Creator cells removed */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {formatDate(room.created_at)}
                   </td>

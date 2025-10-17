@@ -62,9 +62,9 @@ function buildPool(): Pool {
   const isProd = process.env.NODE_ENV === 'production';
   let connectionString = raw;
 
-  console.log('[db] NODE_ENV:', process.env.NODE_ENV || 'undefined');
-  console.log('[db] DB_MODE:', (process.env.DB_MODE || 'auto').toLowerCase(), '→', mode);
-  console.log('[db] Original connection string:', connectionString.replace(/:[^@]*@/, ':****@'));
+  // console.log('[db] NODE_ENV:', process.env.NODE_ENV || 'undefined');
+  // console.log('[db] DB_MODE:', (process.env.DB_MODE || 'auto').toLowerCase(), '→', mode);
+  // console.log('[db] Original connection string:', connectionString.replace(/:[^@]*@/, ':****@'));
 
   const forceSsl = process.env.DB_FORCE_SSL === 'true';
 
@@ -72,8 +72,8 @@ function buildPool(): Pool {
   if (!isProd && !forceSsl) {
     connectionString = connectionString.replace(/[?&]?sslmode=(require|prefer|allow|disable)/g, '');
     connectionString += connectionString.includes('?') ? '&sslmode=disable' : '?sslmode=disable';
-    console.log('[db] Development mode: SSL disabled via connection string');
-    console.log('[db] Modified connection string:', connectionString.replace(/:[^@]*@/, ':****@'));
+    // console.log('[db] Development mode: SSL disabled via connection string');
+    // console.log('[db] Modified connection string:', connectionString.replace(/:[^@]*@/, ':****@'));
   }
 
   // Ensure search_path includes public, using connection options to avoid per-connection commands
@@ -82,13 +82,13 @@ function buildPool(): Pool {
     connectionString += connectionString.includes('?') ? `&options=${encodedOpt}` : `?options=${encodedOpt}`;
   }
 
-  console.log('[db] Final connection string being used:', connectionString.replace(/:[^@]*@/, ':****@'));
+  // console.log('[db] Final connection string being used:', connectionString.replace(/:[^@]*@/, ':****@'));
 
   const cfg: any = { connectionString };
 
   if (!isProd && !forceSsl) {
     cfg.ssl = false;
-    console.log('[db] Development mode: SSL client configuration disabled');
+    // console.log('[db] Development mode: SSL client configuration disabled');
   } else {
     cfg.ssl = { rejectUnauthorized: true };
   }

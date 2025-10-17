@@ -51,6 +51,13 @@
 			"label": "Run tests (in-band)",
 			"type": "shell",
 			"command": "npm test --silent -- -i"
+		},
+		{
+			"label": "Run tests (in-band)",
+			"type": "shell",
+			"command": "npm test --silent -- -i",
+			"isBackground": false,
+			"group": "build"
 		}
 	]
 }

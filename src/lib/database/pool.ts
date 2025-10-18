@@ -86,11 +86,20 @@ function buildPool(): Pool {
 
   const cfg: any = { connectionString };
 
+  // Optional overrides for SSL behavior in production
+  const allowSelfSigned = (process.env.ALLOW_SELF_SIGNED_DB === '1') || (process.env.DB_REJECT_UNAUTHORIZED === 'false');
+  const suppliedCa = (process.env.DB_SSL_CA || '').trim();
+
   if (!isProd && !forceSsl) {
     cfg.ssl = false;
     // console.log('[db] Development mode: SSL client configuration disabled');
   } else {
-    cfg.ssl = { rejectUnauthorized: true };
+    const sslCfg: any = { rejectUnauthorized: !allowSelfSigned };
+    if (suppliedCa) {
+      // Support multi-line CA provided via env with escaped newlines
+      sslCfg.ca = suppliedCa.replace(/\\n/g, '\n');
+    }
+    cfg.ssl = sslCfg;
   }
 
   return new Pool(cfg);

@@ -1,5 +1,5 @@
 import type { NextApiRequest } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../database/pool';
 
 /**
  * Extract session token from request headers or cookies
@@ -25,16 +25,8 @@ export async function getAuthenticatedUserId(req: NextApiRequest): Promise<strin
   }
 
   try {
-    // Use environment variable for database connection - disable SSL for development
-    const connectionString = process.env.POOL_DATABASE_URL || process.env.DATABASE_URL;
-    const modifiedConnectionString = process.env.NODE_ENV === 'development' 
-      ? connectionString?.replace('sslmode=require', 'sslmode=disable')
-      : connectionString;
-    
-    const pool = new Pool({
-      connectionString: modifiedConnectionString,
-      ssl: process.env.NODE_ENV === 'development' ? false : undefined
-    });
+    // Use shared pool with unified SSL configuration
+    const pool = getPool();
     
     const client = await pool.connect();
     
@@ -54,7 +46,6 @@ export async function getAuthenticatedUserId(req: NextApiRequest): Promise<strin
       
     } finally {
       client.release();
-      await pool.end();
     }
   } catch (error) {
     console.error('Error getting authenticated user ID:', error);

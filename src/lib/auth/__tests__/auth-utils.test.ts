@@ -1,21 +1,17 @@
 import type { NextApiRequest } from 'next';
 import { getAuthToken, getAuthenticatedUserId, requireAuth } from '../auth-utils';
-import { Pool } from 'pg';
 
-// Mock pg module
-jest.mock('pg', () => ({
-  Pool: jest.fn().mockImplementation(() => ({
-    connect: jest.fn(),
-    end: jest.fn()
-  }))
+// Mock shared getPool used by auth-utils
+const mockClient: any = { query: jest.fn(), release: jest.fn() };
+const mockPool: any = { connect: jest.fn().mockResolvedValue(mockClient) };
+jest.mock('../../database/pool', () => ({
+  getPool: jest.fn(() => mockPool)
 }));
 
 // Mock console.error to avoid noise in tests
 const mockConsoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
 
 describe('auth-utils', () => {
-  let mockPool: any;
-  let mockClient: any;
   let mockRequest: Partial<NextApiRequest>;
   let originalEnv: NodeJS.ProcessEnv;
 
@@ -26,19 +22,10 @@ describe('auth-utils', () => {
     // Store original environment variables
     originalEnv = { ...process.env };
     
-    // Setup mock client
-    mockClient = {
-      query: jest.fn(),
-      release: jest.fn()
-    };
-    
-    // Setup mock pool
-    mockPool = {
-      connect: jest.fn().mockResolvedValue(mockClient),
-      end: jest.fn().mockResolvedValue(undefined)
-    };
-    
-    (Pool as jest.MockedClass<typeof Pool>).mockImplementation(() => mockPool);
+    // Reset mock client/pool fns
+    mockClient.query.mockReset();
+    mockClient.release.mockReset();
+    mockPool.connect.mockResolvedValue(mockClient);
     
     // Setup base mock request
     mockRequest = {
@@ -183,7 +170,6 @@ describe('auth-utils', () => {
         ['valid-token']
       );
       expect(mockClient.release).toHaveBeenCalled();
-      expect(mockPool.end).toHaveBeenCalled();
     });
 
     it('should return null for expired or invalid token', async () => {
@@ -199,68 +185,19 @@ describe('auth-utils', () => {
       
       expect(userId).toBe(null);
       expect(mockClient.release).toHaveBeenCalled();
-      expect(mockPool.end).toHaveBeenCalled();
     });
 
-    it('should use POOL_DATABASE_URL when available', async () => {
-      Object.assign(process.env, {
-        NODE_ENV: 'development',
-        POOL_DATABASE_URL: 'postgresql://pool:pass@localhost:5432/pool',
-        DATABASE_URL: 'postgresql://user:pass@localhost:5432/test'
-      });
-      
-      mockRequest.headers = {
-        authorization: 'Bearer test-token'
-      };
-      
-      mockClient.query.mockResolvedValue({ rows: [] });
-      
-      await getAuthenticatedUserId(mockRequest as NextApiRequest);
-      
-      expect(Pool).toHaveBeenCalledWith({
-        connectionString: 'postgresql://pool:pass@localhost:5432/pool',
-        ssl: false
-      });
-    });
-
-    it('should modify SSL settings for development environment', async () => {
-      Object.assign(process.env, {
-        NODE_ENV: 'development',
-        DATABASE_URL: 'postgresql://user:pass@localhost:5432/test?sslmode=require'
-      });
-      
-      mockRequest.headers = {
-        authorization: 'Bearer test-token'
-      };
-      
-      mockClient.query.mockResolvedValue({ rows: [] });
-      
-      await getAuthenticatedUserId(mockRequest as NextApiRequest);
-      
-      expect(Pool).toHaveBeenCalledWith({
-        connectionString: 'postgresql://user:pass@localhost:5432/test?sslmode=disable',
-        ssl: false
-      });
-    });
-
-    it('should use production SSL settings for non-development environment', async () => {
-      Object.assign(process.env, {
-        NODE_ENV: 'production',
-        DATABASE_URL: 'postgresql://user:pass@localhost:5432/test'
-      });
-      
-      mockRequest.headers = {
-        authorization: 'Bearer test-token'
-      };
-      
-      mockClient.query.mockResolvedValue({ rows: [] });
-      
-      await getAuthenticatedUserId(mockRequest as NextApiRequest);
-      
-      expect(Pool).toHaveBeenCalledWith({
-        connectionString: 'postgresql://user:pass@localhost:5432/test',
-        ssl: undefined
-      });
+    it('should obtain a client from shared pool and run the token query', async () => {
+      mockRequest.headers = { authorization: 'Bearer test-token' };
+      mockClient.query.mockResolvedValue({ rows: [{ user_id: 'abc' }] });
+      const userId = await getAuthenticatedUserId(mockRequest as NextApiRequest);
+      expect(userId).toBe('abc');
+      expect(mockPool.connect).toHaveBeenCalled();
+      expect(mockClient.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT user_id FROM auth_tokens'),
+        ['test-token']
+      );
+      expect(mockClient.release).toHaveBeenCalled();
     });
 
     it('should handle database connection errors', async () => {
@@ -289,7 +226,6 @@ describe('auth-utils', () => {
       
       expect(userId).toBe(null);
       expect(mockClient.release).toHaveBeenCalled();
-      expect(mockPool.end).toHaveBeenCalled();
       expect(mockConsoleError).toHaveBeenCalledWith('Error getting authenticated user ID:', queryError);
     });
 
@@ -303,7 +239,6 @@ describe('auth-utils', () => {
       await getAuthenticatedUserId(mockRequest as NextApiRequest);
       
       expect(mockClient.release).toHaveBeenCalled();
-      expect(mockPool.end).toHaveBeenCalled();
     });
   });
 
@@ -379,26 +314,12 @@ describe('auth-utils', () => {
       expect(token).toBe('test');
     });
 
-    it('should handle empty environment variables', async () => {
-      Object.assign(process.env, {
-        DATABASE_URL: undefined,
-        POOL_DATABASE_URL: undefined,
-        NODE_ENV: undefined
-      });
-      
-      mockRequest.headers = {
-        authorization: 'Bearer test-token'
-      };
-      
-      mockClient.query.mockResolvedValue({ rows: [] });
-      
+    it('should return null when getPool throws (no DB)', async () => {
+      const mod = require('../../database/pool');
+      mod.getPool.mockImplementationOnce(() => { throw new Error('no db'); });
+      mockRequest.headers = { authorization: 'Bearer test-token' };
       const userId = await getAuthenticatedUserId(mockRequest as NextApiRequest);
-      
       expect(userId).toBe(null);
-      expect(Pool).toHaveBeenCalledWith({
-        connectionString: undefined,
-        ssl: undefined
-      });
     });
 
     it('should work with cookies from getAuthToken through the full flow', async () => {

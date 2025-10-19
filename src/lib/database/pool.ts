@@ -3,10 +3,14 @@ import { config } from 'dotenv';
 import { join } from 'path';
 import { readFileSync } from 'fs';
 
-// Force load environment variables immediately
+// Load environment variables
 try {
-  config({ path: join(process.cwd(), '.env.local'), override: true });
-  config({ override: false }); // fallback to .env
+  // In development, also load from .env.local and allow overriding
+  if (process.env.NODE_ENV !== 'production') {
+    config({ path: join(process.cwd(), '.env.local'), override: true });
+  }
+  // Always load from default .env without overriding already-set envs
+  config({ override: false });
 } catch (e) {
   console.error('Failed to load environment variables:', e);
 }

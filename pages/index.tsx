@@ -14,6 +14,7 @@ const Home: NextPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [healthResult, setHealthResult] = useState<any>(null);
+  const showDbHealth = (process.env.NEXT_PUBLIC_SHOW_DB_HEALTH === '1' || process.env.NEXT_PUBLIC_SHOW_DB_HEALTH === 'true');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,22 +269,24 @@ const Home: NextPage = () => {
               Continue as Guest
             </button>
 
-            {/* DB Health Check */}
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={testDbHealth}
-                disabled={healthLoading}
-                className="w-full flex justify-center py-3 px-4 border border-green-600 rounded-md shadow-sm text-sm font-medium text-green-50 bg-green-600 hover:bg-green-700 disabled:opacity-50"
-              >
-                {healthLoading ? 'Testing DB Connection…' : 'Test DB Connection'}
-              </button>
-              {healthResult && (
-                <pre className="mt-3 max-h-64 overflow-auto text-xs bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-3 rounded border border-gray-300 dark:border-gray-700">
+            {/* DB Health Check (hidden unless NEXT_PUBLIC_SHOW_DB_HEALTH is set) */}
+            {showDbHealth && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={testDbHealth}
+                  disabled={healthLoading}
+                  className="w-full flex justify-center py-3 px-4 border border-green-600 rounded-md shadow-sm text-sm font-medium text-green-50 bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                >
+                  {healthLoading ? 'Testing DB Connection…' : 'Test DB Connection'}
+                </button>
+                {healthResult && (
+                  <pre className="mt-3 max-h-64 overflow-auto text-xs bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-3 rounded border border-gray-300 dark:border-gray-700">
 {JSON.stringify(healthResult, null, 2)}
-                </pre>
-              )}
-            </div>
+                  </pre>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </main>

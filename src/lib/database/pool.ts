@@ -28,9 +28,9 @@ function resolveConnectionString(): { connectionString: string; mode: 'local' | 
   // Supabase/Vercel integration variables
   const vercelPooled = process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || undefined;
   const vercelDirect = process.env.POSTGRES_URL_NON_POOLING || undefined;
-  // Legacy custom vars
-  const supabasePooled = process.env.POOL_DATABASE_URL || vercelPooled;
-  const supabaseDirect = process.env.DIRECT_DATABASE_URL || vercelDirect;
+  // Prefer integration vars over legacy ones if both exist
+  const supabasePooled = vercelPooled || process.env.POOL_DATABASE_URL;
+  const supabaseDirect = vercelDirect || process.env.DIRECT_DATABASE_URL;
 
   const isProd = process.env.NODE_ENV === 'production';
 

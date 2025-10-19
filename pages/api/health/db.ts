@@ -25,6 +25,9 @@ type Resp = {
     selectedPort?: number | null;
     urlHostType?: 'pooler' | 'direct' | 'other';
     sslmodeParam?: string;
+    nodeVersion?: string;
+    opensslVersion?: string;
+    nodeExtraCACerts?: string | undefined;
   };
 };
 
@@ -39,6 +42,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     sslConfigured: process.env.NODE_ENV === 'production' ? true : false,
     allowSelfSigned: process.env.ALLOW_SELF_SIGNED_DB === '1' || process.env.DB_REJECT_UNAUTHORIZED === 'false',
     hasCa: !!(process.env.DB_SSL_CA || process.env.DB_SSL_CA_FILE),
+    nodeVersion: process.version,
+    opensslVersion: (process as any).versions?.openssl,
+    nodeExtraCACerts: process.env.NODE_EXTRA_CA_CERTS,
   };
 
   try {

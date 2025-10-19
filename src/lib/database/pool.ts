@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { config } from 'dotenv';
-import { join } from 'path';
+import { join, isAbsolute } from 'path';
 import { readFileSync } from 'fs';
 
 // Load environment variables
@@ -25,8 +25,12 @@ function resolveConnectionString(): { connectionString: string; mode: 'local' | 
     || (process.env.POSTGRES_USER && process.env.POSTGRES_PASSWORD && process.env.POSTGRES_DB
       ? `postgresql://${process.env.POSTGRES_USER}:${process.env.POSTGRES_PASSWORD}@localhost:5432/${process.env.POSTGRES_DB}`
       : undefined);
-  const supabasePooled = process.env.POOL_DATABASE_URL;
-  const supabaseDirect = process.env.DIRECT_DATABASE_URL;
+  // Supabase/Vercel integration variables
+  const vercelPooled = process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || undefined;
+  const vercelDirect = process.env.POSTGRES_URL_NON_POOLING || undefined;
+  // Legacy custom vars
+  const supabasePooled = process.env.POOL_DATABASE_URL || vercelPooled;
+  const supabaseDirect = process.env.DIRECT_DATABASE_URL || vercelDirect;
 
   const isProd = process.env.NODE_ENV === 'production';
 
@@ -97,7 +101,15 @@ function buildPool(): Pool {
   const suppliedCaFile = (process.env.DB_SSL_CA_FILE || '').trim();
   if (!suppliedCa && suppliedCaFile) {
     try {
-      suppliedCa = readFileSync(suppliedCaFile, 'utf8');
+      const tryPaths = isAbsolute(suppliedCaFile)
+        ? [suppliedCaFile]
+        : [suppliedCaFile, join(process.cwd(), suppliedCaFile)];
+      for (const p of tryPaths) {
+        try {
+          suppliedCa = readFileSync(p, 'utf8');
+          break;
+        } catch {}
+      }
     } catch (e) {
       console.warn('[db] Failed to read DB_SSL_CA_FILE:', suppliedCaFile);
     }
@@ -110,7 +122,11 @@ function buildPool(): Pool {
     const sslCfg: any = { rejectUnauthorized: !allowSelfSigned };
     if (suppliedCa) {
       // Support multi-line CA provided via env with escaped newlines
-      sslCfg.ca = suppliedCa.replace(/\\n/g, '\n');
+      const normalized = suppliedCa.replace(/\\n/g, '\n');
+      if (/----BEGIN CERTIFICATE----/.test(normalized)) {
+        console.warn('[db] DB_SSL_CA appears to have malformed PEM header/footer (needs 5 dashes).');
+      }
+      sslCfg.ca = normalized;
     }
     cfg.ssl = sslCfg;
     if (allowSelfSigned) {

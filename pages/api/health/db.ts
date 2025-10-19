@@ -11,21 +11,31 @@ type Resp = {
     dbMode?: string | undefined;
     poolUrlPresent: boolean;
     directUrlPresent: boolean;
+    vercelPooledPresent?: boolean;
+    vercelDirectPresent?: boolean;
     sslConfigured?: boolean;
     allowSelfSigned?: boolean;
     hasCa?: boolean;
     selectedUrlPresent?: boolean;
     insecureOk?: boolean;
     insecureError?: string;
+    caHeaderValid?: boolean;
+    caBlockCount?: number;
+    selectedHost?: string;
+    selectedPort?: number | null;
+    urlHostType?: 'pooler' | 'direct' | 'other';
+    sslmodeParam?: string;
   };
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse<Resp>) {
-  const diagnostics = {
+  const diagnostics: any = {
     nodeEnv: process.env.NODE_ENV,
     dbMode: process.env.DB_MODE,
     poolUrlPresent: !!process.env.POOL_DATABASE_URL,
     directUrlPresent: !!process.env.DIRECT_DATABASE_URL,
+    vercelPooledPresent: !!(process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL),
+    vercelDirectPresent: !!process.env.POSTGRES_URL_NON_POOLING,
     sslConfigured: process.env.NODE_ENV === 'production' ? true : false,
     allowSelfSigned: process.env.ALLOW_SELF_SIGNED_DB === '1' || process.env.DB_REJECT_UNAUTHORIZED === 'false',
     hasCa: !!(process.env.DB_SSL_CA || process.env.DB_SSL_CA_FILE),
@@ -57,6 +67,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     let insecureError: string | undefined;
     let selectedUrl = process.env.POOL_DATABASE_URL || process.env.DIRECT_DATABASE_URL || process.env.DATABASE_URL;
     if (selectedUrl) {
+
+    // Additional diagnostics for CA formatting and URL details
+    try {
+      const caRaw = (process.env.DB_SSL_CA || '').trim();
+      if (caRaw) {
+        const caNormalized = caRaw.replace(/\\n/g, '\n');
+        const good = (caNormalized.match(/-----BEGIN CERTIFICATE-----/g) || []).length;
+        const bad = (caNormalized.match(/----BEGIN CERTIFICATE----/g) || []).length;
+        diagnostics.caHeaderValid = good > 0 && bad === 0;
+        diagnostics.caBlockCount = good;
+      }
+    } catch {}
+
+    try {
+      if (selectedUrl) {
+        const sslmodeMatch = selectedUrl.match(/(?:[?&])sslmode=([^&]+)/i);
+        diagnostics.sslmodeParam = sslmodeMatch ? decodeURIComponent(sslmodeMatch[1]) : undefined;
+        try {
+          const u = new URL(selectedUrl);
+          diagnostics.selectedHost = u.hostname;
+          diagnostics.selectedPort = u.port ? Number(u.port) : null;
+          if (/pooler\.supabase\.com$/i.test(u.hostname)) diagnostics.urlHostType = 'pooler';
+          else if (/^db\..*\.supabase\.co$/i.test(u.hostname)) diagnostics.urlHostType = 'direct';
+          else diagnostics.urlHostType = 'other';
+        } catch {}
+      }
+    } catch {}
       try {
         // Append options for search_path=public like main pool does
         const encodedOpt = encodeURIComponent('-c search_path=public');

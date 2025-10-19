@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
+import { Pool as PgPool } from 'pg';
 
 type Resp = {
   ok: boolean;
@@ -13,6 +14,9 @@ type Resp = {
     sslConfigured?: boolean;
     allowSelfSigned?: boolean;
     hasCa?: boolean;
+    selectedUrlPresent?: boolean;
+    insecureOk?: boolean;
+    insecureError?: string;
   };
 };
 
@@ -46,10 +50,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       client.release();
     }
   } catch (e: any) {
+    const primaryError = e?.message || 'unknown error';
+
+    // Attempt an insecure diagnostic connection to help pinpoint CA issues (does not affect app config)
+    let insecureOk = false;
+    let insecureError: string | undefined;
+    let selectedUrl = process.env.POOL_DATABASE_URL || process.env.DIRECT_DATABASE_URL || process.env.DATABASE_URL;
+    if (selectedUrl) {
+      try {
+        // Append options for search_path=public like main pool does
+        const encodedOpt = encodeURIComponent('-c search_path=public');
+        if (!/([?&])options=/.test(selectedUrl)) {
+          selectedUrl += selectedUrl.includes('?') ? `&options=${encodedOpt}` : `?options=${encodedOpt}`;
+        }
+        const tmp = new PgPool({ connectionString: selectedUrl, ssl: { rejectUnauthorized: false } });
+        const c = await tmp.connect();
+        try {
+          await c.query('SELECT 1');
+          insecureOk = true;
+        } finally {
+          c.release();
+          await tmp.end();
+        }
+      } catch (ie: any) {
+        insecureError = ie?.message || String(ie);
+      }
+    }
+
     return res.status(500).json({
       ok: false,
-      error: e?.message || 'unknown error',
-      diagnostics,
+      error: primaryError,
+      diagnostics: { ...diagnostics, selectedUrlPresent: !!selectedUrl, insecureOk, insecureError },
     });
   }
 }

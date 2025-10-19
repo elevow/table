@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import { config } from 'dotenv';
 import { join } from 'path';
+import { readFileSync } from 'fs';
 
 // Force load environment variables immediately
 try {
@@ -88,7 +89,15 @@ function buildPool(): Pool {
 
   // Optional overrides for SSL behavior in production
   const allowSelfSigned = (process.env.ALLOW_SELF_SIGNED_DB === '1') || (process.env.DB_REJECT_UNAUTHORIZED === 'false');
-  const suppliedCa = (process.env.DB_SSL_CA || '').trim();
+  let suppliedCa = (process.env.DB_SSL_CA || '').trim();
+  const suppliedCaFile = (process.env.DB_SSL_CA_FILE || '').trim();
+  if (!suppliedCa && suppliedCaFile) {
+    try {
+      suppliedCa = readFileSync(suppliedCaFile, 'utf8');
+    } catch (e) {
+      console.warn('[db] Failed to read DB_SSL_CA_FILE:', suppliedCaFile);
+    }
+  }
 
   if (!isProd && !forceSsl) {
     cfg.ssl = false;
@@ -100,6 +109,9 @@ function buildPool(): Pool {
       sslCfg.ca = suppliedCa.replace(/\\n/g, '\n');
     }
     cfg.ssl = sslCfg;
+    if (allowSelfSigned) {
+      console.warn('[db] ALLOW_SELF_SIGNED_DB enabled: TLS certificate verification is relaxed. Avoid in long-term production.');
+    }
   }
 
   return new Pool(cfg);

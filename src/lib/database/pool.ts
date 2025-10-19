@@ -77,6 +77,11 @@ function buildPool(): Pool {
 
   const forceSsl = process.env.DB_FORCE_SSL === 'true';
 
+  // Remove any sslmode parameter; we'll control TLS via cfg.ssl explicitly
+  connectionString = connectionString.replace(/([?&])sslmode=([^&]+)/gi, (m, sep) => sep === '?' ? '?' : '');
+  // Clean up possible leftover ?& or trailing ?
+  connectionString = connectionString.replace(/\?&/, '?').replace(/\?$/, '');
+
   // For local mode or any non-production env without DB_FORCE_SSL, disable SSL
   if (!isProd && !forceSsl) {
     connectionString = connectionString.replace(/[?&]?sslmode=(require|prefer|allow|disable)/g, '');

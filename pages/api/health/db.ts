@@ -95,11 +95,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       }
     } catch {}
       try {
-        // Append options for search_path=public like main pool does
+        // Append options for search_path=public like main pool does and strip sslmode
         const encodedOpt = encodeURIComponent('-c search_path=public');
         if (!/([?&])options=/.test(selectedUrl)) {
           selectedUrl += selectedUrl.includes('?') ? `&options=${encodedOpt}` : `?options=${encodedOpt}`;
         }
+        selectedUrl = selectedUrl.replace(/([?&])sslmode=([^&]+)/gi, (m, sep) => sep === '?' ? '?' : '');
+        selectedUrl = selectedUrl.replace(/\?&/, '?').replace(/\?$/, '');
         const tmp = new PgPool({ connectionString: selectedUrl, ssl: { rejectUnauthorized: false } });
         const c = await tmp.connect();
         try {

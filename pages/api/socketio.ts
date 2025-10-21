@@ -894,7 +894,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
       transport: 'websocket'
     });
 
-    // Store the Socket.IO server instance for other API routes
+  // Store the Socket.IO server instance for other API routes
     res.socket.server.io = wsManager.getSocketServer();
     
     // Initialize seat management handlers
@@ -911,7 +911,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
     }
   }
 
-  // Send success response
+  // Send success response (also serves as the HTTP endpoint for the Socket.IO path)
   res.status(200).json({ status: 'Socket.IO server running' });
 }
 

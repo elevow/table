@@ -26,7 +26,9 @@ describe('WebSocketManager', () => {
     manager = WebSocketManager.getInstance(server, config);
     
     server.listen(port, () => {
+      const path = process.env.SOCKET_IO_PATH || '/socket.io';
       clientSocket = io(`http://localhost:${port}`, {
+        path,
         transports: ['websocket'],
         reconnection: false // Disable auto-reconnection for tests
       });
@@ -72,7 +74,7 @@ describe('WebSocketManager', () => {
         const socketId = clientSocket.id;
         
         // Listen for disconnect before initiating it
-        clientSocket.once('disconnect', (reason) => {
+  clientSocket.once('disconnect', (reason: string) => {
           setTimeout(() => {
             const state = manager.getConnectionState(socketId);
             // Implementation sets 'reconnecting' for transport close/ping timeout
@@ -137,7 +139,7 @@ describe('WebSocketManager', () => {
       return new Promise<void>((resolve) => {
         const testData = { message: 'test' };
         
-        clientSocket.once('test-event', (data) => {
+  clientSocket.once('test-event', (data: any) => {
           expect(data).toEqual(testData);
           resolve();
         });
@@ -155,7 +157,7 @@ describe('WebSocketManager', () => {
         
         // Wait for room join to be processed
         setTimeout(() => {
-          clientSocket.once('test-event', (data) => {
+          clientSocket.once('test-event', (data: any) => {
             expect(data).toEqual(testData);
             resolve();
           });
@@ -178,12 +180,12 @@ describe('WebSocketManager', () => {
           if (received === 2) resolve();
         };
         
-        clientSocket.once('test1', (data) => {
+  clientSocket.once('test1', (data: any) => {
           expect(data).toEqual({ id: 1 });
           checkDone();
         });
         
-        clientSocket.once('test2', (data) => {
+  clientSocket.once('test2', (data: any) => {
           expect(data).toEqual({ id: 2 });
           checkDone();
         });

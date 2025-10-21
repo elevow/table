@@ -37,7 +37,16 @@ export class WebSocketManager {
     this.connectionStates = new Map();
     this.systemMonitor = SystemMonitor.getInstance();
 
+    // Determine Socket.IO path; default to Next API route in app, but use
+    // the classic '/socket.io' path during tests so existing tests connect
+    const socketPath = process.env.NODE_ENV === 'test'
+      ? '/socket.io'
+      : (process.env.SOCKET_IO_PATH || '/api/socketio');
+
     this.io = new SocketServer(server, {
+      // Use an explicit path; on Vercel/Next we serve via /api/socketio
+      // In tests, we keep '/socket.io' to match default client expectations
+      path: socketPath,
       transports: ['websocket', 'polling'], // Allow fallback to polling
       allowUpgrades: true,
       pingInterval: this.config.pingInterval,

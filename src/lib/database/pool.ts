@@ -20,6 +20,7 @@ let pool: Pool | null = null;
 function resolveConnectionString(): { connectionString: string; mode: 'local' | 'supabase' } {
   const modeRaw = (process.env.DB_MODE || 'auto').toLowerCase();
   const mode: 'auto' | 'local' | 'supabase' = (['local', 'supabase'].includes(modeRaw) ? modeRaw : 'auto') as any;
+  const preferDirect = process.env.DB_PREFER_DIRECT === '1' || process.env.DB_PREFER_DIRECT === 'true';
 
   const localUrl = process.env.LOCAL_DATABASE_URL
     || (process.env.POSTGRES_USER && process.env.POSTGRES_PASSWORD && process.env.POSTGRES_DB
@@ -38,10 +39,12 @@ function resolveConnectionString(): { connectionString: string; mode: 'local' | 
     if (localUrl) return { connectionString: localUrl, mode: 'local' };
     // Fall back to direct if local not set
     if (supabasePooled || supabaseDirect) {
+      if (preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase' };
       return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase' };
     }
   } else if (mode === 'supabase') {
     if (supabasePooled || supabaseDirect) {
+      if (preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase' };
       return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase' };
     }
     if (localUrl) {
@@ -53,6 +56,7 @@ function resolveConnectionString(): { connectionString: string; mode: 'local' | 
       return { connectionString: localUrl, mode: 'local' };
     }
     if (supabasePooled || supabaseDirect) {
+      if (preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase' };
       return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase' };
     }
     if (localUrl) {

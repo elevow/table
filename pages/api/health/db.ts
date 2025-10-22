@@ -47,6 +47,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     nodeExtraCACerts: process.env.NODE_EXTRA_CA_CERTS,
   };
 
+  // Clarify effective behavior of CA based on disable flag
+  try {
+    const customCaDisabled = (process.env.DB_DISABLE_CUSTOM_CA === '1') || (process.env.DB_USE_DEFAULT_CA === '1');
+    diagnostics.customCaDisabled = customCaDisabled;
+    diagnostics.effectiveHasCa = diagnostics.hasCa && !customCaDisabled;
+  } catch {}
+
   try {
     const pool = getPool();
     const client = await pool.connect();

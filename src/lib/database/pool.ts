@@ -102,6 +102,7 @@ function buildPool(): Pool {
 
   // Optional overrides for SSL behavior in production
   const allowSelfSigned = (process.env.ALLOW_SELF_SIGNED_DB === '1') || (process.env.DB_REJECT_UNAUTHORIZED === 'false');
+  const disableCustomCa = (process.env.DB_DISABLE_CUSTOM_CA === '1') || (process.env.DB_USE_DEFAULT_CA === '1');
   // Prefer file over inline when both are provided to avoid malformed env content overriding good file
   const suppliedCaFile = (process.env.DB_SSL_CA_FILE || '').trim();
   let suppliedCa = '';
@@ -130,7 +131,7 @@ function buildPool(): Pool {
     // console.log('[db] Development mode: SSL client configuration disabled');
   } else {
     const sslCfg: any = { rejectUnauthorized: !allowSelfSigned };
-    if (suppliedCa) {
+    if (suppliedCa && !disableCustomCa) {
       // Support multi-line CA provided via env with escaped newlines
       const normalized = suppliedCa.replace(/\\n/g, '\n');
       const hasGoodBegin = /-----BEGIN CERTIFICATE-----/.test(normalized);
@@ -139,6 +140,8 @@ function buildPool(): Pool {
         console.warn('[db] DB_SSL_CA appears to have malformed PEM header/footer (needs 5 dashes).');
       }
       sslCfg.ca = normalized;
+    } else if (suppliedCa && disableCustomCa) {
+      console.warn('[db] DB_DISABLE_CUSTOM_CA=1: Ignoring provided DB SSL CA and using Node default trust store.');
     }
     cfg.ssl = sslCfg;
     if (allowSelfSigned) {

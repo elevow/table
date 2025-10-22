@@ -16,8 +16,21 @@ try {
 }
 
 let pool: Pool | null = null;
+type PoolDiagnostics = {
+  mode: 'local' | 'supabase';
+  preferDirect: boolean;
+  usedIntegration: { pooled: boolean; direct: boolean };
+  selectedUrlHost?: string;
+  selectedUrlPort?: number | null;
+  urlHostType?: 'pooler' | 'direct' | 'other';
+  sslRejectUnauthorized?: boolean;
+  sslCaProvided?: boolean;
+  customCaDisabled?: boolean;
+};
+let lastDiag: PoolDiagnostics | null = null;
+let lastSelectedConnString: string | null = null;
 
-function resolveConnectionString(): { connectionString: string; mode: 'local' | 'supabase' } {
+function resolveConnectionString(): { connectionString: string; mode: 'local' | 'supabase'; preferDirect: boolean; usedIntegration: { pooled: boolean; direct: boolean } } {
   const modeRaw = (process.env.DB_MODE || 'auto').toLowerCase();
   const mode: 'auto' | 'local' | 'supabase' = (['local', 'supabase'].includes(modeRaw) ? modeRaw : 'auto') as any;
   const preferDirect = process.env.DB_PREFER_DIRECT === '1' || process.env.DB_PREFER_DIRECT === 'true';
@@ -36,42 +49,42 @@ function resolveConnectionString(): { connectionString: string; mode: 'local' | 
   const isProd = process.env.NODE_ENV === 'production';
 
   if (mode === 'local') {
-    if (localUrl) return { connectionString: localUrl, mode: 'local' };
+    if (localUrl) return { connectionString: localUrl, mode: 'local', preferDirect, usedIntegration: { pooled: false, direct: false } };
     // Fall back to direct if local not set
     if (supabasePooled || supabaseDirect) {
-      if (preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase' };
-      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase' };
+      if (preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
+      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
     }
   } else if (mode === 'supabase') {
     if (supabasePooled || supabaseDirect) {
-      if (preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase' };
-      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase' };
+      if (preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
+      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
     }
     if (localUrl) {
-      return { connectionString: localUrl, mode: 'local' };
+      return { connectionString: localUrl, mode: 'local', preferDirect, usedIntegration: { pooled: false, direct: false } };
     }
   } else {
     // auto
     if (!isProd && localUrl) {
-      return { connectionString: localUrl, mode: 'local' };
+      return { connectionString: localUrl, mode: 'local', preferDirect, usedIntegration: { pooled: false, direct: false } };
     }
     if (supabasePooled || supabaseDirect) {
-      if (preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase' };
-      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase' };
+      if (preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
+      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
     }
     if (localUrl) {
-      return { connectionString: localUrl, mode: 'local' };
+      return { connectionString: localUrl, mode: 'local', preferDirect, usedIntegration: { pooled: false, direct: false } };
     }
   }
 
   // As a last resort, use whatever is set in POOL/DIRECT or throw
   const fallback = supabasePooled || supabaseDirect;
-  if (fallback) return { connectionString: fallback, mode: 'supabase' };
+  if (fallback) return { connectionString: fallback, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
   throw new Error('No database URL found. Set LOCAL_DATABASE_URL for local or POOL_DATABASE_URL/DIRECT_DATABASE_URL for Supabase.');
 }
 
 function buildPool(): Pool {
-  const { connectionString: raw, mode } = resolveConnectionString();
+  const { connectionString: raw, mode, preferDirect, usedIntegration } = resolveConnectionString();
   const isProd = process.env.NODE_ENV === 'production';
   let connectionString = raw;
 
@@ -153,6 +166,28 @@ function buildPool(): Pool {
     }
   }
 
+  // Capture diagnostics
+  try {
+    lastSelectedConnString = connectionString;
+    const d: PoolDiagnostics = {
+      mode,
+      preferDirect,
+      usedIntegration,
+      sslRejectUnauthorized: (cfg.ssl && typeof cfg.ssl === 'object') ? !!(cfg.ssl as any).rejectUnauthorized : undefined,
+      sslCaProvided: (cfg.ssl && typeof cfg.ssl === 'object') ? !!(cfg.ssl as any).ca : false,
+      customCaDisabled: disableCustomCa,
+    };
+    try {
+      const u = new URL(connectionString);
+      d.selectedUrlHost = u.hostname;
+      d.selectedUrlPort = u.port ? Number(u.port) : null;
+      if (/pooler\.supabase\.com$/i.test(u.hostname)) d.urlHostType = 'pooler';
+      else if (/^db\..*\.supabase\.co$/i.test(u.hostname)) d.urlHostType = 'direct';
+      else d.urlHostType = 'other';
+    } catch {}
+    lastDiag = d;
+  } catch {}
+
   return new Pool(cfg);
 }
 
@@ -163,4 +198,12 @@ export function getPool(): Pool {
   }
   if (!pool) pool = buildPool();
   return pool;
+}
+
+export function getPoolDiagnostics(): any {
+  return lastDiag ? { ...lastDiag } : null;
+}
+
+export function __internal_getSelectedConnectionString(): string | null {
+  return lastSelectedConnString;
 }

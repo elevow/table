@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPool } from '../../../src/lib/database/pool';
+import { getPool, getPoolDiagnostics, __internal_getSelectedConnectionString } from '../../../src/lib/database/pool';
 import { Pool as PgPool } from 'pg';
 
 type Resp = {
@@ -61,6 +61,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       // Execute a trivial query and also fetch server version for visibility
       const ping = await client.query('SELECT 1 AS one');
       const version = await client.query('SHOW server_version');
+      const poolDiag = getPoolDiagnostics?.();
+      if (poolDiag) Object.assign(diagnostics, { poolDiag });
       return res.status(200).json({
         ok: true,
         result: {
@@ -76,9 +78,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     const primaryError = e?.message || 'unknown error';
 
     // Attempt an insecure diagnostic connection to help pinpoint CA issues (does not affect app config)
-    let insecureOk = false;
-    let insecureError: string | undefined;
-    let selectedUrl = process.env.POOL_DATABASE_URL || process.env.DIRECT_DATABASE_URL || process.env.DATABASE_URL;
+  let insecureOk = false;
+  let insecureError: string | undefined;
+  // Prefer the actual connection string selected by the pool module if available
+  let selectedUrl = __internal_getSelectedConnectionString?.() || process.env.POOL_DATABASE_URL || process.env.DIRECT_DATABASE_URL || process.env.DATABASE_URL;
     if (selectedUrl) {
 
     // Additional diagnostics for CA formatting and URL details
@@ -128,6 +131,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
         insecureError = ie?.message || String(ie);
       }
     }
+
+    const poolDiag = getPoolDiagnostics?.();
+    if (poolDiag) Object.assign(diagnostics, { poolDiag });
 
     return res.status(500).json({
       ok: false,

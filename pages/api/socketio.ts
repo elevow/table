@@ -46,7 +46,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
   };
 
   // Support hot-reload: version the handlers and rebind when changed
-  const HANDLERS_VERSION = 7; // bump to force reinit after code changes
+  const HANDLERS_VERSION = 8; // bump to force reinit after code changes
   if (io._handlersVersion !== HANDLERS_VERSION) {
     if (io._seatHandlersAdded) {
       try {
@@ -64,6 +64,17 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
   }
   
   console.log('Adding seat management handlers...');
+
+  // Debug flag for verbose seat flow diagnostics
+  const seatDebug = (() => {
+    const v = String(process.env.SEAT_DEBUG || '').toLowerCase();
+    return v === '1' || v === 'true' || v === 'yes';
+  })();
+  const dlog = (...args: any[]) => {
+    if (seatDebug) {
+      try { console.log('[seat-debug]', ...args); } catch {}
+    }
+  };
 
   // Auto next-hand scheduler (per table)
   const NEXT_HAND_DELAY_MS = 5000;
@@ -305,17 +316,29 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
 
     // Handle seat claim requests
     socket.on('claim_seat', (data: { tableId: string; seatNumber: number; playerId: string; playerName: string; chips: number }) => {
-      // console.log('Seat claim request:', data);
       const { tableId, seatNumber, playerId, playerName, chips } = data;
+      const reqId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
+      // Initial receive log
+      try {
+        const roomsArr = Array.from((socket.rooms || new Set<string>()) as Set<string>);
+        dlog('claim_seat received', { reqId, socketId: socket.id, tableId, seatNumber, playerId, playerName, chips, rooms: roomsArr });
+      } catch {}
       
       // Initialize and get game seats for this table
       const seats = GameSeats.initializeRoomSeats(tableId);
+      try {
+        const occupied = Object.entries(seats).filter(([, a]) => a).map(([n]) => Number(n));
+        const existingSeat = Object.entries(seats).find(([, a]) => a?.playerId === playerId);
+        dlog('pre-check seats', { reqId, tableId, occupied, existingSeat: existingSeat ? Number(existingSeat[0]) : null });
+      } catch {}
       
       // Check if seat is available
       if (seats[seatNumber] !== null) {
+        dlog('seat_claim_failed', { reqId, reason: 'occupied', tableId, seatNumber, playerId });
         socket.emit('seat_claim_failed', { 
           error: 'Seat already occupied', 
-          seatNumber 
+          seatNumber,
+          reqId
         });
         return;
       }
@@ -326,9 +349,11 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       );
       
       if (playerCurrentSeat) {
+        dlog('seat_claim_failed', { reqId, reason: 'already_seated', tableId, requested: seatNumber, current: parseInt(playerCurrentSeat[0]), playerId });
         socket.emit('seat_claim_failed', { 
           error: 'Player already has a seat', 
-          seatNumber: parseInt(playerCurrentSeat[0])
+          seatNumber: parseInt(playerCurrentSeat[0]),
+          reqId
         });
         return;
       }
@@ -344,6 +369,10 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         playerName,
         chips
       });
+      try {
+        const roomSize = res.socket.server.io?.sockets?.adapter?.rooms?.get?.(`table_${tableId}`)?.size ?? undefined;
+        dlog('seat_claimed broadcast', { reqId, tableId, seatNumber, playerId, roomSize });
+      } catch {}
       
       console.log(`Seat ${seatNumber} claimed by ${playerName} (${playerId}) at table ${tableId}`);
     });

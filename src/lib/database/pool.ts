@@ -102,9 +102,10 @@ function buildPool(): Pool {
 
   // Optional overrides for SSL behavior in production
   const allowSelfSigned = (process.env.ALLOW_SELF_SIGNED_DB === '1') || (process.env.DB_REJECT_UNAUTHORIZED === 'false');
-  let suppliedCa = (process.env.DB_SSL_CA || '').trim();
+  // Prefer file over inline when both are provided to avoid malformed env content overriding good file
   const suppliedCaFile = (process.env.DB_SSL_CA_FILE || '').trim();
-  if (!suppliedCa && suppliedCaFile) {
+  let suppliedCa = '';
+  if (suppliedCaFile) {
     try {
       const tryPaths = isAbsolute(suppliedCaFile)
         ? [suppliedCaFile]
@@ -119,6 +120,10 @@ function buildPool(): Pool {
       console.warn('[db] Failed to read DB_SSL_CA_FILE:', suppliedCaFile);
     }
   }
+  // If file not provided or unreadable, fall back to inline env
+  if (!suppliedCa) {
+    suppliedCa = (process.env.DB_SSL_CA || '').trim();
+  }
 
   if (!isProd && !forceSsl) {
     cfg.ssl = false;
@@ -128,7 +133,9 @@ function buildPool(): Pool {
     if (suppliedCa) {
       // Support multi-line CA provided via env with escaped newlines
       const normalized = suppliedCa.replace(/\\n/g, '\n');
-      if (/----BEGIN CERTIFICATE----/.test(normalized)) {
+      const hasGoodBegin = /-----BEGIN CERTIFICATE-----/.test(normalized);
+      const hasGoodEnd = /-----END CERTIFICATE-----/.test(normalized);
+      if (!(hasGoodBegin && hasGoodEnd)) {
         console.warn('[db] DB_SSL_CA appears to have malformed PEM header/footer (needs 5 dashes).');
       }
       sslCfg.ca = normalized;

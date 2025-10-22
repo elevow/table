@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -27,17 +27,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Use environment variable for database connection - disable SSL for development
-    const connectionString = process.env.POOL_DATABASE_URL || process.env.DIRECT_DATABASE_URL;
-    const modifiedConnectionString = process.env.NODE_ENV === 'development' 
-      ? connectionString?.replace('sslmode=require', 'sslmode=disable')
-      : connectionString;
-    
-    const pool = new Pool({
-      connectionString: modifiedConnectionString,
-      ssl: false
-    });
-    
+    // Use centralized pool with robust TLS/CA handling and Vercel/Supabase integration vars
+    const pool = getPool();
     const client = await pool.connect();
 
     try {
@@ -102,7 +93,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     } finally {
       client.release();
-      await pool.end();
+      // Do not end the shared pool
     }
   } catch (error) {
     console.error('Error validating room code:', error);

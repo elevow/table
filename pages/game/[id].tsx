@@ -742,7 +742,24 @@ export default function GamePage() {
                 : 'bg-green-600 border-green-500 opacity-80'
           }`}
           style={style}
-          onClick={() => canClaim && claimSeat(seatNumber)}
+          onClick={() => {
+            if (canClaim) {
+              claimSeat(seatNumber);
+            } else {
+              try {
+                console.warn('Seat click blocked', {
+                  seatNumber,
+                  isEmpty,
+                  userRole,
+                  currentPlayerSeat,
+                  seatStateReady,
+                  claimingSeat,
+                  hasSocket: !!socket,
+                  socketConnected: !!socket?.connected,
+                });
+              } catch {}
+            }
+          }}
           title={
             isEmpty
               ? canClaim

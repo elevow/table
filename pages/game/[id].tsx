@@ -228,7 +228,6 @@ export default function GamePage() {
   // Seat management functions
   const claimSeat = (seatNumber: number) => {
     if (userRole === 'guest') return; // Guests cannot claim seats
-    if (!seatStateReady) return; // Wait for server seat state
     if (seatAssignments[seatNumber]) return; // Seat already taken locally
     if (currentPlayerSeat) return; // Player already has a seat
     if (claimingSeat) return; // Already claiming

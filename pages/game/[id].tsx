@@ -650,8 +650,9 @@ export default function GamePage() {
   const renderSeat = (seatNumber: number, position: string, style?: React.CSSProperties) => {
     const assignment = seatAssignments[seatNumber];
     const isCurrentPlayer = assignment?.playerId === playerId;
-    const isEmpty = !assignment;
-    const canClaim = isEmpty && userRole !== 'guest' && !currentPlayerSeat && seatStateReady && claimingSeat === null;
+  const isEmpty = !assignment;
+  // Allow claiming even if seat state hasn't synced yet; server validates occupancy
+  const canClaim = isEmpty && userRole !== 'guest' && !currentPlayerSeat && claimingSeat === null;
 
     // Determine info box position based on seat coordinates - RIGHT NEXT to each seat
     const getInfoBoxPosition = (currentPosition: string, seatStyle?: React.CSSProperties) => {
@@ -746,15 +747,13 @@ export default function GamePage() {
             isEmpty
               ? canClaim
                 ? 'Click to claim this seat'
-                : !seatStateReady
-                  ? 'Please wait… syncing seats'
-                  : claimingSeat === seatNumber
-                    ? 'Claim pending…'
-                    : userRole === 'guest'
-                      ? 'Guests cannot claim seats'
-                      : currentPlayerSeat
-                        ? 'You already have a seat'
-                        : 'Seat not available'
+                : claimingSeat === seatNumber
+                  ? 'Claim pending…'
+                  : userRole === 'guest'
+                    ? 'Guests cannot claim seats'
+                    : currentPlayerSeat
+                      ? 'You already have a seat'
+                      : (!seatStateReady ? 'Please wait… syncing seats' : 'Seat not available')
               : isCurrentPlayer
                 ? 'Your seat - click Stand Up button to leave'
                 : `${assignment.playerName} - $${assignment.chips || 0}`
@@ -1427,6 +1426,11 @@ export default function GamePage() {
         socketInstance.on('game_started', handleGameStart);
         socketInstance.on('game_state_update', handleGameStateUpdate);
         socketInstance.on('action_failed', handleActionFailed);
+        // Handle explicit seat claim failures from server (e.g., race with another client)
+        socketInstance.on('seat_claim_failed', (data: { error: string; seatNumber?: number; reqId?: string }) => {
+          console.warn('Seat claim failed:', data?.error || 'unknown error');
+          setClaimingSeat(null);
+        });
 
         // Request current seat state when joining
         socketInstance.emit('get_seat_state', { tableId: id });
@@ -1446,7 +1450,8 @@ export default function GamePage() {
         currentSocket.off('seat_state');
         currentSocket.off('game_started');
         currentSocket.off('game_state_update');
-        currentSocket.off('action_failed');
+  currentSocket.off('action_failed');
+  currentSocket.off('seat_claim_failed');
       }
     };
   }, [playerId, id]); // Only depend on playerId and id

@@ -226,7 +226,7 @@ export default function GamePage() {
   }, [pokerGameState?.stage, socket, id]);
   
   // Seat management functions
-  const claimSeat = (seatNumber: number) => {
+  const claimSeat = async (seatNumber: number) => {
     if (userRole === 'guest') return; // Guests cannot claim seats
     if (seatAssignments[seatNumber]) return; // Seat already taken locally
     if (currentPlayerSeat) return; // Player already has a seat
@@ -241,20 +241,60 @@ export default function GamePage() {
     const startingChips = 20; // Initial chips client-side
 
     setClaimingSeat(seatNumber);
-    // Request server to claim; do not optimistically set local state
-    if (socket) {
-      socket.emit('claim_seat', { 
-        tableId: id, 
-        seatNumber, 
-        playerId, 
-        playerName, 
-        chips: startingChips 
+
+    // Ensure we have a connected socket before emitting
+    try {
+      let s = socket as any;
+      if (!s || !s.connected) {
+        // Attempt to initialize/connect the socket
+        const s2 = await getSocket();
+        if (s2) setSocket(s2 as any);
+        s = s2 as any;
+      }
+
+      if (!s) {
+        console.warn('Seat claim aborted: no socket available');
+        setClaimingSeat(null);
+        return;
+      }
+
+      if (!s.connected) {
+        await new Promise<void>((resolve) => {
+          try {
+            s.once('connect', () => resolve());
+            // Also set a max wait in case connection never succeeds
+            setTimeout(() => resolve(), 3000);
+          } catch {
+            resolve();
+          }
+        });
+      }
+
+      // Join the table room defensively before claiming
+      try {
+        if (id && typeof id === 'string' && playerId) {
+          s.emit('join_table', { tableId: id, playerId });
+        }
+      } catch {}
+
+      // Request server to claim; do not optimistically set local state
+      s.emit('claim_seat', {
+        tableId: id,
+        seatNumber,
+        playerId,
+        playerName,
+        chips: startingChips
       });
+    } catch (err) {
+      console.warn('Seat claim failed to emit:', err);
+      setClaimingSeat(null);
+      return;
     }
+
     // Fallback timeout to clear pending if no response
     setTimeout(() => {
       setClaimingSeat(prev => (prev === seatNumber ? null : prev));
-    }, 4000);
+    }, 6000);
   };
 
   const standUp = () => {

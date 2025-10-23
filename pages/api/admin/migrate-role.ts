@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -16,8 +16,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let client;
 
   try {
-    // Use the same connection pattern as other API endpoints
-    pool = new Pool();
+  // Use the shared pool with consistent TLS config
+  pool = getPool();
     
     client = await pool.connect();
     console.log('Connected to database');
@@ -97,12 +97,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       stack: error.stack
     });
   } finally {
-    if (pool) {
-      try {
-        await pool.end();
-      } catch (e) {
-        console.error('Error closing pool:', e);
-      }
-    }
+    // Do not end the shared pool in API routes
   }
 }

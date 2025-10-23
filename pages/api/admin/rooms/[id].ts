@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../../src/lib/database/pool';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { isAdminEmail } from '../../../../src/utils/roleUtils';
 
@@ -13,17 +13,7 @@ async function isUserAdmin(req: NextApiRequest): Promise<boolean> {
       return false;
     }
 
-    // Use environment variable for database connection - disable SSL for development
-    const connectionString = process.env.POOL_DATABASE_URL || process.env.DIRECT_DATABASE_URL;
-    const modifiedConnectionString = process.env.NODE_ENV === 'development' 
-      ? connectionString?.replace('sslmode=require', 'sslmode=disable')
-      : connectionString;
-    
-    const pool = new Pool({
-      connectionString: modifiedConnectionString,
-      ssl: false
-    });
-    
+    const pool = getPool();
     const client = await pool.connect();
     
     try {
@@ -45,7 +35,6 @@ async function isUserAdmin(req: NextApiRequest): Promise<boolean> {
       return isAdmin;
     } finally {
       client.release();
-      await pool.end();
     }
   } catch (error) {
     console.error('Error checking admin status:', error);
@@ -74,15 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'DELETE') {
     try {
-      const connectionString = process.env.POOL_DATABASE_URL || process.env.DIRECT_DATABASE_URL;
-      const modifiedConnectionString = process.env.NODE_ENV === 'development' 
-        ? connectionString?.replace('sslmode=require', 'sslmode=disable')
-        : connectionString;
-      
-      const pool = new Pool({
-        connectionString: modifiedConnectionString,
-        ssl: false
-      });
+      const pool = getPool();
       const client = await pool.connect();
 
       try {
@@ -105,7 +86,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       } finally {
         client.release();
-        await pool.end();
       }
     } catch (error) {
       console.error('Error deleting room:', error);
@@ -118,15 +98,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     try {
-      const connectionString = process.env.POOL_DATABASE_URL || process.env.DIRECT_DATABASE_URL;
-      const modifiedConnectionString = process.env.NODE_ENV === 'development' 
-        ? connectionString?.replace('sslmode=require', 'sslmode=disable')
-        : connectionString;
-      
-      const pool = new Pool({
-        connectionString: modifiedConnectionString,
-        ssl: false
-      });
+      const pool = getPool();
       const client = await pool.connect();
 
       try {
@@ -144,7 +116,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       } finally {
         client.release();
-        await pool.end();
       }
     } catch (error) {
       console.error('Error fetching room:', error);

@@ -47,6 +47,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     nodeExtraCACerts: process.env.NODE_EXTRA_CA_CERTS,
   };
 
+  // Classify integration/legacy URLs to help identify misconfigurations
+  try {
+    const classify = (url?: string) => {
+      if (!url) return undefined;
+      try {
+        const u = new URL(url);
+        const host = u.hostname;
+        let type: 'pooler' | 'direct' | 'other' = 'other';
+        if (/pooler\.supabase\.com$/i.test(host)) type = 'pooler';
+        else if (/^db\..*\.supabase\.co$/i.test(host)) type = 'direct';
+        return { host, type };
+      } catch {
+        return undefined;
+      }
+    };
+    diagnostics.vercelPooled = classify(process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL);
+    diagnostics.vercelDirect = classify(process.env.POSTGRES_URL_NON_POOLING);
+    diagnostics.legacyPooled = classify(process.env.POOL_DATABASE_URL);
+    diagnostics.legacyDirect = classify(process.env.DIRECT_DATABASE_URL);
+  } catch {}
+
   // Clarify effective behavior of CA based on disable flag
   try {
     const customCaDisabled = (process.env.DB_DISABLE_CUSTOM_CA === '1') || (process.env.DB_USE_DEFAULT_CA === '1');

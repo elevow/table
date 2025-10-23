@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { isAdminEmail } from '../../../src/utils/roleUtils';
 
@@ -22,19 +22,7 @@ async function isUserAdmin(req: NextApiRequest): Promise<boolean> {
       return false;
     }
 
-    // Use environment variable for database connection - disable SSL for development
-    const connectionString = process.env.POOL_DATABASE_URL || process.env.DIRECT_DATABASE_URL;
-    const modifiedConnectionString = process.env.NODE_ENV === 'development' 
-      ? connectionString?.replace('sslmode=require', 'sslmode=disable')
-      : connectionString;
-    
-    // console.log('Development mode: Using connection without SSL requirement');
-    
-    const pool = new Pool({
-      connectionString: modifiedConnectionString,
-      ssl: false
-    });
-    
+    const pool = getPool();
     const client = await pool.connect();
     
     try {
@@ -57,7 +45,6 @@ async function isUserAdmin(req: NextApiRequest): Promise<boolean> {
       
     } finally {
       client.release();
-      await pool.end();
     }
   } catch (error) {
     console.error('Error checking admin status:', error);
@@ -86,17 +73,7 @@ export default async function handler(
   }
 
   try {
-    const connectionString = process.env.POOL_DATABASE_URL || process.env.DIRECT_DATABASE_URL;
-    const modifiedConnectionString = process.env.NODE_ENV === 'development' 
-      ? connectionString?.replace('sslmode=require', 'sslmode=disable')
-      : connectionString;
-    
-    // console.log('Development mode: Using connection without SSL requirement');
-    
-    const pool = new Pool({
-      connectionString: modifiedConnectionString,
-      ssl: false
-    });
+    const pool = getPool();
     const client = await pool.connect();
 
     try {
@@ -151,7 +128,6 @@ export default async function handler(
 
     } finally {
       client.release();
-      await pool.end();
     }
   } catch (error: any) {
     console.error('Error fetching admin rooms:', error);

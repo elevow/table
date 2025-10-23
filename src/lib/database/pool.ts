@@ -30,6 +30,17 @@ type PoolDiagnostics = {
 let lastDiag: PoolDiagnostics | null = null;
 let lastSelectedConnString: string | null = null;
 
+function classifyUrlType(url: string): 'pooler' | 'direct' | 'other' {
+  try {
+    const u = new URL(url);
+    if (/pooler\.supabase\.com$/i.test(u.hostname)) return 'pooler';
+    if (/^db\..*\.supabase\.co$/i.test(u.hostname)) return 'direct';
+    return 'other';
+  } catch {
+    return 'other';
+  }
+}
+
 function resolveConnectionString(): { connectionString: string; mode: 'local' | 'supabase'; preferDirect: boolean; usedIntegration: { pooled: boolean; direct: boolean } } {
   const modeRaw = (process.env.DB_MODE || 'auto').toLowerCase();
   const mode: 'auto' | 'local' | 'supabase' = (['local', 'supabase'].includes(modeRaw) ? modeRaw : 'auto') as any;
@@ -42,9 +53,22 @@ function resolveConnectionString(): { connectionString: string; mode: 'local' | 
   // Supabase/Vercel integration variables
   const vercelPooled = process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || undefined;
   const vercelDirect = process.env.POSTGRES_URL_NON_POOLING || undefined;
+  const useDirectOverride = process.env.DB_USE_DIRECT_URL_OVERRIDE === '1' || process.env.DB_USE_DIRECT_URL_OVERRIDE === 'true';
+  // If override is enabled, prefer DIRECT_DATABASE_URL over Vercel integration var for "direct"
+  const directOverride = useDirectOverride && process.env.DIRECT_DATABASE_URL ? process.env.DIRECT_DATABASE_URL : undefined;
   // Prefer integration vars over legacy ones if both exist
   const supabasePooled = vercelPooled || process.env.POOL_DATABASE_URL;
-  const supabaseDirect = vercelDirect || process.env.DIRECT_DATABASE_URL;
+  let supabaseDirect = (directOverride || vercelDirect || process.env.DIRECT_DATABASE_URL);
+  const requireDirectHost = process.env.DB_REQUIRE_DIRECT_HOST === '1' || process.env.DB_REQUIRE_DIRECT_HOST === 'true';
+  if (supabaseDirect && (process.env.DB_PREFER_DIRECT === '1' || process.env.DB_PREFER_DIRECT === 'true') && requireDirectHost) {
+    const t = classifyUrlType(supabaseDirect);
+    if (t !== 'direct') {
+      const alt = process.env.DIRECT_DATABASE_URL;
+      if (alt && classifyUrlType(alt) === 'direct') {
+        supabaseDirect = alt;
+      }
+    }
+  }
 
   const isProd = process.env.NODE_ENV === 'production';
 

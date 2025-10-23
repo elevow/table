@@ -19,6 +19,7 @@ let pool: Pool | null = null;
 type PoolDiagnostics = {
   mode: 'local' | 'supabase';
   preferDirect: boolean;
+  forcePooled?: boolean;
   usedIntegration: { pooled: boolean; direct: boolean };
   selectedUrlHost?: string;
   selectedUrlPort?: number | null;
@@ -41,10 +42,11 @@ function classifyUrlType(url: string): 'pooler' | 'direct' | 'other' {
   }
 }
 
-function resolveConnectionString(): { connectionString: string; mode: 'local' | 'supabase'; preferDirect: boolean; usedIntegration: { pooled: boolean; direct: boolean } } {
+function resolveConnectionString(): { connectionString: string; mode: 'local' | 'supabase'; preferDirect: boolean; usedIntegration: { pooled: boolean; direct: boolean }, forcePooled: boolean } {
   const modeRaw = (process.env.DB_MODE || 'auto').toLowerCase();
   const mode: 'auto' | 'local' | 'supabase' = (['local', 'supabase'].includes(modeRaw) ? modeRaw : 'auto') as any;
   const preferDirect = process.env.DB_PREFER_DIRECT === '1' || process.env.DB_PREFER_DIRECT === 'true';
+  const forcePooled = process.env.DB_FORCE_POOLED === '1' || process.env.DB_FORCE_POOLED === 'true';
 
   const localUrl = process.env.LOCAL_DATABASE_URL
     || (process.env.POSTGRES_USER && process.env.POSTGRES_PASSWORD && process.env.POSTGRES_DB
@@ -73,42 +75,42 @@ function resolveConnectionString(): { connectionString: string; mode: 'local' | 
   const isProd = process.env.NODE_ENV === 'production';
 
   if (mode === 'local') {
-    if (localUrl) return { connectionString: localUrl, mode: 'local', preferDirect, usedIntegration: { pooled: false, direct: false } };
+    if (localUrl) return { connectionString: localUrl, mode: 'local', preferDirect, usedIntegration: { pooled: false, direct: false }, forcePooled };
     // Fall back to direct if local not set
     if (supabasePooled || supabaseDirect) {
-      if (preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
-      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
+      if (!forcePooled && preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect }, forcePooled };
+      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect }, forcePooled };
     }
   } else if (mode === 'supabase') {
     if (supabasePooled || supabaseDirect) {
-      if (preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
-      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
+      if (!forcePooled && preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect }, forcePooled };
+      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect }, forcePooled };
     }
     if (localUrl) {
-      return { connectionString: localUrl, mode: 'local', preferDirect, usedIntegration: { pooled: false, direct: false } };
+      return { connectionString: localUrl, mode: 'local', preferDirect, usedIntegration: { pooled: false, direct: false }, forcePooled };
     }
   } else {
     // auto
     if (!isProd && localUrl) {
-      return { connectionString: localUrl, mode: 'local', preferDirect, usedIntegration: { pooled: false, direct: false } };
+      return { connectionString: localUrl, mode: 'local', preferDirect, usedIntegration: { pooled: false, direct: false }, forcePooled };
     }
     if (supabasePooled || supabaseDirect) {
-      if (preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
-      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
+      if (!forcePooled && preferDirect && supabaseDirect) return { connectionString: supabaseDirect, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect }, forcePooled };
+      return { connectionString: supabasePooled || supabaseDirect!, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect }, forcePooled };
     }
     if (localUrl) {
-      return { connectionString: localUrl, mode: 'local', preferDirect, usedIntegration: { pooled: false, direct: false } };
+      return { connectionString: localUrl, mode: 'local', preferDirect, usedIntegration: { pooled: false, direct: false }, forcePooled };
     }
   }
 
   // As a last resort, use whatever is set in POOL/DIRECT or throw
   const fallback = supabasePooled || supabaseDirect;
-  if (fallback) return { connectionString: fallback, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect } };
+  if (fallback) return { connectionString: fallback, mode: 'supabase', preferDirect, usedIntegration: { pooled: !!supabasePooled, direct: !!supabaseDirect }, forcePooled };
   throw new Error('No database URL found. Set LOCAL_DATABASE_URL for local or POOL_DATABASE_URL/DIRECT_DATABASE_URL for Supabase.');
 }
 
 function buildPool(): Pool {
-  const { connectionString: raw, mode, preferDirect, usedIntegration } = resolveConnectionString();
+  const { connectionString: raw, mode, preferDirect, usedIntegration, forcePooled } = resolveConnectionString();
   const isProd = process.env.NODE_ENV === 'production';
   let connectionString = raw;
 
@@ -196,6 +198,7 @@ function buildPool(): Pool {
     const d: PoolDiagnostics = {
       mode,
       preferDirect,
+      forcePooled,
       usedIntegration,
       sslRejectUnauthorized: (cfg.ssl && typeof cfg.ssl === 'object') ? !!(cfg.ssl as any).rejectUnauthorized : undefined,
       sslCaProvided: (cfg.ssl && typeof cfg.ssl === 'object') ? !!(cfg.ssl as any).ca : false,

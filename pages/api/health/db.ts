@@ -40,6 +40,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     vercelPooledPresent: !!(process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL),
     vercelDirectPresent: !!process.env.POSTGRES_URL_NON_POOLING,
     sslConfigured: process.env.NODE_ENV === 'production' ? true : false,
+    preferDirect: process.env.DB_PREFER_DIRECT === '1' || process.env.DB_PREFER_DIRECT === 'true',
+    forcePooled: process.env.DB_FORCE_POOLED === '1' || process.env.DB_FORCE_POOLED === 'true',
     allowSelfSigned: process.env.ALLOW_SELF_SIGNED_DB === '1' || process.env.DB_REJECT_UNAUTHORIZED === 'false',
     hasCa: !!(process.env.DB_SSL_CA || process.env.DB_SSL_CA_FILE),
     nodeVersion: process.version,

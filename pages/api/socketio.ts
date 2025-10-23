@@ -940,8 +940,11 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
     }
   }
 
-  // Send success response (also serves as the HTTP endpoint for the Socket.IO path)
-  res.status(200).json({ status: 'Socket.IO server running' });
+  // Important: do not send JSON for Engine.IO polling/handshake requests.
+  // Ending the response is sufficient to keep Next happy while allowing
+  // the Socket.IO server (attached to the same HTTP server) to handle
+  // the actual Engine.IO protocol on this path.
+  res.end();
 }
 
 // Disable body parsing for this endpoint

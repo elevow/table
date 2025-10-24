@@ -156,6 +156,10 @@ export default function GamePage() {
   const [claimingSeat, setClaimingSeat] = useState<number | null>(null);
   const [userRole, setUserRole] = useState<'admin' | 'player' | 'guest'>('guest');
   const [playerChips, setPlayerChips] = useState<number>(0);
+  // Feature flag to disable realtime sockets and use HTTP endpoints instead
+  const socketsDisabled = (process.env.NEXT_PUBLIC_DISABLE_SOCKETS || '')
+    .toString()
+    .toLowerCase() === 'true' || (process.env.NEXT_PUBLIC_DISABLE_SOCKETS || '') === '1';
   
   // Helper functions for game state
   const getSeatedPlayersCount = () => {
@@ -242,6 +246,41 @@ export default function GamePage() {
 
     setClaimingSeat(seatNumber);
 
+    // If sockets are disabled, call HTTP endpoint instead
+    if (socketsDisabled) {
+      try {
+        const resp = await fetch('/api/games/seats/claim', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tableId: id, seatNumber, playerId, playerName, chips: startingChips })
+        });
+        if (!resp.ok) {
+          const e = await resp.json().catch(() => ({}));
+          console.warn('Seat claim failed (HTTP):', e);
+          setClaimingSeat(null);
+          return;
+        }
+        const data = await resp.json();
+        // Update local state and storage
+        setSeatAssignments(prev => ({
+          ...prev,
+          [seatNumber]: { playerId, playerName, chips: Number(startingChips) }
+        }));
+        setCurrentPlayerSeat(seatNumber);
+        setPlayerChips(Number(startingChips));
+        try {
+          if (id) localStorage.setItem(`seats_${id}`, JSON.stringify({ ...seatAssignments, [seatNumber]: { playerId, playerName, chips: Number(startingChips) } }));
+          if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(Number(startingChips)));
+        } catch {}
+        setClaimingSeat(null);
+        return;
+      } catch (err) {
+        console.warn('Seat claim (HTTP) error:', err);
+        setClaimingSeat(null);
+        return;
+      }
+    }
+
     // Ensure we have a connected socket before emitting
     try {
       let s = socket as any;
@@ -314,8 +353,16 @@ export default function GamePage() {
     localStorage.setItem(`seats_${id}`, JSON.stringify(newAssignments));
     localStorage.removeItem(`chips_${playerId}_${id}`);
 
-    // Broadcast to other players via socket
-    if (socket) {
+    // Broadcast/notify via HTTP or socket depending on mode
+    if (socketsDisabled) {
+      try {
+        fetch('/api/games/seats/stand', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tableId: id, seatNumber: seatToVacate, playerId })
+        }).catch(() => {});
+      } catch {}
+    } else if (socket) {
       socket.emit('stand_up', { 
         tableId: id, 
         seatNumber: seatToVacate, 
@@ -353,6 +400,10 @@ export default function GamePage() {
 
   // Poker action handlers
   const handlePokerAction = (action: string, amount?: number) => {
+    if (socketsDisabled) {
+      console.warn('Realtime disabled: poker actions are unavailable in HTTP mode.');
+      return;
+    }
     if (!socket || !pokerGameState || !playerId) {
       console.warn('Cannot perform action: missing socket, game state, or player ID');
       return;
@@ -1164,9 +1215,11 @@ export default function GamePage() {
     };
     
     // Don't block page load for socket initialization
-    setTimeout(() => {
-      initSocket();
-    }, 100);
+    if (!socketsDisabled) {
+      setTimeout(() => {
+        initSocket();
+      }, 100);
+    }
 
     // Debug: Clean up any corrupted localStorage data that might contain time formatting
     if (typeof window !== 'undefined') {
@@ -1199,7 +1252,7 @@ export default function GamePage() {
     // Note: Seat assignments loading moved to separate useEffect to prevent infinite loops
 
     // Join table and personal room
-    if (socket && id && typeof id === 'string') {
+    if (!socketsDisabled && socket && id && typeof id === 'string') {
       socket.emit('join_table', { tableId: id, playerId: playerId });
     }
 
@@ -1268,6 +1321,30 @@ export default function GamePage() {
 
     const initSocket = async () => {
       try {
+        if (socketsDisabled) {
+          // HTTP mode: fetch seat state once
+          try {
+            const resp = await fetch(`/api/games/seats/state?tableId=${id}`);
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data?.seats) {
+                setSeatAssignments(data.seats);
+                setSeatStateReady(true);
+                try { if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats)); } catch {}
+                const playerSeat = Object.entries(data.seats).find(([_, assignment]: any) => assignment?.playerId === playerId);
+                if (playerSeat) {
+                  const [seatNumber, assignment] = playerSeat as any;
+                  setCurrentPlayerSeat(parseInt(seatNumber));
+                  setPlayerChips(assignment?.chips || 0);
+                  try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to fetch seat state (HTTP):', e);
+          }
+          return;
+        }
         const socketInstance = await getSocket();
         if (!socketInstance) {
           console.error('Failed to get socket instance');
@@ -1662,8 +1739,9 @@ export default function GamePage() {
             {canStartGame() && !gameStarted && (
               <button
                 onClick={handleStartGame}
-                className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto"
-                title={`Start the game with ${getSeatedPlayersCount()} players`}
+                disabled={socketsDisabled}
+                className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                title={socketsDisabled ? 'Realtime is disabled; starting a game requires sockets' : `Start the game with ${getSeatedPlayersCount()} players`}
                 aria-label="Start game"
               >
                 <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

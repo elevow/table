@@ -41,7 +41,7 @@ export class WebSocketManager {
     // the classic '/socket.io' path during tests so existing tests connect
     const socketPath = process.env.NODE_ENV === 'test'
       ? '/socket.io'
-      : (process.env.SOCKET_IO_PATH || '/api/socketio');
+      : (process.env.SOCKET_IO_PATH || '/socket.io');
 
     this.io = new SocketServer(server, {
       // Use an explicit path; on Vercel/Next we serve via /api/socketio

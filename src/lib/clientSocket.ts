@@ -64,10 +64,10 @@ export async function getSocket(): Promise<Socket | null> {
       }
       
       // Create socket connection with conservative configuration
-      // Connect to the Socket.IO server via the API route path to work on Vercel
-      // This ensures polling requests hit /api/socketio which Next can serve
+      // Use the default Socket.IO path '/socket.io' to avoid Next API routing
+      // and let the attached engine handle polling directly on the server.
       socket = io('/', {
-        path: '/api/socketio',
+        path: '/socket.io',
         transports: ['polling'], // Force polling on Vercel
         upgrade: false, // Do not attempt WebSocket upgrade on serverless
         autoConnect: false, // Don't auto-connect, we'll connect manually

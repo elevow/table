@@ -940,11 +940,16 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
     }
   }
 
-  // Always end the response immediately so the underlying Socket.IO
-  // server (attached to the same HTTP server) can process Engine.IO
-  // polling/handshake frames without this handler blocking the lambda.
-  // This prevents 504 FUNCTION_INVOCATION_TIMEOUT on Vercel.
-  res.end();
+  // For Engine.IO polling/handshake requests, do not write a response here.
+  // Let the Socket.IO server attached to the HTTP server produce the output.
+  const url = req.url || '';
+  const isEngineIo = url.includes('EIO=') && url.includes('transport=');
+  if (isEngineIo) {
+    return; // externalResolver=true tells Next not to expect a response body here
+  }
+
+  // For simple probes (like warm-up fetches), return a tiny OK JSON
+  res.status(200).json({ status: 'Socket.IO server running' });
 }
 
 // Disable body parsing for this endpoint

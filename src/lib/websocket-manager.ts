@@ -47,18 +47,40 @@ export class WebSocketManager {
       // Use an explicit path; on Vercel/Next we serve via /api/socketio
       // In tests, we keep '/socket.io' to match default client expectations
       path: socketPath,
-      transports: ['websocket', 'polling'], // Allow fallback to polling
-      allowUpgrades: true,
+      transports: ['polling'], // Force polling on serverless
+      allowUpgrades: false, // Do not attempt WebSocket upgrades on Vercel
       pingInterval: this.config.pingInterval,
       pingTimeout: this.config.timeout,
       connectTimeout: this.config.timeout,
       cors: {
-        origin: process.env.NODE_ENV === 'development' ? '*' : false,
+        origin: '*', // be permissive; client uses same-origin
         methods: ['GET', 'POST']
       }
     });
 
     this.setupEventHandlers();
+
+    try {
+      // Extra diagnostics to surface Engine.IO handshake issues
+      (this.io.engine as any).on?.('connection_error', (err: any) => {
+        try {
+          console.error('[engine-io] connection_error', {
+            code: err?.code,
+            message: err?.message,
+            context: err?.context,
+            url: err?.context?.request?.url || err?.req?.url
+          });
+        } catch (e) {
+          console.error('[engine-io] connection_error (unparseable)', err);
+        }
+      });
+      (this.io.engine as any).on?.('initial_headers', (_headers: any, req: any) => {
+        try { console.log('[engine-io] initial_headers', req?.url); } catch {}
+      });
+      (this.io.engine as any).on?.('headers', (_headers: any, req: any) => {
+        try { console.log('[engine-io] headers', req?.url); } catch {}
+      });
+    } catch {}
   }
 
   static getInstance(server?: HttpServer, config?: Partial<WebSocketConfig>): WebSocketManager {

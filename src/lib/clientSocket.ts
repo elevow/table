@@ -68,13 +68,14 @@ export async function getSocket(): Promise<Socket | null> {
       // This ensures polling requests hit /api/socketio which Next can serve
       socket = io('/', {
         path: '/api/socketio',
-        transports: ['polling', 'websocket'], // Prefer polling first
+        transports: ['polling'], // Force polling on Vercel
+        upgrade: false, // Do not attempt WebSocket upgrade on serverless
         autoConnect: false, // Don't auto-connect, we'll connect manually
         reconnection: true,
         reconnectionAttempts: 2, // Very limited attempts
         reconnectionDelay: 5000, // Long delay between attempts
         reconnectionDelayMax: 10000,
-        timeout: 10000,
+        timeout: 20000,
         forceNew: false
       });
       

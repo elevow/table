@@ -939,11 +939,22 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
       console.warn('Re-initialization of seat handlers failed:', e);
     }
   }
-  // Always end the API route response immediately. The Socket.IO server is
-  // attached at the HTTP server level and will handle Engine.IO requests
-  // independently of this handler. Returning a body here can interfere with
-  // polling handshakes on serverless platforms.
-  res.status(200).end();
+  // For Engine.IO polling/handshake requests, do not write a response here.
+  // Let the Socket.IO server attached to the HTTP server produce the output.
+  const rawUrl = req.url || '';
+  let isEngineIo = false;
+  try {
+    const u = new URL(rawUrl, 'http://localhost');
+    isEngineIo = u.searchParams.has('EIO') && u.searchParams.has('transport');
+  } catch {
+    isEngineIo = rawUrl.includes('EIO=') && rawUrl.includes('transport=');
+  }
+  if (isEngineIo) {
+    return; // externalResolver=true tells Next not to expect a response body here
+  }
+
+  // For simple probes (like warm-up fetches), return a tiny OK JSON
+  res.status(200).json({ status: 'Socket.IO server running' });
 }
 
 // Disable body parsing for this endpoint

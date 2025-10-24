@@ -940,11 +940,17 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
     }
   }
 
-  // Important: do not send JSON for Engine.IO polling/handshake requests.
-  // Ending the response is sufficient to keep Next happy while allowing
-  // the Socket.IO server (attached to the same HTTP server) to handle
-  // the actual Engine.IO protocol on this path.
-  res.end();
+  // Hand off Engine.IO requests to Socket.IO without writing to res.
+  // Engine.IO recognizes requests containing EIO & transport params.
+  const url = req.url || '';
+  const isEngineIo = url.includes('EIO=') && url.includes('transport=');
+  if (isEngineIo) {
+    // Do not write a response; Socket.IO will handle it.
+    return;
+  }
+
+  // For plain probes (e.g., client warm-up fetch), return a tiny OK.
+  res.status(200).json({ status: 'Socket.IO server running' });
 }
 
 // Disable body parsing for this endpoint

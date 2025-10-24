@@ -48,7 +48,7 @@ export async function getSocket(): Promise<Socket | null> {
   // Start initialization process
   initializationPromise = (async () => {
     try {
-      console.log('🔌 Creating Socket.IO connection...');
+  console.log('🔌 Creating Socket.IO connection...');
       
       // Ensure socket server is initialized (only once with rate limiting)
       const now = Date.now();
@@ -66,9 +66,16 @@ export async function getSocket(): Promise<Socket | null> {
       // Create socket connection with environment-aware configuration
       const isTest = process.env.NODE_ENV === 'test';
       const socketPath = isTest ? '/socket.io' : '/api/socketio';
+      const transports = isTest ? ['polling', 'websocket'] as const : ['polling'] as const;
+      console.log('🛣️ Socket.IO config', {
+        path: socketPath,
+        transports,
+        upgrade: isTest ? true : false,
+        base: '/',
+      });
       socket = io('/', {
         path: socketPath,
-        transports: isTest ? ['polling', 'websocket'] : ['polling'],
+        transports: transports as any,
         upgrade: isTest ? true : false,
         autoConnect: false, // Don't auto-connect, we'll connect manually
         reconnection: true,
@@ -86,8 +93,18 @@ export async function getSocket(): Promise<Socket | null> {
         console.log('✅ Socket.IO connected successfully');
       });
 
-      socket.on('connect_error', (error) => {
-        console.warn('⚠️ Socket.IO connection error:', error.message || error);
+      socket.on('connect_error', (error: any) => {
+        try {
+          const detail = {
+            message: error?.message || String(error),
+            description: (error && typeof error === 'object' && 'description' in error) ? (error as any).description : undefined,
+            type: (error && typeof error === 'object' && 'type' in error) ? (error as any).type : undefined,
+            transport: (socket as any)?.transport?.name,
+          };
+          console.warn('⚠️ Socket.IO connection error:', detail);
+        } catch {
+          console.warn('⚠️ Socket.IO connection error:', error?.message || error);
+        }
         // Don't reset promise immediately, let reconnection handle it
       });
       

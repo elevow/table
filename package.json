@@ -10,6 +10,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "socket:dev": "node server/socket-server.js",
+    "socket:start": "node server/socket-server.js",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
     "db:migrate": "node scripts/db-migrate.js",

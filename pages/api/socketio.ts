@@ -950,6 +950,11 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
     isEngineIo = rawUrl.includes('EIO=') && rawUrl.includes('transport=');
   }
   if (isEngineIo) {
+    try {
+      if (process.env.DEBUG_ENGINE_IO) {
+        console.log('[socketio] passthrough Engine.IO frame', rawUrl);
+      }
+    } catch {}
     return; // externalResolver=true tells Next not to expect a response body here
   }
 

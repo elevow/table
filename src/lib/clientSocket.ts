@@ -65,18 +65,23 @@ export async function getSocket(): Promise<Socket | null> {
       
       // Create socket connection with environment-aware configuration
       const isTest = process.env.NODE_ENV === 'test';
-      const socketPath = isTest ? '/socket.io' : '/api/socketio';
-      const transports = isTest ? ['polling', 'websocket'] as const : ['polling'] as const;
+      // Allow overriding the socket server base URL (useful for external persistent servers)
+      const envBase = (typeof window !== 'undefined' ? (window as any).NEXT_PUBLIC_SOCKET_IO_URL : undefined) || process.env.NEXT_PUBLIC_SOCKET_IO_URL;
+      const baseUrl = envBase && /^https?:\/\//i.test(envBase) ? envBase : '/';
+      const socketPath = isTest ? '/socket.io' : (process.env.NEXT_PUBLIC_SOCKET_IO_PATH || '/api/socketio');
+      const crossOrigin = baseUrl !== '/';
+      const transports = isTest ? ['polling', 'websocket'] as const : (crossOrigin ? ['websocket', 'polling'] as const : ['polling'] as const);
+      const allowUpgrade = isTest ? true : !!crossOrigin;
       console.log('🛣️ Socket.IO config', {
+        base: baseUrl,
         path: socketPath,
         transports,
-        upgrade: isTest ? true : false,
-        base: '/',
+        upgrade: allowUpgrade,
       });
-      socket = io('/', {
+      socket = io(baseUrl, {
         path: socketPath,
         transports: transports as any,
-        upgrade: isTest ? true : false,
+        upgrade: allowUpgrade,
         autoConnect: false, // Don't auto-connect, we'll connect manually
         reconnection: true,
         reconnectionAttempts: 2, // Very limited attempts

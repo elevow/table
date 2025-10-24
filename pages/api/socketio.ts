@@ -940,22 +940,17 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
     }
   }
 
-  // Hand off Engine.IO requests to Socket.IO without writing to res.
-  // Engine.IO recognizes requests containing EIO & transport params.
-  const url = req.url || '';
-  const isEngineIo = url.includes('EIO=') && url.includes('transport=');
-  if (isEngineIo) {
-    // Do not write a response; Socket.IO will handle it.
-    return;
-  }
-
-  // For plain probes (e.g., client warm-up fetch), return a tiny OK.
-  res.status(200).json({ status: 'Socket.IO server running' });
+  // Always end the response immediately so the underlying Socket.IO
+  // server (attached to the same HTTP server) can process Engine.IO
+  // polling/handshake frames without this handler blocking the lambda.
+  // This prevents 504 FUNCTION_INVOCATION_TIMEOUT on Vercel.
+  res.end();
 }
 
 // Disable body parsing for this endpoint
 export const config = {
   api: {
     bodyParser: false,
+    externalResolver: true,
   },
 };

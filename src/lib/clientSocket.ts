@@ -69,9 +69,30 @@ export async function getSocket(): Promise<Socket | null> {
       const envBase = (typeof window !== 'undefined' ? (window as any).NEXT_PUBLIC_SOCKET_IO_URL : undefined) || process.env.NEXT_PUBLIC_SOCKET_IO_URL;
       const baseUrl = envBase && /^https?:\/\//i.test(envBase) ? envBase : '/';
       const socketPath = isTest ? '/socket.io' : (process.env.NEXT_PUBLIC_SOCKET_IO_PATH || '/api/socketio');
-      const crossOrigin = baseUrl !== '/';
-      const transports = isTest ? ['polling', 'websocket'] as const : (crossOrigin ? ['websocket', 'polling'] as const : ['polling'] as const);
-      const allowUpgrade = isTest ? true : !!crossOrigin;
+      // Determine if the base is cross-origin compared to current page (treat absolute same-origin as same)
+      let crossOrigin = baseUrl !== '/';
+      try {
+        if (typeof window !== 'undefined' && baseUrl !== '/') {
+          const u = new URL(baseUrl);
+          if (u.origin === window.location.origin) {
+            crossOrigin = false;
+          }
+        }
+      } catch {}
+      // Optional force-polling flag to ensure no websocket/upgrade in production
+      const forcePolling = (() => {
+        const raw = (typeof window !== 'undefined' ? (window as any).NEXT_PUBLIC_SOCKET_IO_FORCE_POLLING : undefined) || process.env.NEXT_PUBLIC_SOCKET_IO_FORCE_POLLING;
+        const v = String(raw || '').toLowerCase();
+        return v === '1' || v === 'true' || v === 'yes';
+      })();
+      const transports = isTest
+        ? (['polling', 'websocket'] as const)
+        : forcePolling
+          ? (['polling'] as const)
+          : crossOrigin
+            ? (['websocket', 'polling'] as const)
+            : (['polling'] as const);
+      const allowUpgrade = isTest ? true : (forcePolling ? false : !!crossOrigin);
       console.log('🛣️ Socket.IO config', {
         base: baseUrl,
         path: socketPath,

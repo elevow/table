@@ -41,19 +41,20 @@ export class WebSocketManager {
     // the classic '/socket.io' path during tests so existing tests connect
     const socketPath = process.env.NODE_ENV === 'test'
       ? '/socket.io'
-      : (process.env.SOCKET_IO_PATH || '/socket.io');
+      : (process.env.SOCKET_IO_PATH || '/api/socketio');
 
+    const isTest = process.env.NODE_ENV === 'test';
     this.io = new SocketServer(server, {
       // Use an explicit path; on Vercel/Next we serve via /api/socketio
       // In tests, we keep '/socket.io' to match default client expectations
       path: socketPath,
-      transports: ['polling'], // Force polling on serverless
-      allowUpgrades: false, // Do not attempt WebSocket upgrades on Vercel
+      transports: isTest ? ['websocket', 'polling'] : ['polling'],
+      allowUpgrades: isTest ? true : false,
       pingInterval: this.config.pingInterval,
       pingTimeout: this.config.timeout,
       connectTimeout: this.config.timeout,
       cors: {
-        origin: '*', // be permissive; client uses same-origin
+        origin: '*',
         methods: ['GET', 'POST']
       }
     });

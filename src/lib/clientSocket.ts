@@ -63,13 +63,13 @@ export async function getSocket(): Promise<Socket | null> {
         }
       }
       
-      // Create socket connection with conservative configuration
-      // Use the default Socket.IO path '/socket.io' to avoid Next API routing
-      // and let the attached engine handle polling directly on the server.
+      // Create socket connection with environment-aware configuration
+      const isTest = process.env.NODE_ENV === 'test';
+      const socketPath = isTest ? '/socket.io' : '/api/socketio';
       socket = io('/', {
-        path: '/socket.io',
-        transports: ['polling'], // Force polling on Vercel
-        upgrade: false, // Do not attempt WebSocket upgrade on serverless
+        path: socketPath,
+        transports: isTest ? ['polling', 'websocket'] : ['polling'],
+        upgrade: isTest ? true : false,
         autoConnect: false, // Don't auto-connect, we'll connect manually
         reconnection: true,
         reconnectionAttempts: 2, // Very limited attempts

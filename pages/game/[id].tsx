@@ -229,6 +229,52 @@ export default function GamePage() {
     };
   }, [pokerGameState?.stage, socket, id]);
   
+  // HTTP mode: periodic seat polling to reflect other players
+  useEffect(() => {
+    if (!socketsDisabled) return;
+    if (!id) return;
+    let alive = true;
+    let timer: any = null;
+
+    const fetchSeats = async () => {
+      try {
+        const resp = await fetch(`/api/games/seats/state?tableId=${id}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!alive) return;
+        if (data?.seats) {
+          // Only update if changed
+          try {
+            const nextStr = JSON.stringify(data.seats);
+            const prevStr = JSON.stringify(seatAssignments);
+            if (nextStr !== prevStr) {
+              setSeatAssignments(data.seats);
+              setSeatStateReady(true);
+              try { if (id) localStorage.setItem(`seats_${id}`, nextStr); } catch {}
+              const playerSeat = Object.entries(data.seats).find(([_, a]: any) => a?.playerId === playerId);
+              if (playerSeat) {
+                const [seatNumber, assignment] = playerSeat as any;
+                setCurrentPlayerSeat(parseInt(seatNumber));
+                setPlayerChips(assignment?.chips || 0);
+                try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
+              } else {
+                setCurrentPlayerSeat(null);
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    };
+
+    // Initial and interval fetch
+    fetchSeats();
+    timer = setInterval(fetchSeats, 3000);
+    return () => {
+      alive = false;
+      if (timer) clearInterval(timer);
+    };
+  }, [socketsDisabled, id, playerId, seatAssignments]);
+
   // Seat management functions
   const claimSeat = async (seatNumber: number) => {
     if (userRole === 'guest') return; // Guests cannot claim seats

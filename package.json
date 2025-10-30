@@ -10,6 +10,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "heroku-postbuild": "echo Skipping heroku-postbuild for Koyeb",
     "socket:dev": "node server/socket-server.js",
     "socket:start": "node server/socket-server.js",
     "db:up": "docker compose up -d db",

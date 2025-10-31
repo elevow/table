@@ -1044,16 +1044,26 @@ export default function GamePage() {
 
           if (isStudVariant()) {
             const { down, up } = getStudCardsForPlayer(assignment.playerId);
+            const atShowdown = pokerGameState?.stage === 'showdown';
             return (
               <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent stud cards">
                 <div className="flex items-center gap-1">
-                  {/* Down cards (face down) */}
-                  {down.map((_, i) => (
-                    <div key={`down-${i}`} className="w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center">
-                      <div className="w-6 h-10 rounded bg-blue-600/50 border border-blue-400"></div>
-                    </div>
+                  {/* Down cards: reveal at showdown, otherwise keep face-down */}
+                  {down.map((card: any, i: number) => (
+                    atShowdown ? (
+                      <div key={`down-${i}`} className="bg-white rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow">
+                        <div>{card.rank}</div>
+                        <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>
+                          {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={`down-${i}`} className="w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center">
+                        <div className="w-6 h-10 rounded bg-blue-600/50 border border-blue-400"></div>
+                      </div>
+                    )
                   ))}
-                  {/* Up cards (face up) */}
+                  {/* Up cards (always face up) */}
                   {up.map((card: any, i: number) => (
                     <div key={`up-${i}`} className="bg-white rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow">
                       <div>{card.rank}</div>

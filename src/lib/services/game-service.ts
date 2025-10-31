@@ -43,7 +43,7 @@ export class GameService {
     let state = input.state;
     const bettingMode = (room?.configuration?.bettingMode as 'no-limit' | 'pot-limit' | undefined);
     const requireRitUnanimous = !!room?.configuration?.requireRunItTwiceUnanimous;
-  const variant = room?.configuration?.variant as undefined | 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud';
+  const variant = room?.configuration?.variant as undefined | 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'dealers-choice';
     // Only include non-defaults to preserve backward-compat visuals/equality
     if (bettingMode && bettingMode !== 'no-limit') {
       state = { ...(state || {}), bettingMode };

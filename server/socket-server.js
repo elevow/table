@@ -62,6 +62,17 @@ if (!global.activeGames) {
   global.activeGames = new Map();
 }
 
+// In-memory table configuration for special modes (e.g., Dealer's Choice)
+// tableId -> {
+//   mode: 'fixed' | 'dealers-choice',
+//   chosenVariant?: string,
+//   allowedVariants?: string[],
+//   dcStepCount?: number, // number of completed hands since last DC prompt
+// }
+if (!global.tableConfigs) {
+  global.tableConfigs = new Map();
+}
+
 // Helpers: Start next hand after showdown
 const NEXT_HAND_DELAY_MS = 5000;
 if (!global.nextHandTimers) {
@@ -84,27 +95,77 @@ function scheduleNextHand(tableId) {
         const eng = global.activeGames.get(tableId);
         const curr = eng?.getState?.() || {};
         if (curr.stage !== 'showdown') return;
+
+        const tableCfg = global.tableConfigs.get(tableId) || { mode: 'fixed' };
+        const isDealersChoice = tableCfg.mode === 'dealers-choice';
+
         // Rebuild a fresh engine to rotate dealer and clear state
         try { delete require.cache[require.resolve('../src/lib/poker/poker-engine')]; } catch {}
         const { PokerEngine } = require('../src/lib/poker/poker-engine');
         const sb = Number(curr.smallBlind) || 1;
         const bb = Number(curr.bigBlind) || 2;
-        const variant = curr.variant || 'texas-holdem';
-        const bettingMode = curr.bettingMode || (variant === 'omaha' || variant === 'omaha-hi-lo' ? 'pot-limit' : 'no-limit');
+        // Prepare a neutral player list for the fresh engine
         const rebuilt = (Array.isArray(curr.players) ? curr.players : []).map(p => ({
           id: p.id, name: p.name || p.id, position: p.position, stack: p.stack,
           currentBet: 0, hasActed: false, isFolded: false, isAllIn: false, timeBank: p.timeBank ?? 30, holeCards: []
         }));
-        const fresh = new PokerEngine(tableId, rebuilt, sb, bb, { variant, bettingMode });
-        try { fresh.state.dealerPosition = curr.dealerPosition ?? 0; } catch {}
-        fresh.startNewHand();
-        global.activeGames.set(tableId, fresh);
-        const newState = fresh.getState();
-        io.to(`table_${tableId}`).emit('game_state_update', {
-          gameState: newState,
-          lastAction: { action: 'auto_next_hand' },
-          timestamp: new Date().toISOString(),
-        });
+        // Fresh engine baseline (we'll decide variant below)
+        const baseFresh = new PokerEngine(tableId, rebuilt, sb, bb, {});
+        try { baseFresh.state.dealerPosition = curr.dealerPosition ?? 0; } catch {}
+
+        if (isDealersChoice) {
+          // Dealer's Choice: prompt based on completed hands since last prompt
+          const st = baseFresh.getState();
+          const n = Array.isArray(st.players) ? st.players.length : 0;
+          const upcomingDealerIdx = n > 0 ? ((st.dealerPosition + 1) % n) : 0;
+          const upcomingDealerId = st.players?.[upcomingDealerIdx]?.id;
+
+          const prevStep = Number(tableCfg.dcStepCount || 0);
+          const threshold = (n > 0 ? n : 1) + 1; // number of players + 1
+          const nextStep = prevStep + 1;
+
+          if (nextStep >= threshold) {
+            // Time to prompt dealer; reset counter and wait for choice
+            global.tableConfigs.set(tableId, { ...tableCfg, dcStepCount: 0 });
+            global.activeGames.set(tableId, baseFresh);
+            const allowed = tableCfg.allowedVariants || ['texas-holdem', 'omaha', 'omaha-hi-lo', 'seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'];
+            io.to(`table_${tableId}`).emit('awaiting_dealer_choice', {
+              tableId,
+              dealerId: upcomingDealerId,
+              allowedVariants: allowed,
+              current: tableCfg.chosenVariant || 'texas-holdem',
+            });
+          } else {
+            // Auto-start with the last chosen variant and increment counter
+            const useVariant = tableCfg.chosenVariant || 'texas-holdem';
+            const mode = (useVariant === 'omaha' || useVariant === 'omaha-hi-lo') ? 'pot-limit' : (curr.bettingMode || 'no-limit');
+            const withVariant = new PokerEngine(tableId, rebuilt, sb, bb, { variant: useVariant, bettingMode: mode });
+            try { withVariant.state.dealerPosition = curr.dealerPosition ?? 0; } catch {}
+            global.tableConfigs.set(tableId, { ...tableCfg, dcStepCount: nextStep });
+            global.activeGames.set(tableId, withVariant);
+            withVariant.startNewHand();
+            const newState = withVariant.getState();
+            io.to(`table_${tableId}`).emit('game_state_update', {
+              gameState: newState,
+              lastAction: { action: 'auto_next_hand' },
+              timestamp: new Date().toISOString(),
+            });
+          }
+        } else {
+          // Fixed variant: start next hand immediately
+          const nextVariant = curr.variant || 'texas-holdem';
+          const bettingMode = curr.bettingMode || ((nextVariant === 'omaha' || nextVariant === 'omaha-hi-lo') ? 'pot-limit' : 'no-limit');
+          const fresh = new PokerEngine(tableId, rebuilt, sb, bb, { variant: nextVariant, bettingMode });
+          try { fresh.state.dealerPosition = curr.dealerPosition ?? 0; } catch {}
+          global.activeGames.set(tableId, fresh);
+          fresh.startNewHand();
+          const newState = fresh.getState();
+          io.to(`table_${tableId}`).emit('game_state_update', {
+            gameState: newState,
+            lastAction: { action: 'auto_next_hand' },
+            timestamp: new Date().toISOString(),
+          });
+        }
       } finally {
         nextHandTimers.delete(tableId);
       }
@@ -125,6 +186,29 @@ io.on('connection', (socket) => {
       socket.join(`table_${tableId}`);
       socket.tableId = tableId;
       socket.playerId = playerId;
+      // If this is a Dealer's Choice table and we're awaiting a choice, notify the joiner only
+      try {
+        const cfg = global.tableConfigs?.get?.(tableId);
+        const engine = global.activeGames?.get?.(tableId);
+        if (cfg && cfg.mode === 'dealers-choice' && engine && typeof engine.getState === 'function') {
+          const st = engine.getState();
+          const n = Array.isArray(st.players) ? st.players.length : 0;
+          if (n > 0) {
+            const awaiting = !st.variant && st.communityCards?.length === 0 && st.stage === 'preflop';
+            if (awaiting) {
+              const upcomingDealerIdx = ((st.dealerPosition || 0) + 1) % n;
+              const dealerId = st.players?.[upcomingDealerIdx]?.id;
+              const allowed = cfg.allowedVariants || ['texas-holdem', 'omaha', 'omaha-hi-lo', 'seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'];
+              socket.emit('awaiting_dealer_choice', {
+                tableId,
+                dealerId,
+                allowedVariants: allowed,
+                current: cfg.chosenVariant || 'texas-holdem',
+              });
+            }
+          }
+        }
+      } catch {}
     } catch (e) {
       console.warn('join_table error', e);
     }
@@ -214,12 +298,34 @@ io.on('connection', (socket) => {
       let smallBlind = Number(data?.smallBlind) || Number(data?.sb) || 1;
       let bigBlind = Number(data?.bigBlind) || Number(data?.bb) || 2;
       let variant = data?.variant || 'texas-holdem';
-      // Default betting mode: pot-limit for Omaha variants unless explicitly provided, else no-limit
+      const allowedVariants = ['texas-holdem', 'omaha', 'omaha-hi-lo', 'seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'];
+      const isDealersChoice = String(variant) === 'dealers-choice';
+      // Default betting mode depends on effective variant
+      const effectiveVariant = isDealersChoice ? (data?.initialChoice || 'texas-holdem') : variant;
       let bettingMode = data?.bettingMode
-        || ((variant === 'omaha' || variant === 'omaha-hi-lo') ? 'pot-limit' : 'no-limit');
+        || ((effectiveVariant === 'omaha' || effectiveVariant === 'omaha-hi-lo') ? 'pot-limit' : 'no-limit');
 
-      const engine = new PokerEngine(tableId, players, smallBlind, bigBlind, { variant, bettingMode });
-      engine.startNewHand();
+      if (isDealersChoice) {
+        // Record table config; do NOT pre-set chosenVariant; dealer will pick each hand
+        global.tableConfigs.set(tableId, {
+          mode: 'dealers-choice',
+          chosenVariant: undefined,
+          allowedVariants,
+          dcStepCount: 0,
+        });
+      } else {
+        global.tableConfigs.set(tableId, { mode: 'fixed' });
+      }
+
+      const engine = isDealersChoice
+        ? new PokerEngine(tableId, players, smallBlind, bigBlind, {})
+        : new PokerEngine(tableId, players, smallBlind, bigBlind, { variant: effectiveVariant, bettingMode });
+      if (isDealersChoice) {
+        // For the very first hand, let the upcoming dealer choose; set dealerPosition to -1 so first dealer is players[0]
+        try { engine.state.dealerPosition = -1; } catch {}
+      } else {
+        engine.startNewHand();
+      }
       if (!global.activeGames) global.activeGames = new Map();
       global.activeGames.set(tableId, engine);
       const gameState = engine.getState();
@@ -231,6 +337,18 @@ io.on('connection', (socket) => {
         gameState,
         timestamp: new Date().toISOString(),
       });
+      if (isDealersChoice) {
+        const st = engine.getState();
+        const n = Array.isArray(st.players) ? st.players.length : 0;
+        const upcomingDealerIdx = n > 0 ? ((st.dealerPosition + 1) % n) : 0;
+        const dealerId = st.players?.[upcomingDealerIdx]?.id;
+        io.to(`table_${tableId}`).emit('awaiting_dealer_choice', {
+          tableId,
+          dealerId,
+          allowedVariants,
+          current: global.tableConfigs.get(tableId)?.chosenVariant || 'texas-holdem',
+        });
+      }
       console.log(`Game started at table ${tableId} with ${players.length} players`);
     } catch (e) {
       console.error('start_game failed:', e);
@@ -300,15 +418,106 @@ io.on('connection', (socket) => {
       if (state.stage !== 'showdown') return;
       const players = Array.isArray(state.players) ? state.players : [];
       if (players.length < 2) return;
+      const cfg = global.tableConfigs.get(tableId) || { mode: 'fixed' };
+      if (cfg.mode === 'dealers-choice') {
+        // Rebuild a fresh engine and decide whether to prompt or auto-start based on players+1 threshold
+        try { delete require.cache[require.resolve('../src/lib/poker/poker-engine')]; } catch {}
+        const { PokerEngine } = require('../src/lib/poker/poker-engine');
+        const sb = Number(state.smallBlind) || 1;
+        const bb = Number(state.bigBlind) || 2;
+        const rebuilt = players.map(p => ({
+          id: p.id, name: p.name || p.id, position: p.position, stack: p.stack,
+          currentBet: 0, hasActed: false, isFolded: false, isAllIn: false, timeBank: p.timeBank ?? 30, holeCards: []
+        }));
+        const freshBase = new PokerEngine(tableId, rebuilt, sb, bb, {});
+        try { freshBase.state.dealerPosition = state.dealerPosition ?? 0; } catch {}
+
+        const st = freshBase.getState();
+        const n = Array.isArray(st.players) ? st.players.length : 0;
+        const upcomingDealerIdx = n > 0 ? ((st.dealerPosition + 1) % n) : 0;
+        const upcomingDealerId = st.players?.[upcomingDealerIdx]?.id;
+
+        const prevStep = Number(cfg.dcStepCount || 0);
+        const threshold = (n > 0 ? n : 1) + 1;
+        const nextStep = prevStep + 1;
+
+        if (nextStep >= threshold) {
+          global.tableConfigs.set(tableId, { ...cfg, dcStepCount: 0 });
+          global.activeGames.set(tableId, freshBase);
+          io.to(`table_${tableId}`).emit('awaiting_dealer_choice', {
+            tableId,
+            dealerId: upcomingDealerId,
+            allowedVariants: cfg.allowedVariants || ['texas-holdem','omaha','omaha-hi-lo','seven-card-stud','seven-card-stud-hi-lo','five-card-stud'],
+            current: cfg.chosenVariant || 'texas-holdem',
+          });
+        } else {
+          const useVariant = cfg.chosenVariant || 'texas-holdem';
+          const mode = (useVariant === 'omaha' || useVariant === 'omaha-hi-lo') ? 'pot-limit' : (state.bettingMode || 'no-limit');
+          const fresh = new PokerEngine(tableId, rebuilt, sb, bb, { variant: useVariant, bettingMode: mode });
+          try { fresh.state.dealerPosition = state.dealerPosition ?? 0; } catch {}
+          global.tableConfigs.set(tableId, { ...cfg, dcStepCount: nextStep });
+          global.activeGames.set(tableId, fresh);
+          fresh.startNewHand();
+          const newState = fresh.getState();
+          io.to(`table_${tableId}`).emit('game_state_update', {
+            gameState: newState,
+            lastAction: { action: 'request_next_hand' },
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } else {
+        engine.startNewHand();
+        const newState = engine.getState();
+        io.to(`table_${tableId}`).emit('game_state_update', {
+          gameState: newState,
+          lastAction: { action: 'request_next_hand' },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (e) {
+      console.warn('request_next_hand failed:', e);
+    }
+  });
+
+  // Dealer chooses the variant for the upcoming hand (Dealer's Choice tables only)
+  socket.on('choose_variant', (data) => {
+    try {
+      const { tableId, variant } = data || {};
+      if (!tableId || !variant) return;
+      const cfg = global.tableConfigs.get(tableId);
+      if (!cfg || cfg.mode !== 'dealers-choice') return;
+      if (!global.activeGames || !global.activeGames.has(tableId)) return;
+      const engine = global.activeGames.get(tableId);
+      const st = engine.getState();
+      const n = Array.isArray(st.players) ? st.players.length : 0;
+      const upcomingDealerIdx = n > 0 ? ((st.dealerPosition + 1) % n) : 0;
+      const dealerId = st.players?.[upcomingDealerIdx]?.id;
+      if (socket.playerId !== dealerId) {
+        socket.emit('action_failed', { error: 'Only the dealer can choose the variant for this hand' });
+        return;
+      }
+      const allowed = cfg.allowedVariants || ['texas-holdem', 'omaha', 'omaha-hi-lo', 'seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'];
+      if (!allowed.includes(variant)) {
+        socket.emit('action_failed', { error: 'Variant not allowed' });
+        return;
+      }
+  // Persist choice and reset prompt counter
+  cfg.chosenVariant = variant;
+  cfg.dcStepCount = 0;
+  global.tableConfigs.set(tableId, cfg);
+      const mode = (variant === 'omaha' || variant === 'omaha-hi-lo') ? 'pot-limit' : 'no-limit';
+      try { engine.setVariant(variant); } catch {}
+      try { engine.setBettingMode(mode); } catch {}
       engine.startNewHand();
       const newState = engine.getState();
       io.to(`table_${tableId}`).emit('game_state_update', {
         gameState: newState,
-        lastAction: { action: 'request_next_hand' },
+        lastAction: { action: 'dealer_chose_variant', variant },
         timestamp: new Date().toISOString(),
       });
     } catch (e) {
-      console.warn('request_next_hand failed:', e);
+      console.warn('choose_variant failed:', e);
+      socket.emit('action_failed', { error: e?.message || 'Failed to choose variant' });
     }
   });
 

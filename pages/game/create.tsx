@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import { tournamentPresets } from '../../src/lib/tournament/tournament-utils';
 import type { TournamentConfig } from '../../src/types/tournament';
 
-type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud';
+type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'dealers-choice';
 type BettingMode = 'no-limit' | 'pot-limit';
 
 export default function CreateGameRoomPage() {
@@ -213,7 +213,13 @@ export default function CreateGameRoomPage() {
               <option value="seven-card-stud">Seven-Card Stud</option>
               <option value="seven-card-stud-hi-lo">Seven-Card Stud Hi-Lo (8 or Better)</option>
               <option value="five-card-stud">Five-Card Stud</option>
+              <option value="dealers-choice">Dealer&apos;s Choice (dealer selects each hand)</option>
             </select>
+            {variant === 'dealers-choice' && (
+              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                The dealer will choose the variant before each hand. Betting mode will adapt to the chosen variant (Omaha variants default to Pot-Limit).
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium">Betting mode</label>
@@ -221,10 +227,14 @@ export default function CreateGameRoomPage() {
               className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               value={bettingMode}
               onChange={e => setBettingMode(e.target.value as BettingMode)}
+              disabled={variant === 'dealers-choice'}
             >
               <option value="no-limit">No Limit</option>
               <option value="pot-limit">Pot Limit</option>
             </select>
+            {variant === 'dealers-choice' && (
+              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Betting mode is determined by the dealer’s selected variant.</p>
+            )}
           </div>
           {/* Removed Require unanimous RIT consent checkbox per request */}
         </div>

@@ -180,6 +180,12 @@ export default function GamePage() {
   const autoNextHandTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Visual accessibility options
   const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
+  // Dealer's Choice: pending choice prompt from server
+  const [awaitingDealerChoice, setAwaitingDealerChoice] = useState<null | { dealerId?: string; allowedVariants?: string[]; current?: string }>(null);
+  const [selectedVariantDC, setSelectedVariantDC] = useState<string>('texas-holdem');
+  // Track if the dealer has manually changed the selection to avoid overwriting with stale prompts
+  const userChangedVariantRef = useRef<boolean>(false);
+  const lastAwaitingDealerIdRef = useRef<string | undefined>(undefined);
 
   // Initialize high-contrast setting from localStorage and keep in sync when room changes
   useEffect(() => {
@@ -499,6 +505,8 @@ export default function GamePage() {
         seatedPlayers: seated,
         // Pass variant/betting/blinds so the socket server can initialize correctly
         variant,
+        // If Dealer's Choice selected at room level, optionally include an initial suggestion
+        initialChoice: 'texas-holdem',
         bettingMode,
         smallBlind: sb,
         bigBlind: bb,
@@ -1620,6 +1628,11 @@ export default function GamePage() {
           
           if (data.gameState) {
             setPokerGameState(data.gameState);
+            // Reset any prior Dealer's Choice prompt and seed default selection
+            setAwaitingDealerChoice(null);
+            setSelectedVariantDC('texas-holdem');
+            userChangedVariantRef.current = false;
+            lastAwaitingDealerIdRef.current = undefined;
             try {
               const gs = data.gameState || {};
               const players = Array.isArray(gs.players) ? gs.players : [];
@@ -1669,6 +1682,10 @@ export default function GamePage() {
           console.log('Game state update:', data.gameState);
           console.log('Last action:', data.lastAction);
           setPokerGameState(data.gameState);
+          // Clear Dealer's Choice prompt once a hand starts
+          setAwaitingDealerChoice(null);
+          userChangedVariantRef.current = false;
+          lastAwaitingDealerIdRef.current = undefined;
           try {
             const gs = data.gameState || {};
             const players = Array.isArray(gs.players) ? gs.players : [];
@@ -1729,6 +1746,27 @@ export default function GamePage() {
         socketInstance.on('game_started', handleGameStart);
         socketInstance.on('game_state_update', handleGameStateUpdate);
         socketInstance.on('action_failed', handleActionFailed);
+        socketInstance.on('awaiting_dealer_choice', (payload: any) => {
+          try {
+            // Determine if this is a new DC session (dealer changed) vs duplicate prompt
+            const incomingDealerId = payload?.dealerId as string | undefined;
+            const prevDealerId = lastAwaitingDealerIdRef.current;
+            const isNewSession = incomingDealerId && incomingDealerId !== prevDealerId;
+
+            if (isNewSession) {
+              // Reset manual-change marker for a fresh session and seed default from server
+              userChangedVariantRef.current = false;
+              lastAwaitingDealerIdRef.current = incomingDealerId;
+              if (payload?.current) setSelectedVariantDC(String(payload.current));
+            } else {
+              // Same dealer: only update selection from server if user hasn't manually changed it
+              if (!userChangedVariantRef.current && payload?.current) {
+                setSelectedVariantDC(String(payload.current));
+              }
+            }
+            setAwaitingDealerChoice(payload || {});
+          } catch {}
+        });
         // Handle explicit seat claim failures from server (e.g., race with another client)
         socketInstance.on('seat_claim_failed', (data: { error: string; seatNumber?: number; reqId?: string }) => {
           console.warn('Seat claim failed:', data?.error || 'unknown error');
@@ -1755,6 +1793,7 @@ export default function GamePage() {
         currentSocket.off('game_state_update');
   currentSocket.off('action_failed');
   currentSocket.off('seat_claim_failed');
+  currentSocket.off('awaiting_dealer_choice');
       }
     };
   }, [playerId, id]); // Only depend on playerId and id
@@ -1936,6 +1975,79 @@ export default function GamePage() {
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Dealer's Choice selection banner */}
+          {gameStarted && awaitingDealerChoice && (
+            <div className="lg:col-span-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 rounded-lg shadow-md p-4">
+              {(() => {
+                const dealerId = awaitingDealerChoice?.dealerId;
+                const allowed = Array.isArray(awaitingDealerChoice?.allowedVariants)
+                  ? awaitingDealerChoice!.allowedVariants!
+                  : ['texas-holdem','omaha','omaha-hi-lo','seven-card-stud','seven-card-stud-hi-lo','five-card-stud'];
+                const isMeDealer = dealerId && dealerId === playerId;
+                const labelMap: Record<string, string> = {
+                  'texas-holdem': "Texas Hold'em",
+                  'omaha': 'Omaha',
+                  'omaha-hi-lo': 'Omaha Hi-Lo',
+                  'seven-card-stud': 'Seven-Card Stud',
+                  'seven-card-stud-hi-lo': 'Seven-Card Stud Hi-Lo',
+                  'five-card-stud': 'Five-Card Stud',
+                };
+                if (isMeDealer) {
+                  return (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="inline-block px-2 py-0.5 text-xs rounded bg-amber-600 text-white">Dealer's Choice</span>
+                        <h3 className="text-lg font-semibold">Choose the variant for this hand</h3>
+                      </div>
+                      <div className="flex flex-wrap gap-3 mt-2">
+                        {allowed.map(v => (
+                          <label key={v} className={`px-3 py-1.5 rounded border text-sm cursor-pointer select-none ${selectedVariantDC === v ? 'bg-amber-600 text-white border-amber-500' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-amber-300 dark:border-amber-600'}`}> 
+                            <input
+                              type="radio"
+                              name="dc-variant"
+                              className="hidden"
+                              value={v}
+                              checked={selectedVariantDC === v}
+                              onChange={() => {
+                                userChangedVariantRef.current = true;
+                                setSelectedVariantDC(v);
+                              }}
+                            />
+                            {labelMap[v] || v}
+                          </label>
+                        ))}
+                      </div>
+                      <div className="mt-3">
+                        <button
+                          onClick={() => {
+                            try {
+                              if (!socket || !id) return;
+                              socket.emit('choose_variant', { tableId: id, variant: selectedVariantDC });
+                            } catch {}
+                          }}
+                          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded shadow"
+                        >
+                          Start {labelMap[selectedVariantDC] || selectedVariantDC}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+                // Non-dealer view
+                return (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block px-2 py-0.5 text-xs rounded bg-amber-600 text-white">Dealer's Choice</span>
+                        <h3 className="text-lg font-semibold">Waiting for dealer to choose variant…</h3>
+                      </div>
+                      <div className="text-sm mt-1 opacity-80">Allowed: {allowed.map(v => labelMap[v] || v).join(', ')}</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
           {/* Poker Table - Green Felt Design */}
           <div className="lg:col-span-2 relative">
             {/* Green felt table surface */}

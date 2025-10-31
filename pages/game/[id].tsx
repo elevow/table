@@ -583,39 +583,33 @@ export default function GamePage() {
           const lower = name.toLowerCase();
           // For straights and flushes (incl. straight flush/royal), show just the name
           if (lower.includes('straight') || lower.includes('flush')) return name;
-          // Count ranks in the best 5
+          // Derive kickers from the best 5-card hand itself
           const counts: Record<string, number> = {};
           for (const c of best) counts[c.rank] = (counts[c.rank] || 0) + 1;
-          const freqs = Object.values(counts).sort((a, b) => b - a);
-          // Determine which ranks constitute the made hand vs kickers
-          let handRanks = new Set<string>();
-          if (freqs[0] === 4) {
-            // Four of a kind -> 4 of same rank; remaining single is kicker
-            const quadRank = Object.keys(counts).find(r => counts[r] === 4);
-            if (quadRank) handRanks.add(quadRank);
-          } else if (freqs[0] === 3 && freqs[1] === 2) {
-            // Full house -> no kickers (all five are part of the combo)
-            const tripRank = Object.keys(counts).find(r => counts[r] === 3);
-            const pairRank = Object.keys(counts).find(r => counts[r] === 2);
-            if (tripRank) handRanks.add(tripRank);
-            if (pairRank) handRanks.add(pairRank);
-          } else if (freqs[0] === 3) {
-            // Trips -> remaining two singles are kickers; trips is made hand
-            const tripRank = Object.keys(counts).find(r => counts[r] === 3);
-            if (tripRank) handRanks.add(tripRank);
-          } else if (freqs[0] === 2 && freqs[1] === 2) {
-            // Two pair -> two ranks are made hand; remaining single is kicker
+          const freqVals = Object.values(counts).sort((a, b) => b - a);
+          const handRanks = new Set<string>();
+          if (freqVals[0] === 4) {
+            const quad = Object.keys(counts).find(r => counts[r] === 4);
+            if (quad) handRanks.add(quad);
+          } else if (freqVals[0] === 3 && freqVals[1] === 2) {
+            // Full house (suffix omitted earlier, but keep logic complete)
+            const trip = Object.keys(counts).find(r => counts[r] === 3);
+            const pair = Object.keys(counts).find(r => counts[r] === 2);
+            if (trip) handRanks.add(trip);
+            if (pair) handRanks.add(pair);
+          } else if (freqVals[0] === 3) {
+            const trip = Object.keys(counts).find(r => counts[r] === 3);
+            if (trip) handRanks.add(trip);
+          } else if (freqVals[0] === 2 && freqVals[1] === 2) {
             Object.keys(counts).forEach(r => { if (counts[r] === 2) handRanks.add(r); });
-          } else if (freqs[0] === 2) {
-            // One pair -> three singles are kickers; pair is made hand
-            const pairRank = Object.keys(counts).find(r => counts[r] === 2);
-            if (pairRank) handRanks.add(pairRank);
+          } else if (freqVals[0] === 2) {
+            const pair = Object.keys(counts).find(r => counts[r] === 2);
+            if (pair) handRanks.add(pair);
           } else {
-            // High Card -> first (highest) is "made", others are kickers
-            const sorted = [...best].sort((a, b) => (weight[b.rank] || 0) - (weight[a.rank] || 0));
-            if (sorted[0]) handRanks.add(sorted[0].rank);
+            // High card: exclude the highest card from kickers
+            const sortedBest = [...best].sort((a, b) => (weight[b.rank] || 0) - (weight[a.rank] || 0));
+            if (sortedBest[0]) handRanks.add(sortedBest[0].rank);
           }
-          // Collect kickers among the best five (ranks not in made-hand ranks)
           const kickerRanks = best
             .filter(c => !handRanks.has(c.rank))
             .sort((a, b) => (weight[b.rank] || 0) - (weight[a.rank] || 0))

@@ -571,6 +571,61 @@ export default function GamePage() {
       const me = pokerGameState.players?.find((p: any) => p.id === playerId);
       if (!me) return null;
 
+      // Helpers for kicker formatting
+      const weight: Record<string, number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
+      const sym = (r: string) => r; // keep '10' as '10', others as single letters already
+      const formatWithKickers = (hr: any): string => {
+        try {
+          const name = String(hr?.name || hr?.description || '') || null;
+          const best: any[] = Array.isArray(hr?.cards) ? hr.cards : [];
+          if (!name || best.length < 5) return name || '';
+          const lower = name.toLowerCase();
+          // For straights and flushes (incl. straight flush/royal), show just the name
+          if (lower.includes('straight') || lower.includes('flush')) return name;
+          // Count ranks in the best 5
+          const counts: Record<string, number> = {};
+          for (const c of best) counts[c.rank] = (counts[c.rank] || 0) + 1;
+          const freqs = Object.values(counts).sort((a, b) => b - a);
+          // Determine which ranks constitute the made hand vs kickers
+          let handRanks = new Set<string>();
+          if (freqs[0] === 4) {
+            // Four of a kind -> 4 of same rank; remaining single is kicker
+            const quadRank = Object.keys(counts).find(r => counts[r] === 4);
+            if (quadRank) handRanks.add(quadRank);
+          } else if (freqs[0] === 3 && freqs[1] === 2) {
+            // Full house -> no kickers (all five are part of the combo)
+            const tripRank = Object.keys(counts).find(r => counts[r] === 3);
+            const pairRank = Object.keys(counts).find(r => counts[r] === 2);
+            if (tripRank) handRanks.add(tripRank);
+            if (pairRank) handRanks.add(pairRank);
+          } else if (freqs[0] === 3) {
+            // Trips -> remaining two singles are kickers; trips is made hand
+            const tripRank = Object.keys(counts).find(r => counts[r] === 3);
+            if (tripRank) handRanks.add(tripRank);
+          } else if (freqs[0] === 2 && freqs[1] === 2) {
+            // Two pair -> two ranks are made hand; remaining single is kicker
+            Object.keys(counts).forEach(r => { if (counts[r] === 2) handRanks.add(r); });
+          } else if (freqs[0] === 2) {
+            // One pair -> three singles are kickers; pair is made hand
+            const pairRank = Object.keys(counts).find(r => counts[r] === 2);
+            if (pairRank) handRanks.add(pairRank);
+          } else {
+            // High Card -> first (highest) is "made", others are kickers
+            const sorted = [...best].sort((a, b) => (weight[b.rank] || 0) - (weight[a.rank] || 0));
+            if (sorted[0]) handRanks.add(sorted[0].rank);
+          }
+          // Collect kickers among the best five (ranks not in made-hand ranks)
+          const kickerRanks = best
+            .filter(c => !handRanks.has(c.rank))
+            .sort((a, b) => (weight[b.rank] || 0) - (weight[a.rank] || 0))
+            .map(c => sym(c.rank));
+          if (kickerRanks.length === 0) return name;
+          return `${name} + ${kickerRanks.join('')}`;
+        } catch {
+          return String(hr?.name || hr?.description || '');
+        }
+      };
+
       // Utility: quick label for partial info (when <5 cards known)
       const partialLabel = (cards: any[]): string | null => {
         if (!Array.isArray(cards) || cards.length === 0) return null;
@@ -597,7 +652,7 @@ export default function GamePage() {
         if (all.length < 5) return partialLabel(all);
         // Use generic ranking; solver will pick best from available cards
         const ranking = HandEvaluator.getHandRanking(all, []);
-        return ranking?.name || null;
+        return formatWithKickers(ranking) || null;
       }
 
       // Hold'em/Omaha style: use hole + community
@@ -610,12 +665,12 @@ export default function GamePage() {
       if (variant === 'omaha' || variant === 'omaha-hi-lo') {
         // Prefer Omaha evaluator (exactly 2+3 when possible)
         const ranking = HandEvaluator.getOmahaHandRanking(holes, board);
-        return ranking?.name || null;
+        return formatWithKickers(ranking) || null;
       }
 
       // Default: generic
       const ranking = HandEvaluator.getHandRanking(holes, board);
-      return ranking?.name || null;
+      return formatWithKickers(ranking) || null;
     } catch (e) {
       console.warn('Hand name computation failed:', e);
       return null;

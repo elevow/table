@@ -201,9 +201,9 @@ export default function GamePage() {
       if (suit === 'hearts') return 'text-red-500';
       if (suit === 'diamonds') return 'text-yellow-500';
       if (suit === 'clubs') return 'text-blue-600';
-      return 'text-black dark:text-gray-100'; // spades
+      return 'text-black'; // spades
     }
-    return (suit === 'hearts' || suit === 'diamonds') ? 'text-red-500' : 'text-black dark:text-gray-100';
+    return (suit === 'hearts' || suit === 'diamonds') ? 'text-red-500' : 'text-black';
   }, [highContrastCards]);
 
   // Fetch room configuration to determine variant, betting mode, and blinds
@@ -1079,7 +1079,7 @@ export default function GamePage() {
                   {down.map((card: any, i: number) => (
                     atShowdown ? (
                       <div key={`down-${i}`} className="bg-white rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow">
-                        <div>{card.rank}</div>
+                        <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                         <div className={suitColorClass(card.suit)}>
                           {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                         </div>
@@ -1093,7 +1093,7 @@ export default function GamePage() {
                   {/* Up cards (always face up) */}
                   {up.map((card: any, i: number) => (
                     <div key={`up-${i}`} className="bg-white rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow">
-                      <div>{card.rank}</div>
+                      <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                       <div className={suitColorClass(card.suit)}>
                         {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                       </div>
@@ -1113,7 +1113,7 @@ export default function GamePage() {
                 <div className="flex gap-1">
                   {holes.map((card: any, index: number) => (
                     <div key={index} className="bg-white dark:bg-gray-700 rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black dark:text-gray-100 font-bold shadow">
-                      <div>{card.rank}</div>
+                      <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                       <div className={suitColorClass(card.suit)}>
                         {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                       </div>
@@ -1924,7 +1924,7 @@ export default function GamePage() {
                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-8 flex gap-1">
                     {pokerGameState.communityCards.map((card: any, index: number) => (
                       <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold">
-                        <div>{card.rank}</div>
+                        <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                         <div className={suitColorClass(card.suit)}>
                           {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                         </div>
@@ -1954,7 +1954,7 @@ export default function GamePage() {
                       <div className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
                         {all.map((card: any, i: number) => (
                           <div key={`me-card-${i}`} className="bg-white rounded border text-xs p-1 w-10 h-14 flex flex-col items-center justify-center text-black font-bold shadow-lg">
-                            <div>{card.rank}</div>
+                            <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                             <div className={suitColorClass(card.suit)}>
                               {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                             </div>
@@ -1971,7 +1971,7 @@ export default function GamePage() {
                     <div className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
                       {holes.map((card: any, index: number) => (
                         <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-lg">
-                          <div>{card.rank}</div>
+                          <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                           <div className={suitColorClass(card.suit)}>
                             {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                           </div>
@@ -2343,7 +2343,7 @@ export default function GamePage() {
                         <div className="flex gap-1 mb-3">
                           {board.map((card: any, ci: number) => (
                             <div key={ci} className="bg-white dark:bg-gray-700 rounded border text-[10px] p-1 w-7 h-10 flex flex-col items-center justify-center text-black dark:text-gray-100 font-bold">
-                              <div>{card.rank}</div>
+                              <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                               <div className={suitColorClass(card.suit)}>
                                 {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                               </div>

@@ -89,7 +89,7 @@ export default function GamePage() {
         if (data?.url) {
           setPlayerAvatars(prev => {
             const next = { ...prev, [playerIdToLoad]: data.url };
-            console.log('[Avatar] Cached URL for', playerIdToLoad, '→', data.url);
+            // console.log('[Avatar] Cached URL for', playerIdToLoad, '→', data.url);
             return next;
           });
           return;
@@ -2311,18 +2311,124 @@ export default function GamePage() {
             </div>
           )}
 
-          {/* Fallback simple showdown banner when not RIT */}
-          {gameStarted && pokerGameState && (pokerGameState.stage === 'showdown' || getActiveNonFoldedPlayers().length === 1) && !pokerGameState.runItTwice?.enabled && (
+          {/* Hi-Lo showdown panel (non-RIT): show high and low winners from lastHiLoResult */}
+          {gameStarted && pokerGameState && (pokerGameState.stage === 'showdown' || getActiveNonFoldedPlayers().length === 1)
+            && !pokerGameState.runItTwice?.enabled
+            && ((pokerGameState.variant === 'omaha-hi-lo' || pokerGameState.variant === 'seven-card-stud-hi-lo') && pokerGameState.lastHiLoResult) && (
+            <div className="lg:col-span-2 bg-cyan-50 dark:bg-cyan-900/30 border border-cyan-300 dark:border-cyan-700 text-cyan-900 dark:text-cyan-100 rounded-lg shadow-md p-4 mt-4">
+              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                <span className="inline-block px-2 py-0.5 text-xs rounded bg-cyan-600 text-white">Hi-Lo</span>
+                Showdown Results
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* High winners */}
+                <div className="rounded-md border border-cyan-300 dark:border-cyan-700 bg-white dark:bg-gray-800 p-3 shadow-sm">
+                  <div className="text-sm font-semibold mb-2">High Winners</div>
+                  <div className="space-y-1">
+                    {pokerGameState.lastHiLoResult!.high.map((h: any) => {
+                      const player = pokerGameState.players.find((p: any) => p.id === h.playerId);
+                      return (
+                        <div key={h.playerId} className="text-xs flex items-center justify-between bg-cyan-100 dark:bg-cyan-800/40 px-2 py-1 rounded">
+                          <span className="font-medium">{player?.name || h.playerId.slice(0,6)}</span>
+                          <span className="text-cyan-700 dark:text-cyan-300 font-semibold">+${h.amount}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* Low winners (if any) */}
+                <div className="rounded-md border border-cyan-300 dark:border-cyan-700 bg-white dark:bg-gray-800 p-3 shadow-sm">
+                  <div className="text-sm font-semibold mb-2">Low Winners</div>
+                  {Array.isArray(pokerGameState.lastHiLoResult!.low) && pokerGameState.lastHiLoResult!.low.length > 0 ? (
+                    <div className="space-y-1">
+                      {pokerGameState.lastHiLoResult!.low!.map((l: any) => {
+                        const player = pokerGameState.players.find((p: any) => p.id === l.playerId);
+                        return (
+                          <div key={l.playerId} className="text-xs flex items-center justify-between bg-cyan-100 dark:bg-cyan-800/40 px-2 py-1 rounded">
+                            <span className="font-medium">{player?.name || l.playerId.slice(0,6)}</span>
+                            <span className="text-cyan-700 dark:text-cyan-300 font-semibold">+${l.amount}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-cyan-800 dark:text-cyan-200 opacity-80">No qualifying low hand</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Showdown banner when not RIT: compute true winners instead of assuming the first remaining */}
+          {gameStarted && pokerGameState && (pokerGameState.stage === 'showdown' || getActiveNonFoldedPlayers().length === 1)
+            && !pokerGameState.runItTwice?.enabled
+            && !(((pokerGameState.variant === 'omaha-hi-lo' || pokerGameState.variant === 'seven-card-stud-hi-lo')) && pokerGameState.lastHiLoResult) && (
             <div className="lg:col-span-2 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 rounded-lg shadow-md p-4 mt-4">
               {(() => {
                 const remaining = getActiveNonFoldedPlayers();
-                const winner = remaining[0];
-                return (
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">{winner?.name || 'Winner'}</span>
-                    <span>wins the pot</span>
-                  </div>
-                );
+                // Win-by-fold: only one active player remains
+                if (remaining.length === 1) {
+                  const only = remaining[0];
+                  return (
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{only?.name || 'Winner'}</span>
+                      <span>wins the pot</span>
+                    </div>
+                  );
+                }
+
+                // Standard showdown with 2+ active players: evaluate winners client-side for display only
+                try {
+                  const variant = pokerGameState?.variant as string | undefined;
+                  const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
+
+                  type EvalRes = { playerId: string; name: string; hand: any; label: string };
+                  const evals: EvalRes[] = remaining.map((p: any) => {
+                    if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+                      const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
+                      const down = Array.isArray(st?.downCards) ? st.downCards : [];
+                      const up = Array.isArray(st?.upCards) ? st.upCards : [];
+                      const { hand } = HandEvaluator.evaluateHand([...down, ...up], []);
+                      return { playerId: p.id, name: p.name || p.id, hand, label: String((hand as any)?.description || '') };
+                    }
+                    if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+                      const { hand } = HandEvaluator.evaluateOmahaHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
+                      return { playerId: p.id, name: p.name || p.id, hand, label: String((hand as any)?.description || '') };
+                    }
+                    const { hand } = HandEvaluator.evaluateHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
+                    return { playerId: p.id, name: p.name || p.id, hand, label: String((hand as any)?.description || '') };
+                  });
+
+                  // Find best via pairwise comparison
+                  let best: EvalRes[] = [];
+                  for (const e of evals) {
+                    if (best.length === 0) { best = [e]; continue; }
+                    const cmp = HandEvaluator.compareHands(e.hand, best[0].hand);
+                    if (cmp > 0) best = [e];
+                    else if (cmp === 0) best.push(e);
+                  }
+
+                  const names = best.map(b => b.name);
+                  // Prefer showing a single common label if all share the same hand description
+                  const sameLabel = best.every(b => b.label === best[0].label) ? best[0].label : '';
+                  return (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{names.join(', ')}</span>
+                      <span>{best.length > 1 ? 'split the pot' : 'wins the pot'}</span>
+                      {sameLabel ? (
+                        <span className="opacity-80">({sameLabel})</span>
+                      ) : null}
+                    </div>
+                  );
+                } catch (e) {
+                  // Defensive fallback: avoid showing the same player incorrectly; show generic completion
+                  return (
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Showdown complete</span>
+                      <span>chips updated</span>
+                    </div>
+                  );
+                }
               })()}
             </div>
           )}

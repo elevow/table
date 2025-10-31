@@ -1996,7 +1996,7 @@ export default function GamePage() {
                   return (
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="inline-block px-2 py-0.5 text-xs rounded bg-amber-600 text-white">Dealer's Choice</span>
+                        <span className="inline-block px-2 py-0.5 text-xs rounded bg-amber-600 text-white">Dealer&apos;s Choice</span>
                         <h3 className="text-lg font-semibold">Choose the variant for this hand</h3>
                       </div>
                       <div className="flex flex-wrap gap-3 mt-2">
@@ -2038,7 +2038,7 @@ export default function GamePage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="inline-block px-2 py-0.5 text-xs rounded bg-amber-600 text-white">Dealer's Choice</span>
+                        <span className="inline-block px-2 py-0.5 text-xs rounded bg-amber-600 text-white">Dealer&apos;s Choice</span>
                         <h3 className="text-lg font-semibold">Waiting for dealer to choose variant…</h3>
                       </div>
                       <div className="text-sm mt-1 opacity-80">Allowed: {allowed.map(v => labelMap[v] || v).join(', ')}</div>

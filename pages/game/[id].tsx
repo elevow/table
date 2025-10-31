@@ -142,6 +142,8 @@ export default function GamePage() {
   
   // Room info state
   const [maxPlayers, setMaxPlayers] = useState<number>(6); // Default to 6, will be updated from room info
+  // Room config (variant, betting mode, blinds)
+  const [roomConfig, setRoomConfig] = useState<{ variant?: string; bettingMode?: 'no-limit' | 'pot-limit'; sb?: number; bb?: number } | null>(null);
   
   // Seat management state - initialize dynamically based on maxPlayers
   const [seatAssignments, setSeatAssignments] = useState<Record<number, { playerId: string; playerName: string; chips: number } | null>>(() => {
@@ -176,6 +178,29 @@ export default function GamePage() {
   const [pokerGameState, setPokerGameState] = useState<any>(null);
   // Auto next-hand fallback timer ref
   const autoNextHandTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Fetch room configuration to determine variant, betting mode, and blinds
+  useEffect(() => {
+    let alive = true;
+    const fetchRoom = async () => {
+      try {
+        if (!id || typeof id !== 'string') return;
+        const resp = await fetch(`/api/games/rooms/${id}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!alive) return;
+        const cfg = (data?.configuration || {}) as any;
+        const blinds = (data?.blindLevels || {}) as any;
+        const sb = Number(blinds?.sb) || Number(blinds?.smallBlind) || undefined;
+        const bb = Number(blinds?.bb) || Number(blinds?.bigBlind) || undefined;
+        const variant = cfg?.variant as string | undefined;
+        const bettingMode = (cfg?.bettingMode as any) as ('no-limit' | 'pot-limit' | undefined);
+        setRoomConfig({ variant, bettingMode, sb, bb });
+      } catch {}
+    };
+    fetchRoom();
+    return () => { alive = false; };
+  }, [id]);
   
   // Load avatars for all seated players
   useEffect(() => {
@@ -429,17 +454,29 @@ export default function GamePage() {
     
     // Emit start game event via socket
     if (socket) {
-      socket.emit('start_game', { 
-        tableId: id, 
+      const seated = Object.entries(seatAssignments)
+        .filter(([_, assignment]) => assignment !== null)
+        .map(([seatNumber, assignment]) => ({
+          seatNumber: parseInt(seatNumber),
+          playerId: (assignment as any)!.playerId,
+          playerName: (assignment as any)!.playerName,
+          chips: (assignment as any)!.chips
+        }));
+      const variant = roomConfig?.variant || undefined;
+      const bettingMode = roomConfig?.bettingMode || (variant === 'omaha' || variant === 'omaha-hi-lo' ? 'pot-limit' : undefined);
+      const sb = roomConfig?.sb;
+      const bb = roomConfig?.bb;
+      socket.emit('start_game', {
+        tableId: id,
         playerId,
-        seatedPlayers: Object.entries(seatAssignments)
-          .filter(([_, assignment]) => assignment !== null)
-          .map(([seatNumber, assignment]) => ({
-            seatNumber: parseInt(seatNumber),
-            playerId: assignment!.playerId,
-            playerName: assignment!.playerName,
-            chips: assignment!.chips
-          }))
+        seatedPlayers: seated,
+        // Pass variant/betting/blinds so the socket server can initialize correctly
+        variant,
+        bettingMode,
+        smallBlind: sb,
+        bigBlind: bb,
+        sb,
+        bb,
       });
     }
   };

@@ -210,10 +210,14 @@ io.on('connection', (socket) => {
         timeBank: 30,
         holeCards: [],
       }));
-      const smallBlind = 1;
-      const bigBlind = 2;
-      const variant = 'texas-holdem';
-      const bettingMode = 'no-limit';
+      // Ingest optional table configuration provided by the client (preferred) or fall back to defaults
+      let smallBlind = Number(data?.smallBlind) || Number(data?.sb) || 1;
+      let bigBlind = Number(data?.bigBlind) || Number(data?.bb) || 2;
+      let variant = data?.variant || 'texas-holdem';
+      // Default betting mode: pot-limit for Omaha variants unless explicitly provided, else no-limit
+      let bettingMode = data?.bettingMode
+        || ((variant === 'omaha' || variant === 'omaha-hi-lo') ? 'pot-limit' : 'no-limit');
+
       const engine = new PokerEngine(tableId, players, smallBlind, bigBlind, { variant, bettingMode });
       engine.startNewHand();
       if (!global.activeGames) global.activeGames = new Map();

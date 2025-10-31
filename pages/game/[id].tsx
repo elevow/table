@@ -573,7 +573,8 @@ export default function GamePage() {
 
       // Helpers for kicker formatting
       const weight: Record<string, number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
-      const sym = (r: string) => r; // keep '10' as '10', others as single letters already
+  // Map ranks for compact kicker display: use 'T' for 10
+  const sym = (r: string) => (r === '10' ? 'T' : r);
       const formatWithKickers = (hr: any): string => {
         try {
           const name = String(hr?.name || hr?.description || '') || null;

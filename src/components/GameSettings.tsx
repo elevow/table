@@ -6,9 +6,10 @@ import { useEffect, useState, memo } from 'react';
 
 interface GameSettingsProps {
   gameId: string;
+  onSettingsChange?: (settings: any) => void;
 }
 
-function GameSettings({ gameId }: GameSettingsProps) {
+function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
   const [settings, setSettings] = useState({
     soundEnabled: true,
     chatEnabled: true,
@@ -16,6 +17,7 @@ function GameSettings({ gameId }: GameSettingsProps) {
     autoFoldEnabled: false,
     rabbitHuntEnabled: false,
     timeBank: 30,
+    highContrastCards: false,
   });
   
   useEffect(() => {
@@ -28,6 +30,10 @@ function GameSettings({ gameId }: GameSettingsProps) {
       if (raw) {
         const saved = JSON.parse(raw);
         setSettings(prev => ({ ...prev, ...saved }));
+        // Notify parent of initial load
+        if (typeof onSettingsChange === 'function') {
+          onSettingsChange({ ...settings, ...saved });
+        }
       }
     } catch {}
   }, [gameId]);
@@ -37,6 +43,10 @@ function GameSettings({ gameId }: GameSettingsProps) {
     try {
       localStorage.setItem(`game_settings_${gameId}`, JSON.stringify(settings));
     } catch {}
+    // Notify parent on any change
+    if (typeof onSettingsChange === 'function') {
+      onSettingsChange(settings);
+    }
   }, [gameId, settings]);
   
   const handleSettingChange = (setting: string, value: boolean | number) => {
@@ -96,6 +106,19 @@ function GameSettings({ gameId }: GameSettingsProps) {
             />
             Rabbit Hunt (preview)
           </label>
+        </div>
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.highContrastCards}
+              onChange={(e) => handleSettingChange('highContrastCards', e.target.checked)}
+            />
+            High Contrast Cards
+          </label>
+          <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+            When enabled: Hearts = Red, Diamonds = Yellow, Spades = Black, Clubs = Blue.
+          </div>
         </div>
         <div className="setting-item">
           <label>

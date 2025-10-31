@@ -178,6 +178,33 @@ export default function GamePage() {
   const [pokerGameState, setPokerGameState] = useState<any>(null);
   // Auto next-hand fallback timer ref
   const autoNextHandTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Visual accessibility options
+  const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
+
+  // Initialize high-contrast setting from localStorage and keep in sync when room changes
+  useEffect(() => {
+    try {
+      if (!id) return;
+      const raw = localStorage.getItem(`game_settings_${id}`);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (typeof saved?.highContrastCards === 'boolean') {
+          setHighContrastCards(!!saved.highContrastCards);
+        }
+      }
+    } catch {}
+  }, [id]);
+
+  // Helper: suit -> Tailwind text color class, considering high contrast setting
+  const suitColorClass = useCallback((suit: string) => {
+    if (highContrastCards) {
+      if (suit === 'hearts') return 'text-red-500';
+      if (suit === 'diamonds') return 'text-yellow-500';
+      if (suit === 'clubs') return 'text-blue-600';
+      return 'text-black dark:text-gray-100'; // spades
+    }
+    return (suit === 'hearts' || suit === 'diamonds') ? 'text-red-500' : 'text-black dark:text-gray-100';
+  }, [highContrastCards]);
 
   // Fetch room configuration to determine variant, betting mode, and blinds
   useEffect(() => {
@@ -1053,7 +1080,7 @@ export default function GamePage() {
                     atShowdown ? (
                       <div key={`down-${i}`} className="bg-white rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow">
                         <div>{card.rank}</div>
-                        <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>
+                        <div className={suitColorClass(card.suit)}>
                           {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                         </div>
                       </div>
@@ -1067,7 +1094,7 @@ export default function GamePage() {
                   {up.map((card: any, i: number) => (
                     <div key={`up-${i}`} className="bg-white rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow">
                       <div>{card.rank}</div>
-                      <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>
+                      <div className={suitColorClass(card.suit)}>
                         {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                       </div>
                     </div>
@@ -1087,7 +1114,7 @@ export default function GamePage() {
                   {holes.map((card: any, index: number) => (
                     <div key={index} className="bg-white dark:bg-gray-700 rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black dark:text-gray-100 font-bold shadow">
                       <div>{card.rank}</div>
-                      <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : ''}>
+                      <div className={suitColorClass(card.suit)}>
                         {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                       </div>
                     </div>
@@ -1898,7 +1925,7 @@ export default function GamePage() {
                     {pokerGameState.communityCards.map((card: any, index: number) => (
                       <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold">
                         <div>{card.rank}</div>
-                        <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>
+                        <div className={suitColorClass(card.suit)}>
                           {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                         </div>
                       </div>
@@ -1928,7 +1955,7 @@ export default function GamePage() {
                         {all.map((card: any, i: number) => (
                           <div key={`me-card-${i}`} className="bg-white rounded border text-xs p-1 w-10 h-14 flex flex-col items-center justify-center text-black font-bold shadow-lg">
                             <div>{card.rank}</div>
-                            <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>
+                            <div className={suitColorClass(card.suit)}>
                               {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                             </div>
                           </div>
@@ -1945,7 +1972,7 @@ export default function GamePage() {
                       {holes.map((card: any, index: number) => (
                         <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-lg">
                           <div>{card.rank}</div>
-                          <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black'}>
+                          <div className={suitColorClass(card.suit)}>
                             {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                           </div>
                         </div>
@@ -2317,7 +2344,7 @@ export default function GamePage() {
                           {board.map((card: any, ci: number) => (
                             <div key={ci} className="bg-white dark:bg-gray-700 rounded border text-[10px] p-1 w-7 h-10 flex flex-col items-center justify-center text-black dark:text-gray-100 font-bold">
                               <div>{card.rank}</div>
-                              <div className={card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : ''}>
+                              <div className={suitColorClass(card.suit)}>
                                 {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                               </div>
                             </div>
@@ -2492,7 +2519,7 @@ export default function GamePage() {
             )}
             {showSettings && (
               <div className="mt-4">
-                <GameSettings gameId={String(id)} />
+                <GameSettings gameId={String(id)} onSettingsChange={(s: any) => setHighContrastCards(!!s?.highContrastCards)} />
               </div>
             )}
           </div>

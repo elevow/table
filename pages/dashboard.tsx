@@ -23,12 +23,14 @@ const Dashboard: NextPage = () => {
   // Default to 'me' so the API can resolve the authenticated user server-side.
   const [userId, setUserId] = useState<string>('me');
   const { avatarData, loading: avatarLoading } = useUserAvatar(userId);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   
   // Get authenticated user ID on component mount
   useEffect(() => {
     const getAuthenticatedUserId = async () => {
       try {
         const authToken = localStorage.getItem('auth_token');
+        setIsAuthenticated(!!authToken);
         if (authToken) {
           const response = await fetch('/api/auth/me', {
             headers: {
@@ -197,8 +199,10 @@ const Dashboard: NextPage = () => {
           {/* Game action buttons */}
           <div className="flex justify-center">
             <button
-              className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2 rounded-md"
-              onClick={() => router.push('/game/create')}
+              className={`px-6 py-2 rounded-md text-white ${isAuthenticated ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-gray-400 cursor-not-allowed'}`}
+              onClick={() => { if (isAuthenticated) router.push('/game/create'); }}
+              disabled={!isAuthenticated}
+              title={isAuthenticated ? undefined : 'Sign in to create a room'}
               data-route="/game/create"
             >
               Create Room (choose variant)

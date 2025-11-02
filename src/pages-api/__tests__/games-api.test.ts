@@ -27,6 +27,11 @@ jest.mock('../../../src/lib/services/game-service', () => ({
   GameService: jest.fn().mockImplementation(() => mockService)
 }));
 
+// Mock auth to always return a valid user id
+jest.mock('../../../src/lib/auth/auth-utils', () => ({
+  requireAuth: jest.fn().mockResolvedValue('test-user-id')
+}));
+
 function createRes() {
   const res: Partial<NextApiResponse> & { status: jest.Mock; json: jest.Mock } = {
     status: jest.fn().mockReturnThis(),

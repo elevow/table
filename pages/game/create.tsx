@@ -15,7 +15,8 @@ export default function CreateGameRoomPage() {
   const [bigBlind, setBigBlind] = useState(2);
   const [variant, setVariant] = useState<Variant>('texas-holdem');
   const [bettingMode, setBettingMode] = useState<BettingMode>('no-limit');
-  const [createdBy, setCreatedBy] = useState('u1');
+  // Auth state
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,15 +25,16 @@ export default function CreateGameRoomPage() {
   const presetOptions = useMemo(() => Object.entries(tournamentPresets), []);
   const selectedTournamentConfig: TournamentConfig | null = useMemo(() => enableTournament ? tournamentPresets[presetKey]?.build() : null, [enableTournament, presetKey]);
 
-  // Debug router state
+  // On mount, determine if user is authenticated (token present)
   useEffect(() => {
-    console.log('Router state:', {
-      pathname: router.pathname,
-      asPath: router.asPath,
-      isReady: router.isReady,
-      query: router.query
-    });
-  }, [router]);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      setIsAuthenticated(!!token);
+      if (!token) {
+        setError('You must sign in to create a room.');
+      }
+    } catch {}
+  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,15 +55,18 @@ export default function CreateGameRoomPage() {
       }
 
       console.log('Creating game room...');
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      if (!token) {
+        throw new Error('You must be signed in to create a room');
+      }
       const res = await fetch('/api/games/rooms/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
           name,
           gameType: 'poker',
           maxPlayers,
           blindLevels: { sb: smallBlind, bb: bigBlind },
-          createdBy,
           configuration: {
             variant,
             bettingMode,
@@ -286,9 +291,12 @@ export default function CreateGameRoomPage() {
           )}
         </div>
         {error && <p className="text-red-600 text-sm">{error}</p>}
-        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50" disabled={submitting || isNavigating}>
+        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50" disabled={submitting || isNavigating || !isAuthenticated}>
           {isNavigating ? 'Joining room...' : submitting ? 'Creating…' : 'Create room'}
         </button>
+        {!isAuthenticated && (
+          <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">Sign in to create a game room.</p>
+        )}
         {isNavigating && (
           <p className="text-blue-600 text-sm mt-2 animate-pulse">
             ✨ Room created successfully! Taking you to the game...

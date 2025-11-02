@@ -3,6 +3,7 @@ import { getPool } from '../../../../src/lib/database/pool';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { GameService } from '../../../../src/lib/services/game-service';
 import { createSafeAudit } from '../../../../src/lib/api/audit';
+import { requireAuth } from '../../../../src/lib/auth/auth-utils';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -25,9 +26,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const safeLog = createSafeAudit(pool);
 
   try {
+    // Require authentication; unauthenticated (including guests without a session) cannot create rooms
+    const userId = await requireAuth(req);
+
     const service = new GameService(pool);
-    console.log('Creating room with data:', JSON.stringify(req.body, null, 2));
-    const created = await service.createRoom(req.body);
+    // Sanitize/force createdBy to authenticated user
+    const payload = { ...req.body, createdBy: userId };
+
+    console.log('Creating room with data:', JSON.stringify({ ...payload, createdBy: '[auth-user]'} , null, 2));
+    const created = await service.createRoom(payload);
     console.log('Room created successfully:', created.id);
     return res.status(201).json(created);
   } catch (err: any) {

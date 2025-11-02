@@ -22,6 +22,11 @@ jest.mock('../../../src/lib/services/game-service', () => ({
   GameService: jest.fn().mockImplementation(() => mockService)
 }));
 
+// Mock auth to always return a valid user id for create route
+jest.mock('../../../src/lib/auth/auth-utils', () => ({
+  requireAuth: jest.fn().mockResolvedValue('u100')
+}));
+
 // Mock the audit helper and capture calls end-to-end
 const mockSafeLog = jest.fn().mockResolvedValue(undefined);
 const mockCreateSafeAudit = jest.fn().mockReturnValue(mockSafeLog);

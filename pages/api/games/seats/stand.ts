@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import type { Server as HttpServer } from 'http';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
+import { publishSeatState, publishSeatVacated } from '../../../../src/lib/realtime/publisher';
 
 interface NextApiResponseServerIO extends NextApiResponse {
   socket: any & {
@@ -8,7 +9,7 @@ interface NextApiResponseServerIO extends NextApiResponse {
   };
 }
 
-export default function handler(req: NextApiRequest, res: NextApiResponseServerIO) {
+export default async function handler(req: NextApiRequest, res: NextApiResponseServerIO) {
   try {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
@@ -48,6 +49,18 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
     // Vacate
     seats[sNum!] = null;
     GameSeats.setRoomSeats(String(tableId), seats);
+
+    const seatPayload = { seatNumber: sNum!, playerId };
+
+    // Broadcast via Supabase for socket-less clients
+    try {
+      await Promise.all([
+        publishSeatVacated(String(tableId), seatPayload),
+        publishSeatState(String(tableId), { seats })
+      ]);
+    } catch (pubErr) {
+      console.warn('Seat vacate Supabase publish failed:', pubErr);
+    }
 
     // Broadcast seat vacated if Socket.IO server present
     try {

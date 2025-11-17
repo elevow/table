@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { isBrowser } from './env';
+import { getTransportMode } from '../utils/transport';
 
 let socket: Socket | null = null;
 let isInitializing = false;
@@ -12,6 +13,13 @@ let globalSocketInitializing = false;
 
 export async function getSocket(): Promise<Socket | null> {
   if (!isBrowser()) return null;
+  
+  // Check transport mode - don't initialize socket if using Supabase
+  const transportMode = getTransportMode();
+  if (transportMode === 'supabase') {
+    console.log('🚫 Socket initialization skipped - using Supabase transport');
+    return null;
+  }
   
   console.log('🔍 getSocket() called - socket exists:', !!socket, 'connected:', socket?.connected, 'initializing:', !!initializationPromise);
   

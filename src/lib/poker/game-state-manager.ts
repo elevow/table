@@ -192,20 +192,49 @@ export class GameStateManager {
   }
 
   public findNextActivePlayer(startPosition: number): Player | undefined {
-    let pos = startPosition;
+    if (process.env.DEBUG_POKER === 'true') {
+      // eslint-disable-next-line no-console
+      console.log(`[DEBUG] findNextActivePlayer: startPos=${startPosition}, numPlayers=${this.state.players.length}, currentBet=${this.state.currentBet}`);
+      // eslint-disable-next-line no-console
+      console.log(`[DEBUG]   All players:`, this.state.players.map(p => `pos=${p.position} id=${p.id.slice(0,8)} hasActed=${p.hasActed} bet=${p.currentBet}`));
+    }
+    
     const numPlayers = this.state.players.length;
     
-    do {
-      // Convert to 0-based for modulo, then back to 1-based for position lookup
-      pos = ((pos - 1 + 1) % numPlayers) + 1;
-      const player = this.state.players.find(p => p.position === pos);
+    // Find the index of the player with startPosition
+    const startIndex = this.state.players.findIndex(p => p.position === startPosition);
+    if (startIndex === -1) {
+      if (process.env.DEBUG_POKER === 'true') {
+        // eslint-disable-next-line no-console
+        console.log(`[DEBUG]   -> Start position ${startPosition} not found in players array`);
+      }
+      return undefined;
+    }
+    
+    // Check each player in order, starting from the next player after startIndex
+    for (let i = 1; i <= numPlayers; i++) {
+      const currentIndex = (startIndex + i) % numPlayers;
+      const player = this.state.players[currentIndex];
+      
+      if (process.env.DEBUG_POKER === 'true') {
+        // eslint-disable-next-line no-console
+        console.log(`[DEBUG]   Loop iteration ${i}: arrayIndex=${currentIndex}, pos=${player.position}, player=${player.id}, hasActed=${player.hasActed}, currentBet=${player.currentBet}, isFolded=${player.isFolded}, isAllIn=${player.isAllIn}`);
+      }
       
       if (player && !player.isFolded && !player.isAllIn && 
           (!player.hasActed || player.currentBet < this.state.currentBet)) {
+        if (process.env.DEBUG_POKER === 'true') {
+          // eslint-disable-next-line no-console
+          console.log(`[DEBUG]   -> Found next player: ${player.id} at pos=${player.position}`);
+        }
         return player;
       }
-    } while (pos !== startPosition);
+    }
 
+    if (process.env.DEBUG_POKER === 'true') {
+      // eslint-disable-next-line no-console
+      console.log(`[DEBUG]   -> No next player found`);
+    }
     return undefined;
   }
 }

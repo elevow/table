@@ -367,18 +367,34 @@ export class PokerEngine {
     }
 
     // Find next player or move to next stage
+    this.log(`Searching for next player after ${player.id} (pos=${player.position})`);
+    this.log(`All players state:`, this.state.players.map(p => ({
+      id: p.id,
+      pos: p.position,
+      hasActed: p.hasActed,
+      currentBet: p.currentBet,
+      isFolded: p.isFolded,
+      isAllIn: p.isAllIn
+    })));
+    this.log(`Current state: currentBet=${this.state.currentBet}, stage=${this.state.stage}`);
+    
     const nextPlayer = this.gameStateManager.findNextActivePlayer(player.position);
     
     if (nextPlayer) {
+      this.log(`Found next player: ${nextPlayer.id} (pos=${nextPlayer.position})`);
       this.state.activePlayer = nextPlayer.id;
     } else {
+      this.log(`No next player found - betting round should be complete`);
+      
       // Check if only one player remains (win by fold)
       const activePlayers = this.getActivePlayers();
       if (activePlayers.length === 1) {
+        this.log(`Only one active player remains - determining winner`);
         this.determineWinner();
         return;
       }
 
+      this.log(`Moving to next stage from ${this.state.stage}`);
       const nextStage = this.gameStateManager.moveToNextStage();
 
   if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
@@ -1142,6 +1158,25 @@ export class PokerEngine {
   public runItTwiceNow(): void {
     if (!this.state.runItTwice?.enabled) throw new Error('Run It Twice is not enabled');
     this.executeRunItTwice();
+  }
+
+  // Dealer's Choice tables pause the game until the dealer selects a variant
+  public pauseForDealerChoice(): TableState {
+    this.state.stage = 'awaiting-dealer-choice';
+    this.state.activePlayer = '';
+    this.state.pot = 0;
+    this.state.currentBet = 0;
+    this.state.minRaise = this.state.bigBlind;
+    this.state.communityCards = [];
+    this.state.players = this.state.players.map((player) => ({
+      ...player,
+      currentBet: 0,
+      hasActed: false,
+      isFolded: false,
+      isAllIn: false,
+      holeCards: [],
+    }));
+    return this.getState();
   }
 
   public getState(): TableState {

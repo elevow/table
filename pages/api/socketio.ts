@@ -4,6 +4,7 @@ import { Server as HttpServer } from 'http';
 import { WebSocketManager } from '../../src/lib/websocket-manager';
 import { GameService } from '../../src/lib/services/game-service';
 import { getPool } from '../../src/lib/database/pool';
+import { publishSeatClaimed, publishSeatState, publishSeatVacated } from '../../src/lib/realtime/publisher';
 
 // Extend the response type to include the socket server
 interface NextApiResponseServerIO extends NextApiResponse {
@@ -315,7 +316,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
     });
 
     // Handle seat claim requests
-    socket.on('claim_seat', (data: { tableId: string; seatNumber: number; playerId: string; playerName: string; chips: number }) => {
+  socket.on('claim_seat', async (data: { tableId: string; seatNumber: number; playerId: string; playerName: string; chips: number }) => {
       const { tableId, seatNumber, playerId, playerName, chips } = data;
       const reqId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
       // Initial receive log
@@ -362,23 +363,29 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       seats[seatNumber] = { playerId, playerName, chips };
       GameSeats.setRoomSeats(tableId, seats);
       
+      const seatPayload = { seatNumber, playerId, playerName, chips };
       // Broadcast to all players in the table
-      io.to(`table_${tableId}`).emit('seat_claimed', {
-        seatNumber,
-        playerId,
-        playerName,
-        chips
-      });
+      io.to(`table_${tableId}`).emit('seat_claimed', seatPayload);
       try {
         const roomSize = res.socket.server.io?.sockets?.adapter?.rooms?.get?.(`table_${tableId}`)?.size ?? undefined;
         dlog('seat_claimed broadcast', { reqId, tableId, seatNumber, playerId, roomSize });
       } catch {}
+
+      // Mirror into Supabase realtime for socket-less clients
+      try {
+        await Promise.all([
+          publishSeatClaimed(tableId, seatPayload),
+          publishSeatState(tableId, { seats })
+        ]);
+      } catch (pubErr) {
+        console.warn('Seat claim Supabase publish failed (socketio):', pubErr);
+      }
       
       console.log(`Seat ${seatNumber} claimed by ${playerName} (${playerId}) at table ${tableId}`);
     });
 
     // Handle stand up requests
-    socket.on('stand_up', (data: { tableId: string; seatNumber: number; playerId: string }) => {
+    socket.on('stand_up', async (data: { tableId: string; seatNumber: number; playerId: string }) => {
       console.log('Stand up request:', data);
       const { tableId, seatNumber, playerId } = data;
       
@@ -398,13 +405,20 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       seats[seatNumber] = null;
       GameSeats.setRoomSeats(tableId, seats);
       
+      const vacatedPayload = { seatNumber, playerId };
       // Broadcast to all players in the table
-      io.to(`table_${tableId}`).emit('seat_vacated', {
-        seatNumber,
-        playerId
-      });
+      io.to(`table_${tableId}`).emit('seat_vacated', vacatedPayload);
       
       console.log(`Seat ${seatNumber} vacated by ${playerId} at table ${tableId}`);
+
+      try {
+        await Promise.all([
+          publishSeatVacated(tableId, vacatedPayload),
+          publishSeatState(tableId, { seats })
+        ]);
+      } catch (pubErr) {
+        console.warn('Seat vacate Supabase publish failed (socketio stand_up):', pubErr);
+      }
 
       // If a game is active, auto-fold the standing player and mark for removal next hand
       try {
@@ -450,7 +464,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
     });
 
     // Handle player leaving the table (auto-fold if mid-hand)
-    socket.on('leave_table', (tableIdRaw: string) => {
+    socket.on('leave_table', async (tableIdRaw: string) => {
       try {
         const tableId = tableIdRaw || socket.tableId;
         const playerId = socket.playerId;
@@ -469,7 +483,16 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
               const seatNumber = parseInt(seatStr, 10);
               seats[seatNumber] = null;
               GameSeats.setRoomSeats(tableId, seats);
-              io.to(`table_${tableId}`).emit('seat_vacated', { seatNumber, playerId });
+              const vacPayload = { seatNumber, playerId };
+              io.to(`table_${tableId}`).emit('seat_vacated', vacPayload);
+              try {
+                await Promise.all([
+                  publishSeatVacated(tableId, vacPayload),
+                  publishSeatState(tableId, { seats })
+                ]);
+              } catch (pubErr) {
+                console.warn('Seat vacate Supabase publish failed (leave_table):', pubErr);
+              }
               console.log(`Player ${playerId} left; vacated seat ${seatNumber} at table ${tableId}`);
             }
           }

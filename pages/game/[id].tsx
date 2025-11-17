@@ -11,9 +11,10 @@ import { useUserAvatar } from '../../src/hooks/useUserAvatar';
 import Avatar from '../../src/components/Avatar';
 import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
 import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
+import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
+import { getTransportMode } from '../../src/utils/transport';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
-// Dynamic import with loading state
 const GameBoard = dynamic(() => import('../../src/components/GameBoard'), {
   loading: () => <div className="skeleton-loader game-board-loader" />,
   ssr: false, // Disable server-side rendering for this component
@@ -62,13 +63,13 @@ export default function GamePage() {
   
   // Debug logging for avatar data
   useEffect(() => {
-    console.log('=== Avatar Debug Start ===');
-    console.log('Avatar Debug - playerId:', playerId);
-    console.log('Avatar Debug - currentPlayerAvatar:', currentPlayerAvatar);
-    console.log('Avatar Debug - avatarLoading:', avatarLoading);
-    console.log('Avatar Debug - avatarError:', avatarError);
-    console.log('Avatar Debug - useUserAvatar hook called with:', playerId);
-    console.log('=== Avatar Debug End ===');
+    // console.log('=== Avatar Debug Start ===');
+    // console.log('Avatar Debug - playerId:', playerId);
+    // console.log('Avatar Debug - currentPlayerAvatar:', currentPlayerAvatar);
+    // console.log('Avatar Debug - avatarLoading:', avatarLoading);
+    // console.log('Avatar Debug - avatarError:', avatarError);
+    // console.log('Avatar Debug - useUserAvatar hook called with:', playerId);
+    // console.log('=== Avatar Debug End ===');
     if (avatarError) {
       console.error('Avatar loading failed:', avatarError);
     }
@@ -158,10 +159,90 @@ export default function GamePage() {
   const [claimingSeat, setClaimingSeat] = useState<number | null>(null);
   const [userRole, setUserRole] = useState<'admin' | 'player' | 'guest'>('guest');
   const [playerChips, setPlayerChips] = useState<number>(0);
-  // Feature flag to disable realtime sockets and use HTTP endpoints instead
-  const socketsDisabled = (process.env.NEXT_PUBLIC_DISABLE_SOCKETS || '')
-    .toString()
-    .toLowerCase() === 'true' || (process.env.NEXT_PUBLIC_DISABLE_SOCKETS || '') === '1';
+  
+  // Check if sockets are disabled based on transport mode
+  const transportMode = getTransportMode();
+  const socketsDisabled = transportMode === 'supabase' || 
+    (process.env.NEXT_PUBLIC_DISABLE_SOCKETS || '').toString().toLowerCase() === 'true' || 
+    (process.env.NEXT_PUBLIC_DISABLE_SOCKETS || '') === '1';
+  
+  // Subscribe to Supabase realtime updates when in Supabase mode
+  useSupabaseRealtime(
+    socketsDisabled && id ? `${id}` : undefined,
+    {
+      onGameStateUpdate: (payload: any) => {
+        console.log('📡 Supabase game_state_update:', payload);
+        const { gameState, seq } = payload;
+        
+        // Validate sequence number to prevent out-of-order updates
+        if (typeof seq === 'number') {
+          if (seq < lastSeqRef.current) {
+            console.warn(`⚠️ Ignoring out-of-order update: seq=${seq} < last=${lastSeqRef.current}`);
+            return;
+          }
+          lastSeqRef.current = seq;
+        }
+        
+        if (gameState) {
+          setPokerGameState(gameState);
+          setGameStarted(true);
+          console.log('🎮 Game state updated:', gameState.stage, 'activePlayer:', gameState.activePlayer, 'seq:', seq);
+
+          const derivedDc = computeDealerChoicePrompt(gameState);
+          if (derivedDc) {
+            applyDealerChoicePrompt(derivedDc);
+          } else if (gameState.stage !== 'awaiting-dealer-choice') {
+            applyDealerChoicePrompt(null);
+          }
+
+          // Update seat assignments from game state players
+          if (Array.isArray(gameState.players)) {
+            const updatedSeats: Record<number, { playerId: string; playerName: string; chips: number } | null> = { ...seatAssignments };
+            
+            gameState.players.forEach((player: any) => {
+              if (player.position !== undefined && player.position >= 1 && player.position <= maxPlayers) {
+                updatedSeats[player.position] = {
+                  playerId: player.id,
+                  playerName: player.name || `Player ${player.position}`,
+                  chips: player.stack || 0
+                };
+              }
+            });
+            
+            setSeatAssignments(updatedSeats);
+          }
+        }
+      },
+      onSeatClaimed: (payload: any) => {
+        console.log('📡 Supabase seat_claimed:', payload);
+        const { seatNumber, playerId: claimedPlayerId, playerName, chips } = payload;
+        setSeatAssignments(prev => ({
+          ...prev,
+          [seatNumber]: { playerId: claimedPlayerId, playerName, chips }
+        }));
+        console.log('💺 Seat claimed:', seatNumber, playerName);
+      },
+      onSeatVacated: (payload: any) => {
+        console.log('📡 Supabase seat_vacated:', payload);
+        const { seatNumber } = payload;
+        setSeatAssignments(prev => ({
+          ...prev,
+          [seatNumber]: null
+        }));
+        console.log('💺 Seat vacated:', seatNumber);
+      },
+      onAwaitingDealerChoice: (payload: any) => {
+        if (!payload) return;
+        applyDealerChoicePrompt({
+          dealerId: payload.dealerId,
+          allowedVariants: Array.isArray(payload.allowedVariants) && payload.allowedVariants.length > 0
+            ? payload.allowedVariants
+            : allowedDealerChoiceVariants.current,
+          current: payload.current || payload.suggestedVariant || 'texas-holdem',
+        });
+      }
+    }
+  );
   
   // Helper functions for game state
   const getSeatedPlayersCount = () => {
@@ -176,8 +257,17 @@ export default function GamePage() {
   // Game state
   const [gameStarted, setGameStarted] = useState(false);
   const [pokerGameState, setPokerGameState] = useState<any>(null);
+  const pokerStageRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    pokerStageRef.current = pokerGameState?.stage;
+  }, [pokerGameState?.stage]);
+  // Track last received sequence number to prevent out-of-order updates
+  const lastSeqRef = useRef<number>(0);
+  // Prevent duplicate action submissions
+  const pendingActionRef = useRef<boolean>(false);
   // Auto next-hand fallback timer ref
   const autoNextHandTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoNextHandScheduledRef = useRef<boolean>(false);
   // Visual accessibility options
   const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
   // Dealer's Choice: pending choice prompt from server
@@ -186,6 +276,56 @@ export default function GamePage() {
   // Track if the dealer has manually changed the selection to avoid overwriting with stale prompts
   const userChangedVariantRef = useRef<boolean>(false);
   const lastAwaitingDealerIdRef = useRef<string | undefined>(undefined);
+  const allowedDealerChoiceVariants = useRef([
+    'texas-holdem',
+    'omaha',
+    'omaha-hi-lo',
+    'seven-card-stud',
+    'seven-card-stud-hi-lo',
+    'five-card-stud',
+  ]);
+
+  const applyDealerChoicePrompt = useCallback((prompt: { dealerId?: string; allowedVariants?: string[]; current?: string } | null) => {
+    if (!prompt) {
+      setAwaitingDealerChoice(null);
+      userChangedVariantRef.current = false;
+      lastAwaitingDealerIdRef.current = undefined;
+      return;
+    }
+    if (Array.isArray(prompt.allowedVariants) && prompt.allowedVariants.length > 0) {
+      allowedDealerChoiceVariants.current = prompt.allowedVariants as string[];
+    }
+    const incomingDealerId = prompt.dealerId;
+    const prevDealerId = lastAwaitingDealerIdRef.current;
+    const isNewSession = incomingDealerId && incomingDealerId !== prevDealerId;
+    if (isNewSession) {
+      userChangedVariantRef.current = false;
+      lastAwaitingDealerIdRef.current = incomingDealerId;
+      setSelectedVariantDC(prompt.current || 'texas-holdem');
+    } else if (!userChangedVariantRef.current && prompt.current) {
+      setSelectedVariantDC(prompt.current);
+    }
+    setAwaitingDealerChoice({
+      dealerId: prompt.dealerId,
+      allowedVariants: prompt.allowedVariants || allowedDealerChoiceVariants.current,
+      current: prompt.current || 'texas-holdem',
+    });
+  }, []);
+
+  const computeDealerChoicePrompt = useCallback((state: any) => {
+    if (!state || state.stage !== 'awaiting-dealer-choice') return null;
+    const players = Array.isArray(state.players) ? state.players : [];
+    const playerCount = players.length;
+    if (playerCount === 0) return null;
+    const rawDealerIdx = typeof state.dealerPosition === 'number' ? state.dealerPosition : 0;
+    const dealerIdx = playerCount > 0 ? ((rawDealerIdx + 1) % playerCount) : rawDealerIdx;
+    const dealerId = players[dealerIdx]?.id;
+    return {
+      dealerId,
+      allowedVariants: allowedDealerChoiceVariants.current,
+      current: 'texas-holdem',
+    };
+  }, []);
 
   // Initialize high-contrast setting from localStorage and keep in sync when room changes
   useEffect(() => {
@@ -249,48 +389,67 @@ export default function GamePage() {
 
   // Client-side fallback: after showdown, request next hand after 5s if server didn't start it
   useEffect(() => {
-    // Guard: need socket, table id, and a valid game state
-    if (!socket || !id || typeof id !== 'string') return;
-
-    // Clear any previous timer when stage changes
-    if (autoNextHandTimerRef.current) {
-      clearTimeout(autoNextHandTimerRef.current);
-      autoNextHandTimerRef.current = null;
-    }
+    // Guard: need table id and a valid game state
+    if (!id || typeof id !== 'string') return;
 
     const stage = pokerGameState?.stage;
-    if (stage === 'showdown') {
-      // Schedule a single-shot fallback after 5 seconds
-      autoNextHandTimerRef.current = setTimeout(() => {
-        try {
-          // Double-check we're still at showdown before emitting
-          if (pokerGameState?.stage === 'showdown') {
-            console.log('[client auto] Requesting next hand after 5s');
+    if (stage !== 'showdown') {
+      if (autoNextHandTimerRef.current) {
+        clearTimeout(autoNextHandTimerRef.current);
+        autoNextHandTimerRef.current = null;
+      }
+      autoNextHandScheduledRef.current = false;
+      return;
+    }
+
+    if (autoNextHandTimerRef.current || autoNextHandScheduledRef.current) {
+      return;
+    }
+
+    autoNextHandScheduledRef.current = true;
+    autoNextHandTimerRef.current = setTimeout(async () => {
+      try {
+        if (pokerStageRef.current === 'showdown') {
+          console.log('[client auto] Requesting next hand after 5s');
+          if (socketsDisabled) {
+            const response = await fetch('/api/games/next-hand', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tableId: id, playerId }),
+            });
+            if (!response.ok) {
+              console.warn('Next hand request failed:', await response.text());
+            }
+          } else if (socket) {
             socket.emit('request_next_hand', { tableId: id });
           }
-        } catch (e) {
-          console.warn('Auto next-hand request failed:', e);
-        } finally {
-          if (autoNextHandTimerRef.current) {
-            clearTimeout(autoNextHandTimerRef.current);
-            autoNextHandTimerRef.current = null;
-          }
         }
-      }, 5000);
-    }
+      } catch (e) {
+        console.warn('Auto next-hand request failed:', e);
+      } finally {
+        if (autoNextHandTimerRef.current) {
+          clearTimeout(autoNextHandTimerRef.current);
+          autoNextHandTimerRef.current = null;
+        }
+        autoNextHandScheduledRef.current = false;
+      }
+    }, 5000);
 
     return () => {
       if (autoNextHandTimerRef.current) {
         clearTimeout(autoNextHandTimerRef.current);
         autoNextHandTimerRef.current = null;
       }
+      autoNextHandScheduledRef.current = false;
     };
-  }, [pokerGameState?.stage, socket, id]);
+  }, [pokerGameState?.stage, socket, id, socketsDisabled, playerId]);
   
-  // HTTP mode: periodic seat polling to reflect other players
+  // HTTP mode: periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {
     if (!socketsDisabled) return;
     if (!id) return;
+    // Don't poll seats if game is active - seats come from game state
+    if (gameStarted || pokerGameState) return;
     let alive = true;
     let timer: any = null;
 
@@ -300,28 +459,32 @@ export default function GamePage() {
         if (!resp.ok) return;
         const data = await resp.json();
         if (!alive) return;
-        if (data?.seats) {
-          // Only update if changed
-          try {
-            const nextStr = JSON.stringify(data.seats);
-            const prevStr = JSON.stringify(seatAssignments);
-            if (nextStr !== prevStr) {
-              setSeatAssignments(data.seats);
-              setSeatStateReady(true);
-              try { if (id) localStorage.setItem(`seats_${id}`, nextStr); } catch {}
-              const playerSeat = Object.entries(data.seats).find(([_, a]: any) => a?.playerId === playerId);
-              if (playerSeat) {
-                const [seatNumber, assignment] = playerSeat as any;
-                setCurrentPlayerSeat(parseInt(seatNumber));
-                setPlayerChips(assignment?.chips || 0);
-                try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
-              } else {
-                setCurrentPlayerSeat(null);
+
+        if (data.gameState) {
+            setPokerGameState(data.gameState);
+            const derivedDc = computeDealerChoicePrompt(data.gameState);
+            if (derivedDc) {
+              const incomingDealerId = derivedDc.dealerId;
+              const prevDealerId = lastAwaitingDealerIdRef.current;
+              const isNewSession = incomingDealerId && incomingDealerId !== prevDealerId;
+              if (isNewSession) {
+                userChangedVariantRef.current = false;
+                lastAwaitingDealerIdRef.current = incomingDealerId;
+                setSelectedVariantDC(derivedDc.current || 'texas-holdem');
+              } else if (!userChangedVariantRef.current && derivedDc.current) {
+                setSelectedVariantDC(derivedDc.current);
               }
+              setAwaitingDealerChoice(derivedDc);
+            } else if (data.gameState.stage !== 'awaiting-dealer-choice') {
+              setAwaitingDealerChoice(null);
+              setSelectedVariantDC('texas-holdem');
+              userChangedVariantRef.current = false;
+              lastAwaitingDealerIdRef.current = undefined;
             }
-          } catch {}
         }
-      } catch {}
+      } catch (err) {
+        console.warn('Failed to fetch seats state:', err);
+      }
     };
 
     // Initial and interval fetch
@@ -331,7 +494,7 @@ export default function GamePage() {
       alive = false;
       if (timer) clearInterval(timer);
     };
-  }, [socketsDisabled, id, playerId, seatAssignments]);
+  }, [socketsDisabled, id, playerId, seatAssignments, gameStarted, pokerGameState]);
 
   // Seat management functions
   const claimSeat = async (seatNumber: number) => {
@@ -476,7 +639,7 @@ export default function GamePage() {
   };
 
   // Start game handler
-  const handleStartGame = () => {
+  const handleStartGame = async () => {
     if (!canStartGame()) {
       console.warn('Cannot start game: insufficient players or player not seated');
       return;
@@ -485,20 +648,51 @@ export default function GamePage() {
     console.log('Starting game with', getSeatedPlayersCount(), 'players');
     setGameStarted(true);
     
+    const seated = Object.entries(seatAssignments)
+      .filter(([_, assignment]) => assignment !== null)
+      .map(([seatNumber, assignment]) => ({
+        seatNumber: parseInt(seatNumber),
+        playerId: (assignment as any)!.playerId,
+        playerName: (assignment as any)!.playerName,
+        chips: (assignment as any)!.chips
+      }));
+    const variant = roomConfig?.variant || undefined;
+    const bettingMode = roomConfig?.bettingMode || (variant === 'omaha' || variant === 'omaha-hi-lo' ? 'pot-limit' : undefined);
+    const sb = roomConfig?.sb;
+    const bb = roomConfig?.bb;
+
+    // HTTP API for Supabase mode
+    if (socketsDisabled) {
+      try {
+        const response = await fetch(`/api/games/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tableId: id,
+            playerId,
+            seatedPlayers: seated,
+            variant,
+            initialChoice: 'texas-holdem',
+            bettingMode,
+            smallBlind: sb,
+            bigBlind: bb,
+            sb,
+            bb,
+          }),
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          console.error('Start game failed:', err);
+        }
+      } catch (error) {
+        console.error('Error starting game:', error);
+      }
+      return;
+    }
+
     // Emit start game event via socket
     if (socket) {
-      const seated = Object.entries(seatAssignments)
-        .filter(([_, assignment]) => assignment !== null)
-        .map(([seatNumber, assignment]) => ({
-          seatNumber: parseInt(seatNumber),
-          playerId: (assignment as any)!.playerId,
-          playerName: (assignment as any)!.playerName,
-          chips: (assignment as any)!.chips
-        }));
-      const variant = roomConfig?.variant || undefined;
-      const bettingMode = roomConfig?.bettingMode || (variant === 'omaha' || variant === 'omaha-hi-lo' ? 'pot-limit' : undefined);
-      const sb = roomConfig?.sb;
-      const bb = roomConfig?.bb;
       socket.emit('start_game', {
         tableId: id,
         playerId,
@@ -517,24 +711,70 @@ export default function GamePage() {
   };
 
   // Poker action handlers
-  const handlePokerAction = (action: string, amount?: number) => {
-    if (socketsDisabled) {
-      console.warn('Realtime disabled: poker actions are unavailable in HTTP mode.');
-      return;
-    }
-    if (!socket || !pokerGameState || !playerId) {
-      console.warn('Cannot perform action: missing socket, game state, or player ID');
+  const handlePokerAction = async (action: string, amount?: number) => {
+    if (!pokerGameState || !playerId) {
+      console.warn('Cannot perform action: missing game state or player ID');
       return;
     }
 
+    const isFold = action === 'fold';
+    if (!isFold && pokerGameState?.activePlayer && pokerGameState.activePlayer !== playerId) {
+      console.warn('Action blocked: not your turn', { action, activePlayer: pokerGameState.activePlayer, playerId });
+      return;
+    }
+
+    // Prevent duplicate submissions
+    if (pendingActionRef.current) {
+      console.warn('Action already in progress, ignoring duplicate request');
+      return;
+    }
+
+    pendingActionRef.current = true;
     console.log(`Performing ${action}${amount ? ` for ${amount}` : ''}`);
     
-    socket.emit('player_action', {
-      tableId: id,
-      playerId: playerId,
-      action: action,
-      amount: amount
-    });
+    try {
+      // HTTP API for Supabase mode
+      if (socketsDisabled) {
+        try {
+          const response = await fetch('/api/games/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tableId: id,
+              playerId,
+              action,
+              amount,
+            }),
+          });
+
+          if (!response.ok) {
+            const err = await response.json();
+            console.error('Poker action failed:', err);
+          }
+        } catch (error) {
+          console.error('Error performing poker action:', error);
+        }
+        return;
+      }
+
+      // Socket mode
+      if (!socket) {
+        console.warn('Cannot perform action: socket not connected');
+        return;
+      }
+      
+      socket.emit('player_action', {
+        tableId: id,
+        playerId: playerId,
+        action: action,
+        amount: amount
+      });
+    } finally {
+      // Clear the pending flag after a short delay to allow the action to be processed
+      setTimeout(() => {
+        pendingActionRef.current = false;
+      }, 500);
+    }
   };
 
   const handleFold = () => handlePokerAction('fold');
@@ -1380,25 +1620,6 @@ export default function GamePage() {
   }, []); // Empty dependency array - only run once on mount
 
   useEffect(() => {
-    // Initialize socket connection (non-blocking)
-    const initSocket = async () => {
-      try {
-        const { getSocket } = await import('../../src/lib/clientSocket');
-        const socketInstance = await getSocket();
-        setSocket(socketInstance);
-      } catch (error) {
-        console.warn('Socket initialization failed, continuing without real-time features:', error);
-        // Continue without socket - the app should still work
-      }
-    };
-    
-    // Don't block page load for socket initialization
-    if (!socketsDisabled) {
-      setTimeout(() => {
-        initSocket();
-      }, 100);
-    }
-
     // Debug: Clean up any corrupted localStorage data that might contain time formatting
     if (typeof window !== 'undefined') {
       // Clear old format player IDs that start with 'p_' to force UUID regeneration
@@ -1429,7 +1650,7 @@ export default function GamePage() {
 
     // Note: Seat assignments loading moved to separate useEffect to prevent infinite loops
 
-    // Join table and personal room
+    // Join table and personal room (socket initialization happens in separate useEffect below)
     if (!socketsDisabled && socket && id && typeof id === 'string') {
       socket.emit('join_table', { tableId: id, playerId: playerId });
     }
@@ -1628,11 +1849,25 @@ export default function GamePage() {
           
           if (data.gameState) {
             setPokerGameState(data.gameState);
-            // Reset any prior Dealer's Choice prompt and seed default selection
-            setAwaitingDealerChoice(null);
-            setSelectedVariantDC('texas-holdem');
-            userChangedVariantRef.current = false;
-            lastAwaitingDealerIdRef.current = undefined;
+            const derivedDc = computeDealerChoicePrompt(data.gameState);
+            if (derivedDc) {
+              const incomingDealerId = derivedDc.dealerId;
+              const prevDealerId = lastAwaitingDealerIdRef.current;
+              const isNewSession = incomingDealerId && incomingDealerId !== prevDealerId;
+              if (isNewSession) {
+                userChangedVariantRef.current = false;
+                lastAwaitingDealerIdRef.current = incomingDealerId;
+                setSelectedVariantDC(derivedDc.current || 'texas-holdem');
+              } else if (!userChangedVariantRef.current && derivedDc.current) {
+                setSelectedVariantDC(derivedDc.current);
+              }
+              setAwaitingDealerChoice(derivedDc);
+            } else {
+              setAwaitingDealerChoice(null);
+              setSelectedVariantDC('texas-holdem');
+              userChangedVariantRef.current = false;
+              lastAwaitingDealerIdRef.current = undefined;
+            }
             try {
               const gs = data.gameState || {};
               const players = Array.isArray(gs.players) ? gs.players : [];
@@ -1682,10 +1917,24 @@ export default function GamePage() {
           console.log('Game state update:', data.gameState);
           console.log('Last action:', data.lastAction);
           setPokerGameState(data.gameState);
-          // Clear Dealer's Choice prompt once a hand starts
-          setAwaitingDealerChoice(null);
-          userChangedVariantRef.current = false;
-          lastAwaitingDealerIdRef.current = undefined;
+          const derivedDc = computeDealerChoicePrompt(data.gameState);
+          if (derivedDc) {
+            const incomingDealerId = derivedDc.dealerId;
+            const prevDealerId = lastAwaitingDealerIdRef.current;
+            const isNewSession = incomingDealerId && incomingDealerId !== prevDealerId;
+            if (isNewSession) {
+              userChangedVariantRef.current = false;
+              lastAwaitingDealerIdRef.current = incomingDealerId;
+              setSelectedVariantDC(derivedDc.current || 'texas-holdem');
+            } else if (!userChangedVariantRef.current && derivedDc.current) {
+              setSelectedVariantDC(derivedDc.current);
+            }
+            setAwaitingDealerChoice(derivedDc);
+          } else {
+            setAwaitingDealerChoice(null);
+            userChangedVariantRef.current = false;
+            lastAwaitingDealerIdRef.current = undefined;
+          }
           try {
             const gs = data.gameState || {};
             const players = Array.isArray(gs.players) ? gs.players : [];
@@ -1948,9 +2197,8 @@ export default function GamePage() {
             {canStartGame() && !gameStarted && (
               <button
                 onClick={handleStartGame}
-                disabled={socketsDisabled}
-                className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                title={socketsDisabled ? 'Realtime is disabled; starting a game requires sockets' : `Start the game with ${getSeatedPlayersCount()} players`}
+                className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto"
+                title={`Start the game with ${getSeatedPlayersCount()} players (${transportMode === 'supabase' ? 'Supabase realtime' : 'Socket.IO'})`}
                 aria-label="Start game"
               >
                 <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -2019,11 +2267,24 @@ export default function GamePage() {
                       </div>
                       <div className="mt-3">
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             try {
-                              if (!socket || !id) return;
-                              socket.emit('choose_variant', { tableId: id, variant: selectedVariantDC });
-                            } catch {}
+                              if (!id || !playerId) return;
+                              if (socketsDisabled || !socket) {
+                                const response = await fetch('/api/games/next-hand', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ tableId: id, playerId, variant: selectedVariantDC }),
+                                });
+                                if (!response.ok) {
+                                  console.warn('Dealer choice via HTTP failed:', await response.text());
+                                }
+                              } else {
+                                socket.emit('choose_variant', { tableId: id, variant: selectedVariantDC });
+                              }
+                            } catch (err) {
+                              console.warn('Dealer choice failed:', err);
+                            }
                           }}
                           className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded shadow"
                         >

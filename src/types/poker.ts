@@ -1,7 +1,8 @@
 // Extended to support Seven-card Stud streets (US-053)
 export type GameStage =
   | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' // Hold'em/Omaha
-  | 'third' | 'fourth' | 'fifth' | 'sixth' | 'seventh'; // Seven-card Stud
+  | 'third' | 'fourth' | 'fifth' | 'sixth' | 'seventh' // Seven-card Stud
+  | 'awaiting-dealer-choice'; // Dealer's Choice pre-hand pause
 
 export interface Card {
   suit: 'hearts' | 'diamonds' | 'clubs' | 'spades';

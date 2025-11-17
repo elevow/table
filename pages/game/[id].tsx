@@ -810,28 +810,26 @@ export default function GamePage() {
     } as { down: any[]; up: any[] };
   };
 
-  // Compute a friendly hand name for the current player, variant-aware
-  const getMyHandName = useCallback((): string | null => {
-    try {
-      if (!pokerGameState || !playerId) return null;
-      const variant = pokerGameState?.variant as string | undefined;
-      // If player not found, bail
-      const me = pokerGameState.players?.find((p: any) => p.id === playerId);
-      if (!me) return null;
+  type HandSummary = { primary: string | null; highLabel: string | null; lowLabel: string | null };
 
-      // Helpers for kicker formatting
+  // Compute friendly hand info (high + optional low for Hi-Lo variants)
+  const getMyHandSummary = useCallback((): HandSummary => {
+    const fallback: HandSummary = { primary: null, highLabel: null, lowLabel: null };
+    try {
+      if (!pokerGameState || !playerId) return fallback;
+      const variant = pokerGameState?.variant as string | undefined;
+      const me = pokerGameState.players?.find((p: any) => p.id === playerId);
+      if (!me) return fallback;
+
       const weight: Record<string, number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
-  // Map ranks for compact kicker display: use 'T' for 10
-  const sym = (r: string) => (r === '10' ? 'T' : r);
+      const sym = (r: string) => (r === '10' ? 'T' : r);
       const formatWithKickers = (hr: any): string => {
         try {
           const name = String(hr?.name || hr?.description || '') || null;
           const best: any[] = Array.isArray(hr?.cards) ? hr.cards : [];
           if (!name || best.length < 5) return name || '';
           const lower = name.toLowerCase();
-          // For straights and flushes (incl. straight flush/royal), show just the name
           if (lower.includes('straight') || lower.includes('flush')) return name;
-          // Derive kickers from the best 5-card hand itself
           const counts: Record<string, number> = {};
           for (const c of best) counts[c.rank] = (counts[c.rank] || 0) + 1;
           const freqVals = Object.values(counts).sort((a, b) => b - a);
@@ -840,7 +838,6 @@ export default function GamePage() {
             const quad = Object.keys(counts).find(r => counts[r] === 4);
             if (quad) handRanks.add(quad);
           } else if (freqVals[0] === 3 && freqVals[1] === 2) {
-            // Full house (suffix omitted earlier, but keep logic complete)
             const trip = Object.keys(counts).find(r => counts[r] === 3);
             const pair = Object.keys(counts).find(r => counts[r] === 2);
             if (trip) handRanks.add(trip);
@@ -854,7 +851,6 @@ export default function GamePage() {
             const pair = Object.keys(counts).find(r => counts[r] === 2);
             if (pair) handRanks.add(pair);
           } else {
-            // High card: exclude the highest card from kickers
             const sortedBest = [...best].sort((a, b) => (weight[b.rank] || 0) - (weight[a.rank] || 0));
             if (sortedBest[0]) handRanks.add(sortedBest[0].rank);
           }
@@ -869,7 +865,6 @@ export default function GamePage() {
         }
       };
 
-      // Utility: quick label for partial info (when <5 cards known)
       const partialLabel = (cards: any[]): string | null => {
         if (!Array.isArray(cards) || cards.length === 0) return null;
         const byRank: Record<string, number> = {};
@@ -887,36 +882,62 @@ export default function GamePage() {
         return top?.rank ? `${top.rank === 'A' ? 'Ace' : top.rank === 'K' ? 'King' : top.rank === 'Q' ? 'Queen' : top.rank === 'J' ? 'Jack' : top.rank} High` : null;
       };
 
-      // Stud: use my stud cards (down + up) as my private cards; no community
-      if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+      const computeHighLabel = (): string | null => {
+        if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+          const { down, up } = getStudCardsForPlayer(playerId);
+          const all = [...(down || []), ...(up || [])];
+          if (!all || all.length === 0) return null;
+          if (all.length < 5) return partialLabel(all);
+          const ranking = HandEvaluator.getHandRanking(all, []);
+          return formatWithKickers(ranking) || null;
+        }
+
+        const holes = Array.isArray(me?.holeCards) ? me.holeCards : [];
+        const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
+        if (!holes || holes.length === 0) return null;
+        const known = [...holes, ...board];
+        if (known.length < 5) return partialLabel(known);
+
+        if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+          const ranking = HandEvaluator.getOmahaHandRanking(holes, board);
+          return formatWithKickers(ranking) || null;
+        }
+
+        const ranking = HandEvaluator.getHandRanking(holes, board);
+        return formatWithKickers(ranking) || null;
+      };
+
+      const highLabel = computeHighLabel();
+      let lowLabel: string | null = null;
+      const lowRankLabel = (value: number) => {
+        const map: Record<number, string> = { 1: 'A', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'J', 12: 'Q', 13: 'K' };
+        return map[value] || String(value);
+      };
+      const describeLow = (ranks: number[]): string | null => {
+        if (!Array.isArray(ranks) || ranks.length === 0) return null;
+        return `${ranks.map(lowRankLabel).join('-')} Low`;
+      };
+
+      if (variant === 'omaha-hi-lo') {
+          const holes = Array.isArray(me?.holeCards) ? me.holeCards : [];
+          const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
+          if (holes.length >= 2 && board.length >= 3) {
+            const low = HandEvaluator.evaluateOmahaLowEightOrBetter(holes, board);
+            if (low) lowLabel = describeLow(low.ranks);
+          }
+      } else if (variant === 'seven-card-stud-hi-lo') {
         const { down, up } = getStudCardsForPlayer(playerId);
         const all = [...(down || []), ...(up || [])];
-        if (!all || all.length === 0) return null;
-        if (all.length < 5) return partialLabel(all);
-        // Use generic ranking; solver will pick best from available cards
-        const ranking = HandEvaluator.getHandRanking(all, []);
-        return formatWithKickers(ranking) || null;
+        if (all.length >= 5) {
+          const low = HandEvaluator.evaluateAceToFiveLow(all);
+          if (low) lowLabel = describeLow(low.ranks);
+        }
       }
 
-      // Hold'em/Omaha style: use hole + community
-      const holes = Array.isArray(me?.holeCards) ? me.holeCards : [];
-      const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
-      if (!holes || holes.length === 0) return null;
-      const known = [...holes, ...board];
-      if (known.length < 5) return partialLabel(known);
-
-      if (variant === 'omaha' || variant === 'omaha-hi-lo') {
-        // Prefer Omaha evaluator (exactly 2+3 when possible)
-        const ranking = HandEvaluator.getOmahaHandRanking(holes, board);
-        return formatWithKickers(ranking) || null;
-      }
-
-      // Default: generic
-      const ranking = HandEvaluator.getHandRanking(holes, board);
-      return formatWithKickers(ranking) || null;
+      return { primary: highLabel, highLabel, lowLabel };
     } catch (e) {
-      console.warn('Hand name computation failed:', e);
-      return null;
+      console.warn('Hand summary computation failed:', e);
+      return fallback;
     }
   }, [pokerGameState, playerId]);
 
@@ -2413,9 +2434,23 @@ export default function GamePage() {
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Your Turn</h3>
               {(() => {
-                const name = getMyHandName();
-                return name ? (
-                  <div className="mb-3 text-sm text-gray-700 dark:text-gray-200">Your Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{name}</span></div>
+                const summary = getMyHandSummary();
+                const isHiLo = pokerGameState?.variant === 'omaha-hi-lo' || pokerGameState?.variant === 'seven-card-stud-hi-lo';
+                if (isHiLo) {
+                  const highDisplay = summary.highLabel || summary.primary || 'Waiting for more cards';
+                  const lowDisplay = summary.lowLabel || 'No qualifying low yet';
+                  return (
+                    <div className="mb-3 text-sm text-gray-700 dark:text-gray-200">
+                      <div className="font-semibold text-gray-900 dark:text-gray-100">Your Hand</div>
+                      <div className="mt-1 space-y-1">
+                        <div>High Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{highDisplay}</span></div>
+                        <div>Low Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{lowDisplay}</span></div>
+                      </div>
+                    </div>
+                  );
+                }
+                return summary.primary ? (
+                  <div className="mb-3 text-sm text-gray-700 dark:text-gray-200">Your Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{summary.primary}</span></div>
                 ) : null;
               })()}
               <div className="flex flex-wrap gap-2">
@@ -2740,9 +2775,20 @@ export default function GamePage() {
                 <p>Waiting for {pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'} to act...</p>
                 <p>Current Bet: ${pokerGameState.currentBet || 0} | Pot: ${pokerGameState.pot || 0}</p>
                 {(() => {
-                  const name = getMyHandName();
-                  return name ? (
-                    <p className="mt-1">Your Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{name}</span></p>
+                  const summary = getMyHandSummary();
+                  const isHiLo = pokerGameState?.variant === 'omaha-hi-lo' || pokerGameState?.variant === 'seven-card-stud-hi-lo';
+                  if (isHiLo) {
+                    const highDisplay = summary.highLabel || summary.primary || 'Waiting for more cards';
+                    const lowDisplay = summary.lowLabel || 'No qualifying low yet';
+                    return (
+                      <div className="mt-2 text-sm space-y-0.5">
+                        <div>High Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{highDisplay}</span></div>
+                        <div>Low Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{lowDisplay}</span></div>
+                      </div>
+                    );
+                  }
+                  return summary.primary ? (
+                    <p className="mt-1">Your Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{summary.primary}</span></p>
                   ) : null;
                 })()}
               </div>

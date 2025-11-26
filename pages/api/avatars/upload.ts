@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 import { AvatarService } from '../../../src/lib/services/avatar-service';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { requireAuth } from '../../../src/lib/auth/auth-utils';
@@ -30,27 +30,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Use proper database configuration with SSL fix for self-signed certificates
-    const connectionString = process.env.POOL_DATABASE_URL || process.env.DATABASE_URL;
-    
-    // Parse connection string to modify SSL mode
-    let modifiedConnectionString = connectionString;
-    if (connectionString?.includes('sslmode=require')) {
-      modifiedConnectionString = connectionString.replace('sslmode=require', 'sslmode=prefer');
-    }
-    
-    const pool = new Pool({
-      connectionString: modifiedConnectionString,
-      ssl: connectionString?.includes('supabase') ? { 
-        rejectUnauthorized: false
-      } : false
-    });
+    const pool = getPool();
     
     const service = new AvatarService(pool as any);
     const avatar = await service.uploadAvatar({ userId: authenticatedUserId, originalUrl, variants });
-    
-    // Close the pool connection
-    await pool.end();
     
     return res.status(201).json({ 
       id: avatar.id, 

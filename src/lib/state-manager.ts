@@ -142,9 +142,23 @@ export class StateManager {
 
     try {
       const currentState = this.states.get(tableId);
+      const sanitizedUpdate: Partial<TableState> = { ...update };
+      const prevStage = currentState?.stage;
+      const nextStage = sanitizedUpdate.stage ?? prevStage;
+      const stageResetTargets = new Set<TableState['stage']>(['preflop', 'awaiting-dealer-choice']);
+      if (
+        currentState &&
+        prevStage &&
+        nextStage &&
+        prevStage !== nextStage &&
+        stageResetTargets.has(nextStage)
+      ) {
+        sanitizedUpdate.runItTwicePrompt = null;
+        sanitizedUpdate.runItTwicePromptDisabled = false;
+      }
       const sequence = (this.sequences.get(tableId) || 0) + 1;
       
-      const newState = currentState ? { ...currentState, ...update } : update as TableState;
+      const newState = currentState ? { ...currentState, ...sanitizedUpdate } : sanitizedUpdate as TableState;
       this.states.set(tableId, newState);
       this.sequences.set(tableId, sequence);
 
@@ -152,7 +166,7 @@ export class StateManager {
         type: 'state_update',
         tableId,
         sequence,
-        payload: update,
+        payload: sanitizedUpdate,
         timestamp: Date.now()
       };
 

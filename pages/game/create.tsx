@@ -13,8 +13,10 @@ export default function CreateGameRoomPage() {
   const [maxPlayers, setMaxPlayers] = useState(6);
   const [smallBlind, setSmallBlind] = useState(1);
   const [bigBlind, setBigBlind] = useState(2);
+  const [bigBlindManuallyUpdated, setBigBlindManuallyUpdated] = useState(false);
   const [variant, setVariant] = useState<Variant>('texas-holdem');
   const [bettingMode, setBettingMode] = useState<BettingMode>('no-limit');
+  const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unlimited');
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
@@ -70,6 +72,7 @@ export default function CreateGameRoomPage() {
           configuration: {
             variant,
             bettingMode,
+            numberOfRebuys: numberOfRebuys === 'unlimited' ? 'unlimited' : Number(numberOfRebuys),
             tournament: enableTournament ? { preset: presetKey, config: selectedTournamentConfig } : undefined,
           },
         }),
@@ -189,7 +192,13 @@ export default function CreateGameRoomPage() {
               min={0.01}
               step={0.01}
               value={smallBlind}
-              onChange={e => setSmallBlind(parseFloat(e.target.value || '0'))}
+              onChange={e => {
+                const newSmallBlind = parseFloat(e.target.value || '0');
+                setSmallBlind(newSmallBlind);
+                if (!bigBlindManuallyUpdated) {
+                  setBigBlind(Number((newSmallBlind * 2).toFixed(2)));
+                }
+              }}
             />
           </div>
           <div>
@@ -200,7 +209,13 @@ export default function CreateGameRoomPage() {
               min={Math.max(0.02, Number((smallBlind * 2).toFixed(2)))}
               step={0.01}
               value={bigBlind}
-              onChange={e => setBigBlind(parseFloat(e.target.value || '0'))}
+              onChange={e => {
+                const newBigBlind = parseFloat(e.target.value || '0');
+                if (newBigBlind !== bigBlind) {
+                  setBigBlindManuallyUpdated(true);
+                }
+                setBigBlind(newBigBlind);
+              }}
             />
           </div>
         </div>
@@ -240,6 +255,23 @@ export default function CreateGameRoomPage() {
             {variant === 'dealers-choice' && (
               <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Betting mode is determined by the dealer’s selected variant.</p>
             )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Number of Rebuys</label>
+            <select
+              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={numberOfRebuys === 'unlimited' ? 'unlimited' : String(numberOfRebuys)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setNumberOfRebuys(value === 'unlimited' ? 'unlimited' : parseInt(value, 10));
+              }}
+            >
+              <option value="unlimited">Unlimited</option>
+              {Array.from({ length: 11 }).map((_, idx) => (
+                <option key={idx} value={idx}>{idx}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Set 0-10 or leave as Unlimited for cash-style games.</p>
           </div>
           {/* Removed Require unanimous RIT consent checkbox per request */}
         </div>

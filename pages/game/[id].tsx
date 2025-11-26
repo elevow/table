@@ -1,5 +1,5 @@
 import { useRouter } from 'next/router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
 import { useComponentPerformance } from '../../src/utils/performance-monitor';
@@ -14,6 +14,39 @@ import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 import { getTransportMode } from '../../src/utils/transport';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
+
+type RebuyPromptState = {
+  baseChips: number;
+  rebuysUsed: number;
+  rebuyLimit: number | 'unlimited';
+  remaining: number | 'unlimited';
+};
+
+const persistSeatNumber = (storageKey: string | null, seatNumber: number | null) => {
+  if (typeof window === 'undefined' || !storageKey) return;
+  try {
+    if (seatNumber === null) {
+      localStorage.removeItem(storageKey);
+    } else {
+      localStorage.setItem(storageKey, String(seatNumber));
+    }
+  } catch (err) {
+    console.warn('Failed to persist seat marker:', err);
+  }
+};
+
+const readSeatNumberFromStorage = (storageKey: string | null): number | null => {
+  if (typeof window === 'undefined' || !storageKey) return null;
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch (err) {
+    console.warn('Failed to read seat marker:', err);
+    return null;
+  }
+};
 
 const GameBoard = dynamic(() => import('../../src/components/GameBoard'), {
   loading: () => <div className="skeleton-loader game-board-loader" />,
@@ -42,6 +75,12 @@ const CombinedTimerStats = dynamic(() => import('../../src/components/CombinedTi
 export default function GamePage() {
   const router = useRouter();
   const { id } = router.query;
+  const tableId = useMemo(() => {
+    if (typeof id === 'string') return id;
+    if (Array.isArray(id) && id.length > 0) return id[0] as string;
+    return '';
+  }, [id]);
+  const lastSeatStorageKey = tableId ? `table_lastSeat_${tableId}` : null;
   const chatPanelRef = useRef(null);
   const settingsRef = useRef(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -144,7 +183,13 @@ export default function GamePage() {
   // Room info state
   const [maxPlayers, setMaxPlayers] = useState<number>(6); // Default to 6, will be updated from room info
   // Room config (variant, betting mode, blinds)
-  const [roomConfig, setRoomConfig] = useState<{ variant?: string; bettingMode?: 'no-limit' | 'pot-limit'; sb?: number; bb?: number } | null>(null);
+  const [roomConfig, setRoomConfig] = useState<{
+    variant?: string;
+    bettingMode?: 'no-limit' | 'pot-limit';
+    sb?: number;
+    bb?: number;
+    numberOfRebuys?: number | 'unlimited';
+  } | null>(null);
   
   // Seat management state - initialize dynamically based on maxPlayers
   const [seatAssignments, setSeatAssignments] = useState<Record<number, { playerId: string; playerName: string; chips: number } | null>>(() => {
@@ -159,6 +204,8 @@ export default function GamePage() {
   const [claimingSeat, setClaimingSeat] = useState<number | null>(null);
   const [userRole, setUserRole] = useState<'admin' | 'player' | 'guest'>('guest');
   const [playerChips, setPlayerChips] = useState<number>(0);
+  const [rebuyPrompt, setRebuyPrompt] = useState<RebuyPromptState | null>(null);
+  const [rebuySubmitting, setRebuySubmitting] = useState<boolean>(false);
   
   // Check if sockets are disabled based on transport mode
   const transportMode = getTransportMode();
@@ -240,6 +287,24 @@ export default function GamePage() {
             : allowedDealerChoiceVariants.current,
           current: payload.current || payload.suggestedVariant || 'texas-holdem',
         });
+      },
+      onRebuyPrompt: (payload: any) => {
+        console.log('📡 Supabase rebuy_prompt:', payload);
+        if (!payload || payload.playerId !== playerId) return;
+        const { baseChips = 20, rebuysUsed = 0, rebuyLimit = 'unlimited', remaining = 'unlimited' } = payload;
+        setRebuyPrompt({ baseChips, rebuysUsed, rebuyLimit, remaining });
+      },
+      onRebuyResult: (payload: any) => {
+        console.log('📡 Supabase rebuy_result:', payload);
+        if (!payload || payload.playerId !== playerId) return;
+        setRebuySubmitting(false);
+        if (payload.status === 'accepted') {
+          setRebuyPrompt(null);
+          // Seat is updated via seat_state broadcast
+        } else if (payload.status === 'declined') {
+          setRebuyPrompt(null);
+          // Seat is vacated via seat_vacated broadcast
+        }
       }
     }
   );
@@ -368,7 +433,10 @@ export default function GamePage() {
         const bb = Number(blinds?.bb) || Number(blinds?.bigBlind) || undefined;
         const variant = cfg?.variant as string | undefined;
         const bettingMode = (cfg?.bettingMode as any) as ('no-limit' | 'pot-limit' | undefined);
-        setRoomConfig({ variant, bettingMode, sb, bb });
+        const numberOfRebuys = typeof cfg?.numberOfRebuys === 'number'
+          ? cfg.numberOfRebuys
+          : 'unlimited';
+        setRoomConfig({ variant, bettingMode, sb, bb, numberOfRebuys });
       } catch {}
     };
     fetchRoom();
@@ -534,6 +602,7 @@ export default function GamePage() {
           [seatNumber]: { playerId, playerName, chips: Number(startingChips) }
         }));
         setCurrentPlayerSeat(seatNumber);
+        persistSeatNumber(lastSeatStorageKey, seatNumber);
         setPlayerChips(Number(startingChips));
         try {
           if (id) localStorage.setItem(`seats_${id}`, JSON.stringify({ ...seatAssignments, [seatNumber]: { playerId, playerName, chips: Number(startingChips) } }));
@@ -614,6 +683,7 @@ export default function GamePage() {
 
     setSeatAssignments(newAssignments);
     setCurrentPlayerSeat(null);
+    persistSeatNumber(lastSeatStorageKey, null);
     setPlayerChips(0);
     
     // Save to localStorage
@@ -660,6 +730,7 @@ export default function GamePage() {
     const bettingMode = roomConfig?.bettingMode || (variant === 'omaha' || variant === 'omaha-hi-lo' ? 'pot-limit' : undefined);
     const sb = roomConfig?.sb;
     const bb = roomConfig?.bb;
+    const numberOfRebuys = roomConfig?.numberOfRebuys;
 
     // HTTP API for Supabase mode
     if (socketsDisabled) {
@@ -678,6 +749,7 @@ export default function GamePage() {
             bigBlind: bb,
             sb,
             bb,
+            numberOfRebuys,
           }),
         });
 
@@ -706,6 +778,7 @@ export default function GamePage() {
         bigBlind: bb,
         sb,
         bb,
+        numberOfRebuys,
       });
     }
   };
@@ -947,6 +1020,15 @@ export default function GamePage() {
     return pokerGameState.players.filter((p: any) => !(p.folded || p.isFolded));
   }, [pokerGameState]);
 
+  const getPlayerLabel = useCallback((pid?: string | null) => {
+    if (!pid) return null;
+    const fromGame = pokerGameState?.players?.find((p: any) => p.id === pid);
+    if (fromGame?.name) return fromGame.name;
+    const seatEntry = Object.values(seatAssignments).find((seat) => seat?.playerId === pid);
+    if (seatEntry?.playerName) return seatEntry.playerName;
+    return pid.slice(0, 6).toUpperCase();
+  }, [pokerGameState?.players, seatAssignments]);
+
   // Helpers for No-Limit bet/raise controls
   const getMe = useCallback(() => {
     if (!pokerGameState?.players || !playerId) return null as any;
@@ -1026,6 +1108,26 @@ export default function GamePage() {
   };
 
   // --- Run It Twice (RIT) helpers ---
+  const runItTwicePrompt = pokerGameState?.runItTwicePrompt || null;
+  const isRunItTwicePromptOwner = !!runItTwicePrompt && runItTwicePrompt.playerId === playerId;
+  const runItTwicePromptOwnerName = runItTwicePrompt ? getPlayerLabel(runItTwicePrompt.playerId) : null;
+  const runItTwicePromptTieNames = runItTwicePrompt?.tiedWith
+    ? runItTwicePrompt.tiedWith
+        .map((id: string) => getPlayerLabel(id))
+        .filter((name: string | null): name is string => !!name)
+    : [];
+  const runItTwiceViewerHandDescription = useMemo(() => {
+    if (!runItTwicePrompt) return null;
+    const viewerId = playerId;
+    const viewerDesc = viewerId ? runItTwicePrompt.handDescriptionsByPlayer?.[viewerId] : null;
+    return viewerDesc || runItTwicePrompt.handDescription || null;
+  }, [runItTwicePrompt, playerId]);
+  const runItTwiceBoards = Array.isArray(pokerGameState?.runItTwice?.boards)
+    ? pokerGameState.runItTwice.boards
+    : [];
+  const supabaseSecondRunBoard = transportMode === 'supabase' && runItTwiceBoards.length > 1
+    ? runItTwiceBoards[1]
+    : null;
   const anyAllIn = () => {
     try {
       return Array.isArray(pokerGameState?.players) && pokerGameState.players.some((p: any) => p.isAllIn);
@@ -1038,17 +1140,32 @@ export default function GamePage() {
     // If there is an activePlayer it's likely still betting unless only one remains
     return false; // conservative; server will enforce
   };
-  const canOfferRit = () => {
-    if (!pokerGameState) return false;
-    if (pokerGameState?.runItTwice?.enabled) return false; // already enabled
-    if (pokerGameState.stage === 'showdown') return false; // too late
-    if (!anyAllIn()) return false; // need an all-in
-    if (pokerGameState.communityCards?.length >= 5) return false; // full board dealt
-    return true; // server will validate precise timing
-  };
-  const enableRunItTwice = (runs: number) => {
-    if (!socket || !id || typeof id !== 'string') return;
-    socket.emit('enable_run_it_twice', { tableId: id, runs });
+  const enableRunItTwice = async (runs: number) => {
+    if (!id || typeof id !== 'string') return;
+    
+    const transportMode = getTransportMode();
+    
+    if (transportMode === 'supabase') {
+      // Use HTTP REST API for Supabase transport
+      try {
+        const response = await fetch('/api/games/enable-rit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tableId: id, playerId, runs }),
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Failed to process Run-It-Twice decision:', errorData);
+        }
+      } catch (error) {
+        console.error('Error sending Run-It-Twice decision:', error);
+      }
+    } else {
+      // Use Socket.IO for socket/hybrid transport
+      if (!socket) return;
+      socket.emit('enable_run_it_twice', { tableId: id, runs, playerId });
+    }
   };
 
   // Determine dealer/small blind/big blind tokens for a player based on current game state
@@ -1755,6 +1872,7 @@ export default function GamePage() {
                 if (playerSeat) {
                   const [seatNumber, assignment] = playerSeat as any;
                   setCurrentPlayerSeat(parseInt(seatNumber));
+                  persistSeatNumber(lastSeatStorageKey, parseInt(seatNumber));
                   setPlayerChips(assignment?.chips || 0);
                   try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
                 }
@@ -1805,8 +1923,10 @@ export default function GamePage() {
           // Update current player seat if this player claimed it
           if (data.playerId === playerId) {
             setCurrentPlayerSeat(data.seatNumber);
+            persistSeatNumber(lastSeatStorageKey, data.seatNumber);
             setPlayerChips(data.chips);
             setClaimingSeat(null);
+            setRebuyPrompt(null);
             try {
               if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(data.chips));
             } catch {}
@@ -1832,11 +1952,53 @@ export default function GamePage() {
           // Update current player seat if this player stood up
           if (data.playerId === playerId) {
             setCurrentPlayerSeat(null);
+            persistSeatNumber(lastSeatStorageKey, null);
             setPlayerChips(0);
             setClaimingSeat(null);
+            setRebuyPrompt(null);
+            setRebuySubmitting(false);
             try {
               if (id) localStorage.removeItem(`chips_${playerId}_${id}`);
             } catch {}
+          }
+        };
+
+        const handleSeatStackUpdated = (data: { seatNumber: number; playerId: string; chips: number }) => {
+          setSeatAssignments(prev => {
+            const existing = prev[data.seatNumber];
+            if (!existing) return prev;
+            return {
+              ...prev,
+              [data.seatNumber]: { ...existing, chips: data.chips }
+            };
+          });
+          if (data.playerId === playerId) {
+            setPlayerChips(data.chips);
+          }
+        };
+
+        const handleRebuyPrompt = (payload: any) => {
+          if (!payload || payload.playerId !== playerId) return;
+          const baseChips = Number(payload.baseChips) || 20;
+          const rebuysUsed = Number(payload.rebuysUsed) || 0;
+          const rebuyLimit = payload.rebuyLimit ?? 'unlimited';
+          const remaining = payload.remaining ?? (rebuyLimit === 'unlimited'
+            ? 'unlimited'
+            : Math.max(Number(rebuyLimit) - rebuysUsed, 0));
+          setRebuySubmitting(false);
+          setRebuyPrompt({ baseChips, rebuysUsed, rebuyLimit, remaining });
+        };
+
+        const handleRebuyResult = (payload: any) => {
+          if (!payload || payload.playerId !== playerId) return;
+          setRebuySubmitting(false);
+          if (payload.status === 'accepted') {
+            setRebuyPrompt(null);
+            if (typeof payload.stack === 'number') {
+              setPlayerChips(payload.stack);
+            }
+          } else if (payload.status === 'declined') {
+            setRebuyPrompt(null);
           }
         };
 
@@ -1855,6 +2017,7 @@ export default function GamePage() {
           if (playerSeat) {
             const [seatNumber, assignment] = playerSeat;
             setCurrentPlayerSeat(parseInt(seatNumber));
+            persistSeatNumber(lastSeatStorageKey, parseInt(seatNumber));
             setPlayerChips(assignment?.chips || 0);
             try {
               if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0));
@@ -2013,6 +2176,7 @@ export default function GamePage() {
         socketInstance.on('seat_claimed', handleSeatClaimed);
         socketInstance.on('seat_vacated', handleSeatVacated);
         socketInstance.on('seat_state', handleSeatState);
+        socketInstance.on('seat_stack_updated', handleSeatStackUpdated);
         socketInstance.on('game_started', handleGameStart);
         socketInstance.on('game_state_update', handleGameStateUpdate);
         socketInstance.on('action_failed', handleActionFailed);
@@ -2043,6 +2207,9 @@ export default function GamePage() {
           setClaimingSeat(null);
         });
 
+        socketInstance.on('rebuy_prompt', handleRebuyPrompt);
+        socketInstance.on('rebuy_result', handleRebuyResult);
+
         // Request current seat state when joining
         socketInstance.emit('get_seat_state', { tableId: id });
 
@@ -2059,14 +2226,17 @@ export default function GamePage() {
         currentSocket.off('seat_claimed');
         currentSocket.off('seat_vacated');
         currentSocket.off('seat_state');
+        currentSocket.off('seat_stack_updated');
         currentSocket.off('game_started');
         currentSocket.off('game_state_update');
   currentSocket.off('action_failed');
   currentSocket.off('seat_claim_failed');
   currentSocket.off('awaiting_dealer_choice');
+        currentSocket.off('rebuy_prompt');
+        currentSocket.off('rebuy_result');
       }
     };
-  }, [playerId, id]); // Only depend on playerId and id
+  }, [playerId, id, lastSeatStorageKey]); // Only depend on playerId, id, and storage key used for seat persistence
 
   // Load seat assignments - separate useEffect to prevent infinite loops
   useEffect(() => {
@@ -2100,6 +2270,7 @@ export default function GamePage() {
         Object.entries(cleanSeats).forEach(([seatNum, assignment]) => {
           if (assignment && assignment.playerId === playerId) {
             setCurrentPlayerSeat(parseInt(seatNum));
+            persistSeatNumber(lastSeatStorageKey, parseInt(seatNum));
             
             // Restore chip count from localStorage
             const savedChips = localStorage.getItem(`chips_${playerId}_${id}`);
@@ -2130,7 +2301,44 @@ export default function GamePage() {
         setSeatAssignments(emptySeats);
       }
     }
-  }, [id, playerId, maxPlayers]); // Include maxPlayers in dependencies
+  }, [id, playerId, maxPlayers, lastSeatStorageKey]); // Include maxPlayers in dependencies
+
+  // Sync playerId with canonical seat assignment to avoid mismatched prompts/actions
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const seatNumberFromState = currentPlayerSeat ?? null;
+    const seatNumberFromStorage = readSeatNumberFromStorage(lastSeatStorageKey);
+    const candidateSeatNumber = seatNumberFromState ?? seatNumberFromStorage;
+    if (!candidateSeatNumber) return;
+    const assignment = seatAssignments?.[candidateSeatNumber];
+    if (!assignment || !assignment.playerId) return;
+
+    const savedPlayerName = localStorage.getItem('playerName');
+    if (savedPlayerName && assignment.playerName && assignment.playerName !== savedPlayerName) {
+      return;
+    }
+
+    if (assignment.playerId === playerId) return;
+
+    console.log('[identity-sync] Updating local playerId from seat assignment', {
+      from: playerId,
+      to: assignment.playerId,
+      seat: candidateSeatNumber,
+    });
+    setPlayerId(assignment.playerId);
+    setCurrentPlayerSeat(candidateSeatNumber);
+    setPlayerChips(assignment.chips || 0);
+    persistSeatNumber(lastSeatStorageKey, candidateSeatNumber);
+    try {
+      localStorage.setItem('player_id', assignment.playerId);
+      localStorage.setItem('authenticated_user_id', assignment.playerId);
+      if (tableId) {
+        localStorage.setItem(`chips_${assignment.playerId}_${tableId}`, String(assignment.chips || 0));
+      }
+    } catch (err) {
+      console.warn('Failed to persist synced player identity:', err);
+    }
+  }, [seatAssignments, currentPlayerSeat, playerId, lastSeatStorageKey, tableId]);
 
   // Toggle settings component
   const toggleSettings = () => {
@@ -2160,6 +2368,42 @@ export default function GamePage() {
       setTimeout(() => setInviteStatus(null), 3000);
     }
   };
+
+  const respondToRebuy = useCallback(async (decision: 'yes' | 'no') => {
+    if (!playerId || !id) return;
+    setRebuySubmitting(true);
+    
+    if (socketsDisabled) {
+      // Use HTTP endpoint for Supabase mode
+      try {
+        const response = await fetch('/api/games/rebuy-decision', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tableId: id, playerId, decision }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          console.error('Rebuy decision failed:', data);
+        }
+      } catch (error) {
+        console.error('Rebuy decision error:', error);
+      } finally {
+        setRebuySubmitting(false);
+      }
+      return;
+    }
+    
+    // Socket.IO mode
+    if (!socket) return;
+    socket.emit('rebuy_decision', { tableId: id, playerId, decision });
+  }, [socketsDisabled, socket, playerId, id]);
+
+  useEffect(() => {
+    if (!currentPlayerSeat) {
+      setRebuyPrompt(null);
+      setRebuySubmitting(false);
+    }
+  }, [currentPlayerSeat]);
 
   const handleLeaveGame = async () => {
     // Show confirmation dialog
@@ -2194,10 +2438,42 @@ export default function GamePage() {
   
   return (
     <div className="game-page bg-gray-100 dark:bg-gray-900 min-h-screen">
+      {rebuyPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">Out of chips</h2>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              You have {rebuyPrompt.rebuyLimit === 'unlimited' ? 'unlimited' : `${rebuyPrompt.remaining} of ${rebuyPrompt.rebuyLimit}`} rebuys remaining.
+              Would you like to buy back in for ${rebuyPrompt.baseChips}?
+            </p>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <button
+                onClick={() => respondToRebuy('no')}
+                className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                disabled={rebuySubmitting}
+              >
+                No thanks
+              </button>
+              <button
+                onClick={() => respondToRebuy('yes')}
+                className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                disabled={rebuySubmitting}
+              >
+                {rebuySubmitting ? 'Processing...' : `Rebuy $${rebuyPrompt.baseChips}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Game: {id}</h1>
+            {roomConfig?.numberOfRebuys !== undefined && (
+              <span className="inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-100">
+                Rebuys: {roomConfig.numberOfRebuys === 'unlimited' ? 'Unlimited' : roomConfig.numberOfRebuys}
+              </span>
+            )}
             {/* Removed seated info banner at user request */}
             {/* Removed game started banner at user request */}
           </div>
@@ -2377,6 +2653,24 @@ export default function GamePage() {
                   </div>
                 )}
 
+                {supabaseSecondRunBoard && supabaseSecondRunBoard.length > 0 && (
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-2 flex flex-col items-center gap-1">
+                    <span className="text-[10px] uppercase tracking-wide text-amber-200 font-semibold drop-shadow">
+                      Run 2
+                    </span>
+                    <div className="flex gap-1">
+                      {supabaseSecondRunBoard.map((card: any, index: number) => (
+                        <div key={`rit-second-${index}`} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold">
+                          <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
+                          <div className={suitColorClass(card.suit)}>
+                            {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Pot area - positioned below the community cards */}
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-8 text-white text-center">
                   <div className="bg-gray-800 bg-opacity-70 px-3 py-1 rounded text-sm font-semibold">
@@ -2430,7 +2724,7 @@ export default function GamePage() {
           </div>
 
           {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}
-          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && (
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && (
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Your Turn</h3>
               {(() => {
@@ -2699,31 +2993,6 @@ export default function GamePage() {
                   )
                 )}
 
-                {/* Run It Twice offer (appears when eligible and not yet enabled) */}
-                {canOfferRit() && (
-                  <div className="flex flex-col gap-2 bg-purple-50 dark:bg-purple-900/30 p-3 rounded-md w-full border border-purple-300 dark:border-purple-600">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-purple-900 dark:text-purple-200">Run It Twice</div>
-                      <span className="text-[11px] text-purple-700 dark:text-purple-300">All-in detected</span>
-                    </div>
-                    <div className="text-xs text-purple-800 dark:text-purple-300 leading-snug">
-                      Deal the remaining community cards on multiple boards and split the pot by board outcomes.
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {(() => {
-                        const activeCount = getActiveNonFoldedPlayers().length;
-                        const maxRuns = Math.max(1, activeCount);
-                        return Array.from({ length: maxRuns }, (_, i) => i + 1).map(r => (
-                          <button
-                            key={r}
-                            onClick={() => enableRunItTwice(r)}
-                            className="px-3 py-1.5 rounded text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow focus:outline-none focus:ring-2 focus:ring-purple-400"
-                          >{r} Run{r > 1 ? 's' : ''}</button>
-                        ));
-                      })()}
-                    </div>
-                  </div>
-                )}
               </div>
               
               <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
@@ -2733,8 +3002,90 @@ export default function GamePage() {
             </div>
           )}
 
-          {/* Game Status Display (only before showdown); hide if only one non-folded remains */}
-          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer !== playerId && (
+          {/* Run It Twice decision panel for the selected player */}
+          {gameStarted && pokerGameState && runItTwicePrompt && isRunItTwicePromptOwner && !pokerGameState.runItTwice?.enabled && (
+            <div className="lg:col-span-2 bg-purple-50 dark:bg-purple-900/30 border border-purple-300 dark:border-purple-600 rounded-lg shadow-md p-4 mt-4" aria-live="polite">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block px-2 py-0.5 text-xs rounded bg-purple-600 text-white">RIT</span>
+                  <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100">Run It Twice Decision</h3>
+                </div>
+                <span className="text-xs uppercase tracking-wide text-purple-700 dark:text-purple-300">Hand paused</span>
+              </div>
+              <div className="mt-3 text-sm text-purple-900 dark:text-purple-100 space-y-2">
+                <p>You currently have the lowest revealed hand and must choose how the board finishes.</p>
+                {runItTwiceViewerHandDescription && (
+                  <p className="text-[13px] text-purple-800 dark:text-purple-200">
+                    Current best: <span className="font-semibold">{runItTwiceViewerHandDescription}</span>
+                  </p>
+                )}
+                {!!runItTwicePromptTieNames.length && (
+                  <p className="text-[13px] text-purple-800 dark:text-purple-200">
+                    Lowest hand tie with {runItTwicePromptTieNames.join(', ')}. You were randomly selected to decide.
+                  </p>
+                )}
+                <p className="text-[12px] text-purple-700 dark:text-purple-200">Choose a number of runs to resume the hand.</p>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={() => enableRunItTwice(1)}
+                  className="px-3 py-1.5 rounded text-xs font-semibold bg-gray-200 hover:bg-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                >Keep single run</button>
+                {(() => {
+                  const activeCount = getActiveNonFoldedPlayers().length;
+                  const maxRuns = Math.max(2, Math.max(1, activeCount));
+                  return Array.from({ length: Math.max(0, maxRuns - 1) }, (_, i) => i + 2).map(r => (
+                    <button
+                      key={`rit-${r}`}
+                      onClick={() => enableRunItTwice(r)}
+                      className="px-3 py-1.5 rounded text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow focus:outline-none focus:ring-2 focus:ring-purple-400"
+                    >Run {r === 2 ? 'Twice' : `${r}x`}</button>
+                  ));
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* Run It Twice waiting banner for other players */}
+          {gameStarted && pokerGameState && runItTwicePrompt && !isRunItTwicePromptOwner && !pokerGameState.runItTwice?.enabled && (
+            <div className="lg:col-span-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-300 dark:border-purple-700 rounded-lg shadow-md p-4 mt-4" aria-live="polite">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100 flex items-center gap-2">
+                  <span className="inline-block px-2 py-0.5 text-xs rounded bg-purple-600 text-white">RIT</span>
+                  Waiting on Run It Twice decision
+                </h3>
+                <span className="text-xs uppercase tracking-wide text-purple-700 dark:text-purple-300">Hand paused</span>
+              </div>
+              <div className="text-sm text-purple-900 dark:text-purple-100 space-y-2">
+                <p>
+                  Action is paused while
+                  {' '}
+                  <span className="font-semibold">{runItTwicePromptOwnerName || 'another player'}</span>
+                  {' '}
+                  chooses how many boards to run after the all-in showdown.
+                </p>
+                {runItTwiceViewerHandDescription && (
+                  <p className="text-[13px] text-purple-800 dark:text-purple-200">
+                    Current best hand: <span className="font-semibold">{runItTwiceViewerHandDescription}</span>
+                  </p>
+                )}
+                {!!runItTwicePromptTieNames.length && (
+                  <p className="text-[13px] text-purple-800 dark:text-purple-200">
+                    Tie detected between {runItTwicePromptTieNames.join(', ')}; a random picker selected
+                    {' '}
+                    {runItTwicePromptOwnerName || 'that player'}
+                    {' '}to decide.
+                  </p>
+                )}
+                <p className="text-[12px] text-purple-700 dark:text-purple-300">
+                  You don’t need to act—once the decision is made, the remaining boards will be dealt automatically.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Game Status Display (only before showdown); hide if only one non-folded remains; hide during Run-It-Twice prompt */}
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer !== playerId && !runItTwicePrompt && (
             <div className="lg:col-span-2 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-md p-4 mt-4">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Game Status</h3>
@@ -2984,6 +3335,8 @@ export default function GamePage() {
                 playerId={playerId} 
                 gameId={String(id)}
                 onShowSettings={toggleSettings}
+                gameState={pokerGameState}
+                socketsDisabled={socketsDisabled}
               />
             )}
             {showSettings && (

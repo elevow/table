@@ -5,8 +5,13 @@ import listRoomHandler from '../../../pages/api/chat/room/list';
 import listPrivateHandler from '../../../pages/api/chat/private/list';
 import moderateHandler from '../../../pages/api/chat/moderate';
 
-jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({})) }));
+jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({ query: jest.fn().mockResolvedValue({ rows: [] }) })) }));
 jest.mock('../../../src/lib/api/rate-limit', () => ({ rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 }) }));
+jest.mock('../../../src/lib/api/socket-server', () => ({ getWsManager: jest.fn().mockReturnValue(null) }));
+jest.mock('../../../src/lib/realtime/publisher', () => ({
+  publishChatMessage: jest.fn().mockResolvedValue(undefined),
+  publishChatModerated: jest.fn().mockResolvedValue(undefined),
+}));
 
 const mockService: any = {
   send: jest.fn(),

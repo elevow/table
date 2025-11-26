@@ -1,6 +1,9 @@
 import { StateDelta, StateConflict } from '../../types/state-sync';
-import type { Socket } from 'socket.io-client';
 import { TableState } from '../../types/poker';
+
+// Note: Socket type removed - Socket.IO transport has been deprecated
+// This type is kept for backward compatibility
+type Socket = any;
 
 export interface StateVersioning {
   version: number;
@@ -61,7 +64,7 @@ export interface IConflictManager {
 }
 
 export interface StateManagerConfig extends StateSyncOptions {
-  socket: Socket;
+  socket?: Socket; // Deprecated - Socket.IO has been removed
   optimisticUpdates: boolean;
 }
 

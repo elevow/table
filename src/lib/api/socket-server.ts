@@ -1,12 +1,13 @@
+/**
+ * Socket server helper - deprecated
+ * Socket.IO transport has been removed. Only Supabase transport is supported.
+ */
+
 import type { NextApiResponse } from 'next';
-import type { Server as HttpServer } from 'http';
 import { WebSocketManager } from '../websocket-manager';
 
-// Helper to get/create the WebSocketManager from a Next.js API response.
-// Returns null if the underlying Node server is not available (e.g., edge runtimes).
-export function getWsManager(res: NextApiResponse): WebSocketManager | null {
-  const anyRes = res as any;
-  const server: HttpServer | undefined = anyRes?.socket?.server as HttpServer | undefined;
-  if (!server) return null;
-  return WebSocketManager.getInstance(server);
+// Helper to get the WebSocketManager (deprecated - returns the deprecated stub)
+export function getWsManager(_res: NextApiResponse): WebSocketManager | null {
+  console.warn('⚠️ getWsManager is deprecated. Socket.IO has been removed.');
+  return WebSocketManager.getInstance();
 }

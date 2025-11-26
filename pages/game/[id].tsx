@@ -1170,8 +1170,7 @@ export default function GamePage() {
                   currentPlayerSeat,
                   seatStateReady,
                   claimingSeat,
-                  hasSocket: !!socket,
-                  socketConnected: !!socket?.connected,
+                  transport: 'supabase',
                 });
               } catch {}
             }
@@ -1817,7 +1816,7 @@ export default function GamePage() {
               <button
                 onClick={handleStartGame}
                 className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto"
-                title={`Start the game with ${getSeatedPlayersCount()} players (${transportMode === 'supabase' ? 'Supabase realtime' : 'Socket.IO'})`}
+                title={`Start the game with ${getSeatedPlayersCount()} players (Supabase realtime)`}
                 aria-label="Start game"
               >
                 <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

@@ -7,8 +7,11 @@ import updateHandler from '../../../pages/api/games/active/update';
 import endHandler from '../../../pages/api/games/active/end';
 import byRoomHandler from '../../../pages/api/games/active/by-room';
 
-// Mock pg Pool and rate limiter
-jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({})) }));
+// Mock pool module to avoid database connection
+const mockPool: any = {};
+jest.mock('../../../src/lib/database/pool', () => ({
+  getPool: jest.fn(() => mockPool)
+}));
 
 jest.mock('../../../src/lib/api/rate-limit', () => ({
   rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 })

@@ -6,6 +6,10 @@ interface ChatPanelProps {
   playerId?: string;
 }
 
+/**
+ * ChatPanel component - displays chat messages and allows sending messages
+ * Note: Socket.IO transport has been removed. Real-time updates require Supabase realtime.
+ */
 function ChatPanel({ gameId, playerId }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -14,7 +18,6 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
   const [reactions, setReactions] = useState<Record<string, Record<string, number>>>({});
   // Track current user's reactions for toggle behavior: myReactions[messageId][emoji] = true
   const [myReactions, setMyReactions] = useState<Record<string, Record<string, boolean>>>({});
-  const [socket, setSocket] = useState<any>(null);
 
   // lightweight emoji set for quick reactions
   const emojis = useMemo(() => ['👍', '❤️', '😂'], []);
@@ -55,77 +58,13 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
   }, [gameId, playerId]);
 
   useEffect(() => {
-    // Initialize socket connection (non-blocking)
-    const initSocket = async () => {
-      try {
-        const { getSocket } = await import('../lib/clientSocket');
-        const socketInstance = await getSocket();
-        setSocket(socketInstance);
-      } catch (error) {
-        console.warn('Chat socket initialization failed, continuing without real-time chat:', error);
-      }
-    };
-    
-    // Don't block page load for socket initialization
-    setTimeout(() => {
-      initSocket();
-    }, 200);
-    
+    // Note: Real-time chat updates require Supabase realtime subscription
+    // Socket.IO transport has been removed
     fetchMessages();
   }, [gameId, fetchMessages]);
 
-  useEffect(() => {
-    if (!socket) return;
-    
-    const onNew = (payload: { message: ChatMessage }) => {
-      // If this message belongs to this room, append if not already present
-      const m = payload?.message;
-      if (!m) return;
-      setMessages(prev => (prev.some(x => x.id === m.id) ? prev : [...prev, m]));
-    };
-    const onReact = (payload: { messageId: string; emoji: string; userId: string }) => {
-      if (!payload?.messageId || !payload?.emoji) return;
-      setReactions(prev => {
-        const current = { ...(prev[payload.messageId] || {}) };
-        current[payload.emoji] = (current[payload.emoji] || 0) + 1;
-        return { ...prev, [payload.messageId]: current };
-      });
-      if (playerId && payload.userId === playerId) {
-        setMyReactions(prev => ({
-          ...prev,
-          [payload.messageId]: { ...(prev[payload.messageId] || {}), [payload.emoji]: true }
-        }));
-      }
-    };
-    const onReactRemoved = (payload: { messageId: string; emoji: string; userId: string }) => {
-      if (!payload?.messageId || !payload?.emoji) return;
-      setReactions(prev => {
-        const current = { ...(prev[payload.messageId] || {}) };
-        if (current[payload.emoji] && current[payload.emoji] > 0) {
-          current[payload.emoji] = current[payload.emoji] - 1;
-          if (current[payload.emoji] <= 0) {
-            delete current[payload.emoji];
-          }
-        }
-        return { ...prev, [payload.messageId]: current };
-      });
-      if (playerId && payload.userId === playerId) {
-        setMyReactions(prev => {
-          const mine = { ...(prev[payload.messageId] || {}) };
-          if (mine[payload.emoji]) delete mine[payload.emoji];
-          return { ...prev, [payload.messageId]: mine };
-        });
-      }
-    };
-    socket.on('chat:new_message', onNew);
-    socket.on('chat:reaction', onReact);
-    socket.on('chat:reaction_removed', onReactRemoved);
-    return () => {
-      socket.off('chat:new_message', onNew);
-      socket.off('chat:reaction', onReact);
-      socket.off('chat:reaction_removed', onReactRemoved);
-    };
-  }, [socket, playerId]);
+  // Note: Real-time chat updates (new messages, reactions) require Supabase realtime subscription
+  // Socket.IO transport has been removed - polling or Supabase realtime should be used instead
 
   const handleSendMessage = async () => {
     const text = input.trim();

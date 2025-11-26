@@ -1,13 +1,15 @@
 import { getTransportMode, setTransportMode } from '../transport';
 
 describe('transport', () => {
-  it('should return default transport mode', () => {
+  it('should return supabase as the only transport mode', () => {
     const mode = getTransportMode();
-    expect(['socket', 'supabase', 'hybrid']).toContain(mode);
+    expect(mode).toBe('supabase');
   });
 
-  it('should handle setTransportMode in test environment', () => {
-    // In Node.js test environment, window is undefined, so this should not throw
+  it('setTransportMode should be a no-op', () => {
+    // setTransportMode is a no-op since only Supabase is supported
     expect(() => setTransportMode('supabase')).not.toThrow();
+    // Mode should still be supabase
+    expect(getTransportMode()).toBe('supabase');
   });
 });

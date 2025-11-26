@@ -4,7 +4,6 @@ import dynamic from 'next/dynamic';
 import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
 import { useComponentPerformance } from '../../src/utils/performance-monitor';
 import TimerHUD from '../../src/components/TimerHUD';
-import { getSocket } from '../../src/lib/clientSocket';
 import { createInvite } from '../../src/services/friends-ui';
 import { determineUserRole } from '../../src/utils/roleUtils';
 import { useUserAvatar } from '../../src/hooks/useUserAvatar';
@@ -12,8 +11,7 @@ import Avatar from '../../src/components/Avatar';
 import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
 import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
-import { getTransportMode } from '../../src/utils/transport';
-// Run It Twice: UI additions rely on optional runItTwice field in game state
+// Note: Socket.IO transport has been removed - only Supabase transport is supported
 
 const GameBoard = dynamic(() => import('../../src/components/GameBoard'), {
   loading: () => <div className="skeleton-loader game-board-loader" />,
@@ -48,7 +46,6 @@ export default function GamePage() {
   const [gameRoutes, setGameRoutes] = useState<import('../../src/utils/game-routes').GameRoute[]>([]);
   const { markInteraction } = useComponentPerformance('GamePage');
   const [playerId, setPlayerId] = useState<string>('');
-  const [socket, setSocket] = useState<any>(null);
   const [inviteeId, setInviteeId] = useState<string>('');
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteStatus, setInviteStatus] = useState<string | null>(null);
@@ -160,15 +157,12 @@ export default function GamePage() {
   const [userRole, setUserRole] = useState<'admin' | 'player' | 'guest'>('guest');
   const [playerChips, setPlayerChips] = useState<number>(0);
   
-  // Check if sockets are disabled based on transport mode
-  const transportMode = getTransportMode();
-  const socketsDisabled = transportMode === 'supabase' || 
-    (process.env.NEXT_PUBLIC_DISABLE_SOCKETS || '').toString().toLowerCase() === 'true' || 
-    (process.env.NEXT_PUBLIC_DISABLE_SOCKETS || '') === '1';
+  // Sockets are always disabled - only Supabase transport is supported
+  const socketsDisabled = true;
   
-  // Subscribe to Supabase realtime updates when in Supabase mode
+  // Subscribe to Supabase realtime updates
   useSupabaseRealtime(
-    socketsDisabled && id ? `${id}` : undefined,
+    id ? `${id}` : undefined,
     {
       onGameStateUpdate: (payload: any) => {
         console.log('📡 Supabase game_state_update:', payload);
@@ -420,8 +414,6 @@ export default function GamePage() {
             if (!response.ok) {
               console.warn('Next hand request failed:', await response.text());
             }
-          } else if (socket) {
-            socket.emit('request_next_hand', { tableId: id });
           }
         }
       } catch (e) {
@@ -442,11 +434,10 @@ export default function GamePage() {
       }
       autoNextHandScheduledRef.current = false;
     };
-  }, [pokerGameState?.stage, socket, id, socketsDisabled, playerId]);
+  }, [pokerGameState?.stage, id, playerId]);
   
   // HTTP mode: periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {
-    if (!socketsDisabled) return;
     if (!id) return;
     // Don't poll seats if game is active - seats come from game state
     if (gameStarted || pokerGameState) return;
@@ -513,94 +504,36 @@ export default function GamePage() {
 
     setClaimingSeat(seatNumber);
 
-    // If sockets are disabled, call HTTP endpoint instead
-    if (socketsDisabled) {
-      try {
-        const resp = await fetch('/api/games/seats/claim', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tableId: id, seatNumber, playerId, playerName, chips: startingChips })
-        });
-        if (!resp.ok) {
-          const e = await resp.json().catch(() => ({}));
-          console.warn('Seat claim failed (HTTP):', e);
-          setClaimingSeat(null);
-          return;
-        }
-        const data = await resp.json();
-        // Update local state and storage
-        setSeatAssignments(prev => ({
-          ...prev,
-          [seatNumber]: { playerId, playerName, chips: Number(startingChips) }
-        }));
-        setCurrentPlayerSeat(seatNumber);
-        setPlayerChips(Number(startingChips));
-        try {
-          if (id) localStorage.setItem(`seats_${id}`, JSON.stringify({ ...seatAssignments, [seatNumber]: { playerId, playerName, chips: Number(startingChips) } }));
-          if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(Number(startingChips)));
-        } catch {}
-        setClaimingSeat(null);
-        return;
-      } catch (err) {
-        console.warn('Seat claim (HTTP) error:', err);
-        setClaimingSeat(null);
-        return;
-      }
-    }
-
-    // Ensure we have a connected socket before emitting
+    // Use HTTP endpoint for seat claiming (Socket.IO has been removed)
     try {
-      let s = socket as any;
-      if (!s || !s.connected) {
-        // Attempt to initialize/connect the socket
-        const s2 = await getSocket();
-        if (s2) setSocket(s2 as any);
-        s = s2 as any;
-      }
-
-      if (!s) {
-        console.warn('Seat claim aborted: no socket available');
+      const resp = await fetch('/api/games/seats/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableId: id, seatNumber, playerId, playerName, chips: startingChips })
+      });
+      if (!resp.ok) {
+        const e = await resp.json().catch(() => ({}));
+        console.warn('Seat claim failed (HTTP):', e);
         setClaimingSeat(null);
         return;
       }
-
-      if (!s.connected) {
-        await new Promise<void>((resolve) => {
-          try {
-            s.once('connect', () => resolve());
-            // Also set a max wait in case connection never succeeds
-            setTimeout(() => resolve(), 3000);
-          } catch {
-            resolve();
-          }
-        });
-      }
-
-      // Join the table room defensively before claiming
+      const data = await resp.json();
+      // Update local state and storage
+      setSeatAssignments(prev => ({
+        ...prev,
+        [seatNumber]: { playerId, playerName, chips: Number(startingChips) }
+      }));
+      setCurrentPlayerSeat(seatNumber);
+      setPlayerChips(Number(startingChips));
       try {
-        if (id && typeof id === 'string' && playerId) {
-          s.emit('join_table', { tableId: id, playerId });
-        }
+        if (id) localStorage.setItem(`seats_${id}`, JSON.stringify({ ...seatAssignments, [seatNumber]: { playerId, playerName, chips: Number(startingChips) } }));
+        if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(Number(startingChips)));
       } catch {}
-
-      // Request server to claim; do not optimistically set local state
-      s.emit('claim_seat', {
-        tableId: id,
-        seatNumber,
-        playerId,
-        playerName,
-        chips: startingChips
-      });
-    } catch (err) {
-      console.warn('Seat claim failed to emit:', err);
       setClaimingSeat(null);
-      return;
+    } catch (err) {
+      console.warn('Seat claim (HTTP) error:', err);
+      setClaimingSeat(null);
     }
-
-    // Fallback timeout to clear pending if no response
-    setTimeout(() => {
-      setClaimingSeat(prev => (prev === seatNumber ? null : prev));
-    }, 6000);
   };
 
   const standUp = () => {
@@ -620,22 +553,14 @@ export default function GamePage() {
     localStorage.setItem(`seats_${id}`, JSON.stringify(newAssignments));
     localStorage.removeItem(`chips_${playerId}_${id}`);
 
-    // Broadcast/notify via HTTP or socket depending on mode
-    if (socketsDisabled) {
-      try {
-        fetch('/api/games/seats/stand', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tableId: id, seatNumber: seatToVacate, playerId })
-        }).catch(() => {});
-      } catch {}
-    } else if (socket) {
-      socket.emit('stand_up', { 
-        tableId: id, 
-        seatNumber: seatToVacate, 
-        playerId 
-      });
-    }
+    // Notify via HTTP (Socket.IO has been removed)
+    try {
+      fetch('/api/games/seats/stand', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableId: id, seatNumber: seatToVacate, playerId })
+      }).catch(() => {});
+    } catch {}
   };
 
   // Start game handler
@@ -661,10 +586,9 @@ export default function GamePage() {
     const sb = roomConfig?.sb;
     const bb = roomConfig?.bb;
 
-    // HTTP API for Supabase mode
-    if (socketsDisabled) {
-      try {
-        const response = await fetch(`/api/games/start`, {
+    // Use HTTP API for game start (Socket.IO has been removed)
+    try {
+      const response = await fetch(`/api/games/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -688,26 +612,6 @@ export default function GamePage() {
       } catch (error) {
         console.error('Error starting game:', error);
       }
-      return;
-    }
-
-    // Emit start game event via socket
-    if (socket) {
-      socket.emit('start_game', {
-        tableId: id,
-        playerId,
-        seatedPlayers: seated,
-        // Pass variant/betting/blinds so the socket server can initialize correctly
-        variant,
-        // If Dealer's Choice selected at room level, optionally include an initial suggestion
-        initialChoice: 'texas-holdem',
-        bettingMode,
-        smallBlind: sb,
-        bigBlind: bb,
-        sb,
-        bb,
-      });
-    }
   };
 
   // Poker action handlers
@@ -733,42 +637,26 @@ export default function GamePage() {
     console.log(`Performing ${action}${amount ? ` for ${amount}` : ''}`);
     
     try {
-      // HTTP API for Supabase mode
-      if (socketsDisabled) {
-        try {
-          const response = await fetch('/api/games/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tableId: id,
-              playerId,
-              action,
-              amount,
-            }),
-          });
+      // Use HTTP API for poker actions (Socket.IO has been removed)
+      try {
+        const response = await fetch('/api/games/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tableId: id,
+            playerId,
+            action,
+            amount,
+          }),
+        });
 
-          if (!response.ok) {
-            const err = await response.json();
-            console.error('Poker action failed:', err);
-          }
-        } catch (error) {
-          console.error('Error performing poker action:', error);
+        if (!response.ok) {
+          const err = await response.json();
+          console.error('Poker action failed:', err);
         }
-        return;
+      } catch (error) {
+        console.error('Error performing poker action:', error);
       }
-
-      // Socket mode
-      if (!socket) {
-        console.warn('Cannot perform action: socket not connected');
-        return;
-      }
-      
-      socket.emit('player_action', {
-        tableId: id,
-        playerId: playerId,
-        action: action,
-        amount: amount
-      });
     } finally {
       // Clear the pending flag after a short delay to allow the action to be processed
       setTimeout(() => {
@@ -1046,9 +934,18 @@ export default function GamePage() {
     if (pokerGameState.communityCards?.length >= 5) return false; // full board dealt
     return true; // server will validate precise timing
   };
-  const enableRunItTwice = (runs: number) => {
-    if (!socket || !id || typeof id !== 'string') return;
-    socket.emit('enable_run_it_twice', { tableId: id, runs });
+  const enableRunItTwice = async (runs: number) => {
+    if (!id || typeof id !== 'string') return;
+    // Use HTTP API for Run It Twice (Socket.IO has been removed)
+    try {
+      await fetch('/api/games/run-it-twice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableId: id, runs, playerId }),
+      });
+    } catch (error) {
+      console.warn('Failed to enable Run It Twice:', error);
+    }
   };
 
   // Determine dealer/small blind/big blind tokens for a player based on current game state
@@ -1671,10 +1568,7 @@ export default function GamePage() {
 
     // Note: Seat assignments loading moved to separate useEffect to prevent infinite loops
 
-    // Join table and personal room (socket initialization happens in separate useEffect below)
-    if (!socketsDisabled && socket && id && typeof id === 'string') {
-      socket.emit('join_table', { tableId: id, playerId: playerId });
-    }
+    // Note: Socket.IO has been removed - real-time updates come via Supabase realtime
 
     // Load game routes data only when needed
     const loadGameRoutes = async () => {
@@ -1733,339 +1627,35 @@ export default function GamePage() {
     determineRole();
   }, []); // Empty dependency array - only run once on mount
 
-  // Initialize socket connection - run once on mount
+  // Initialize seat state via HTTP - Socket.IO has been removed
   useEffect(() => {
     if (!playerId || !id) return;
 
-    let currentSocket: any = null;
-
-    const initSocket = async () => {
+    const initSeatState = async () => {
+      // Fetch seat state via HTTP API
       try {
-        if (socketsDisabled) {
-          // HTTP mode: fetch seat state once
-          try {
-            const resp = await fetch(`/api/games/seats/state?tableId=${id}`);
-            if (resp.ok) {
-              const data = await resp.json();
-              if (data?.seats) {
-                setSeatAssignments(data.seats);
-                setSeatStateReady(true);
-                try { if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats)); } catch {}
-                const playerSeat = Object.entries(data.seats).find(([_, assignment]: any) => assignment?.playerId === playerId);
-                if (playerSeat) {
-                  const [seatNumber, assignment] = playerSeat as any;
-                  setCurrentPlayerSeat(parseInt(seatNumber));
-                  setPlayerChips(assignment?.chips || 0);
-                  try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
-                }
-              }
+        const resp = await fetch(`/api/games/seats/state?tableId=${id}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data?.seats) {
+            setSeatAssignments(data.seats);
+            setSeatStateReady(true);
+            try { if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats)); } catch {}
+            const playerSeat = Object.entries(data.seats).find(([_, assignment]: any) => assignment?.playerId === playerId);
+            if (playerSeat) {
+              const [seatNumber, assignment] = playerSeat as any;
+              setCurrentPlayerSeat(parseInt(seatNumber));
+              setPlayerChips(assignment?.chips || 0);
+              try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
             }
-          } catch (e) {
-            console.warn('Failed to fetch seat state (HTTP):', e);
           }
-          return;
         }
-        const socketInstance = await getSocket();
-        if (!socketInstance) {
-          console.error('Failed to get socket instance');
-          return;
-        }
-        
-        currentSocket = socketInstance;
-        setSocket(socketInstance);
-
-        // Join the game room
-        socketInstance.emit('join_table', { tableId: id, playerId: playerId });
-
-        // Listen for seat updates from other players
-        const handleSeatClaimed = (data: { seatNumber: number; playerId: string; playerName: string; chips: number }) => {
-          console.log('Received seat_claimed:', data);
-          setSeatAssignments(prev => ({
-            ...prev,
-            [data.seatNumber]: {
-              playerId: data.playerId,
-              playerName: data.playerName,
-              chips: data.chips
-            }
-          }));
-          try {
-            const nextSeats = {
-              ...seatAssignments,
-              [data.seatNumber]: {
-                playerId: data.playerId,
-                playerName: data.playerName,
-                chips: data.chips,
-              }
-            } as Record<number, { playerId: string; playerName: string; chips: number } | null>;
-            if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(nextSeats));
-          } catch (e) {
-            console.warn('Failed to persist seats on seat_claimed');
-          }
-          
-          // Update current player seat if this player claimed it
-          if (data.playerId === playerId) {
-            setCurrentPlayerSeat(data.seatNumber);
-            setPlayerChips(data.chips);
-            setClaimingSeat(null);
-            try {
-              if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(data.chips));
-            } catch {}
-          }
-        };
-
-        const handleSeatVacated = (data: { seatNumber: number; playerId: string }) => {
-          console.log('Received seat_vacated:', data);
-          setSeatAssignments(prev => ({
-            ...prev,
-            [data.seatNumber]: null
-          }));
-          try {
-            const nextSeats = {
-              ...seatAssignments,
-              [data.seatNumber]: null,
-            } as Record<number, { playerId: string; playerName: string; chips: number } | null>;
-            if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(nextSeats));
-          } catch (e) {
-            console.warn('Failed to persist seats on seat_vacated');
-          }
-          
-          // Update current player seat if this player stood up
-          if (data.playerId === playerId) {
-            setCurrentPlayerSeat(null);
-            setPlayerChips(0);
-            setClaimingSeat(null);
-            try {
-              if (id) localStorage.removeItem(`chips_${playerId}_${id}`);
-            } catch {}
-          }
-        };
-
-        const handleSeatState = (data: { seats: Record<number, { playerId: string; playerName: string; chips: number } | null> }) => {
-          console.log('Received seat_state:', data);
-          setSeatAssignments(data.seats);
-          setSeatStateReady(true);
-          try {
-            if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats));
-          } catch (e) {
-            console.warn('Failed to persist seats on seat_state');
-          }
-          
-          // Find current player's seat
-          const playerSeat = Object.entries(data.seats).find(([_, assignment]) => assignment?.playerId === playerId);
-          if (playerSeat) {
-            const [seatNumber, assignment] = playerSeat;
-            setCurrentPlayerSeat(parseInt(seatNumber));
-            setPlayerChips(assignment?.chips || 0);
-            try {
-              if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0));
-            } catch {}
-          }
-        };
-
-        const handleGameStart = (data: { startedBy: string; playerName: string; seatedPlayers: any[]; gameState?: any }) => {
-          console.log('Game started by:', data.startedBy, data.playerName);
-          console.log('Seated players:', data.seatedPlayers);
-          console.log('Initial game state:', data.gameState);
-          setGameStarted(true);
-          
-          if (data.gameState) {
-            setPokerGameState(data.gameState);
-            const derivedDc = computeDealerChoicePrompt(data.gameState);
-            if (derivedDc) {
-              const incomingDealerId = derivedDc.dealerId;
-              const prevDealerId = lastAwaitingDealerIdRef.current;
-              const isNewSession = incomingDealerId && incomingDealerId !== prevDealerId;
-              if (isNewSession) {
-                userChangedVariantRef.current = false;
-                lastAwaitingDealerIdRef.current = incomingDealerId;
-                setSelectedVariantDC(derivedDc.current || 'texas-holdem');
-              } else if (!userChangedVariantRef.current && derivedDc.current) {
-                setSelectedVariantDC(derivedDc.current);
-              }
-              setAwaitingDealerChoice(derivedDc);
-            } else {
-              setAwaitingDealerChoice(null);
-              setSelectedVariantDC('texas-holdem');
-              userChangedVariantRef.current = false;
-              lastAwaitingDealerIdRef.current = undefined;
-            }
-            try {
-              const gs = data.gameState || {};
-              const players = Array.isArray(gs.players) ? gs.players : [];
-              const activeCount = players.filter((p: any) => !(p?.isFolded || (p as any)?.folded)).length;
-              if (activeCount === 1 && gs.stage !== 'showdown') {
-                console.log('[client safety] One active at game start; requesting settlement');
-                socketInstance.emit('force_settlement', { tableId: id });
-              }
-            } catch {}
-            
-            // Update seat assignments with initial stack values from game state
-            if (data.gameState.players) {
-              setSeatAssignments(prev => {
-                const updated = { ...prev };
-                
-                // Update each seat's chip count based on the poker game state
-                data.gameState.players.forEach((player: any) => {
-                  // Find the seat number for this player
-                  const seatEntry = Object.entries(prev).find(([_, assignment]) => 
-                    assignment?.playerId === player.id
-                  );
-                  
-                  if (seatEntry) {
-                    const [seatNumber, assignment] = seatEntry;
-                    if (assignment) {
-                      updated[parseInt(seatNumber)] = {
-                        ...assignment,
-                        chips: player.stack // Update with current stack from game state
-                      };
-                    }
-                  }
-                });
-                
-                return updated;
-              });
-              
-              // Update current player's chip count
-              const currentPlayer = data.gameState.players.find((p: any) => p.id === playerId);
-              if (currentPlayer) {
-                setPlayerChips(currentPlayer.stack);
-              }
-            }
-          }
-        };
-
-        const handleGameStateUpdate = (data: { gameState: any; lastAction?: any }) => {
-          console.log('Game state update:', data.gameState);
-          console.log('Last action:', data.lastAction);
-          setPokerGameState(data.gameState);
-          const derivedDc = computeDealerChoicePrompt(data.gameState);
-          if (derivedDc) {
-            const incomingDealerId = derivedDc.dealerId;
-            const prevDealerId = lastAwaitingDealerIdRef.current;
-            const isNewSession = incomingDealerId && incomingDealerId !== prevDealerId;
-            if (isNewSession) {
-              userChangedVariantRef.current = false;
-              lastAwaitingDealerIdRef.current = incomingDealerId;
-              setSelectedVariantDC(derivedDc.current || 'texas-holdem');
-            } else if (!userChangedVariantRef.current && derivedDc.current) {
-              setSelectedVariantDC(derivedDc.current);
-            }
-            setAwaitingDealerChoice(derivedDc);
-          } else {
-            setAwaitingDealerChoice(null);
-            userChangedVariantRef.current = false;
-            lastAwaitingDealerIdRef.current = undefined;
-          }
-          try {
-            const gs = data.gameState || {};
-            const players = Array.isArray(gs.players) ? gs.players : [];
-            const activeCount = players.filter((p: any) => !(p?.isFolded || (p as any)?.folded)).length;
-            if (activeCount === 1 && gs.stage !== 'showdown') {
-              console.log('[client safety] One active player remains but stage is', gs.stage, '→ requesting settlement');
-              socketInstance.emit('force_settlement', { tableId: id });
-            }
-          } catch (e) {
-            console.warn('Safety check failed:', e);
-          }
-          
-          // Update seat assignments with current stack values from game state
-          if (data.gameState && data.gameState.players) {
-            setSeatAssignments(prev => {
-              const updated = { ...prev };
-              
-              // Update each seat's chip count based on the poker game state
-              data.gameState.players.forEach((player: any) => {
-                // Find the seat number for this player
-                const seatEntry = Object.entries(prev).find(([_, assignment]) => 
-                  assignment?.playerId === player.id
-                );
-                
-                if (seatEntry) {
-                  const [seatNumber, assignment] = seatEntry;
-                  if (assignment) {
-                    updated[parseInt(seatNumber)] = {
-                      ...assignment,
-                      chips: player.stack // Update with current stack from game state
-                    };
-                  }
-                }
-              });
-              
-              return updated;
-            });
-            
-            // Update current player's chip count
-            const currentPlayer = data.gameState.players.find((p: any) => p.id === playerId);
-            if (currentPlayer) {
-              setPlayerChips(currentPlayer.stack);
-            }
-          }
-        };
-
-        const handleActionFailed = (data: { error: string; playerId?: string; action?: string }) => {
-          console.error('Action failed:', data);
-          // You could show a toast notification here
-          if (data?.action === 'claim_seat' && data?.playerId === playerId) {
-            setClaimingSeat(null);
-          }
-        };
-
-        socketInstance.on('seat_claimed', handleSeatClaimed);
-        socketInstance.on('seat_vacated', handleSeatVacated);
-        socketInstance.on('seat_state', handleSeatState);
-        socketInstance.on('game_started', handleGameStart);
-        socketInstance.on('game_state_update', handleGameStateUpdate);
-        socketInstance.on('action_failed', handleActionFailed);
-        socketInstance.on('awaiting_dealer_choice', (payload: any) => {
-          try {
-            // Determine if this is a new DC session (dealer changed) vs duplicate prompt
-            const incomingDealerId = payload?.dealerId as string | undefined;
-            const prevDealerId = lastAwaitingDealerIdRef.current;
-            const isNewSession = incomingDealerId && incomingDealerId !== prevDealerId;
-
-            if (isNewSession) {
-              // Reset manual-change marker for a fresh session and seed default from server
-              userChangedVariantRef.current = false;
-              lastAwaitingDealerIdRef.current = incomingDealerId;
-              if (payload?.current) setSelectedVariantDC(String(payload.current));
-            } else {
-              // Same dealer: only update selection from server if user hasn't manually changed it
-              if (!userChangedVariantRef.current && payload?.current) {
-                setSelectedVariantDC(String(payload.current));
-              }
-            }
-            setAwaitingDealerChoice(payload || {});
-          } catch {}
-        });
-        // Handle explicit seat claim failures from server (e.g., race with another client)
-        socketInstance.on('seat_claim_failed', (data: { error: string; seatNumber?: number; reqId?: string }) => {
-          console.warn('Seat claim failed:', data?.error || 'unknown error');
-          setClaimingSeat(null);
-        });
-
-        // Request current seat state when joining
-        socketInstance.emit('get_seat_state', { tableId: id });
-
-      } catch (error) {
-        console.error('Failed to initialize socket:', error);
+      } catch (e) {
+        console.warn('Failed to fetch seat state (HTTP):', e);
       }
     };
 
-    initSocket();
-
-    return () => {
-      // Clean up socket listeners when component unmounts
-      if (currentSocket) {
-        currentSocket.off('seat_claimed');
-        currentSocket.off('seat_vacated');
-        currentSocket.off('seat_state');
-        currentSocket.off('game_started');
-        currentSocket.off('game_state_update');
-  currentSocket.off('action_failed');
-  currentSocket.off('seat_claim_failed');
-  currentSocket.off('awaiting_dealer_choice');
-      }
-    };
+    initSeatState();
   }, [playerId, id]); // Only depend on playerId and id
 
   // Load seat assignments - separate useEffect to prevent infinite loops
@@ -2170,9 +1760,17 @@ export default function GamePage() {
     console.log('Current router state:', router.asPath, router.pathname);
     
     try {
-      // Notify server that player is leaving
-      if (socket && playerId) {
-        socket.emit('leave_table', String(id));
+      // Notify server that player is leaving via HTTP (Socket.IO has been removed)
+      if (playerId && id) {
+        try {
+          await fetch('/api/games/leave', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tableId: id, playerId }),
+          });
+        } catch (e) {
+          console.warn('Leave notification failed:', e);
+        }
       }
       
       // Clear any game-specific data
@@ -2291,17 +1889,14 @@ export default function GamePage() {
                           onClick={async () => {
                             try {
                               if (!id || !playerId) return;
-                              if (socketsDisabled || !socket) {
-                                const response = await fetch('/api/games/next-hand', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ tableId: id, playerId, variant: selectedVariantDC }),
-                                });
-                                if (!response.ok) {
-                                  console.warn('Dealer choice via HTTP failed:', await response.text());
-                                }
-                              } else {
-                                socket.emit('choose_variant', { tableId: id, variant: selectedVariantDC });
+                              // Use HTTP API for dealer choice (Socket.IO has been removed)
+                              const response = await fetch('/api/games/next-hand', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ tableId: id, playerId, variant: selectedVariantDC }),
+                              });
+                              if (!response.ok) {
+                                console.warn('Dealer choice via HTTP failed:', await response.text());
                               }
                             } catch (err) {
                               console.warn('Dealer choice failed:', err);

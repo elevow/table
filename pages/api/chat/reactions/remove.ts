@@ -19,18 +19,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const { rows } = await pool.query('SELECT room_id FROM chat_messages WHERE id = $1', [messageId]);
       roomId = rows?.[0]?.room_id ?? null;
-      // Broadcast via Socket.IO
-      const ws = getWsManager(res);
-      if (ws && roomId) {
-        ws.broadcast('chat:reaction_removed', { messageId, emoji, userId }, roomId);
-      }
-    } catch {}
+    } catch {
+      // Optionally log error, but continue
+    }
+    // Broadcast via Socket.IO
+    const ws = getWsManager(res);
+    if (ws && roomId) {
+      ws.broadcast('chat:reaction_removed', { messageId, emoji, userId }, roomId);
+    }
     // Broadcast via Supabase Realtime
-    try {
-      if (roomId) {
+    if (roomId) {
+      try {
         await publishChatReactionRemoved(roomId, { messageId, emoji, userId });
+      } catch {
+        // Optionally log error, but continue
       }
-    } catch {}
+    }
     return res.status(200).json(result);
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });

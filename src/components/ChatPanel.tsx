@@ -64,26 +64,26 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
   const handleSupabaseNewMessage = useCallback((payload: { message: ChatMessage }) => {
     const m = payload?.message;
     if (!m) return;
+    // Skip if this is our own message (already handled optimistically in handleSendMessage)
+    if (playerId && m.senderId === playerId) return;
     setMessages(prev => (prev.some(x => x.id === m.id) ? prev : [...prev, m]));
-  }, []);
+  }, [playerId]);
 
   const handleSupabaseReaction = useCallback((payload: { messageId: string; emoji: string; userId: string }) => {
     if (!payload?.messageId || !payload?.emoji) return;
+    // Skip if this is our own reaction (already handled optimistically)
+    if (playerId && payload.userId === playerId) return;
     setReactions(prev => {
       const current = { ...(prev[payload.messageId] || {}) };
       current[payload.emoji] = (current[payload.emoji] || 0) + 1;
       return { ...prev, [payload.messageId]: current };
     });
-    if (playerId && payload.userId === playerId) {
-      setMyReactions(prev => ({
-        ...prev,
-        [payload.messageId]: { ...(prev[payload.messageId] || {}), [payload.emoji]: true }
-      }));
-    }
   }, [playerId]);
 
   const handleSupabaseReactionRemoved = useCallback((payload: { messageId: string; emoji: string; userId: string }) => {
     if (!payload?.messageId || !payload?.emoji) return;
+    // Skip if this is our own reaction removal (already handled optimistically)
+    if (playerId && payload.userId === playerId) return;
     setReactions(prev => {
       const current = { ...(prev[payload.messageId] || {}) };
       if (current[payload.emoji] && current[payload.emoji] > 0) {
@@ -94,13 +94,6 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
       }
       return { ...prev, [payload.messageId]: current };
     });
-    if (playerId && payload.userId === playerId) {
-      setMyReactions(prev => {
-        const mine = { ...(prev[payload.messageId] || {}) };
-        if (mine[payload.emoji]) delete mine[payload.emoji];
-        return { ...prev, [payload.messageId]: mine };
-      });
-    }
   }, [playerId]);
 
   const handleSupabaseModerated = useCallback((payload: { messageId: string; hidden: boolean; moderatorId: string }) => {

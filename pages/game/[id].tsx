@@ -2984,6 +2984,8 @@ export default function GamePage() {
                 playerId={playerId} 
                 gameId={String(id)}
                 onShowSettings={toggleSettings}
+                gameState={pokerGameState}
+                socketsDisabled={socketsDisabled}
               />
             )}
             {showSettings && (

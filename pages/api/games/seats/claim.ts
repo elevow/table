@@ -1,15 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import type { Server as HttpServer } from 'http';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
 import { publishSeatClaimed, publishSeatState } from '../../../../src/lib/realtime/publisher';
 
-interface NextApiResponseServerIO extends NextApiResponse {
-  socket: any & {
-    server: HttpServer & { io?: any };
-  };
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponseServerIO) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
@@ -56,19 +49,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseS
     } catch (pubErr) {
       console.warn('Seat claim Supabase publish failed:', pubErr);
     }
-
-    // Broadcast via Socket.IO if server is present (hybrid support)
-    try {
-      const io = res.socket?.server?.io;
-      if (io) {
-        io.to(`table_${tableId}`).emit('seat_claimed', {
-          seatNumber,
-          playerId,
-          playerName,
-          chips: Number(chips) || 20,
-        });
-      }
-    } catch {}
 
     return res.status(200).json({ ok: true, ...seatPayload, seats });
   } catch (e: any) {

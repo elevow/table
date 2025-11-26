@@ -14,41 +14,9 @@ interface TimerHUDProps {
 }
 
 export default function TimerHUD({ tableId, playerId }: TimerHUDProps) {
-  const [socket, setSocket] = useState<any>(null);
   const [timer, setTimer] = useState<TimerState>(undefined);
   const [now, setNow] = useState<number>(Date.now());
   const [bank, setBank] = useState<number>(0);
-
-  useEffect(() => {
-    // Initialize socket connection (non-blocking)
-    const initSocket = async () => {
-      try {
-        const { getSocket } = await import('../lib/clientSocket');
-        const socketInstance = await getSocket();
-        setSocket(socketInstance);
-      } catch (error) {
-        console.warn('Timer socket initialization failed, continuing without real-time timer:', error);
-      }
-    };
-    
-    // Don't block page load for socket initialization
-    setTimeout(() => {
-      initSocket();
-    }, 300);
-  }, []);
-
-  useEffect(() => {
-    const onTimer = (state?: any) => setTimer(state);
-    const onBank = ({ amount }: { amount: number }) => setBank(amount);
-
-    if (!socket) return;
-    socket.on('timer_update', onTimer);
-    socket.on('timebank_update', onBank);
-    return () => {
-      socket?.off('timer_update', onTimer);
-      socket?.off('timebank_update', onBank);
-    };
-  }, [socket]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 200);
@@ -64,8 +32,17 @@ export default function TimerHUD({ tableId, playerId }: TimerHUDProps) {
   const isMyTurn = timer && timer.activePlayer === playerId;
   const seconds = Math.ceil(remainingMs / 1000);
 
-  const useTimeBank = () => {
-    socket?.emit('use_timebank', { tableId, playerId });
+  const useTimeBank = async () => {
+    // Use HTTP API to request time bank usage (Socket.IO has been removed)
+    try {
+      await fetch('/api/games/timebank/use', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableId, playerId }),
+      });
+    } catch (error) {
+      console.error('Failed to use time bank:', error);
+    }
   };
 
   return (

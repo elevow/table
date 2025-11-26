@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { getWsManager } from '../../../../src/lib/api/socket-server';
 import { ChatService } from '../../../../src/lib/services/chat-service';
+import { publishChatReactionRemoved } from '../../../../src/lib/realtime/publisher';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -14,12 +15,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const svc = new ChatService(pool);
     const result = await svc.removeReaction({ messageId, userId, emoji });
     // Broadcast a decrement event so other clients can update instantly
+    let roomId: string | null = null;
     try {
       const { rows } = await pool.query('SELECT room_id FROM chat_messages WHERE id = $1', [messageId]);
-      const roomId: string | null = rows?.[0]?.room_id ?? null;
+      roomId = rows?.[0]?.room_id ?? null;
+      // Broadcast via Socket.IO
       const ws = getWsManager(res);
       if (ws && roomId) {
         ws.broadcast('chat:reaction_removed', { messageId, emoji, userId }, roomId);
+      }
+    } catch {}
+    // Broadcast via Supabase Realtime
+    try {
+      if (roomId) {
+        await publishChatReactionRemoved(roomId, { messageId, emoji, userId });
       }
     } catch {}
     return res.status(200).json(result);

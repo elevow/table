@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, memo, useCallback } from 'react';
 import type { ChatMessage } from '../types/chat';
+import { getTransportMode } from '../utils/transport';
+import { useSupabaseChatRealtime } from '../hooks/useSupabaseChatRealtime';
 
 interface ChatPanelProps {
   gameId: string;
@@ -15,6 +17,10 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
   // Track current user's reactions for toggle behavior: myReactions[messageId][emoji] = true
   const [myReactions, setMyReactions] = useState<Record<string, Record<string, boolean>>>({});
   const [socket, setSocket] = useState<any>(null);
+
+  // Check transport mode to determine if we use Supabase or Socket.IO for realtime
+  const transportMode = getTransportMode();
+  const useSupabaseTransport = transportMode === 'supabase';
 
   // lightweight emoji set for quick reactions
   const emojis = useMemo(() => ['👍', '❤️', '😂'], []);
@@ -54,8 +60,66 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
     }
   }, [gameId, playerId]);
 
+  // Supabase realtime callbacks for chat events
+  const handleSupabaseNewMessage = useCallback((payload: { message: ChatMessage }) => {
+    const m = payload?.message;
+    if (!m) return;
+    setMessages(prev => (prev.some(x => x.id === m.id) ? prev : [...prev, m]));
+  }, []);
+
+  const handleSupabaseReaction = useCallback((payload: { messageId: string; emoji: string; userId: string }) => {
+    if (!payload?.messageId || !payload?.emoji) return;
+    setReactions(prev => {
+      const current = { ...(prev[payload.messageId] || {}) };
+      current[payload.emoji] = (current[payload.emoji] || 0) + 1;
+      return { ...prev, [payload.messageId]: current };
+    });
+    if (playerId && payload.userId === playerId) {
+      setMyReactions(prev => ({
+        ...prev,
+        [payload.messageId]: { ...(prev[payload.messageId] || {}), [payload.emoji]: true }
+      }));
+    }
+  }, [playerId]);
+
+  const handleSupabaseReactionRemoved = useCallback((payload: { messageId: string; emoji: string; userId: string }) => {
+    if (!payload?.messageId || !payload?.emoji) return;
+    setReactions(prev => {
+      const current = { ...(prev[payload.messageId] || {}) };
+      if (current[payload.emoji] && current[payload.emoji] > 0) {
+        current[payload.emoji] = current[payload.emoji] - 1;
+        if (current[payload.emoji] <= 0) {
+          delete current[payload.emoji];
+        }
+      }
+      return { ...prev, [payload.messageId]: current };
+    });
+    if (playerId && payload.userId === playerId) {
+      setMyReactions(prev => {
+        const mine = { ...(prev[payload.messageId] || {}) };
+        if (mine[payload.emoji]) delete mine[payload.emoji];
+        return { ...prev, [payload.messageId]: mine };
+      });
+    }
+  }, [playerId]);
+
+  // Subscribe to Supabase realtime chat events when in Supabase transport mode
+  useSupabaseChatRealtime(
+    useSupabaseTransport ? gameId : undefined,
+    {
+      onNewMessage: handleSupabaseNewMessage,
+      onReaction: handleSupabaseReaction,
+      onReactionRemoved: handleSupabaseReactionRemoved,
+    }
+  );
+
   useEffect(() => {
-    // Initialize socket connection (non-blocking)
+    // Only initialize socket connection when NOT using Supabase transport
+    if (useSupabaseTransport) {
+      fetchMessages();
+      return;
+    }
+
     const initSocket = async () => {
       try {
         const { getSocket } = await import('../lib/clientSocket');
@@ -72,10 +136,11 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
     }, 200);
     
     fetchMessages();
-  }, [gameId, fetchMessages]);
+  }, [gameId, fetchMessages, useSupabaseTransport]);
 
+  // Socket.IO event listeners (only active when NOT using Supabase transport)
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || useSupabaseTransport) return;
     
     const onNew = (payload: { message: ChatMessage }) => {
       // If this message belongs to this room, append if not already present
@@ -125,7 +190,7 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
       socket.off('chat:reaction', onReact);
       socket.off('chat:reaction_removed', onReactRemoved);
     };
-  }, [socket, playerId]);
+  }, [socket, playerId, useSupabaseTransport]);
 
   const handleSendMessage = async () => {
     const text = input.trim();

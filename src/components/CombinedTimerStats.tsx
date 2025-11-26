@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, memo, useRef, useCallback } from 'react';
+import { getTransportMode } from '../utils/transport';
+import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 
 // Timer types
 type TimerState = {
@@ -32,7 +34,11 @@ interface CombinedHUDProps {
   socketsDisabled?: boolean;
 }
 
-function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameState: externalGameState, socketsDisabled = false }: CombinedHUDProps) {
+function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings }: CombinedHUDProps) {
+  // Check transport mode to determine whether to use sockets or Supabase
+  const transportMode = getTransportMode();
+  const useSupabase = transportMode === 'supabase';
+  
   // Timer states
   const [socket, setSocket] = useState<any>(null);
   const [timer, setTimer] = useState<TimerState>(undefined);
@@ -58,12 +64,29 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
   });
   const [statsLoading, setStatsLoading] = useState(true);
 
-  // Handler for game state updates (used by both socket events and Supabase)
-  const processGameStateUpdate = useCallback((gs: any) => {
+  // Hand/session stat updater: process game state updates
+  const processGameStateUpdate = useCallback((payload: { gameState: any; lastAction?: any }) => {
+    const gs = payload?.gameState;
     if (!gs) return;
 
     const prevStage = lastStageRef.current;
     const currStage = gs.stage;
+
+    // Check for game_started action (from lastAction) to initialize tracking
+    if (payload.lastAction?.action === 'game_started' || (prevStage === undefined && currStage)) {
+      // Initialize tracking snapshots from initial state
+      lastStageRef.current = gs.stage;
+      lastPotRef.current = gs.pot || 0;
+      const stacks: Record<string, number> = {};
+      (gs.players || []).forEach((p: any) => (stacks[p.id] = p.stack || 0));
+      lastStacksRef.current = stacks;
+      // Initialize hand-start baselines: approximate start-of-hand as (stack + currentBet)
+      const handStart: Record<string, number> = {};
+      (gs.players || []).forEach((p: any) => (handStart[p.id] = (p.stack || 0) + (p.currentBet || 0)));
+      handStartStacksRef.current = handStart;
+      console.log('[stats] Game started - initialized tracking', { stage: gs.stage, stacks, handStart });
+      return;
+    }
 
     // Detect new hand start: transition to preflop (reset hand-start baseline)
     if (currStage === 'preflop' && prevStage !== 'preflop') {
@@ -132,36 +155,20 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
     lastStacksRef.current = stacks;
   }, [playerId, gameId]);
 
-  // Handler for game started events
-  const processGameStarted = useCallback((gs: any) => {
-    if (gs) {
-      // Initialize tracking snapshots from initial state
-      lastStageRef.current = gs.stage;
-      lastPotRef.current = gs.pot || 0;
-      const stacks: Record<string, number> = {};
-      (gs.players || []).forEach((p: any) => (stacks[p.id] = p.stack || 0));
-      lastStacksRef.current = stacks;
-      // Initialize hand-start baselines: approximate start-of-hand as (stack + currentBet)
-      const handStart: Record<string, number> = {};
-      (gs.players || []).forEach((p: any) => (handStart[p.id] = (p.stack || 0) + (p.currentBet || 0)));
-      handStartStacksRef.current = handStart;
-    } else {
-      lastStageRef.current = undefined;
-      lastPotRef.current = 0;
-      lastStacksRef.current = {};
-      handStartStacksRef.current = {};
+  // Subscribe to Supabase realtime updates when in Supabase mode
+  useSupabaseRealtime(
+    useSupabase ? tableId : undefined,
+    {
+      onGameStateUpdate: (payload: any) => {
+        console.log('[stats] Supabase game_state_update received:', payload?.gameState?.stage);
+        processGameStateUpdate(payload);
+      }
     }
-  }, []);
+  );
 
-  // Process external game state updates (for Supabase transport)
+  // Timer socket initialization (only when not using Supabase)
   useEffect(() => {
-    if (!socketsDisabled || !externalGameState) return;
-    processGameStateUpdate(externalGameState);
-  }, [socketsDisabled, externalGameState, processGameStateUpdate]);
-
-  // Timer socket initialization (skip when using Supabase transport)
-  useEffect(() => {
-    if (socketsDisabled) return;
+    if (useSupabase) return;
     
     const initSocket = async () => {
       try {
@@ -176,22 +183,25 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
     setTimeout(() => {
       initSocket();
     }, 300);
-  }, [socketsDisabled]);
+  }, [useSupabase]);
 
-  // Timer socket events
+  // Timer socket events (only when not using Supabase)
   useEffect(() => {
+    if (useSupabase || !socket) return;
+    
     const onTimer = (state?: any) => setTimer(state);
     const onBank = ({ amount }: { amount: number }) => setBank(amount);
     // Hand/session stat updater: listen for game lifecycle
     const onGameStarted = (data: { gameState?: any }) => {
-      processGameStarted(data?.gameState);
+      console.log('[stats] Socket game_started received');
+      processGameStateUpdate({ gameState: data?.gameState, lastAction: { action: 'game_started' } });
     };
 
     const onGameStateUpdate = (payload: { gameState: any }) => {
-      processGameStateUpdate(payload?.gameState);
+      console.log('[stats] Socket game_state_update received:', payload?.gameState?.stage);
+      processGameStateUpdate(payload);
     };
     
-    if (!socket) return;
     socket.on('timer_update', onTimer);
     socket.on('timebank_update', onBank);
     socket.on('game_started', onGameStarted);
@@ -202,7 +212,7 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
       socket?.off('game_started', onGameStarted);
       socket?.off('game_state_update', onGameStateUpdate);
     };
-  }, [socket, processGameStarted, processGameStateUpdate]);
+  }, [socket, useSupabase, processGameStateUpdate]);
 
   // Timer countdown
   useEffect(() => {

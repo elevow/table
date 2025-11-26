@@ -1,10 +1,13 @@
+import { randomInt } from 'crypto';
 import { Server as SocketServer } from 'socket.io';
-import { PlayerAction, TableState, Player, DisconnectionState } from '../types/poker';
+import { PlayerAction, TableState, Player, DisconnectionState, RunItTwicePrompt, Card } from '../types/poker';
 import { ActionValidator } from './action-validator';
 import { StateManager } from './state-manager';
 import { TimerManager } from './timer-manager';
 import { createPokerEngine } from './poker/engine-factory';
 import { PokerEngine } from './poker/poker-engine';
+import { HandEvaluator } from './poker/hand-evaluator';
+import { HandInterface } from '../types/poker-engine';
 
 interface ActionResponse {
   success: boolean;
@@ -60,18 +63,18 @@ export class ActionManager {
               updateKeys: Object.keys(update || {}),
               communityLen: state.communityCards?.length || 0
             });
+            if (update && typeof update.runItTwicePrompt !== 'undefined' && update.runItTwicePrompt) {
+              console.debug('[auto-runout] prompt detected via listener; clearing timers', { tableId, promptFor: update.runItTwicePrompt.playerId });
+              this.clearAutoRunout(tableId);
+              return;
+            }
             // If state just progressed and meets runout conditions, schedule reveals and hide UI
             const activeCount = state.players.filter(p => !p.isFolded).length;
             const anyAllIn = state.players.some(p => !p.isFolded && p.isAllIn);
             const nonAllInCount = state.players.filter(p => !p.isFolded && !p.isAllIn).length;
             const need = Math.max(0, 5 - (state.communityCards?.length || 0));
             if (activeCount >= 2 && anyAllIn && nonAllInCount <= 1 && need > 0 && state.stage !== 'showdown') {
-              // Hide UI
-              console.debug('[auto-runout] listener gating passed; hiding UI and stopping timers', { tableId, activeCount, anyAllIn, nonAllInCount, need, stage: state.stage });
-              this.stateManager.updateState(tableId, { activePlayer: '' as any });
-              // Stop any per-turn timer
-              this.timerManager.stopTimer(tableId);
-              // Ensure runout is scheduled
+              console.debug('[auto-runout] listener gating passed; deferring to scheduler', { tableId, activeCount, anyAllIn, nonAllInCount, need, stage: state.stage });
               this.maybeScheduleAutoRunout(tableId, state);
             } else {
               console.debug('[auto-runout] listener gating not met', { tableId, activeCount, anyAllIn, nonAllInCount, need, stage: state.stage });
@@ -107,9 +110,9 @@ export class ActionManager {
           .catch(error => callback({ success: false, error: error.message }));
       });
 
-      // Run It Twice enable request (client emits when offering 2-4 runs) leveraging real PokerEngine for seed security
+      // Run It Twice enable/decline request; only the designated player may respond while a prompt is pending
       socket.on('enable_run_it_twice', async (
-        { tableId, runs }: { tableId: string; runs: number },
+        { tableId, runs, playerId }: { tableId: string; runs: number; playerId?: string },
         cb?: (resp: { success: boolean; error?: string }) => void
       ) => {
         try {
@@ -117,13 +120,44 @@ export class ActionManager {
           const state = this.stateManager.getState(tableId);
           if (!state) { cb?.({ success: false, error: 'Table not found' }); return; }
           if (state.runItTwice?.enabled) { cb?.({ success: false, error: 'Already enabled' }); return; }
-          // Dynamic allowed runs: 1 up to number of active (non-folded) players
-          const activeCount = state.players.filter(p => !p.isFolded).length;
-          const maxRuns = Math.max(1, activeCount);
-          if (runs < 1 || runs > maxRuns) { cb?.({ success: false, error: `Runs must be 1-${maxRuns}` }); return; }
+          const requesterId = playerId || (socket as any).playerId;
+          const prompt = state.runItTwicePrompt;
+          if (prompt) {
+            if (!requesterId) { cb?.({ success: false, error: 'Unknown player' }); return; }
+            if (prompt.playerId !== requesterId) { cb?.({ success: false, error: 'Not authorized for Run It Twice decision' }); return; }
+          }
           if (state.communityCards.length >= 5 || state.stage === 'showdown') { cb?.({ success: false, error: 'Too late' }); return; }
           const anyAllIn = state.players.some(p => p.isAllIn);
           if (!anyAllIn) { cb?.({ success: false, error: 'No all-in present' }); return; }
+          const activeCount = state.players.filter(p => !p.isFolded).length;
+          const maxRuns = Math.max(1, activeCount);
+          if (runs < 1 || runs > maxRuns) { cb?.({ success: false, error: `Runs must be 1-${maxRuns}` }); return; }
+
+          const awaitingPrompt = !!prompt;
+          if (awaitingPrompt && runs <= 1) {
+            console.debug('[auto-runout] Run It Twice declined; revealing all hands and resuming runout', { tableId, requesterId });
+            const revealedState = this.mergeEngineHoleCards(tableId, state);
+            this.stateManager.updateState(tableId, {
+              players: revealedState.players,
+              runItTwicePrompt: null,
+              activePlayer: '' as any,
+              runItTwicePromptDisabled: true,
+            });
+            const resumeState: TableState = {
+              ...revealedState,
+              runItTwicePrompt: null,
+              activePlayer: '' as any,
+              runItTwicePromptDisabled: true,
+            };
+            this.maybeScheduleAutoRunout(tableId, resumeState);
+            cb?.({ success: true });
+            return;
+          }
+
+          if (!awaitingPrompt && runs === 1) {
+            cb?.({ success: false, error: 'Multiple runs required' });
+            return;
+          }
 
           const engine = this.getOrCreateEngine(tableId, state);
           // Sync public info (hole + community) into engine clone state
@@ -138,8 +172,23 @@ export class ActionManager {
 
           engine.enableRunItTwice(runs);
           const rit = engine.getState().runItTwice;
-          this.stateManager.updateState(tableId, { runItTwice: rit });
+          const revealedState = this.mergeEngineHoleCards(tableId, state);
+          this.stateManager.updateState(tableId, {
+            players: revealedState.players,
+            runItTwice: rit,
+            runItTwicePrompt: null,
+            activePlayer: '' as any,
+            runItTwicePromptDisabled: true,
+          });
           this.io.to(tableId).emit('rit_enabled', { tableId, runs, rit });
+          const updatedState: TableState = {
+            ...revealedState,
+            runItTwice: rit,
+            runItTwicePrompt: null,
+            activePlayer: '' as any,
+            runItTwicePromptDisabled: true,
+          };
+          this.maybeScheduleAutoRunout(tableId, updatedState);
           cb?.({ success: true });
         } catch (e: any) {
           cb?.({ success: false, error: e?.message || 'Failed to enable Run It Twice' });
@@ -174,6 +223,10 @@ export class ActionManager {
     const state = this.stateManager.getState(action.tableId);
     if (!state) {
       return { success: false, error: 'Table not found' };
+    }
+
+    if (state.runItTwicePrompt) {
+      return { success: false, error: 'Waiting on Run It Twice decision' };
     }
 
     // If hand is locked for auto-runout or already scheduled, with runout remaining, block further actions
@@ -239,7 +292,10 @@ export class ActionManager {
         stage: maybeResolved.stage,
         communityLen: maybeResolved.communityCards?.length || 0
       });
-      this.stateManager.updateState(action.tableId, { activePlayer: '' as any });
+      const latestState = this.stateManager.getState(action.tableId);
+      if (!latestState?.runItTwicePrompt) {
+        this.stateManager.updateState(action.tableId, { activePlayer: '' as any });
+      }
       // Do not start turn timer during auto-runout
     } else {
       console.debug('[auto-runout] post-action gating not met; starting turn timer if applicable', {
@@ -432,6 +488,27 @@ export class ActionManager {
         return;
       }
 
+      // Stop any turn timer while the hand is locked for runout/prompt
+      this.timerManager.stopTimer(tableId);
+
+      if (state.runItTwicePrompt) {
+        console.debug('[auto-runout] awaiting existing Run It Twice prompt', { tableId, playerId: state.runItTwicePrompt.playerId });
+        this.clearAutoRunout(tableId);
+        return;
+      }
+
+      const promptDisabled = !!state.runItTwicePromptDisabled;
+      if (!promptDisabled && !state.runItTwice?.enabled) {
+        const promptState = this.mergeEngineHoleCards(tableId, state);
+        const prompt = this.determineRunItTwicePrompt(promptState);
+        if (prompt) {
+          console.debug('[auto-runout] issuing Run It Twice prompt before runout', { tableId, promptPlayer: prompt.playerId, eligible: prompt.eligiblePlayerIds });
+          this.stateManager.updateState(tableId, { runItTwicePrompt: prompt, activePlayer: prompt.playerId, runItTwicePromptDisabled: false });
+          this.clearAutoRunout(tableId);
+          return;
+        }
+      }
+
       // Prepare engine for deterministic preview using current public info
       const engine = this.getOrCreateEngine(tableId, state);
       const engState = (engine as any).getState();
@@ -511,6 +588,122 @@ export class ActionManager {
     } catch {
       // ignore scheduling failures
     }
+  }
+
+  private determineRunItTwicePrompt(state: TableState): RunItTwicePrompt | null {
+    try {
+      const board = Array.isArray(state.communityCards) ? state.communityCards : [];
+      const variant = state.variant;
+      const minHoleCards = (variant === 'omaha' || variant === 'omaha-hi-lo') ? 4 : 2;
+      const evaluator = (variant === 'omaha' || variant === 'omaha-hi-lo')
+        ? HandEvaluator.evaluateOmahaHand.bind(HandEvaluator)
+        : HandEvaluator.evaluateHand.bind(HandEvaluator);
+      const contenders = state.players
+        .filter(p => !p.isFolded && Array.isArray(p.holeCards) && p.holeCards.length >= minHoleCards)
+        .map(p => {
+          const evaluation = evaluator(p.holeCards || [], board);
+          const normalizedHand = this.normalizeHandForComparison(evaluation);
+          const desc = normalizedHand.description || '';
+          return {
+            playerId: p.id,
+            hand: normalizedHand,
+            description: desc,
+          };
+        });
+      if (contenders.length < 2) return null;
+
+      let weakest = contenders[0];
+      let weakestGroup = [contenders[0]];
+      for (let i = 1; i < contenders.length; i++) {
+        const candidate = contenders[i];
+        const cmp = HandEvaluator.compareHands(candidate.hand, weakest.hand);
+        // compareHands returns 1 if first hand wins, -1 if second wins
+        // So negative cmp means candidate is weaker than current weakest
+        if (cmp < 0) {
+          weakest = candidate;
+          weakestGroup = [candidate];
+        } else if (cmp === 0) {
+          weakestGroup.push(candidate);
+        }
+      }
+
+      const pickIndex = weakestGroup.length === 1 ? 0 : randomInt(weakestGroup.length);
+      const chosen = weakestGroup[pickIndex];
+      if (!chosen) return null;
+      const tiedWith = weakestGroup
+        .filter(entry => entry.playerId !== chosen.playerId)
+        .map(entry => entry.playerId);
+
+      const handDescriptionsByPlayer = contenders.reduce<Record<string, string>>((acc, entry) => {
+        if (entry.description) acc[entry.playerId] = entry.description;
+        return acc;
+      }, {});
+
+      const prompt: RunItTwicePrompt = {
+        playerId: chosen.playerId,
+        reason: 'lowest-hand',
+        createdAt: Date.now(),
+        boardCardsCount: board.length,
+        handDescription: chosen.description || undefined,
+        handDescriptionsByPlayer: Object.keys(handDescriptionsByPlayer).length ? handDescriptionsByPlayer : undefined,
+        eligiblePlayerIds: contenders.map(c => c.playerId),
+        tiedWith: tiedWith.length ? tiedWith : undefined,
+      };
+      return prompt;
+    } catch (err) {
+      console.debug('[auto-runout] failed to compute Run It Twice prompt', { err: (err as any)?.message });
+      return null;
+    }
+  }
+
+  private mergeEngineHoleCards(tableId: string, state: TableState): TableState {
+    try {
+      const engine = this.getOrCreateEngine(tableId, state);
+      const engineState = (engine as any)?.getState?.();
+      const enginePlayers = Array.isArray(engineState?.players) ? engineState.players : [];
+      if (!enginePlayers.length) return state;
+      const mergedPlayers = state.players.map(player => {
+        const engPlayer = enginePlayers.find((ep: any) => ep.id === player.id);
+        const engCards = Array.isArray(engPlayer?.holeCards) ? engPlayer.holeCards : [];
+        if (!engCards.length) return player;
+        const alreadyVisible = Array.isArray(player.holeCards) && player.holeCards.length >= engCards.length;
+        if (alreadyVisible) return player;
+        return { ...player, holeCards: engCards };
+      });
+      return { ...state, players: mergedPlayers };
+    } catch {
+      return state;
+    }
+  }
+
+  private normalizeHandForComparison(evaluation: { hand: HandInterface; cards: Card[] }): HandInterface {
+    if (Array.isArray(evaluation?.hand?.cards) && evaluation.hand.cards.length >= 5) {
+      return evaluation.hand;
+    }
+    const suitMap: Record<Card['suit'], string> = { hearts: 'h', diamonds: 'd', clubs: 'c', spades: 's' };
+    const normalizedCards = (evaluation.cards || []).map(card => ({
+      value: card.rank === '10' ? 'T' : card.rank,
+      suit: suitMap[card.suit] || 'h',
+    }));
+    const used = new Set(normalizedCards.map(card => `${card.value}${card.suit}`));
+    const fillerRanks = ['2', '3', '4', '5', '6', '7', '8', '9'];
+    const fillerSuits = ['h', 'd', 'c', 's'];
+    let rankIdx = 0;
+    while (normalizedCards.length < 5 && rankIdx < fillerRanks.length) {
+      for (const suit of fillerSuits) {
+        const key = `${fillerRanks[rankIdx]}${suit}`;
+        if (used.has(key)) continue;
+        normalizedCards.push({ value: fillerRanks[rankIdx], suit });
+        used.add(key);
+        if (normalizedCards.length >= 5) break;
+      }
+      rankIdx += 1;
+    }
+    return {
+      rank: evaluation.hand?.rank ?? 1,
+      description: evaluation.hand?.description || (evaluation.hand as any)?.descr || 'High Card',
+      cards: normalizedCards,
+    };
   }
 
   private clearAutoRunout(tableId: string): void {

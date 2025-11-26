@@ -7,6 +7,8 @@ type Callbacks = {
   onSeatState?: (p: { seats: Record<number, { playerId: string; playerName: string; chips: number } | null> }) => void;
   onGameStateUpdate?: (p: { gameState: any; lastAction?: any }) => void;
   onAwaitingDealerChoice?: (p: any) => void;
+  onRebuyPrompt?: (p: any) => void;
+  onRebuyResult?: (p: any) => void;
 };
 
 export function useSupabaseRealtime(tableId?: string | string[], callbacks?: Callbacks) {
@@ -26,6 +28,8 @@ export function useSupabaseRealtime(tableId?: string | string[], callbacks?: Cal
       .on('broadcast', { event: 'seat_state' }, (p) => cbsRef.current?.onSeatState?.(p.payload))
       .on('broadcast', { event: 'game_state_update' }, (p) => cbsRef.current?.onGameStateUpdate?.(p.payload))
       .on('broadcast', { event: 'awaiting_dealer_choice' }, (p) => cbsRef.current?.onAwaitingDealerChoice?.(p.payload))
+      .on('broadcast', { event: 'rebuy_prompt' }, (p) => cbsRef.current?.onRebuyPrompt?.(p.payload))
+      .on('broadcast', { event: 'rebuy_result' }, (p) => cbsRef.current?.onRebuyResult?.(p.payload))
       .subscribe();
 
     return () => {

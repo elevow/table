@@ -73,15 +73,50 @@ export class HandEvaluator {
     const allCardsRaw = [...(holeCards || []), ...(communityCards || [])];
     const allCards: Card[] = allCardsRaw.filter((c: any) => c && c.rank && c.suit) as Card[];
 
-    // If fewer than 5 valid cards, return a minimal High Card evaluation without calling solver
+    // If fewer than 5 valid cards, perform a lightweight evaluation (detecting pairs/trips/etc.) without solver
     if (allCards.length < 5) {
       const weight: Record<Card['rank'], number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
-      const sorted = [...allCards].sort((a, b) => weight[b.rank] - weight[a.rank]);
-      const best = sorted.slice(0, Math.min(5, sorted.length));
-      const top = best[0]?.rank || '';
       const labelMap: Record<Card['rank'], string> = { '2': 'Two', '3': 'Three', '4': 'Four', '5': 'Five', '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine', '10': 'Ten', 'J': 'Jack', 'Q': 'Queen', 'K': 'King', 'A': 'Ace' } as any;
-      const descr = top ? `${labelMap[top as Card['rank']]} High` : 'High Card';
-      return { hand: { rank: 1, description: descr, cards: [] }, cards: best };
+      const pluralMap: Record<Card['rank'], string> = { '2': 'Twos', '3': 'Threes', '4': 'Fours', '5': 'Fives', '6': 'Sixes', '7': 'Sevens', '8': 'Eights', '9': 'Nines', '10': 'Tens', 'J': 'Jacks', 'Q': 'Queens', 'K': 'Kings', 'A': 'Aces' } as any;
+      const limit = Math.min(5, allCards.length);
+      const sortedCards = [...allCards].sort((a, b) => weight[b.rank] - weight[a.rank]);
+      const counts: Record<Card['rank'], number> = {} as any;
+      allCards.forEach(card => { counts[card.rank] = (counts[card.rank] || 0) + 1; });
+      const sortedRanks = Object.keys(counts) as Card['rank'][];
+      sortedRanks.sort((a, b) => {
+        if (counts[b] !== counts[a]) return counts[b] - counts[a];
+        return weight[b] - weight[a];
+      });
+
+      const buildResult = (name: string, description: string, rankValue: HandRank) => {
+        const best = sortedCards.slice(0, limit);
+        const hand: any = { rank: rankValue, description, descr: description, cards: [] };
+        hand.name = name;
+        return { hand: hand as HandInterface, cards: best };
+      };
+
+      const topRank = sortedRanks[0];
+      const topCount = topRank ? counts[topRank] : 0;
+      const pairRanks = sortedRanks.filter(rank => counts[rank] === 2);
+
+      if (topCount === 4 && topRank) {
+        return buildResult('Four of a Kind', `Four of a Kind (${pluralMap[topRank]})`, HandRank.FourOfAKind);
+      }
+      if (topCount === 3 && topRank) {
+        return buildResult('Three of a Kind', `Three of a Kind (${pluralMap[topRank]})`, HandRank.ThreeOfAKind);
+      }
+      if (pairRanks.length >= 2) {
+        const [firstPair, secondPair] = pairRanks.slice(0, 2);
+        const desc = `Two Pair (${pluralMap[firstPair]} & ${pluralMap[secondPair]})`;
+        return buildResult('Two Pair', desc, HandRank.TwoPair);
+      }
+      if (pairRanks.length === 1) {
+        const rank = pairRanks[0];
+        return buildResult('Pair', `Pair of ${pluralMap[rank]}`, HandRank.OnePair);
+      }
+      const topCard = sortedCards[0];
+      const descr = topCard ? `${labelMap[topCard.rank]} High` : 'High Card';
+      return buildResult('High Card', descr, HandRank.HighCard);
     }
 
     const cardStrings = this.cardsToString(allCards);

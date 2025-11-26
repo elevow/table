@@ -1,6 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { WebSocketManager } from '../../src/lib/websocket-manager';
 import { Server as HttpServer } from 'http';
+import { fetchRoomRebuyLimit } from '../../src/lib/shared/rebuy-limit';
+import { getPlayerRebuyInfo, recordBuyin } from '../../src/lib/shared/rebuy-tracker';
 
 // Extend the response type to include the socket server
 interface NextApiResponseServerIO extends NextApiResponse {
@@ -45,7 +47,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
       });
 
       // Handle seat claim requests
-      socket.on('claim_seat', (data: { tableId: string; seatNumber: number; playerId: string; playerName: string; chips: number }) => {
+      socket.on('claim_seat', async (data: { tableId: string; seatNumber: number; playerId: string; playerName: string; chips: number }) => {
         console.log('Seat claim request:', data.tableId, data.seatNumber, data.playerId);
         const { tableId, seatNumber, playerId, playerName, chips } = data;
         
@@ -80,6 +82,25 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
           return;
         }
         
+        const rebuyLimit = await fetchRoomRebuyLimit(tableId);
+        const previousRecord = getPlayerRebuyInfo(tableId, playerId);
+        const isInitial = !previousRecord;
+        const rebuysUsed = previousRecord?.rebuys ?? 0;
+        const numericLimit = rebuyLimit === 'unlimited' ? Number.POSITIVE_INFINITY : rebuyLimit;
+
+        if (!isInitial && rebuysUsed >= numericLimit) {
+          const message = rebuyLimit === 'unlimited'
+            ? 'Rebuy not available for this table.'
+            : `Rebuy limit (${rebuyLimit}) reached for this room.`;
+          socket.emit('seat_claim_failed', {
+            error: message,
+            seatNumber,
+            rebuyLimit,
+            rebuysUsed,
+          });
+          return;
+        }
+
         // Claim the seat
         seats[seatNumber] = { playerId, playerName, chips };
         gameSeats.set(tableId, seats);
@@ -91,6 +112,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponseServerI
           playerName,
           chips
         });
+
+        recordBuyin(tableId, playerId);
         
         console.log(`Seat ${seatNumber} claimed by ${playerName} (${playerId}) at table ${tableId}`);
       });

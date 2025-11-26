@@ -1,2 +1,163 @@
-// Placeholder API route - to be implemented
-export {};
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { publishGameStateUpdate } from '../../../src/lib/realtime/publisher';
+import { nextSeq } from '../../../src/lib/realtime/sequence';
+import {
+  getRunItState,
+  disableRunItPrompt,
+  enrichStateWithRunIt,
+  isAutoRunoutEligible,
+} from '../../../src/lib/poker/run-it-twice-manager';
+import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
+import type { TableState } from '../../../src/types/poker';
+
+function getIo(res: NextApiResponse): any | null {
+  try {
+    // @ts-ignore
+    const io = (res as any)?.socket?.server?.io;
+    return io || null;
+  } catch {
+    return null;
+  }
+}
+
+const revealAllHoleCards = (engine: any, state: TableState): TableState => {
+  try {
+    const engineState = engine?.getState?.();
+    if (!engineState) return state;
+    const enginePlayers = Array.isArray(engineState.players) ? engineState.players : [];
+    const mergedPlayers = Array.isArray(state.players)
+      ? state.players.map((player: any) => {
+          const engPlayer = enginePlayers.find((ep: any) => ep.id === player.id);
+          const engCards = Array.isArray(engPlayer?.holeCards) ? engPlayer.holeCards : [];
+          if (!engCards.length) return player;
+          const alreadyVisible = Array.isArray(player.holeCards) && player.holeCards.length >= engCards.length;
+          if (alreadyVisible) return player;
+          return { ...player, holeCards: engCards };
+        })
+      : state.players;
+    return { ...state, players: mergedPlayers } as TableState;
+  } catch {
+    return state;
+  }
+};
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const { tableId, playerId, runs } = (req.body || {}) as {
+    tableId?: string;
+    playerId?: string;
+    runs?: number;
+  };
+
+  if (!tableId || !playerId || typeof runs !== 'number') {
+    return res.status(400).json({ error: 'Missing tableId, playerId, or runs' });
+  }
+
+  try {
+    const meta = getRunItState(tableId);
+    
+    // Validate that this player has an active prompt
+    if (!meta.prompt || meta.prompt.playerId !== playerId) {
+      return res.status(400).json({ error: 'No active Run-It-Twice prompt for this player' });
+    }
+
+    // Get the active game engine
+    const g: any = global as any;
+    const engine = g?.activeGames?.get(tableId);
+    if (!engine) {
+      return res.status(404).json({ error: 'No active game found for this table' });
+    }
+    clearSupabaseAutoRunout(tableId);
+
+    const autoRunoutDebug = !!process.env.AUTO_RUNOUT_DEBUG;
+    const gameState = engine.getState();
+
+    const broadcastState = async (state: TableState, lastAction: any) => {
+      const enrichedState = enrichStateWithRunIt(tableId, state);
+      try {
+        const seq = nextSeq(tableId);
+        await publishGameStateUpdate(tableId, {
+          gameState: enrichedState,
+          lastAction,
+          timestamp: new Date().toISOString(),
+          seq,
+        } as any);
+      } catch (e) {
+        console.warn('Failed to publish game state to Supabase:', e);
+      }
+
+      try {
+        const io = getIo(res);
+        if (io) {
+          const seq = nextSeq(tableId);
+          io.to(`table_${tableId}`).emit('game_state_update', {
+            gameState: enrichedState,
+            lastAction,
+            timestamp: new Date().toISOString(),
+            seq,
+          });
+          if (lastAction?.action === 'run_it_twice_enabled') {
+            io.to(`table_${tableId}`).emit('rit_enabled', { tableId, runs: lastAction.runs, rit: enrichedState.runItTwice });
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to emit via socket:', e);
+      }
+
+      return enrichedState;
+    };
+
+    // Validate runs parameter
+    const activePlayers = (gameState.players || []).filter((p: any) => !(p.isFolded || (p as any).folded)).length || 0;
+    const maxRuns = Math.max(1, activePlayers);
+    if (runs < 1 || runs > maxRuns) {
+      return res.status(400).json({ error: `Runs must be 1-${maxRuns}` });
+    }
+
+    let updatedState: TableState;
+    let actionName: 'run_it_twice_declined' | 'run_it_twice_enabled';
+
+    if (runs === 1) {
+      if (autoRunoutDebug) {
+        console.log(`[enable-rit.ts] Player ${playerId} declined Run-It-Twice for table ${tableId}`);
+      }
+      disableRunItPrompt(tableId, true);
+      const baseState: TableState = {
+        ...gameState,
+        runItTwicePrompt: null,
+        runItTwicePromptDisabled: true,
+        activePlayer: '' as any,
+      };
+      updatedState = revealAllHoleCards(engine, baseState);
+      actionName = 'run_it_twice_declined';
+    } else {
+      if (autoRunoutDebug) {
+        console.log(`[enable-rit.ts] Player ${playerId} accepted Run-It-Twice with ${runs} runs for table ${tableId}`);
+      }
+      if (typeof engine.enableRunItTwice === 'function') {
+        engine.enableRunItTwice(runs);
+      }
+      disableRunItPrompt(tableId, true);
+      const baseState: TableState = {
+        ...engine.getState(),
+        runItTwicePrompt: null,
+        runItTwicePromptDisabled: true,
+        activePlayer: '' as any,
+      };
+      updatedState = revealAllHoleCards(engine, baseState);
+      actionName = 'run_it_twice_enabled';
+    }
+
+    const enrichedState = await broadcastState(updatedState, { action: actionName, playerId, runs });
+
+    if (isAutoRunoutEligible(updatedState)) {
+      scheduleSupabaseAutoRunout(tableId, engine, (state, meta) => broadcastState(state, meta).then(() => {}));
+    }
+
+    return res.status(200).json({ success: true, runs, gameState: enrichedState });
+  } catch (e: any) {
+    console.error('Error processing Run-It-Twice response:', e);
+    return res.status(500).json({ error: e?.message || 'Internal server error' });
+  }
+}

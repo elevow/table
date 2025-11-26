@@ -116,6 +116,55 @@ describe('StateManager', () => {
       stateManager.updateState(tableId, { pot: 200 });
       expect(stateManager.getSequence(tableId)).toBe(21);
     });
+
+    it('resets Run It Twice flags when a new hand begins', () => {
+      const tableId = 'rit-reset-table';
+      const baseState: TableState = {
+        tableId,
+        stage: 'showdown',
+        players: [{
+          id: 'p1',
+          name: 'Player 1',
+          position: 0,
+          stack: 0,
+          currentBet: 0,
+          hasActed: true,
+          isFolded: false,
+          isAllIn: true,
+          timeBank: 30000
+        }],
+        activePlayer: '',
+        pot: 0,
+        communityCards: [
+          { rank: 'A', suit: 'hearts' },
+          { rank: 'K', suit: 'spades' },
+          { rank: 'Q', suit: 'diamonds' },
+          { rank: 'J', suit: 'clubs' },
+          { rank: '10', suit: 'hearts' }
+        ],
+        currentBet: 0,
+        dealerPosition: 0,
+        smallBlind: 5,
+        bigBlind: 10,
+        minRaise: 10,
+        lastRaise: 0,
+        runItTwicePrompt: {
+          playerId: 'p1',
+          reason: 'lowest-hand',
+          createdAt: Date.now(),
+          boardCardsCount: 5,
+          eligiblePlayerIds: ['p1']
+        },
+        runItTwicePromptDisabled: true
+      } as TableState;
+
+      stateManager.updateState(tableId, baseState);
+      stateManager.updateState(tableId, { stage: 'preflop', communityCards: [] });
+
+      const nextState = stateManager.getState(tableId);
+      expect(nextState?.runItTwicePromptDisabled).toBe(false);
+      expect(nextState?.runItTwicePrompt).toBeNull();
+    });
   });
 
   describe('Socket Handling', () => {

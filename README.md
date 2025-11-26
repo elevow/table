@@ -1,6 +1,6 @@
 # Table
 
-A Next.js + React + TypeScript poker application with real‑time play (Socket.IO), REST API routes, and a PostgreSQL‑backed data layer. Includes rich test coverage with Jest and a modular database/migration design.
+A Next.js + React + TypeScript poker application with real‑time play via Supabase Realtime, REST API routes, and a PostgreSQL‑backed data layer. Includes rich test coverage with Jest and a modular database/migration design.
 
 ## Quick start
 
@@ -119,9 +119,9 @@ Apply these in order (via Supabase SQL editor or psql):
 Notes
 - The TypeScript files in `src/lib/database/migrations/*.ts` are config objects used by tests. They aren’t wired to a production CLI; prefer the SQL files above. If you want a code-driven runner, open an issue and we’ll add a small Node/pg script to execute selected configs.
 
-## Realtime (Socket.IO)
+## Realtime (Supabase)
 
-The app uses Socket.IO for chat and invites. When running `npm run dev` or `npm run start`, the Next.js server hosts both API routes and the Socket.IO server. Ensure your deployment target supports long‑lived WebSocket connections.
+The app uses Supabase Realtime for game state updates, seat management, and chat. Configure the Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY) to enable real-time features.
 
 ## Environment variables (summary)
 
@@ -154,9 +154,6 @@ npx pm2 save
 ```
 6) Put a reverse proxy (Nginx/Apache) in front and forward HTTP(S) traffic to the Node process
 
-Notes
-- Ensure the proxy supports and forwards WebSocket upgrade requests
-- Open outbound network access to your PostgreSQL service if remote
 
 ### Option B: Docker (example workflow)
 
@@ -183,30 +180,29 @@ EXPOSE 3000
 CMD ["npm", "run", "start"]
 ```
 
-Run the container (set envs for Postgres):
+Run the container (set envs for Postgres and Supabase):
 ```bash
 docker build -t table:latest .
 docker run -p 3000:3000 --env-file .env.production table:latest
 ```
 
-Ensure your `.env.production` contains the Postgres variables and any other secrets.
+Ensure your `.env.production` contains the Postgres and Supabase variables and any other secrets.
 
-### Option C: Vercel (caveat: WebSockets)
+### Option C: Vercel / Serverless
 
 - Import the repo into Vercel
 - Set environment variables in Project Settings
 - Build command: `npm run build`; Output directory: (Next.js default)
 - Start command: not required (Vercel manages it)
 
-Important: Vercel’s serverless model may not support long‑lived Socket.IO connections in a single app without additional setup. For real‑time features, consider:
-- A separate socket server (Node/Container) deployed to a provider that supports WebSockets
-- Or a host like Render, Railway, Fly.io, AWS ECS/Fargate, or a VM
+Note: Since the app uses Supabase Realtime (not Socket.IO), it works well with serverless deployments like Vercel without needing dedicated WebSocket infrastructure.
 
 ## Troubleshooting
 
-- WebSocket not connecting
-  - Verify proxy/WebApp Gateway forwards `Upgrade` requests and `Connection: upgrade`
-  - Check CORS/origin settings if you restrict origins
+- Supabase connection issues
+  - Verify `NEXT_PUBLIC_SUPABASE_URL` and keys are correctly set
+  - Check Supabase dashboard for Realtime service status
+  - Ensure your Supabase project has Realtime enabled
 
 - PostgreSQL SSL errors (self‑signed, etc.)
   - Set `PGSSLMODE=require` for managed providers that mandate SSL

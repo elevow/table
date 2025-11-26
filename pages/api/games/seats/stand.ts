@@ -1,15 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import type { Server as HttpServer } from 'http';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
-import { publishSeatState, publishSeatVacated } from '../../../../src/lib/realtime/publisher';
+import { publishSeatState, publishSeatVacated, publishGameStateUpdate } from '../../../../src/lib/realtime/publisher';
 
-interface NextApiResponseServerIO extends NextApiResponse {
-  socket: any & {
-    server: HttpServer & { io?: any };
-  };
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponseServerIO) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
@@ -52,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseS
 
     const seatPayload = { seatNumber: sNum!, playerId };
 
-    // Broadcast via Supabase for socket-less clients
+    // Broadcast via Supabase for realtime clients
     try {
       await Promise.all([
         publishSeatVacated(String(tableId), seatPayload),
@@ -62,17 +55,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseS
       console.warn('Seat vacate Supabase publish failed:', pubErr);
     }
 
-    // Broadcast seat vacated if Socket.IO server present
-    try {
-      const io = res.socket?.server?.io;
-      if (io) {
-        io.to(`table_${tableId}`).emit('seat_vacated', { seatNumber: sNum, playerId });
-      }
-    } catch {}
-
     // If a game engine is active, attempt auto-fold and update (best-effort)
     try {
-      const io = res.socket?.server?.io;
       if ((global as any).activeGames && (global as any).activeGames.has(String(tableId))) {
         const engine = (global as any).activeGames.get(String(tableId));
         if (engine && typeof engine.removePlayer === 'function') {
@@ -83,13 +67,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseS
             engine.ensureWinByFoldIfSingle();
             gameState = engine.getState();
           }
-          if (io) {
-            io.to(`table_${tableId}`).emit('game_state_update', {
+          // Broadcast game state update via Supabase
+          try {
+            await publishGameStateUpdate(String(tableId), {
               gameState,
               lastAction: { playerId, action: 'auto_fold_on_stand_up' },
               timestamp: new Date().toISOString(),
             });
-          }
+          } catch {}
         }
       }
     } catch {}

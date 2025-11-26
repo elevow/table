@@ -11,11 +11,11 @@
    - Server-side rendering strategy
 
 2. Real-time Communication
-   - Socket.io implementation
-   - WebSocket fallback strategy
-   - Event handling system
+   - Supabase Realtime channels
+   - Broadcast event system
    - Connection state management
    - Reconnection logic
+   - HTTP polling fallback
 
 3. UI Components
    - Atomic design structure
@@ -36,7 +36,7 @@
 ### Backend Architecture
 1. API Structure
    - RESTful endpoints
-   - WebSocket events
+   - Supabase Realtime events
    - Authentication middleware
    - Rate limiting
    - Error handling

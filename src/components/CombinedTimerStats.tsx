@@ -34,7 +34,7 @@ interface CombinedHUDProps {
   socketsDisabled?: boolean;
 }
 
-function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings }: CombinedHUDProps) {
+function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameState, socketsDisabled }: CombinedHUDProps) {
   // Check transport mode to determine whether to use sockets or Supabase
   const transportMode = getTransportMode();
   const useSupabase = transportMode === 'supabase';

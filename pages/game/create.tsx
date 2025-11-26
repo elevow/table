@@ -13,6 +13,7 @@ export default function CreateGameRoomPage() {
   const [maxPlayers, setMaxPlayers] = useState(6);
   const [smallBlind, setSmallBlind] = useState(1);
   const [bigBlind, setBigBlind] = useState(2);
+  const [bigBlindManuallyUpdated, setBigBlindManuallyUpdated] = useState(false);
   const [variant, setVariant] = useState<Variant>('texas-holdem');
   const [bettingMode, setBettingMode] = useState<BettingMode>('no-limit');
   const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unlimited');
@@ -191,7 +192,13 @@ export default function CreateGameRoomPage() {
               min={0.01}
               step={0.01}
               value={smallBlind}
-              onChange={e => setSmallBlind(parseFloat(e.target.value || '0'))}
+              onChange={e => {
+                const newSmallBlind = parseFloat(e.target.value || '0');
+                setSmallBlind(newSmallBlind);
+                if (!bigBlindManuallyUpdated) {
+                  setBigBlind(Number((newSmallBlind * 2).toFixed(2)));
+                }
+              }}
             />
           </div>
           <div>
@@ -202,7 +209,13 @@ export default function CreateGameRoomPage() {
               min={Math.max(0.02, Number((smallBlind * 2).toFixed(2)))}
               step={0.01}
               value={bigBlind}
-              onChange={e => setBigBlind(parseFloat(e.target.value || '0'))}
+              onChange={e => {
+                const newBigBlind = parseFloat(e.target.value || '0');
+                if (newBigBlind !== bigBlind) {
+                  setBigBlindManuallyUpdated(true);
+                }
+                setBigBlind(newBigBlind);
+              }}
             />
           </div>
         </div>

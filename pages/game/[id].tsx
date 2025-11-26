@@ -1607,7 +1607,7 @@ export default function GamePage() {
   if (typeof endMark === 'function') endMark();
       prefetcher.cleanup();
     };
-  }, [id, markInteraction, socket, playerId]);
+  }, [id, markInteraction, playerId]);
 
   // Determine user role - separate useEffect to prevent infinite loops
   useEffect(() => {

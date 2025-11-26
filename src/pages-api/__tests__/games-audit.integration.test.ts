@@ -7,7 +7,10 @@ import createRoomHandler from '../../../pages/api/games/rooms/create';
 // Prepare shared mocks
 const poolInstance: any = { __tag: 'pool' };
 
-jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => poolInstance) }));
+// Mock the pool module to avoid requiring database environment variables
+jest.mock('../../../src/lib/database/pool', () => ({
+  getPool: jest.fn(() => poolInstance)
+}));
 
 jest.mock('../../../src/lib/api/rate-limit', () => ({
   rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 })

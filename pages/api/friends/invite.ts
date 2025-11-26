@@ -2,7 +2,6 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { FriendService } from '../../../src/lib/services/friend-service';
-import { getWsManager } from '../../../src/lib/api/socket-server';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -17,17 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const service = new FriendService(pool as any);
     const invite = await service.inviteToGame(inviterId, inviteeId, roomId);
 
-    // Realtime: notify both inviter and invitee personal rooms
-    const ws = getWsManager(res);
-    if (ws) {
-      try {
-        ws.broadcast('friends:invite_created', { invite }, inviterId);
-        ws.broadcast('friends:invite_created', { invite }, inviteeId);
-      } catch (_) {
-        // ignore websocket errors; API response should remain successful
-      }
-    }
-
+    // Real-time updates handled via HTTP polling or Supabase realtime
     return res.status(201).json(invite);
   } catch (e: any) {
     const status = e?.code === 'BLOCKED' ? 400 : 500;

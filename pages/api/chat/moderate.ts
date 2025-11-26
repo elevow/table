@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
-import { getWsManager } from '../../../src/lib/api/socket-server';
 import { ChatService } from '../../../src/lib/services/chat-service';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -13,14 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const pool = new Pool();
     const svc = new ChatService(pool);
     const updated = await svc.moderate(String(messageId), String(moderatorId), hide !== false);
-    try {
-      const { rows } = await pool.query('SELECT room_id FROM chat_messages WHERE id = $1', [messageId]);
-      const roomId: string | null = rows?.[0]?.room_id ?? null;
-      const ws = getWsManager(res);
-      if (ws && roomId) {
-        ws.broadcast('chat:moderated', { messageId, hidden: hide !== false, moderatorId }, roomId);
-      }
-    } catch {}
+    // Real-time updates handled via HTTP polling or Supabase realtime
     return res.status(200).json(updated);
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });

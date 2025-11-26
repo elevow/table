@@ -1,6 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { publishGameStateUpdate } from '../../../src/lib/realtime/publisher';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
+import {
+  enrichStateWithRunIt,
+  maybeCreateRunItPrompt,
+  isAutoRunoutEligible,
+} from '../../../src/lib/poker/run-it-twice-manager';
+import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
+import type { Card, GameStage, TableState } from '../../../src/types/poker';
 
 function getIo(res: NextApiResponse): any | null {
   try {
@@ -33,10 +40,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!engine) {
       return res.status(404).json({ error: 'No active game found for this table' });
     }
+    clearSupabaseAutoRunout(tableId);
 
     // Log current game state for debugging
     const currentState = engine.getState();
     console.log('[action] Current activePlayer:', currentState.activePlayer, 'Action from:', playerId, 'Action:', action);
+
+    // Snapshot community cards/stage before applying the action so we can detect premature board reveals
+    const preActionCommunity: Card[] = Array.isArray(currentState?.communityCards)
+      ? currentState.communityCards.map((card: Card) => ({ ...card }))
+      : [];
+    const preActionStage: GameStage | undefined = currentState?.stage;
+
+    const broadcastState = async (state: TableState, lastAction: any) => {
+      const enrichedState = enrichStateWithRunIt(tableId, state);
+      try {
+        const seq = nextSeq(tableId);
+        await publishGameStateUpdate(tableId, {
+          gameState: enrichedState,
+          lastAction,
+          timestamp: new Date().toISOString(),
+          seq,
+        } as any);
+      } catch (e) {
+        console.warn('Failed to publish game state to Supabase:', e);
+      }
+
+      try {
+        const io = getIo(res);
+        if (io) {
+          const seq = nextSeq(tableId);
+          io.to(`table_${tableId}`).emit('game_state_update', {
+            gameState: enrichedState,
+            lastAction,
+            timestamp: new Date().toISOString(),
+            seq,
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to emit via socket:', e);
+      }
+
+      return enrichedState;
+    };
 
     // Build PlayerAction object
     const playerAction = {
@@ -66,38 +112,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Get updated game state
-    const gameState = engine.getState();
+    let gameState = engine.getState();
 
-    // Broadcast via Supabase Realtime
-    try {
-      const seq = nextSeq(tableId);
-      await publishGameStateUpdate(tableId, {
-        gameState,
-        lastAction: { action, playerId, amount },
-        timestamp: new Date().toISOString(),
-        seq,
-      } as any);
-    } catch (e) {
-      console.warn('Failed to publish game state to Supabase:', e);
-    }
-
-    // Also emit over socket if available (hybrid compatibility)
-    try {
-      const io = getIo(res);
-      if (io) {
-        const seq = nextSeq(tableId);
-        io.to(`table_${tableId}`).emit('game_state_update', {
-          gameState,
-          lastAction: { action, playerId, amount },
-          timestamp: new Date().toISOString(),
-          seq,
-        });
+    // Check if we should issue a Run-It-Twice prompt
+    const autoRunoutDebug = !!process.env.AUTO_RUNOUT_DEBUG;
+    const autoEligible = isAutoRunoutEligible(gameState);
+    let issuedPrompt = null;
+    if (autoEligible) {
+      const postCommunityCount = Array.isArray(gameState.communityCards) ? gameState.communityCards.length : 0;
+      const preCommunityCount = preActionCommunity.length;
+      const boardAdvanced = postCommunityCount > preCommunityCount;
+      const promptOptions = boardAdvanced
+        ? {
+            communityOverride: preActionCommunity,
+            boardVisibleCount: preCommunityCount,
+            stageOverride: preActionStage,
+          }
+        : undefined;
+      issuedPrompt = maybeCreateRunItPrompt(tableId, gameState, promptOptions);
+      if (autoRunoutDebug && issuedPrompt) {
+        console.log('[action.ts] Issued Run-It-Twice prompt:', issuedPrompt);
       }
-    } catch (e) {
-      console.warn('Failed to emit via socket:', e);
     }
 
-    return res.status(200).json({ success: true, gameState });
+    if (issuedPrompt) {
+      gameState = { ...gameState, activePlayer: issuedPrompt.playerId };
+    }
+
+    const enrichedState = await broadcastState(gameState, { action, playerId, amount });
+
+    const shouldScheduleAutoRunout = autoEligible && !issuedPrompt;
+    if (shouldScheduleAutoRunout) {
+      scheduleSupabaseAutoRunout(tableId, engine, (state, meta) => broadcastState(state, meta).then(() => {}));
+    }
+
+    return res.status(200).json({ success: true, gameState: enrichedState });
   } catch (e: any) {
     console.error('Error processing poker action:', e);
     return res.status(500).json({ error: e?.message || 'Internal server error' });

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { isAdminEmail } from '../../../src/utils/roleUtils';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
+import { getRoomRebuySnapshot } from '../../../src/lib/shared/rebuy-tracker';
 
 interface RoomStats {
   roomId: string;
@@ -10,6 +11,12 @@ interface RoomStats {
     playerId: string;
     playerName: string;
     chips: number;
+  }>;
+  rebuyStats?: Array<{
+    playerId: string;
+    buyins: number;
+    rebuys: number;
+    lastBuyinAt: number;
   }>;
 }
 
@@ -30,8 +37,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (roomId && typeof roomId === 'string') {
       // Get stats for a specific room
-  const roomStats = GameSeats.getRoomStats(roomId);
-      return res.status(200).json(roomStats);
+      const roomStats = GameSeats.getRoomStats(roomId);
+      const rebuyStats = getRoomRebuySnapshot(roomId);
+      return res.status(200).json({ ...roomStats, rebuyStats });
     } else {
       // Get stats for all active rooms
       const allStats: RoomStats[] = [];
@@ -39,7 +47,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       for (const tableId of GameSeats.getActiveRooms()) {
         const stats = GameSeats.getRoomStats(tableId);
         if (stats.currentPlayers > 0) {
-          allStats.push(stats);
+          const rebuyStats = getRoomRebuySnapshot(tableId);
+          allStats.push({ ...stats, rebuyStats });
         }
       }
 

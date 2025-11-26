@@ -6,6 +6,7 @@ import { getPool } from '../../../src/lib/database/pool';
 import { GameService } from '../../../src/lib/services/game-service';
 import { resolveVariantAndMode, defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
+import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 
 function getIo(res: NextApiResponse): any | null {
   try {
@@ -123,6 +124,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     g.activeGames.set(tableId, engine);
     
+    // Clear Run-It-Twice state for new hand
+    clearRunItState(tableId);
+    
     // Store room configuration for next-hand API
     const allowedDcVariants = ['texas-holdem','omaha','omaha-hi-lo','seven-card-stud','seven-card-stud-hi-lo','five-card-stud'];
     const roomConfigPayload: any = {
@@ -163,9 +167,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Broadcast initial state via Supabase for supabase-only mode
     try {
+      const enrichedState = enrichStateWithRunIt(tableId, gameState);
       const seqStart = nextSeq(tableId);
       await publishGameStateUpdate(tableId, {
-        gameState,
+        gameState: enrichedState,
         lastAction: { action: 'game_started', startedBy: playerId },
         timestamp: new Date().toISOString(),
         seq: seqStart,
@@ -200,12 +205,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const io = getIo(res);
       if (io) {
+        const enrichedState = enrichStateWithRunIt(tableId, gameState);
         const seqStartEcho = nextSeq(tableId);
-        io.to(`table_${tableId}`).emit('game_started', { startedBy: playerId, playerName: seatedPlayers.find(p => p.playerId === playerId)?.playerName || 'Unknown Player', seatedPlayers, gameState, timestamp: new Date().toISOString(), seq: seqStartEcho });
+        io.to(`table_${tableId}`).emit('game_started', { startedBy: playerId, playerName: seatedPlayers.find(p => p.playerId === playerId)?.playerName || 'Unknown Player', seatedPlayers, gameState: enrichedState, timestamp: new Date().toISOString(), seq: seqStartEcho });
       }
     } catch {}
 
-    return res.status(201).json({ success: true, gameState });
+    const enrichedFinalState = enrichStateWithRunIt(tableId, gameState);
+    return res.status(201).json({ success: true, gameState: enrichedFinalState });
   } catch (e: any) {
     return res.status(400).json({ error: e?.message || 'Failed to start game' });
   }

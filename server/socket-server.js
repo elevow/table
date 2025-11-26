@@ -14,6 +14,8 @@ try {
 
 const http = require('http');
 const { Server } = require('socket.io');
+const { fetchRoomRebuyLimit } = require('../src/lib/shared/rebuy-limit');
+const { getPlayerRebuyInfo, recordBuyin } = require('../src/lib/shared/rebuy-tracker');
 
 const PORT = process.env.PORT || 4001;
 const SOCKET_PATH = process.env.SOCKET_IO_PATH || process.env.NEXT_PUBLIC_SOCKET_IO_PATH || '/socket.io';
@@ -225,7 +227,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('claim_seat', (data) => {
+  socket.on('claim_seat', async (data) => {
     try {
       const { tableId, seatNumber, playerId, playerName, chips } = data || {};
       if (!tableId || !seatNumber || !playerId) return;
@@ -242,9 +244,24 @@ io.on('connection', (socket) => {
         socket.emit('seat_claim_failed', { error: 'Player already has a seat', seatNumber: Number(already[0]) });
         return;
       }
+      const rebuyLimit = await fetchRoomRebuyLimit(tableId);
+      const previousRecord = getPlayerRebuyInfo(tableId, playerId);
+      const isInitial = !previousRecord;
+      const rebuysUsed = previousRecord?.rebuys ?? 0;
+      const numericLimit = rebuyLimit === 'unlimited' ? Number.POSITIVE_INFINITY : rebuyLimit;
+
+      if (!isInitial && rebuysUsed >= numericLimit) {
+        const message = rebuyLimit === 'unlimited'
+          ? 'Rebuy not available for this table.'
+          : `Rebuy limit (${rebuyLimit}) reached for this room.`;
+        socket.emit('seat_claim_failed', { error: message, seatNumber, rebuyLimit, rebuysUsed });
+        return;
+      }
+
       seats[seatNumber] = { playerId, playerName, chips: Number(chips) || 20 };
       setRoomSeats(tableId, seats);
       io.to(`table_${tableId}`).emit('seat_claimed', { seatNumber, playerId, playerName, chips: Number(chips) || 20 });
+      recordBuyin(tableId, playerId);
       console.log(`Seat ${seatNumber} claimed by ${playerName || playerId} at table ${tableId}`);
     } catch (e) {
       console.warn('claim_seat error', e);

@@ -210,8 +210,11 @@ export default function CreateGameRoomPage() {
               step={0.01}
               value={bigBlind}
               onChange={e => {
-                setBigBlind(parseFloat(e.target.value || '0'));
-                setBigBlindManuallyUpdated(true);
+                const newBigBlind = parseFloat(e.target.value || '0');
+                if (newBigBlind !== bigBlind) {
+                  setBigBlindManuallyUpdated(true);
+                }
+                setBigBlind(newBigBlind);
               }}
             />
           </div>

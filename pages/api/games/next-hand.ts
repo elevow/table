@@ -1,6 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { publishGameStateUpdate, publishAwaitingDealerChoice } from '../../../src/lib/realtime/publisher';
+import { publishGameStateUpdate, publishAwaitingDealerChoice, publishRebuyPrompt } from '../../../src/lib/realtime/publisher';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
+import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
+import { fetchRoomRebuyLimit } from '../../../src/lib/shared/rebuy-limit';
+import { getPlayerRebuyInfo } from '../../../src/lib/shared/rebuy-tracker';
+import {
+  BASE_REBUY_CHIPS,
+  clearPendingRebuy,
+  hasPendingRebuy,
+  pendingRebuyCount,
+  setPendingRebuy,
+} from '../../../src/lib/server/rebuy-state';
+import { autoStandPlayer } from '../../../src/lib/server/rebuy-actions';
 
 const DEFAULT_DEALERS_CHOICE_VARIANTS = ['texas-holdem', 'omaha', 'omaha-hi-lo', 'seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'];
 
@@ -63,6 +74,51 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(409).json({ error: 'Need at least two players to start the next hand', gameState: currentState });
       }
 
+      // Check for busted players and issue rebuy prompts
+      const handleBustedPlayers = async (): Promise<boolean> => {
+        const players = Array.isArray(currentState.players) ? currentState.players : [];
+        const busted = players.filter((p: any) => (Number(p.stack) || 0) <= 0);
+        if (!busted.length) {
+          return pendingRebuyCount(tableId) === 0;
+        }
+        const rebuyLimit = await fetchRoomRebuyLimit(tableId);
+        let promptsIssued = 0;
+        for (const player of busted) {
+          if (!player?.id) continue;
+          if (hasPendingRebuy(tableId, player.id)) continue;
+          const record = getPlayerRebuyInfo(tableId, player.id);
+          const rebuysUsed = record?.rebuys ?? 0;
+          const numericLimit = rebuyLimit === 'unlimited' ? Number.POSITIVE_INFINITY : rebuyLimit;
+          if (rebuyLimit !== 'unlimited' && rebuysUsed >= numericLimit) {
+            await autoStandPlayer(null, tableId, player.id, 'rebuy_exhausted');
+            clearPendingRebuy(tableId, player.id);
+            continue;
+          }
+          setPendingRebuy(tableId, player.id, {
+            issuedAt: Date.now(),
+            rebuysUsed,
+            rebuyLimit,
+          });
+          const payload = {
+            tableId,
+            playerId: player.id,
+            playerName: player.name,
+            rebuysUsed,
+            rebuyLimit,
+            baseChips: BASE_REBUY_CHIPS,
+            remaining: rebuyLimit === 'unlimited' ? 'unlimited' : Math.max((rebuyLimit as number) - rebuysUsed, 0),
+          };
+          await publishRebuyPrompt(tableId, payload);
+          promptsIssued += 1;
+        }
+        return pendingRebuyCount(tableId) === 0 && promptsIssued === 0;
+      };
+
+      const rebuyReady = await handleBustedPlayers();
+      if (!rebuyReady) {
+        return res.status(200).json({ success: true, awaitingRebuyDecisions: true, pending: pendingRebuyCount(tableId) });
+      }
+
       const applyVariantAndStart = async ({ chosenVariant, dcStepCount }: { chosenVariant?: string; dcStepCount?: number } = {}) => {
         let mutated = false;
         if (chosenVariant) {
@@ -84,19 +140,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           persistRoomConfig();
         }
 
+        // Clear Run-It-Twice state for new hand
+        clearRunItState(tableId);
+
         engine.startNewHand();
 
         const gameState = engine.getState();
+        const enrichedState = enrichStateWithRunIt(tableId, gameState);
         const sequence = nextSeq(tableId);
 
         await publishGameStateUpdate(tableId, {
-          gameState,
+          gameState: enrichedState,
           sequence,
           lastAction: { action: 'next_hand_started', playerId },
           timestamp: new Date().toISOString(),
         });
 
-        return res.status(200).json({ success: true, gameState });
+        return res.status(200).json({ success: true, gameState: enrichedState });
       };
 
       const promptDealerChoice = async () => {

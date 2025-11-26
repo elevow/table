@@ -36,3 +36,15 @@ export async function publishAwaitingDealerChoice(tableId: string, payload: any)
   if (!supa) return;
   await supa.channel(`table:${tableId}`).send({ type: 'broadcast', event: 'awaiting_dealer_choice', payload });
 }
+
+export async function publishRebuyPrompt(tableId: string, payload: any) {
+  const supa = getSupabaseServer();
+  if (!supa) return;
+  await supa.channel(`table:${tableId}`).send({ type: 'broadcast', event: 'rebuy_prompt', payload });
+}
+
+export async function publishRebuyResult(tableId: string, payload: any) {
+  const supa = getSupabaseServer();
+  if (!supa) return;
+  await supa.channel(`table:${tableId}`).send({ type: 'broadcast', event: 'rebuy_result', payload });
+}

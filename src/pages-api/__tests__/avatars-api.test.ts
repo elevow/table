@@ -5,11 +5,12 @@ import uploadHandler from '../../../pages/api/avatars/upload';
 import getLatestHandler from '../../../pages/api/avatars/user/[userId]';
 import updateHandler from '../../../pages/api/avatars/[avatarId]';
 
-// Mocks: pg Pool, rate limiter, and AvatarService used inside handlers
-jest.mock('pg', () => ({ 
-  Pool: jest.fn().mockImplementation(() => ({
-    end: jest.fn().mockResolvedValue(undefined)
-  }))
+// Mock pool module to avoid database connection
+const mockPool: any = {
+  end: jest.fn().mockResolvedValue(undefined)
+};
+jest.mock('../../../src/lib/database/pool', () => ({
+  getPool: jest.fn(() => mockPool)
 }));
 
 jest.mock('../../../src/lib/api/rate-limit', () => ({

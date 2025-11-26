@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 import { AvatarService } from '../../../src/lib/services/avatar-service';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 
@@ -18,27 +18,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!rl.allowed) return res.status(429).json({ error: 'Delete limit exceeded. Try again later.' });
     
     try {
-      // Use proper database configuration with SSL fix for self-signed certificates
-      const connectionString = process.env.POOL_DATABASE_URL || process.env.DATABASE_URL;
-      
-      // Parse connection string to modify SSL mode
-      let modifiedConnectionString = connectionString;
-      if (connectionString?.includes('sslmode=require')) {
-        modifiedConnectionString = connectionString.replace('sslmode=require', 'sslmode=prefer');
-      }
-      
-      const pool = new Pool({
-        connectionString: modifiedConnectionString,
-        ssl: connectionString?.includes('supabase') ? { 
-          rejectUnauthorized: false
-        } : false
-      });
+      const pool = getPool();
       
       const service = new AvatarService(pool as any);
       const archived = await service['manager'].updateAvatar(avatarId, { status: 'archived' });
-      
-      // Close the pool connection
-      await pool.end();
       
       return res.status(200).json({ success: true, id: archived.id, status: archived.status });
     } catch (e: any) {

@@ -12,6 +12,9 @@ jest.mock('../../../src/lib/realtime/publisher', () => ({
   publishChatMessage: jest.fn().mockResolvedValue(undefined),
   publishChatModerated: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock('../../../src/lib/database/pool', () => ({
+  getPool: jest.fn().mockReturnValue({ query: jest.fn().mockResolvedValue({ rows: [] }) }),
+}));
 
 const mockService: any = {
   send: jest.fn(),

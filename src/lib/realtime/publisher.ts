@@ -48,3 +48,28 @@ export async function publishRebuyResult(tableId: string, payload: any) {
   if (!supa) return;
   await supa.channel(`table:${tableId}`).send({ type: 'broadcast', event: 'rebuy_result', payload });
 }
+
+// Chat events - use a dedicated chat channel per room
+export async function publishChatMessage(roomId: string, payload: { message: any }) {
+  const supa = getSupabaseServer();
+  if (!supa) return;
+  await supa.channel(`chat:${roomId}`).send({ type: 'broadcast', event: 'chat_new_message', payload });
+}
+
+export async function publishChatReaction(roomId: string, payload: { messageId: string; emoji: string; userId: string }) {
+  const supa = getSupabaseServer();
+  if (!supa) return;
+  await supa.channel(`chat:${roomId}`).send({ type: 'broadcast', event: 'chat_reaction', payload });
+}
+
+export async function publishChatReactionRemoved(roomId: string, payload: { messageId: string; emoji: string; userId: string }) {
+  const supa = getSupabaseServer();
+  if (!supa) return;
+  await supa.channel(`chat:${roomId}`).send({ type: 'broadcast', event: 'chat_reaction_removed', payload });
+}
+
+export async function publishChatModerated(roomId: string, payload: { messageId: string; hidden: boolean; moderatorId: string }) {
+  const supa = getSupabaseServer();
+  if (!supa) return;
+  await supa.channel(`chat:${roomId}`).send({ type: 'broadcast', event: 'chat_moderated', payload });
+}

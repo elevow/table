@@ -196,7 +196,7 @@ export default function CreateGameRoomPage() {
                 const newSmallBlind = parseFloat(e.target.value || '0');
                 setSmallBlind(newSmallBlind);
                 if (!bigBlindManuallyUpdated) {
-                  setBigBlind(newSmallBlind * 2);
+                  setBigBlind(Number((newSmallBlind * 2).toFixed(2)));
                 }
               }}
             />

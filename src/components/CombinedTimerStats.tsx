@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState, memo, useRef } from 'react';
+import { useEffect, useMemo, useState, memo, useRef, useCallback } from 'react';
+import { getTransportMode } from '../utils/transport';
+import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 
 // Timer types
 type TimerState = {
@@ -29,6 +31,10 @@ interface CombinedHUDProps {
 }
 
 function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings }: CombinedHUDProps) {
+  // Check transport mode to determine whether to use sockets or Supabase
+  const transportMode = getTransportMode();
+  const useSupabase = transportMode === 'supabase';
+  
   // Timer states
   const [socket, setSocket] = useState<any>(null);
   const [timer, setTimer] = useState<TimerState>(undefined);
@@ -54,8 +60,112 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings }: Combi
   });
   const [statsLoading, setStatsLoading] = useState(true);
 
-  // Timer socket initialization
+  // Hand/session stat updater: process game state updates
+  const processGameStateUpdate = useCallback((payload: { gameState: any; lastAction?: any }) => {
+    const gs = payload?.gameState;
+    if (!gs) return;
+
+    const prevStage = lastStageRef.current;
+    const currStage = gs.stage;
+
+    // Check for game_started action (from lastAction) to initialize tracking
+    if (payload.lastAction?.action === 'game_started' || (prevStage === undefined && currStage)) {
+      // Initialize tracking snapshots from initial state
+      lastStageRef.current = gs.stage;
+      lastPotRef.current = gs.pot || 0;
+      const stacks: Record<string, number> = {};
+      (gs.players || []).forEach((p: any) => (stacks[p.id] = p.stack || 0));
+      lastStacksRef.current = stacks;
+      // Initialize hand-start baselines: approximate start-of-hand as (stack + currentBet)
+      const handStart: Record<string, number> = {};
+      (gs.players || []).forEach((p: any) => (handStart[p.id] = (p.stack || 0) + (p.currentBet || 0)));
+      handStartStacksRef.current = handStart;
+      console.log('[stats] Game started - initialized tracking', { stage: gs.stage, stacks, handStart });
+      return;
+    }
+
+    // Detect new hand start: transition to preflop (reset hand-start baseline)
+    if (currStage === 'preflop' && prevStage !== 'preflop') {
+      const handStart: Record<string, number> = {};
+      (gs.players || []).forEach((p: any) => (handStart[p.id] = (p.stack || 0) + (p.currentBet || 0)));
+      try { console.log('[stats] New hand baseline set', handStart); } catch {}
+      handStartStacksRef.current = handStart;
+    }
+
+    // When a hand transitions into showdown, treat as hand completion
+    if (prevStage !== 'showdown' && currStage === 'showdown') {
+      try {
+        const stacksNow: Record<string, number> = {};
+        (gs.players || []).forEach((p: any) => (stacksNow[p.id] = p.stack || 0));
+        // Prefer per-hand baseline (stack + currentBet at hand start); fallback to last-stage snapshot
+        const myBaseline = handStartStacksRef.current[playerId];
+        const myPrev = typeof myBaseline === 'number' ? myBaseline : lastStacksRef.current[playerId];
+        const myNow = stacksNow[playerId];
+        if (typeof myPrev === 'number' && typeof myNow === 'number') {
+          const delta = myNow - myPrev;
+          // Biggest Pot Won: only track positive winnings for the hand
+          const wonAmount = delta > 0 ? delta : 0;
+          const iFolded = !!(gs.players?.find((p: any) => p.id === playerId)?.folded || gs.players?.find((p: any) => p.id === playerId)?.isFolded);
+          try { console.log('[stats] Hand complete. baseline:', myPrev, 'now:', myNow, 'delta:', delta, 'wonAmount:', wonAmount, 'folded:', iFolded); } catch {}
+
+          setSessionStats(prev => {
+            const next = { ...prev };
+            next.handsPlayed = (prev.handsPlayed || 0) + 1;
+            if (delta > 0) {
+              next.handsWon = (prev.handsWon || 0) + 1;
+              next.totalWinnings = (prev.totalWinnings || 0) + delta;
+              next.biggestPotWon = Math.max((prev as any).biggestPotWon || 0, wonAmount);
+            } else if (delta < 0) {
+              next.totalLosses = (prev.totalLosses || 0) + Math.abs(delta);
+              // Do not update biggestPotWon on losses
+            } else {
+              // No net change; do not update biggestPotWon
+            }
+            // Approximate fold rate similar to PlayerStats component
+            // Prefer using folded flag when available; otherwise fall back to (handsPlayed - handsWon)/handsPlayed
+            if (iFolded) {
+              const foldsSoFar = Math.round(((prev.foldRate || 0) / 100) * (prev.handsPlayed || 0));
+              const newFolds = foldsSoFar + 1;
+              next.foldRate = Math.floor((newFolds / next.handsPlayed) * 100);
+            } else {
+              next.foldRate = Math.floor(((next.handsPlayed - next.handsWon) / next.handsPlayed) * 100);
+            }
+
+            // Persist
+            try {
+              localStorage.setItem(`session_stats_${gameId}`, JSON.stringify(next));
+            } catch {}
+            return next;
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to update session stats on showdown:', e);
+      }
+    }
+
+    // Update snapshots for next transition
+    lastStageRef.current = currStage;
+    lastPotRef.current = gs.pot || 0;
+    const stacks: Record<string, number> = {};
+    (gs.players || []).forEach((p: any) => (stacks[p.id] = p.stack || 0));
+    lastStacksRef.current = stacks;
+  }, [playerId, gameId]);
+
+  // Subscribe to Supabase realtime updates when in Supabase mode
+  useSupabaseRealtime(
+    useSupabase ? tableId : undefined,
+    {
+      onGameStateUpdate: (payload: any) => {
+        console.log('[stats] Supabase game_state_update received:', payload?.gameState?.stage);
+        processGameStateUpdate(payload);
+      }
+    }
+  );
+
+  // Timer socket initialization (only when not using Supabase)
   useEffect(() => {
+    if (useSupabase) return;
+    
     const initSocket = async () => {
       try {
         const { getSocket } = await import('../lib/clientSocket');
@@ -69,110 +179,25 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings }: Combi
     setTimeout(() => {
       initSocket();
     }, 300);
-  }, []);
+  }, [useSupabase]);
 
-  // Timer socket events
+  // Timer socket events (only when not using Supabase)
   useEffect(() => {
+    if (useSupabase || !socket) return;
+    
     const onTimer = (state?: any) => setTimer(state);
     const onBank = ({ amount }: { amount: number }) => setBank(amount);
     // Hand/session stat updater: listen for game lifecycle
     const onGameStarted = (data: { gameState?: any }) => {
-      const gs = data?.gameState;
-      if (gs) {
-        // Initialize tracking snapshots from initial state
-        lastStageRef.current = gs.stage;
-        lastPotRef.current = gs.pot || 0;
-        const stacks: Record<string, number> = {};
-        (gs.players || []).forEach((p: any) => (stacks[p.id] = p.stack || 0));
-        lastStacksRef.current = stacks;
-        // Initialize hand-start baselines: approximate start-of-hand as (stack + currentBet)
-        const handStart: Record<string, number> = {};
-        (gs.players || []).forEach((p: any) => (handStart[p.id] = (p.stack || 0) + (p.currentBet || 0)));
-        handStartStacksRef.current = handStart;
-      } else {
-        lastStageRef.current = undefined;
-        lastPotRef.current = 0;
-        lastStacksRef.current = {};
-        handStartStacksRef.current = {};
-      }
+      console.log('[stats] Socket game_started received');
+      processGameStateUpdate({ gameState: data?.gameState, lastAction: { action: 'game_started' } });
     };
 
     const onGameStateUpdate = (payload: { gameState: any }) => {
-      const gs = payload?.gameState;
-      if (!gs) return;
-
-      const prevStage = lastStageRef.current;
-      const currStage = gs.stage;
-      const prevPot = lastPotRef.current || 0;
-
-      // Detect new hand start: transition to preflop (reset hand-start baseline)
-      if (currStage === 'preflop' && prevStage !== 'preflop') {
-        const handStart: Record<string, number> = {};
-        (gs.players || []).forEach((p: any) => (handStart[p.id] = (p.stack || 0) + (p.currentBet || 0)));
-        try { console.log('[stats] New hand baseline set', handStart); } catch {}
-        handStartStacksRef.current = handStart;
-      }
-
-      // When a hand transitions into showdown, treat as hand completion
-      if (prevStage !== 'showdown' && currStage === 'showdown') {
-        try {
-          const stacksNow: Record<string, number> = {};
-          (gs.players || []).forEach((p: any) => (stacksNow[p.id] = p.stack || 0));
-          // Prefer per-hand baseline (stack + currentBet at hand start); fallback to last-stage snapshot
-          const myBaseline = handStartStacksRef.current[playerId];
-          const myPrev = typeof myBaseline === 'number' ? myBaseline : lastStacksRef.current[playerId];
-          const myNow = stacksNow[playerId];
-          if (typeof myPrev === 'number' && typeof myNow === 'number') {
-            const delta = myNow - myPrev;
-            // Biggest Pot Won: only track positive winnings for the hand
-            const wonAmount = delta > 0 ? delta : 0;
-            const iFolded = !!(gs.players?.find((p: any) => p.id === playerId)?.folded || gs.players?.find((p: any) => p.id === playerId)?.isFolded);
-            try { console.log('[stats] Hand complete. baseline:', myPrev, 'now:', myNow, 'delta:', delta, 'wonAmount:', wonAmount, 'folded:', iFolded); } catch {}
-
-            setSessionStats(prev => {
-              const next = { ...prev };
-              next.handsPlayed = (prev.handsPlayed || 0) + 1;
-              if (delta > 0) {
-                next.handsWon = (prev.handsWon || 0) + 1;
-                next.totalWinnings = (prev.totalWinnings || 0) + delta;
-                next.biggestPotWon = Math.max((prev as any).biggestPotWon || 0, wonAmount);
-              } else if (delta < 0) {
-                next.totalLosses = (prev.totalLosses || 0) + Math.abs(delta);
-                // Do not update biggestPotWon on losses
-              } else {
-                // No net change; do not update biggestPotWon
-              }
-              // Approximate fold rate similar to PlayerStats component
-              // Prefer using folded flag when available; otherwise fall back to (handsPlayed - handsWon)/handsPlayed
-              if (iFolded) {
-                const foldsSoFar = Math.round(((prev.foldRate || 0) / 100) * (prev.handsPlayed || 0));
-                const newFolds = foldsSoFar + 1;
-                next.foldRate = Math.floor((newFolds / next.handsPlayed) * 100);
-              } else {
-                next.foldRate = Math.floor(((next.handsPlayed - next.handsWon) / next.handsPlayed) * 100);
-              }
-
-              // Persist
-              try {
-                localStorage.setItem(`session_stats_${gameId}`, JSON.stringify(next));
-              } catch {}
-              return next;
-            });
-          }
-        } catch (e) {
-          console.warn('Failed to update session stats on showdown:', e);
-        }
-      }
-
-      // Update snapshots for next transition
-      lastStageRef.current = currStage;
-      lastPotRef.current = gs.pot || 0;
-      const stacks: Record<string, number> = {};
-      (gs.players || []).forEach((p: any) => (stacks[p.id] = p.stack || 0));
-      lastStacksRef.current = stacks;
+      console.log('[stats] Socket game_state_update received:', payload?.gameState?.stage);
+      processGameStateUpdate(payload);
     };
     
-    if (!socket) return;
     socket.on('timer_update', onTimer);
     socket.on('timebank_update', onBank);
     socket.on('game_started', onGameStarted);
@@ -183,7 +208,7 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings }: Combi
       socket?.off('game_started', onGameStarted);
       socket?.off('game_state_update', onGameStateUpdate);
     };
-  }, [socket, gameId, playerId]);
+  }, [socket, useSupabase, processGameStateUpdate]);
 
   // Timer countdown
   useEffect(() => {

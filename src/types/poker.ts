@@ -52,6 +52,10 @@ export interface TableState {
   requireRunItTwiceUnanimous?: boolean;
   // US-029: Run It Twice state (set only when enabled)
   runItTwice?: RunItTwice;
+  // RIT prompt metadata when waiting on a specific player to decide
+  runItTwicePrompt?: RunItTwicePrompt | null;
+  // When true, the prompt for the current hand has been resolved and should not reappear
+  runItTwicePromptDisabled?: boolean;
   // US-052/US-054: Hi-Lo last showdown results (optional, present for omaha-hi-lo or seven-card-stud-hi-lo)
   lastHiLoResult?: {
     high: Array<{ playerId: string; amount: number }>;
@@ -151,6 +155,17 @@ export interface RunItTwice {
       proof: string; // may be withheld from clients; used server-side for verification
     };
   };
+}
+
+export interface RunItTwicePrompt {
+  playerId: string; // the player who must make the decision
+  reason: 'lowest-hand';
+  createdAt: number; // epoch ms when prompt issued
+  boardCardsCount: number; // number of community cards visible at prompt time
+  handDescription?: string; // textual summary of their current best hand
+  handDescriptionsByPlayer?: Record<string, string>; // per-player best-hand description for eligible players
+  eligiblePlayerIds: string[]; // players considered when determining lowest hand
+  tiedWith?: string[]; // other players with identical strength when tie-breaking randomly
 }
 
 // US-032: Disconnection handling

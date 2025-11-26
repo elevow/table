@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import type { Server as HttpServer } from 'http';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
 import { publishSeatClaimed, publishSeatState } from '../../../../src/lib/realtime/publisher';
+import { fetchRoomRebuyLimit } from '../../../../src/lib/shared/rebuy-limit';
+import { getPlayerRebuyInfo, recordBuyin } from '../../../../src/lib/shared/rebuy-tracker';
 
 interface NextApiResponseServerIO extends NextApiResponse {
   socket: any & {
@@ -28,6 +30,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseS
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    const roomId = String(tableId);
+
     const seats = GameSeats.initializeRoomSeats(String(tableId));
 
     // Validate seat availability
@@ -39,6 +43,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseS
     const existing = Object.entries(seats).find(([, a]) => a?.playerId === playerId);
     if (existing) {
       return res.status(409).json({ error: 'Player already has a seat', seatNumber: Number(existing[0]) });
+    }
+
+    const rebuyLimit = await fetchRoomRebuyLimit(roomId);
+    const previous = getPlayerRebuyInfo(roomId, playerId);
+    const isInitial = !previous;
+    const rebuysUsed = previous?.rebuys ?? 0;
+    const numericLimit = rebuyLimit === 'unlimited' ? Number.POSITIVE_INFINITY : rebuyLimit;
+
+    if (!isInitial && rebuysUsed >= numericLimit) {
+      const message = rebuyLimit === 'unlimited'
+        ? 'Rebuys are currently unavailable.'
+        : `Rebuy limit (${rebuyLimit}) reached for this room.`;
+      return res.status(403).json({ error: message, rebuyLimit, rebuysUsed });
     }
 
     // Claim seat
@@ -70,7 +87,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseS
       }
     } catch {}
 
-    return res.status(200).json({ ok: true, ...seatPayload, seats });
+    const rebuyRecord = recordBuyin(roomId, playerId);
+
+    return res.status(200).json({ ok: true, ...seatPayload, seats, rebuyCount: rebuyRecord.rebuys });
   } catch (e: any) {
     console.error('seats/claim error:', e);
     return res.status(500).json({ error: 'Internal Server Error' });

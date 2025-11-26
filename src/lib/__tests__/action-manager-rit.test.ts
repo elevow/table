@@ -140,4 +140,63 @@ describe('ActionManager Run It Twice socket', () => {
       });
     });
   });
+
+  it('rejects decisions from non-selected players when a prompt is active', (done) => {
+    const promptedState: TableState = {
+      ...baseState,
+      players: baseState.players.map(p => ({
+        ...p,
+        isAllIn: true,
+        holeCards: [
+          { rank: 'A', suit: 'hearts' },
+          { rank: p.id === 'A' ? 'K' : 'Q', suit: 'clubs' }
+        ]
+      })),
+      runItTwicePrompt: {
+        playerId: 'A',
+        reason: 'lowest-hand',
+        createdAt: Date.now(),
+        boardCardsCount: baseState.communityCards.length,
+        handDescription: 'High Card Ace',
+        eligiblePlayerIds: ['A', 'B']
+      }
+    } as TableState;
+    (mockStateManager.getState as jest.Mock).mockReturnValue(promptedState);
+    actionManager = new ActionManager(mockStateManager, mockIo);
+    invokeSocketHandler('enable_run_it_twice', { tableId: 't1', runs: 2, playerId: 'B' }, (resp: any) => {
+      expect(resp.success).toBe(false);
+      expect(resp.error).toMatch(/Not authorized/i);
+      done();
+    });
+  });
+
+  it('allows the selected player to decline and clears the prompt', (done) => {
+    const promptedState: TableState = {
+      ...baseState,
+      players: baseState.players.map(p => ({
+        ...p,
+        isAllIn: true,
+        holeCards: [
+          { rank: 'A', suit: 'hearts' },
+          { rank: p.id === 'A' ? '2' : 'K', suit: 'clubs' }
+        ]
+      })),
+      runItTwicePrompt: {
+        playerId: 'A',
+        reason: 'lowest-hand',
+        createdAt: Date.now(),
+        boardCardsCount: baseState.communityCards.length,
+        handDescription: 'Ace High',
+        eligiblePlayerIds: ['A', 'B']
+      }
+    } as TableState;
+    (mockStateManager.getState as jest.Mock).mockReturnValue(promptedState);
+    actionManager = new ActionManager(mockStateManager, mockIo);
+    invokeSocketHandler('enable_run_it_twice', { tableId: 't1', runs: 1, playerId: 'A' }, (resp: any) => {
+      expect(resp.success).toBe(true);
+      const updateCall = (mockStateManager.updateState as jest.Mock).mock.calls.find(call => call[0] === 't1' && call[1].runItTwicePrompt === null);
+      expect(updateCall).toBeDefined();
+      done();
+    });
+  });
 });

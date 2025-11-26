@@ -175,6 +175,10 @@ export class GameStateManager {
     this.state.pot = 0;
     this.state.currentBet = 0;
     this.state.communityCards = [];
+    // Clear Run-It-Twice state for new hand
+    this.state.runItTwice = undefined;
+    this.state.runItTwicePrompt = null;
+    this.state.runItTwicePromptDisabled = false;
   if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
       this.state.studState = { playerCards: {} };
     } else {

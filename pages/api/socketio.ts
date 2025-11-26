@@ -1,3 +1,4 @@
+import { randomInt } from 'crypto';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Server as SocketServer } from 'socket.io';
 import { Server as HttpServer } from 'http';
@@ -5,6 +6,19 @@ import { WebSocketManager } from '../../src/lib/websocket-manager';
 import { GameService } from '../../src/lib/services/game-service';
 import { getPool } from '../../src/lib/database/pool';
 import { publishSeatClaimed, publishSeatState, publishSeatVacated } from '../../src/lib/realtime/publisher';
+import { RunItTwicePrompt, TableState, Card, GameStage } from '../../src/types/poker';
+import { HandInterface } from '../../src/types/poker-engine';
+import {
+  getRunItState,
+  clearRunItState,
+  disableRunItPrompt,
+  enrichStateWithRunIt,
+  isAutoRunoutEligible,
+  maybeCreateRunItPrompt,
+  determineRunItTwicePrompt,
+  normalizeHandForComparison,
+  RunItTwiceState,
+} from '../../src/lib/poker/run-it-twice-manager';
 
 // Extend the response type to include the socket server
 interface NextApiResponseServerIO extends NextApiResponse {
@@ -15,8 +29,50 @@ interface NextApiResponseServerIO extends NextApiResponse {
   };
 }
 
+const emitGameStateUpdate = (io: SocketServer, tableId: string, state: TableState | any, lastAction: any) => {
+  const enriched = enrichStateWithRunIt(tableId, state);
+  io.to(`table_${tableId}`).emit('game_state_update', {
+    gameState: enriched,
+    lastAction,
+    timestamp: new Date().toISOString(),
+  });
+};
+
+const revealAllHoleCards = (engine: any, state: TableState): TableState => {
+  try {
+    const engineState = engine?.getState?.();
+    if (!engineState) return state;
+    const enginePlayers = Array.isArray(engineState.players) ? engineState.players : [];
+    const mergedPlayers = Array.isArray(state.players)
+      ? state.players.map((player: any) => {
+          const engPlayer = enginePlayers.find((ep: any) => ep.id === player.id);
+          const engCards = Array.isArray(engPlayer?.holeCards) ? engPlayer.holeCards : [];
+          if (!engCards.length) return player;
+          const alreadyVisible = Array.isArray(player.holeCards) && player.holeCards.length >= engCards.length;
+          if (alreadyVisible) return player;
+          return { ...player, holeCards: engCards };
+        })
+      : state.players;
+    return { ...state, players: mergedPlayers } as TableState;
+  } catch {
+    return state;
+  }
+};
+
 // Import shared game seats management
 import * as GameSeats from '../../src/lib/shared/game-seats';
+import { fetchRoomRebuyLimit } from '../../src/lib/shared/rebuy-limit';
+import { getPlayerRebuyInfo, recordBuyin } from '../../src/lib/shared/rebuy-tracker';
+import {
+  BASE_REBUY_CHIPS,
+  clearPendingRebuy,
+  getPendingRebuys,
+  getRebuyAvailability,
+  hasPendingRebuy,
+  pendingRebuyCount,
+  setPendingRebuy
+} from '../../src/lib/server/rebuy-state';
+import { autoStandPlayer, applyRebuy } from '../../src/lib/server/rebuy-actions';
 
 // Initialize seat management handlers
 function initializeSeatHandlers(res: NextApiResponseServerIO) {
@@ -47,7 +103,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
   };
 
   // Support hot-reload: version the handlers and rebind when changed
-  const HANDLERS_VERSION = 8; // bump to force reinit after code changes
+  const HANDLERS_VERSION = 10; // bump to force reinit after code changes
   if (io._handlersVersion !== HANDLERS_VERSION) {
     if (io._seatHandlersAdded) {
       try {
@@ -110,23 +166,50 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         if (autoRunoutDebug) console.log('[auto-runout] skip: variant not supported in socketio', { tableId, variant });
         return;
       }
-      const players = Array.isArray(state.players) ? state.players : [];
-      const activeCount = players.filter((p: any) => !(p.isFolded || (p as any).folded)).length;
-      const anyAllIn = players.some((p: any) => !(p.isFolded || (p as any).folded) && p.isAllIn);
-      const nonAllInCount = players.filter((p: any) => !(p.isFolded || (p as any).folded) && !p.isAllIn).length;
       const communityLen = Array.isArray(state.communityCards) ? state.communityCards.length : 0;
-      const need = Math.max(0, 5 - communityLen);
-      // New: ensure betting is closed — no non-all-in player owes chips (i.e., unmatched against currentBet)
-      const currentBet = Number(state.currentBet) || 0;
-      const owes = players.some((p: any) => !(p.isFolded || (p as any).folded) && !p.isAllIn && (Number(p.currentBet) || 0) < currentBet);
-      if (!(activeCount >= 2 && anyAllIn && nonAllInCount <= 1 && need > 0 && state.stage !== 'showdown' && !owes)) {
-        if (autoRunoutDebug) console.log('[auto-runout] not scheduling (socketio): gating not met', { tableId, activeCount, anyAllIn, nonAllInCount, need, stage: state.stage, owes });
+      if (!isAutoRunoutEligible(state)) {
+        if (autoRunoutDebug) console.log('[auto-runout] not scheduling (socketio): gating not met', { tableId, stage: state.stage, communityLen });
         return;
       }
       if (autoRunoutTimers.has(tableId) && autoRunoutTimers.get(tableId)!.length > 0) {
         if (autoRunoutDebug) console.log('[auto-runout] not scheduling (socketio): timers already active', { tableId });
         return;
       }
+
+      const pendingPrompt = getRunItState(tableId).prompt;
+      if (pendingPrompt) {
+        if (autoRunoutDebug) console.log('[auto-runout] awaiting existing Run It Twice prompt', { tableId, promptPlayer: pendingPrompt.playerId });
+        clearAutoRunout(tableId);
+        return;
+      }
+      const promptState = (() => {
+        try {
+          const engineState = engine?.getState?.();
+          const enginePlayers = Array.isArray(engineState?.players) ? engineState.players : [];
+          if (!enginePlayers.length) return state;
+          const mergedPlayers = (Array.isArray(state.players) ? state.players : []).map((player: any) => {
+            const engPlayer = enginePlayers.find((ep: any) => ep.id === player.id);
+            const engCards = Array.isArray(engPlayer?.holeCards) ? engPlayer.holeCards : [];
+            if (!engCards.length) return player;
+            const alreadyVisible = Array.isArray(player.holeCards) && player.holeCards.length >= engCards.length;
+            if (alreadyVisible) return player;
+            return { ...player, holeCards: engCards };
+          });
+          return { ...state, players: mergedPlayers };
+        } catch {
+          return state;
+        }
+      })();
+      const prompt = maybeCreateRunItPrompt(tableId, promptState);
+      if (prompt) {
+        if (autoRunoutDebug) console.log('[auto-runout] issuing Run It Twice prompt', { tableId, promptPlayer: prompt.playerId });
+        clearAutoRunout(tableId);
+        const promptState = { ...state, activePlayer: prompt.playerId };
+        emitGameStateUpdate(io, tableId, promptState, { action: 'run_it_twice_prompt', playerId: prompt.playerId });
+        return;
+      }
+
+      const players = Array.isArray(state.players) ? state.players : [];
 
       // Prepare engine for deterministic previews
       try {
@@ -138,15 +221,15 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
 
       // Hide action UI immediately
       try {
-        const out = { ...state, activePlayer: '' };
-        io.to(`table_${tableId}`).emit('game_state_update', { gameState: out, lastAction: { action: 'auto_runout_lock' }, timestamp: new Date().toISOString() });
+        const lockedState = { ...state, activePlayer: '' };
+        emitGameStateUpdate(io, tableId, lockedState, { action: 'auto_runout_lock' });
       } catch {}
 
       const timers: NodeJS.Timeout[] = [];
-      const steps: Array<'flop' | 'turn' | 'river'> = [];
-  if (communityLen < 3) steps.push('flop');
-      if (communityLen < 4) steps.push('turn');
-      if (communityLen < 5) steps.push('river');
+    const steps: Array<'flop' | 'turn' | 'river'> = [];
+    if (communityLen < 3) steps.push('flop');
+    if (communityLen < 4) steps.push('turn');
+    if (communityLen < 5) steps.push('river');
 
       let delay = 5000;
       for (const street of steps) {
@@ -172,11 +255,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
             updated.communityCards = [...baseCommunity, ...cards];
             updated.stage = street === 'flop' ? 'flop' : street === 'turn' ? 'turn' : 'river';
             (updated as any).activePlayer = '';
-            io.to(`table_${tableId}`).emit('game_state_update', {
-              gameState: updated,
-              lastAction: { action: `auto_runout_${street}` },
-              timestamp: new Date().toISOString()
-            });
+            emitGameStateUpdate(io, tableId, updated, { action: `auto_runout_${street}` });
 
             if (street === 'river') {
               const t2 = setTimeout(() => {
@@ -185,11 +264,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
                   if (autoRunoutDebug) console.log('[auto-runout] finalizing showdown (socketio)', { tableId });
                   try { eng?.finalizeToShowdown?.(); } catch {}
                   const finalState = eng?.getState?.() || updated;
-                  io.to(`table_${tableId}`).emit('game_state_update', {
-                    gameState: finalState,
-                    lastAction: { action: 'auto_runout_showdown' },
-                    timestamp: new Date().toISOString()
-                  });
+                  emitGameStateUpdate(io, tableId, finalState, { action: 'auto_runout_showdown' });
                   if (finalState?.stage === 'showdown') {
                     scheduleNextHand(tableId);
                   }
@@ -212,7 +287,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
     }
   };
 
-  const scheduleNextHand = (tableId: string) => {
+  const scheduleNextHand = async (tableId: string) => {
     try {
       // Ensure a game exists and we're not already scheduled
       if (!(global as any).activeGames || !(global as any).activeGames.has(tableId)) {
@@ -231,6 +306,13 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         console.log(`[auto] Not scheduling: stage is ${state.stage}, require showdown (table ${tableId})`);
         return;
       }
+
+      const rebuyReady = await maybeHandleBustedPlayers(tableId, state);
+      if (!rebuyReady) {
+        console.log(`[rebuy] Pending decisions for table ${tableId}; deferring next hand`);
+        return;
+      }
+
       const schedulePlayers = Array.isArray(state.players) ? state.players.length : 0;
       console.log(`[auto] Scheduling next hand in ${NEXT_HAND_DELAY_MS}ms (table ${tableId}); players=${schedulePlayers}`);
 
@@ -245,9 +327,10 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
             return;
           }
           const players = Array.isArray(curr.players) ? curr.players : [];
+          const fundedPlayers = players.filter((p: any) => Number(p.stack) > 0);
           // Require at least two players to continue
-          if (players.length < 2) {
-            console.log(`[auto] Timer fired but not enough players (${players.length}) to start next hand (table ${tableId})`);
+          if (fundedPlayers.length < 2) {
+            console.log(`[auto] Timer fired but not enough funded players (${fundedPlayers.length}) to start next hand (table ${tableId})`);
             return;
           }
 
@@ -260,7 +343,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           const variant = curr.variant || 'texas-holdem';
           const bettingMode = curr.bettingMode || (variant === 'omaha' || variant === 'omaha-hi-lo' ? 'pot-limit' : 'no-limit');
           // Rebuild players preserving id, name, position, and stack
-          const rebuilt = players.map((p: any) => ({
+          const rebuilt = fundedPlayers.map((p: any) => ({
             id: p.id,
             name: p.name || p.id,
             position: p.position,
@@ -276,13 +359,10 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           // Preserve dealer position continuity by setting last dealer and allowing startNewHand() to rotate
           try { (freshEngine as any).state.dealerPosition = curr.dealerPosition ?? 0; } catch {}
           freshEngine.startNewHand();
+          clearRunItState(tableId);
           (global as any).activeGames.set(tableId, freshEngine);
           const newState = freshEngine.getState();
-          io.to(`table_${tableId}`).emit('game_state_update', {
-            gameState: newState,
-            lastAction: { action: 'auto_next_hand' },
-            timestamp: new Date().toISOString(),
-          });
+          emitGameStateUpdate(io, tableId, newState, { action: 'auto_next_hand' });
           console.log(`[auto] Emitted game_state_update auto_next_hand (stage=${newState?.stage}, pot=${newState?.pot}) for table ${tableId}`);
         } catch (e) {
           console.error('Auto next hand failed:', e);
@@ -294,6 +374,50 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       nextHandTimers.set(tableId, timer);
     } catch (err) {
       console.error('scheduleNextHand error:', err);
+    }
+  };
+
+  const maybeHandleBustedPlayers = async (tableId: string, state: TableState): Promise<boolean> => {
+    try {
+      const players = Array.isArray(state.players) ? state.players : [];
+      const busted = players.filter(p => (Number((p as any).stack) || 0) <= 0);
+      if (!busted.length) {
+        return pendingRebuyCount(tableId) === 0;
+      }
+      const rebuyLimit = await fetchRoomRebuyLimit(tableId);
+      let promptsIssued = 0;
+      for (const player of busted) {
+        if (!player?.id) continue;
+        if (hasPendingRebuy(tableId, player.id)) continue;
+        const record = getPlayerRebuyInfo(tableId, player.id);
+        const rebuysUsed = record?.rebuys ?? 0;
+        const numericLimit = rebuyLimit === 'unlimited' ? Number.POSITIVE_INFINITY : rebuyLimit;
+        if (rebuyLimit !== 'unlimited' && rebuysUsed >= numericLimit) {
+          await autoStandPlayer(io, tableId, player.id, 'rebuy_exhausted');
+          clearPendingRebuy(tableId, player.id);
+          continue;
+        }
+        setPendingRebuy(tableId, player.id, {
+          issuedAt: Date.now(),
+          rebuysUsed,
+          rebuyLimit,
+        });
+        const payload = {
+          tableId,
+          playerId: player.id,
+          playerName: player.name,
+          rebuysUsed,
+          rebuyLimit,
+          baseChips: BASE_REBUY_CHIPS,
+          remaining: rebuyLimit === 'unlimited' ? 'unlimited' : Math.max((rebuyLimit as number) - rebuysUsed, 0),
+        };
+        io.to(`table_${tableId}`).emit('rebuy_prompt', payload);
+        promptsIssued += 1;
+      }
+      return pendingRebuyCount(tableId) === 0 && promptsIssued === 0;
+    } catch (err) {
+      console.warn('maybeHandleBustedPlayers failed:', err);
+      return true;
     }
   };
   
@@ -359,6 +483,26 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         return;
       }
       
+      const rebuyLimit = await fetchRoomRebuyLimit(tableId);
+      const previousRecord = getPlayerRebuyInfo(tableId, playerId);
+      const isInitial = !previousRecord;
+      const rebuysUsed = previousRecord?.rebuys ?? 0;
+      const numericLimit = rebuyLimit === 'unlimited' ? Number.POSITIVE_INFINITY : rebuyLimit;
+
+      if (!isInitial && rebuysUsed >= numericLimit) {
+        const message = rebuyLimit === 'unlimited'
+          ? 'Rebuy not available for this table.'
+          : `Rebuy limit (${rebuyLimit}) reached for this room.`;
+        dlog('seat_claim_failed', { reqId, reason: 'rebuy_limit', tableId, playerId, rebuysUsed, rebuyLimit });
+        socket.emit('seat_claim_failed', {
+          error: message,
+          rebuyLimit,
+          rebuysUsed,
+          reqId,
+        });
+        return;
+      }
+
       // Claim the seat
       seats[seatNumber] = { playerId, playerName, chips };
       GameSeats.setRoomSeats(tableId, seats);
@@ -381,6 +525,8 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         console.warn('Seat claim Supabase publish failed (socketio):', pubErr);
       }
       
+      recordBuyin(tableId, playerId);
+
       console.log(`Seat ${seatNumber} claimed by ${playerName} (${playerId}) at table ${tableId}`);
     });
 
@@ -433,11 +579,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
               engine.ensureWinByFoldIfSingle();
               gameState = engine.getState();
             }
-            io.to(`table_${tableId}`).emit('game_state_update', {
-              gameState,
-              lastAction: { playerId, action: 'auto_fold_on_stand_up' },
-              timestamp: new Date().toISOString(),
-            });
+            emitGameStateUpdate(io, tableId, gameState, { playerId, action: 'auto_fold_on_stand_up' });
             // If hand ended, schedule next
             if (gameState?.stage === 'showdown') {
               scheduleNextHand(tableId);
@@ -512,11 +654,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
                 engine.ensureWinByFoldIfSingle();
                 gameState = engine.getState();
               }
-              io.to(`table_${tableId}`).emit('game_state_update', {
-                gameState,
-                lastAction: { playerId, action: 'auto_fold_on_leave' },
-                timestamp: new Date().toISOString(),
-              });
+              emitGameStateUpdate(io, tableId, gameState, { playerId, action: 'auto_fold_on_leave' });
               // [auto-runout] debug after auto-fold emit
               logAutoRunout(tableId, gameState, 'after leave_table auto_fold emit');
               if (gameState?.stage === 'showdown') {
@@ -531,6 +669,48 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         console.error('leave_table handler error:', err);
       }
     });
+
+      socket.on('rebuy_decision', async (data: { tableId: string; playerId: string; decision: 'yes' | 'no' }) => {
+        try {
+          const { tableId, playerId, decision } = data || ({} as any);
+          if (!tableId || !playerId || (decision !== 'yes' && decision !== 'no')) {
+            socket.emit('rebuy_decision_failed', { error: 'Invalid parameters' });
+            return;
+          }
+          if (socket.playerId && socket.playerId !== playerId) {
+            socket.emit('rebuy_decision_failed', { error: 'Cannot decide for another player' });
+            return;
+          }
+
+          if (decision === 'yes') {
+            const availability = await getRebuyAvailability(tableId, playerId);
+            if (!availability.canRebuy) {
+              socket.emit('rebuy_decision_failed', { error: 'Rebuy limit reached' });
+              return;
+            }
+            const { record } = await applyRebuy(io, emitGameStateUpdate, tableId, playerId, BASE_REBUY_CHIPS);
+            clearPendingRebuy(tableId, playerId);
+            socket.emit('rebuy_ack', { tableId, playerId, status: 'accepted', rebuysUsed: record.rebuys, stack: BASE_REBUY_CHIPS });
+            io.to(`table_${tableId}`).emit('rebuy_result', {
+              tableId,
+              playerId,
+              status: 'accepted',
+              rebuysUsed: record.rebuys,
+              stack: BASE_REBUY_CHIPS,
+            });
+          } else {
+            clearPendingRebuy(tableId, playerId);
+            await autoStandPlayer(io, tableId, playerId, 'rebuy_declined');
+            socket.emit('rebuy_ack', { tableId, playerId, status: 'declined' });
+            io.to(`table_${tableId}`).emit('rebuy_result', { tableId, playerId, status: 'declined' });
+          }
+
+          scheduleNextHand(tableId);
+        } catch (err: any) {
+          console.error('rebuy_decision failed:', err);
+          socket.emit('rebuy_decision_failed', { error: err?.message || 'Rebuy failed' });
+        }
+      });
 
     // Handle game start requests
   socket.on('start_game', async (data: { tableId: string; playerId: string; seatedPlayers: any[] }) => {
@@ -618,11 +798,13 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           bettingMode
         });
         
-        // Start a new hand
-        pokerEngine.startNewHand();
+  // Start a new hand
+  pokerEngine.startNewHand();
+  clearRunItState(tableId);
         
-        // Get the current game state
-        const gameState = pokerEngine.getState();
+  // Get the current game state
+  const gameState = pokerEngine.getState();
+  const initialState = enrichStateWithRunIt(tableId, gameState);
         
         // Store the poker engine instance (you might want to use a proper storage solution)
         if (!(global as any).activeGames) {
@@ -639,7 +821,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
           startedBy: playerId,
           playerName: playerName,
           seatedPlayers: seatedPlayers,
-          gameState: gameState,
+          gameState: initialState,
           timestamp: new Date().toISOString()
         });
         
@@ -673,6 +855,11 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         }
         
         const pokerEngine = (global as any).activeGames.get(tableId);
+        const beforeActionState = pokerEngine?.getState?.();
+        const preActionCommunity: Card[] = Array.isArray(beforeActionState?.communityCards)
+          ? beforeActionState.communityCards.map((card: Card) => ({ ...card }))
+          : [];
+        const preActionStage: GameStage | undefined = beforeActionState?.stage;
         
         // Create player action object
         const playerAction = {
@@ -737,13 +924,10 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
                 // Continue dealer rotation
                 try { (freshEngine as any).state.dealerPosition = gameState.dealerPosition ?? 0; } catch {}
                 freshEngine.startNewHand();
+                clearRunItState(tableId);
                 (global as any).activeGames.set(tableId, freshEngine);
                 const newState = freshEngine.getState();
-                io.to(`table_${tableId}`).emit('game_state_update', {
-                  gameState: newState,
-                  lastAction: { action: 'auto_next_hand' },
-                  timestamp: new Date().toISOString()
-                });
+                emitGameStateUpdate(io, tableId, newState, { action: 'auto_next_hand' });
                 console.log(`[auto] Emitted game_state_update auto_next_hand (stage=${newState?.stage}, pot=${newState?.pot}) for table ${tableId}`);
                 return; // we've emitted next hand; stop normal emit below
               }
@@ -788,13 +972,10 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
               const freshEngine = new PokerEngine(tableId, rebuiltPlayers, sb, bb, { variant, bettingMode });
               try { (freshEngine as any).state.dealerPosition = gameState.dealerPosition ?? 0; } catch {}
               freshEngine.startNewHand();
+              clearRunItState(tableId);
               (global as any).activeGames.set(tableId, freshEngine);
               const newState = freshEngine.getState();
-              io.to(`table_${tableId}`).emit('game_state_update', {
-                gameState: newState,
-                lastAction: { action: 'auto_next_hand' },
-                timestamp: new Date().toISOString()
-              });
+              emitGameStateUpdate(io, tableId, newState, { action: 'auto_next_hand' });
               console.log(`[auto] Emitted game_state_update auto_next_hand (stage=${newState?.stage}, pot=${newState?.pot}) for table ${tableId}`);
               return;
             }
@@ -804,29 +985,35 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         }
         
         // Decide if we should lock UI and schedule auto-runout
-        const shouldAuto = (() => {
-          const players = Array.isArray(gameState.players) ? gameState.players : [];
-          const activeCount = players.filter((p: any) => !(p.isFolded || (p as any).folded)).length;
-          const anyAllIn = players.some((p: any) => !(p.isFolded || (p as any).folded) && p.isAllIn);
-          const nonAllInCount = players.filter((p: any) => !(p.isFolded || (p as any).folded) && !p.isAllIn).length;
-          const need = Math.max(0, 5 - (Array.isArray(gameState.communityCards) ? gameState.communityCards.length : 0));
-          const currentBet = Number(gameState.currentBet) || 0;
-          const owes = players.some((p: any) => !(p.isFolded || (p as any).folded) && !p.isAllIn && (Number(p.currentBet) || 0) < currentBet);
-          return activeCount >= 2 && anyAllIn && nonAllInCount <= 1 && need > 0 && gameState.stage !== 'showdown' && !owes;
-        })();
-        const outState = shouldAuto ? { ...gameState, activePlayer: '' } : gameState;
+        const postCommunityCount = Array.isArray(gameState.communityCards) ? gameState.communityCards.length : 0;
+        const preCommunityCount = preActionCommunity.length;
+        const boardAdvanced = postCommunityCount > preCommunityCount;
+        const promptOptions = boardAdvanced
+          ? {
+              communityOverride: preActionCommunity,
+              boardVisibleCount: preCommunityCount,
+              stageOverride: preActionStage,
+            }
+          : undefined;
 
-        // Broadcast updated game state to all players
-        io.to(`table_${tableId}`).emit('game_state_update', {
-          gameState: outState,
-          lastAction: {
-            playerId: playerId,
-            action: action,
-            amount: amount
-          },
-          timestamp: new Date().toISOString()
+        const eligibleForAuto = isAutoRunoutEligible(gameState);
+        let shouldScheduleAuto = eligibleForAuto;
+        let issuedPrompt: RunItTwicePrompt | null = null;
+        if (eligibleForAuto) {
+          issuedPrompt = maybeCreateRunItPrompt(tableId, gameState, promptOptions);
+          if (issuedPrompt) {
+            shouldScheduleAuto = false;
+            gameState = { ...gameState, activePlayer: issuedPrompt.playerId };
+          }
+        }
+        const outState = shouldScheduleAuto ? { ...gameState, activePlayer: '' } : gameState;
+
+        emitGameStateUpdate(io, tableId, outState, {
+          playerId,
+          action,
+          amount
         });
-        if (shouldAuto) {
+        if (shouldScheduleAuto) {
           scheduleAutoRunout(tableId);
         }
         // [auto-runout] debug after broadcasting update
@@ -849,6 +1036,88 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
       }
     });
 
+    socket.on('enable_run_it_twice', (
+      { tableId, runs, playerId: requesterOverride }: { tableId: string; runs: number; playerId?: string },
+      cb?: (resp: { success: boolean; error?: string }) => void
+    ) => {
+      try {
+        if (!tableId || typeof runs !== 'number') {
+          cb?.({ success: false, error: 'Invalid parameters' });
+          return;
+        }
+        if (!(global as any).activeGames || !(global as any).activeGames.has(tableId)) {
+          cb?.({ success: false, error: 'No active game' });
+          return;
+        }
+        const pokerEngine = (global as any).activeGames.get(tableId);
+        const state = pokerEngine?.getState?.();
+        if (!state) {
+          cb?.({ success: false, error: 'Table state unavailable' });
+          return;
+        }
+        if (state.runItTwice?.enabled) {
+          cb?.({ success: false, error: 'Run It Twice already enabled' });
+          return;
+        }
+        const requesterId = requesterOverride || socket.playerId;
+        if (!requesterId) {
+          cb?.({ success: false, error: 'Unknown player' });
+          return;
+        }
+        if (state.communityCards.length >= 5 || state.stage === 'showdown') {
+          cb?.({ success: false, error: 'Too late to enable' });
+          return;
+        }
+        const anyAllIn = (state.players || []).some((p: any) => !(p.isFolded || (p as any).folded) && p.isAllIn);
+        if (!anyAllIn) {
+          cb?.({ success: false, error: 'No all-in detected' });
+          return;
+        }
+        const activePlayers = (state.players || []).filter((p: any) => !(p.isFolded || (p as any).folded)).length || 0;
+        const maxRuns = Math.max(1, activePlayers);
+        if (runs < 1 || runs > maxRuns) {
+          cb?.({ success: false, error: `Runs must be 1-${maxRuns}` });
+          return;
+        }
+
+        const meta = getRunItState(tableId);
+        const prompt = meta.prompt;
+        if (prompt) {
+          if (prompt.playerId !== requesterId) {
+            cb?.({ success: false, error: 'Not authorized for decision' });
+            return;
+          }
+          if (runs <= 1) {
+            disableRunItPrompt(tableId, true);
+            const revealed = revealAllHoleCards(pokerEngine, state);
+            const resumed = { ...revealed, activePlayer: '' };
+            emitGameStateUpdate(io, tableId, resumed, { action: 'run_it_twice_declined', playerId: requesterId });
+            scheduleAutoRunout(tableId);
+            cb?.({ success: true });
+            return;
+          }
+        } else if (runs === 1) {
+          cb?.({ success: false, error: 'Multiple runs required' });
+          return;
+        }
+
+        if (runs < 2) {
+          cb?.({ success: false, error: 'Runs must be at least 2' });
+          return;
+        }
+
+        pokerEngine.enableRunItTwice(runs);
+        const updated = revealAllHoleCards(pokerEngine, pokerEngine.getState());
+        disableRunItPrompt(tableId, true);
+        emitGameStateUpdate(io, tableId, updated, { action: 'run_it_twice_enabled', playerId: requesterId, runs });
+        io.to(`table_${tableId}`).emit('rit_enabled', { tableId, runs, rit: updated.runItTwice });
+        scheduleAutoRunout(tableId);
+        cb?.({ success: true });
+      } catch (err: any) {
+        cb?.({ success: false, error: err?.message || 'Failed to enable Run It Twice' });
+      }
+    });
+
     // Allow clients to explicitly request settlement when only one player remains (defensive fallback)
     socket.on('force_settlement', (data: { tableId: string }) => {
       try {
@@ -865,11 +1134,7 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
             console.log(`[client] force_settlement requested; applying (stage=${before.stage}, pot=${before.pot})`);
             pokerEngine.ensureWinByFoldIfSingle();
             const after = pokerEngine.getState();
-            io.to(`table_${tableId}`).emit('game_state_update', {
-              gameState: after,
-              lastAction: { action: 'force_settlement' },
-              timestamp: new Date().toISOString()
-            });
+            emitGameStateUpdate(io, tableId, after, { action: 'force_settlement' });
             // If hand is over, schedule next hand
             if (after?.stage === 'showdown') {
               scheduleNextHand(tableId);
@@ -901,12 +1166,9 @@ function initializeSeatHandlers(res: NextApiResponseServerIO) {
         }
         console.log(`[auto] request_next_hand accepted: starting next hand now (table ${tableId})`);
         engine.startNewHand();
+        clearRunItState(tableId);
         const newState = engine.getState();
-        io.to(`table_${tableId}`).emit('game_state_update', {
-          gameState: newState,
-          lastAction: { action: 'request_next_hand' },
-          timestamp: new Date().toISOString(),
-        });
+        emitGameStateUpdate(io, tableId, newState, { action: 'request_next_hand' });
         console.log(`[auto] Emitted game_state_update request_next_hand (stage=${newState?.stage}, pot=${newState?.pot}) for table ${tableId}`);
       } catch (err) {
         console.error('request_next_hand failed:', err);

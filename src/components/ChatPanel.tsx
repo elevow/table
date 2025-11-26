@@ -103,6 +103,16 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
     }
   }, [playerId]);
 
+  const handleSupabaseModerated = useCallback((payload: { messageId: string; hidden: boolean; moderatorId: string }) => {
+    if (!payload?.messageId) return;
+    setMessages(prev => 
+      prev.map(m => m.id === payload.messageId 
+        ? { ...m, isModerated: payload.hidden, moderatorId: payload.moderatorId } 
+        : m
+      )
+    );
+  }, []);
+
   // Subscribe to Supabase realtime chat events when in Supabase transport mode
   useSupabaseChatRealtime(
     useSupabaseTransport ? gameId : undefined,
@@ -110,6 +120,7 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
       onNewMessage: handleSupabaseNewMessage,
       onReaction: handleSupabaseReaction,
       onReactionRemoved: handleSupabaseReactionRemoved,
+      onModerated: handleSupabaseModerated,
     }
   );
 

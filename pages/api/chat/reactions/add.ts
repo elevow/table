@@ -14,23 +14,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const pool = new Pool();
     const svc = new ChatService(pool);
     const reaction = await svc.addReaction({ messageId, userId, emoji });
-    // Determine room and emit reaction event to the table room
+    // Determine room for broadcasting
     let roomId: string | null = null;
     try {
       const { rows } = await pool.query('SELECT room_id FROM chat_messages WHERE id = $1', [messageId]);
       roomId = rows?.[0]?.room_id ?? null;
-      // Broadcast via Socket.IO
+    } catch {
+      // Continue without roomId
+    }
+    // Broadcast via Socket.IO
+    try {
       const ws = getWsManager(res);
       if (ws && roomId) {
         ws.broadcast('chat:reaction', { messageId, emoji, userId }, roomId);
       }
-    } catch {}
+    } catch {
+      // Continue if Socket.IO broadcast fails
+    }
     // Broadcast via Supabase Realtime
-    try {
-      if (roomId) {
+    if (roomId) {
+      try {
         await publishChatReaction(roomId, { messageId, emoji, userId });
+      } catch {
+        // Continue if Supabase broadcast fails
       }
-    } catch {}
+    }
     return res.status(201).json(reaction);
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });

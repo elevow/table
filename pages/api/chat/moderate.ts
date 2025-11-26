@@ -14,22 +14,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const pool = new Pool();
     const svc = new ChatService(pool);
     const updated = await svc.moderate(String(messageId), String(moderatorId), hide !== false);
+    // Determine room for broadcasting
     let roomId: string | null = null;
     try {
       const { rows } = await pool.query('SELECT room_id FROM chat_messages WHERE id = $1', [messageId]);
       roomId = rows?.[0]?.room_id ?? null;
-      // Broadcast via Socket.IO
+    } catch {
+      // Continue without roomId
+    }
+    // Broadcast via Socket.IO
+    try {
       const ws = getWsManager(res);
       if (ws && roomId) {
         ws.broadcast('chat:moderated', { messageId, hidden: hide !== false, moderatorId }, roomId);
       }
-    } catch {}
+    } catch {
+      // Continue if Socket.IO broadcast fails
+    }
     // Broadcast via Supabase Realtime
-    try {
-      if (roomId) {
+    if (roomId) {
+      try {
         await publishChatModerated(roomId, { messageId, hidden: hide !== false, moderatorId });
+      } catch {
+        // Continue if Supabase broadcast fails
       }
-    } catch {}
+    }
     return res.status(200).json(updated);
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });

@@ -71,3 +71,10 @@ export interface AddReactionInput {
 export interface ListReactionsQuery {
   messageId: string;
 }
+
+// Delete chat message input
+export interface DeleteChatInput {
+  messageId: string;
+  userId: string; // The user attempting to delete
+  isAdmin?: boolean; // Whether the user is an admin (can delete any message)
+}

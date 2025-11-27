@@ -9,6 +9,7 @@ import type {
   ChatReaction,
   AddReactionInput,
   ListReactionsQuery,
+  DeleteChatInput,
 } from '../../types/chat';
 import { filterMessage } from '../utils/content-filter';
 
@@ -141,5 +142,44 @@ export class ChatManager {
       [q.messageId]
     );
     return (res.rows as ChatReactionRow[]).map((r) => this.mapReaction(r));
+  }
+
+  async deleteMessage(input: DeleteChatInput): Promise<{ deleted: boolean; roomId: string | null }> {
+    if (!input?.messageId) throw new Error('messageId required');
+    if (!input?.userId) throw new Error('userId required');
+
+    // First, get the message to check ownership and get roomId for broadcasting
+    const msgRes = await this.pool.query(
+      `SELECT * FROM chat_messages WHERE id = $1`,
+      [input.messageId]
+    );
+    
+    if (!msgRes.rows[0]) {
+      throw new Error('message not found');
+    }
+
+    const message = msgRes.rows[0] as ChatMessageRow;
+    
+    // Check authorization: only the sender or an admin can delete
+    if (!input.isAdmin && message.sender_id !== input.userId) {
+      throw new Error('not authorized to delete this message');
+    }
+
+    // Delete associated reactions first (foreign key constraint)
+    await this.pool.query(
+      `DELETE FROM chat_reactions WHERE message_id = $1`,
+      [input.messageId]
+    );
+
+    // Delete the message
+    const res = await this.pool.query(
+      `DELETE FROM chat_messages WHERE id = $1`,
+      [input.messageId]
+    );
+
+    return { 
+      deleted: (res.rowCount ?? 0) > 0,
+      roomId: message.room_id 
+    };
   }
 }

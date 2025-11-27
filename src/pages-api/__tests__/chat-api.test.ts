@@ -4,12 +4,14 @@ import sendHandler from '../../../pages/api/chat/send';
 import listRoomHandler from '../../../pages/api/chat/room/list';
 import listPrivateHandler from '../../../pages/api/chat/private/list';
 import moderateHandler from '../../../pages/api/chat/moderate';
+import deleteHandler from '../../../pages/api/chat/delete';
 
 jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({ query: jest.fn().mockResolvedValue({ rows: [] }) })) }));
 jest.mock('../../../src/lib/api/rate-limit', () => ({ rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 }) }));
 jest.mock('../../../src/lib/realtime/publisher', () => ({
   publishChatMessage: jest.fn().mockResolvedValue(undefined),
   publishChatModerated: jest.fn().mockResolvedValue(undefined),
+  publishChatDeleted: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../../src/lib/database/pool', () => ({
   getPool: jest.fn().mockReturnValue({ query: jest.fn().mockResolvedValue({ rows: [] }) }),
@@ -20,6 +22,7 @@ const mockService: any = {
   listRoom: jest.fn(),
   listPrivate: jest.fn(),
   moderate: jest.fn(),
+  delete: jest.fn(),
 };
 
 jest.mock('../../../src/lib/services/chat-service', () => ({
@@ -75,5 +78,57 @@ describe('Chat API (US-023)', () => {
     await moderateHandler(req as any, res as any);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ id: 'm3', isModerated: true });
+  });
+
+  it('POST /api/chat/delete returns deleted status for sender', async () => {
+    mockService.delete.mockResolvedValue({ deleted: true, roomId: 'r1' });
+    const req = reqHelper('POST', { messageId: 'm4', userId: 'u1' });
+    const res = resHelper();
+    await deleteHandler(req as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ deleted: true });
+  });
+
+  it('POST /api/chat/delete returns deleted status for admin', async () => {
+    mockService.delete.mockResolvedValue({ deleted: true, roomId: 'r1' });
+    const req = reqHelper('POST', { messageId: 'm4', userId: 'admin1', isAdmin: true });
+    const res = resHelper();
+    await deleteHandler(req as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ deleted: true });
+  });
+
+  it('POST /api/chat/delete returns 400 when messageId is missing', async () => {
+    const req = reqHelper('POST', { userId: 'u1' });
+    const res = resHelper();
+    await deleteHandler(req as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'messageId required' });
+  });
+
+  it('POST /api/chat/delete returns 400 when userId is missing', async () => {
+    const req = reqHelper('POST', { messageId: 'm1' });
+    const res = resHelper();
+    await deleteHandler(req as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'userId required' });
+  });
+
+  it('POST /api/chat/delete returns 403 when not authorized', async () => {
+    mockService.delete.mockRejectedValue(new Error('not authorized to delete this message'));
+    const req = reqHelper('POST', { messageId: 'm4', userId: 'wrong-user' });
+    const res = resHelper();
+    await deleteHandler(req as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: 'not authorized to delete this message' });
+  });
+
+  it('POST /api/chat/delete returns 404 when message not found', async () => {
+    mockService.delete.mockRejectedValue(new Error('message not found'));
+    const req = reqHelper('POST', { messageId: 'nonexistent', userId: 'u1' });
+    const res = resHelper();
+    await deleteHandler(req as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({ error: 'message not found' });
   });
 });

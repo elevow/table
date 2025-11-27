@@ -35,6 +35,7 @@ describe('ChatService', () => {
       addReaction: jest.fn(),
       removeReaction: jest.fn(),
       listReactions: jest.fn(),
+      deleteMessage: jest.fn(),
     } as any;
 
     (ChatManager as jest.MockedClass<typeof ChatManager>).mockImplementation(() => mockChatManager);
@@ -421,6 +422,55 @@ describe('ChatService', () => {
 
     it('should throw error when messageId is missing', async () => {
       await expect(chatService.listReactions('')).rejects.toThrow('messageId required');
+    });
+  });
+
+  describe('delete', () => {
+    it('should delete message successfully', async () => {
+      const input = {
+        messageId: 'msg123',
+        userId: 'user123',
+        isAdmin: false
+      };
+      const expectedResult = { deleted: true, roomId: 'room123' };
+
+      mockChatManager.deleteMessage.mockResolvedValue(expectedResult);
+
+      const result = await chatService.delete(input);
+
+      expect(mockChatManager.deleteMessage).toHaveBeenCalledWith(input);
+      expect(result).toEqual(expectedResult);
+    });
+
+    it('should delete message as admin', async () => {
+      const input = {
+        messageId: 'msg123',
+        userId: 'admin123',
+        isAdmin: true
+      };
+      const expectedResult = { deleted: true, roomId: 'room123' };
+
+      mockChatManager.deleteMessage.mockResolvedValue(expectedResult);
+
+      const result = await chatService.delete(input);
+
+      expect(mockChatManager.deleteMessage).toHaveBeenCalledWith(input);
+      expect(result).toEqual(expectedResult);
+    });
+
+    it('should throw error when messageId is missing', async () => {
+      await expect(chatService.delete({ messageId: '', userId: 'user123' }))
+        .rejects.toThrow('messageId required');
+    });
+
+    it('should throw error when userId is missing', async () => {
+      await expect(chatService.delete({ messageId: 'msg123', userId: '' }))
+        .rejects.toThrow('userId required');
+    });
+
+    it('should throw error when input is null', async () => {
+      await expect(chatService.delete(null as any))
+        .rejects.toThrow('messageId required');
     });
   });
 });

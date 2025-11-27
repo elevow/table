@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { ChatManager } from '../database/chat-manager';
-import type { SendChatInput, ListRoomChatQuery, ListPrivateChatQuery, ChatMessage, AddReactionInput } from '../../types/chat';
+import type { SendChatInput, ListRoomChatQuery, ListPrivateChatQuery, ChatMessage, AddReactionInput, DeleteChatInput } from '../../types/chat';
 
 export class ChatService {
   private mgr: ChatManager;
@@ -57,5 +57,11 @@ export class ChatService {
   async listReactions(messageId: string) {
     if (!messageId) throw new Error('messageId required');
     return this.mgr.listReactions({ messageId });
+  }
+
+  async delete(input: DeleteChatInput) {
+    if (!input?.messageId) throw new Error('messageId required');
+    if (!input?.userId) throw new Error('userId required');
+    return this.mgr.deleteMessage(input);
   }
 }

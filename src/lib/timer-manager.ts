@@ -1,4 +1,4 @@
-import { Server as SocketServer } from 'socket.io';
+import type { Broadcaster } from './broadcaster';
 import { PlayerAction } from '../types/poker';
 import { StateManager } from './state-manager';
 
@@ -26,7 +26,7 @@ export class TimerManager {
   private config: TimerConfig;
 
   constructor(
-    private io: SocketServer,
+    private io: Broadcaster,
     private stateManager: StateManager,
     config: Partial<TimerConfig> = {}
   ) {

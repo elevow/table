@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, memo, useRef, useCallback } from 'react';
-import { getTransportMode } from '../utils/transport';
 import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 
 // Timer types
@@ -28,19 +27,12 @@ interface CombinedHUDProps {
   playerId: string;
   gameId: string;
   onShowSettings?: () => void;
-  /** Optional game state passed from parent when using Supabase transport */
+  /** Optional game state passed from parent */
   gameState?: any;
-  /** Whether sockets are disabled (using Supabase transport) */
-  socketsDisabled?: boolean;
 }
 
-function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameState, socketsDisabled }: CombinedHUDProps) {
-  // Check transport mode to determine whether to use sockets or Supabase
-  const transportMode = getTransportMode();
-  const useSupabase = transportMode === 'supabase';
-  
+function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameState }: CombinedHUDProps) {
   // Timer states
-  const [socket, setSocket] = useState<any>(null);
   const [timer, setTimer] = useState<TimerState>(undefined);
   const [now, setNow] = useState<number>(Date.now());
   const [bank, setBank] = useState<number>(0);
@@ -155,9 +147,9 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
     lastStacksRef.current = stacks;
   }, [playerId, gameId]);
 
-  // Subscribe to Supabase realtime updates when in Supabase mode
+  // Subscribe to Supabase realtime updates
   useSupabaseRealtime(
-    useSupabase ? tableId : undefined,
+    tableId,
     {
       onGameStateUpdate: (payload: any) => {
         console.log('[stats] Supabase game_state_update received:', payload?.gameState?.stage);
@@ -165,54 +157,6 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
       }
     }
   );
-
-  // Timer socket initialization (only when not using Supabase)
-  useEffect(() => {
-    if (useSupabase) return;
-    
-    const initSocket = async () => {
-      try {
-        const { getSocket } = await import('../lib/clientSocket');
-        const socketInstance = await getSocket();
-        setSocket(socketInstance);
-      } catch (error) {
-        console.warn('Timer socket initialization failed, continuing without real-time timer:', error);
-      }
-    };
-    
-    setTimeout(() => {
-      initSocket();
-    }, 300);
-  }, [useSupabase]);
-
-  // Timer socket events (only when not using Supabase)
-  useEffect(() => {
-    if (useSupabase || !socket) return;
-    
-    const onTimer = (state?: any) => setTimer(state);
-    const onBank = ({ amount }: { amount: number }) => setBank(amount);
-    // Hand/session stat updater: listen for game lifecycle
-    const onGameStarted = (data: { gameState?: any }) => {
-      console.log('[stats] Socket game_started received');
-      processGameStateUpdate({ gameState: data?.gameState, lastAction: { action: 'game_started' } });
-    };
-
-    const onGameStateUpdate = (payload: { gameState: any }) => {
-      console.log('[stats] Socket game_state_update received:', payload?.gameState?.stage);
-      processGameStateUpdate(payload);
-    };
-    
-    socket.on('timer_update', onTimer);
-    socket.on('timebank_update', onBank);
-    socket.on('game_started', onGameStarted);
-    socket.on('game_state_update', onGameStateUpdate);
-    return () => {
-      socket?.off('timer_update', onTimer);
-      socket?.off('timebank_update', onBank);
-      socket?.off('game_started', onGameStarted);
-      socket?.off('game_state_update', onGameStateUpdate);
-    };
-  }, [socket, useSupabase, processGameStateUpdate]);
 
   // Timer countdown
   useEffect(() => {
@@ -298,10 +242,6 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
 
   const isMyTurn = timer && timer.activePlayer === playerId;
   const seconds = Math.ceil(remainingMs / 1000);
-
-  const useTimeBank = () => {
-    socket?.emit('use_timebank', { tableId, playerId });
-  };
 
   const calculateWinRate = () => {
     if (sessionStats.handsPlayed === 0) return 0;

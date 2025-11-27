@@ -1,4 +1,4 @@
-import type { Server as SocketServer } from 'socket.io';
+import type { Broadcaster } from '../broadcaster';
 import { publishSeatState, publishSeatVacated } from '../realtime/publisher';
 import * as GameSeats from '../shared/game-seats';
 import { recordBuyin } from '../shared/rebuy-tracker';
@@ -6,7 +6,7 @@ import { BASE_REBUY_CHIPS } from './rebuy-state';
 import type { TableState } from '../../types/poker';
 
 export async function autoStandPlayer(
-  io: SocketServer | null,
+  io: Broadcaster | null,
   tableId: string,
   playerId: string,
   reason: string = 'auto_stand'
@@ -31,8 +31,8 @@ export async function autoStandPlayer(
 }
 
 export async function applyRebuy(
-  io: SocketServer | null,
-  emitGameStateUpdate: (io: SocketServer, tableId: string, state: TableState | any, lastAction: any) => void,
+  io: Broadcaster | null,
+  emitGameStateUpdate: (io: Broadcaster, tableId: string, state: TableState | any, lastAction: any) => void,
   tableId: string,
   playerId: string,
   chips: number = BASE_REBUY_CHIPS

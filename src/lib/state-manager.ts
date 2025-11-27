@@ -1,4 +1,4 @@
-import { Server as SocketServer } from 'socket.io';
+import type { Broadcaster } from './broadcaster';
 import { TableState, PlayerAction } from '../types/poker';
 import { StateUpdate, StateUpdateResponse, StateReconciliation } from '../types/state-update';
 import { StateRecovery } from './state-recovery';
@@ -10,12 +10,12 @@ export class StateManager {
   private updateRates: Map<string, number[]> = new Map();
   private readonly MAX_UPDATES_PER_SECOND = 20; // Rate limit
   private readonly UPDATE_WINDOW_MS = 1000;
-  private io: SocketServer;
+  private io: Broadcaster;
   private recovery: StateRecovery;
   // Optional listeners for state changes (tableId, newFullState, partialUpdate)
   private listeners: Set<(tableId: string, state: TableState, update: Partial<TableState>) => void> = new Set();
 
-  constructor(io: SocketServer) {
+  constructor(io: Broadcaster) {
     this.io = io;
     this.recovery = new StateRecovery();
     this.setupSocketHandlers();
@@ -38,85 +38,7 @@ export class StateManager {
   }
 
   private setupSocketHandlers(): void {
-    this.io.on('connection', (socket) => {
-      let playerId: string | null = null;
-
-      socket.on('join_table', ({ tableId, playerId: pid }: { tableId: string; playerId: string }) => {
-        playerId = pid;
-        socket.join(tableId);
-        
-        const state = this.states.get(tableId);
-        if (state) {
-          // Check if this is a reconnection
-          const reconciliation = this.recovery.handleReconnect(playerId, state);
-          if (reconciliation) {
-            socket.emit('reconcile', reconciliation);
-          } else {
-            this.sendReconciliation(socket.id, tableId);
-          }
-        }
-      });
-
-      socket.on('leave_table', (tableId: string) => {
-        // Auto-stand: vacate the player's seat first (if seated)
-        if (playerId) {
-          try {
-            leaveSeat(tableId, playerId);
-          } catch (e) {
-            // ignore seat errors; continue
-          }
-          // Auto-fold if player exists in table state
-          const state = this.states.get(tableId);
-          if (state && state.players.some(p => p.id === playerId)) {
-            const autoAction: PlayerAction = {
-              type: 'fold',
-              playerId,
-              tableId,
-              timestamp: Date.now()
-            };
-            this.handleAction(tableId, autoAction);
-          }
-        }
-        // Finally, leave the socket room
-        socket.leave(tableId);
-      });
-
-      // US-063: Lightweight chat realtime relays
-      // Clients emit after successful REST actions; server re-broadcasts to the table room.
-      socket.on('chat:emit_message', (
-        { tableId, message }: { tableId: string; message: { id: string; roomId: string | null; senderId: string; message: string } }
-      ) => {
-        if (!tableId || !message?.id) return;
-        this.io.to(tableId).emit('chat:new_message', { message });
-      });
-
-      socket.on('chat:emit_reaction', (
-        { tableId, messageId, emoji, userId }: { tableId: string; messageId: string; emoji: string; userId: string }
-      ) => {
-        if (!tableId || !messageId || !emoji) return;
-        this.io.to(tableId).emit('chat:reaction', { messageId, emoji, userId });
-      });
-
-      socket.on('disconnect', () => {
-        if (playerId) {
-          // Find the table this player was in
-          for (const [tableId, state] of this.states.entries()) {
-            if (state.players.some(p => p.id === playerId)) {
-              this.recovery.handleDisconnect(playerId, tableId);
-              // Create an auto-fold action for disconnected players
-              const autoAction: PlayerAction = {
-                type: 'fold',
-                playerId,
-                tableId,
-                timestamp: Date.now()
-              };
-              this.handleAction(tableId, autoAction);
-              break;
-            }
-          }
-        }
-      });
-    });
+    // Socket.IO handlers have been removed. Event handling is now done via HTTP/Supabase.
   }
 
   private startTimeoutCheck(): void {

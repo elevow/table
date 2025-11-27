@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
-import { getWsManager } from '../../../../src/lib/api/socket-server';
 import { ChatService } from '../../../../src/lib/services/chat-service';
 import { publishChatReaction } from '../../../../src/lib/realtime/publisher';
 import { getPool } from '../../../../src/lib/database/pool';
@@ -21,15 +20,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       roomId = rows?.[0]?.room_id ?? null;
     } catch {
       // Continue without roomId
-    }
-    // Broadcast via Socket.IO
-    try {
-      const ws = getWsManager(res);
-      if (ws && roomId) {
-        ws.broadcast('chat:reaction', { messageId, emoji, userId }, roomId);
-      }
-    } catch {
-      // Continue if Socket.IO broadcast fails
     }
     // Broadcast via Supabase Realtime
     if (roomId) {

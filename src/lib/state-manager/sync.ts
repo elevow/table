@@ -14,13 +14,7 @@ export class SyncManager implements ISyncManager {
   ) {}
 
   public startSyncInterval(): void {
-    if (this.syncTimeout) {
-      clearInterval(this.syncTimeout);
-    }
-    
-    this.syncTimeout = setInterval(() => {
-      this.syncState();
-    }, this.config.syncInterval);
+    // Socket.IO sync has been removed. State is now synced via Supabase Realtime.
   }
 
   public stopSyncInterval(): void {
@@ -34,100 +28,13 @@ export class SyncManager implements ISyncManager {
     }
   }
 
-  public async syncState(isRetry: boolean = false): Promise<void> {
-    // Always clear retry timer before a sync attempt
-    this.clearSyncTimer();
-
-    try {
-      // If this is the first attempt, reset retry count
-      if (!isRetry) {
-        this.retryCount = 0;
-      }
-
-      const now = Date.now();
-      const checksum = this.calculateChecksum(this.state.data);
-      const pendingUpdates = Array.from(this.state.changes);
-
-      // Only emit sync attempt event for retries
-      if (isRetry) {
-        await (this.config.socket as any).emit('sync_attempt', {
-          version: this.state.version,
-          timestamp: now,
-          attempt: this.retryCount
-        });
-      }
-
-      const result = await (this.config.socket as any).emit('sync_request', {
-        version: this.state.version,
-        checksum,
-        pendingUpdates
-      });
-
-      if (!result) {
-        throw new Error('Sync request failed');
-      }
-
-      // Successful sync - update timestamp and reset
-      const syncCompleteTime = Date.now();
-      // Ensure lastSync strictly increases even within the same millisecond
-      this.state.lastSync = syncCompleteTime > this.state.lastSync
-        ? syncCompleteTime
-        : this.state.lastSync + 1;
-      this.reset();
-      
-      // Only restart sync interval if we're not already syncing
-      if (!this.syncTimeout) {
-        this.startSyncInterval();
-      }
-    } catch (error) {
-      // Increment retry count and check max retries
-      this.retryCount++;
-      if (this.retryCount >= this.config.retryAttempts) {
-        // Max retries reached - emit failure 
-  await (this.config.socket as any).emit('sync_failed', {
-          version: this.state.version,
-          timestamp: Date.now()
-        });
-        this.reset();
-        throw error;
-      }
-
-      // For test scenarios, retry immediately
-      if (process.env.NODE_ENV === 'test') {
-        return this.syncState(true);
-      }
-
-      // Schedule retry
-      this.handleSyncError();
-      throw error;
-    }
+  public async syncState(_isRetry: boolean = false): Promise<void> {
+    // Socket.IO sync has been removed. State is now synced via Supabase Realtime.
+    this.state.lastSync = Date.now();
   }
 
   public handleSyncError(): void {
-    // Stop regular sync interval during retry mode
-    if (this.syncTimeout) {
-      clearInterval(this.syncTimeout);
-      this.syncTimeout = null;
-    }
-
-    // Schedule next retry attempt
-    this.syncTimer = setTimeout(() => {
-      this.syncState();
-    }, this.config.retryDelay);
-  }
-
-  private clearSyncTimer(): void {
-    if (this.syncTimer) {
-      clearTimeout(this.syncTimer);
-      this.syncTimer = null;
-    }
-  }
-
-  // Helper to cleanup all timers and reset counters
-  private reset(): void {
-    this.stopSyncInterval();
-    this.clearSyncTimer();
-    this.retryCount = 0;
+    // Socket.IO sync has been removed. Error handling is now done via Supabase.
   }
 
   private calculateChecksum(data: any): string {

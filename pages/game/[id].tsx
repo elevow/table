@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic';
 import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
 import { useComponentPerformance } from '../../src/utils/performance-monitor';
-import TimerHUD from '../../src/components/TimerHUD';
 import { createInvite } from '../../src/services/friends-ui';
 import { determineUserRole } from '../../src/utils/roleUtils';
 import { useUserAvatar } from '../../src/hooks/useUserAvatar';
@@ -1006,7 +1005,7 @@ export default function GamePage() {
   const runItTwiceBoards = Array.isArray(pokerGameState?.runItTwice?.boards)
     ? pokerGameState.runItTwice.boards
     : [];
-  const supabaseSecondRunBoard = transportMode === 'supabase' && runItTwiceBoards.length > 1
+  const supabaseSecondRunBoard = runItTwiceBoards.length > 1
     ? runItTwiceBoards[1]
     : null;
   const anyAllIn = () => {
@@ -2001,7 +2000,7 @@ export default function GamePage() {
               <button
                 onClick={handleStartGame}
                 className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto"
-                title={`Start the game with ${getSeatedPlayersCount()} players (${transportMode === 'supabase' ? 'Supabase realtime' : 'Socket.IO'})`}
+                title={`Start the game with ${getSeatedPlayersCount()} players`}
                 aria-label="Start game"
               >
                 <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -2838,7 +2837,6 @@ export default function GamePage() {
                 gameId={String(id)}
                 onShowSettings={toggleSettings}
                 gameState={pokerGameState}
-                socketsDisabled={socketsDisabled}
               />
             )}
             {showSettings && (

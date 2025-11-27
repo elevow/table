@@ -7,6 +7,7 @@ type ChatCallbacks = {
   onReaction?: (payload: { messageId: string; emoji: string; userId: string }) => void;
   onReactionRemoved?: (payload: { messageId: string; emoji: string; userId: string }) => void;
   onModerated?: (payload: { messageId: string; hidden: boolean; moderatorId: string }) => void;
+  onDeleted?: (payload: { messageId: string; deletedBy: string }) => void;
 };
 
 /**
@@ -29,6 +30,7 @@ export function useSupabaseChatRealtime(roomId?: string, callbacks?: ChatCallbac
       .on('broadcast', { event: 'chat_reaction' }, (p) => cbsRef.current?.onReaction?.(p.payload))
       .on('broadcast', { event: 'chat_reaction_removed' }, (p) => cbsRef.current?.onReactionRemoved?.(p.payload))
       .on('broadcast', { event: 'chat_moderated' }, (p) => cbsRef.current?.onModerated?.(p.payload))
+      .on('broadcast', { event: 'chat_deleted' }, (p) => cbsRef.current?.onDeleted?.(p.payload))
       .subscribe();
 
     return () => {

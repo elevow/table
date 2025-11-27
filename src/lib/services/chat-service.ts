@@ -39,6 +39,17 @@ export class ChatService {
     return this.mgr.moderate(messageId, moderatorId, hide);
   }
 
+  async getMessage(messageId: string) {
+    if (!messageId) throw new Error('messageId required');
+    return this.mgr.getMessage(messageId);
+  }
+
+  async deleteMessage(messageId: string, userId: string, isAdmin: boolean) {
+    if (!messageId) throw new Error('messageId required');
+    if (!userId) throw new Error('userId required');
+    return this.mgr.deleteMessage(messageId, userId, isAdmin);
+  }
+
   // US-063: Emoji reactions
   async addReaction(input: AddReactionInput) {
     if (!input?.messageId) throw new Error('messageId required');

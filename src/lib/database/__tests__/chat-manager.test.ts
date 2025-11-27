@@ -176,4 +176,99 @@ describe('ChatManager', () => {
     const mgr = new ChatManager(pool);
     await expect(mgr.moderate('missing', 'mod-1', false)).rejects.toThrow('message not found');
   });
+
+  test('getMessage() returns message when found', async () => {
+    const pool = makePool();
+    const query = (pool as any).query as jest.Mock;
+    const row = makeRow({ id: 'm123', sender_id: 'u1' });
+    query.mockResolvedValueOnce({ rows: [row] });
+
+    const mgr = new ChatManager(pool);
+    const result = await mgr.getMessage('m123');
+
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(result?.id).toBe('m123');
+    expect(result?.senderId).toBe('u1');
+  });
+
+  test('getMessage() returns null when not found', async () => {
+    const pool = makePool();
+    const query = (pool as any).query as jest.Mock;
+    query.mockResolvedValueOnce({ rows: [] });
+
+    const mgr = new ChatManager(pool);
+    const result = await mgr.getMessage('nonexistent');
+
+    expect(result).toBeNull();
+  });
+
+  test('getMessage() throws when messageId is empty', async () => {
+    const pool = makePool();
+    const mgr = new ChatManager(pool);
+    await expect(mgr.getMessage('')).rejects.toThrow('messageId required');
+  });
+
+  test('deleteMessage() deletes message when user is sender', async () => {
+    const pool = makePool();
+    const query = (pool as any).query as jest.Mock;
+    const row = makeRow({ id: 'm123', sender_id: 'u1' });
+    // getMessage query
+    query.mockResolvedValueOnce({ rows: [row] });
+    // delete reactions query
+    query.mockResolvedValueOnce({ rowCount: 0 });
+    // delete message query
+    query.mockResolvedValueOnce({ rowCount: 1 });
+
+    const mgr = new ChatManager(pool);
+    const result = await mgr.deleteMessage('m123', 'u1', false);
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(result).toEqual({ deleted: true });
+  });
+
+  test('deleteMessage() deletes message when user is admin (not sender)', async () => {
+    const pool = makePool();
+    const query = (pool as any).query as jest.Mock;
+    const row = makeRow({ id: 'm123', sender_id: 'u1' });
+    // getMessage query
+    query.mockResolvedValueOnce({ rows: [row] });
+    // delete reactions query
+    query.mockResolvedValueOnce({ rowCount: 0 });
+    // delete message query
+    query.mockResolvedValueOnce({ rowCount: 1 });
+
+    const mgr = new ChatManager(pool);
+    const result = await mgr.deleteMessage('m123', 'admin-user', true);
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(result).toEqual({ deleted: true });
+  });
+
+  test('deleteMessage() throws when user is not authorized', async () => {
+    const pool = makePool();
+    const query = (pool as any).query as jest.Mock;
+    const row = makeRow({ id: 'm123', sender_id: 'u1' });
+    // getMessage query
+    query.mockResolvedValueOnce({ rows: [row] });
+
+    const mgr = new ChatManager(pool);
+    await expect(mgr.deleteMessage('m123', 'other-user', false)).rejects.toThrow('not authorized to delete this message');
+  });
+
+  test('deleteMessage() throws when message not found', async () => {
+    const pool = makePool();
+    const query = (pool as any).query as jest.Mock;
+    query.mockResolvedValueOnce({ rows: [] });
+
+    const mgr = new ChatManager(pool);
+    await expect(mgr.deleteMessage('nonexistent', 'u1', false)).rejects.toThrow('message not found');
+  });
+
+  test('deleteMessage() validates required fields', async () => {
+    const pool = makePool();
+    const mgr = new ChatManager(pool);
+
+    await expect(mgr.deleteMessage('', 'u1', false)).rejects.toThrow('messageId required');
+    await expect(mgr.deleteMessage('m1', '', false)).rejects.toThrow('userId required');
+  });
 });

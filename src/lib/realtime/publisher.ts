@@ -73,3 +73,9 @@ export async function publishChatModerated(roomId: string, payload: { messageId:
   if (!supa) return;
   await supa.channel(`chat:${roomId}`).send({ type: 'broadcast', event: 'chat_moderated', payload });
 }
+
+export async function publishChatDeleted(roomId: string, payload: { messageId: string; deletedBy: string }) {
+  const supa = getSupabaseServer();
+  if (!supa) return;
+  await supa.channel(`chat:${roomId}`).send({ type: 'broadcast', event: 'chat_deleted', payload });
+}

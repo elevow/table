@@ -5,13 +5,15 @@ import { useSupabaseChatRealtime } from '../hooks/useSupabaseChatRealtime';
 interface ChatPanelProps {
   gameId: string;
   playerId?: string;
+  isAdmin?: boolean;
 }
 
-function ChatPanel({ gameId, playerId }: ChatPanelProps) {
+function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [reacting, setReacting] = useState<string | null>(null); // messageId currently reacting to
+  const [deleting, setDeleting] = useState<string | null>(null); // messageId currently being deleted
   const [reactions, setReactions] = useState<Record<string, Record<string, number>>>({});
   // Track current user's reactions for toggle behavior: myReactions[messageId][emoji] = true
   const [myReactions, setMyReactions] = useState<Record<string, Record<string, boolean>>>({});
@@ -100,6 +102,24 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
     );
   }, []);
 
+  const handleSupabaseDeleted = useCallback((payload: { messageId: string; deletedBy: string }) => {
+    if (!payload?.messageId) return;
+    // Skip if this is our own deletion (already handled optimistically)
+    if (playerId && payload.deletedBy === playerId) return;
+    setMessages(prev => prev.filter(m => m.id !== payload.messageId));
+    // Clean up reactions for deleted message
+    setReactions(prev => {
+      const next = { ...prev };
+      delete next[payload.messageId];
+      return next;
+    });
+    setMyReactions(prev => {
+      const next = { ...prev };
+      delete next[payload.messageId];
+      return next;
+    });
+  }, [playerId]);
+
   // Subscribe to Supabase realtime chat events
   useSupabaseChatRealtime(
     gameId,
@@ -108,6 +128,7 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
       onReaction: handleSupabaseReaction,
       onReactionRemoved: handleSupabaseReactionRemoved,
       onModerated: handleSupabaseModerated,
+      onDeleted: handleSupabaseDeleted,
     }
   );
 
@@ -219,12 +240,60 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
     }
   };
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!playerId) return;
+    setDeleting(messageId);
+    try {
+      // Optimistic removal
+      const messageToDelete = messages.find(m => m.id === messageId);
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      setReactions(prev => {
+        const next = { ...prev };
+        delete next[messageId];
+        return next;
+      });
+      setMyReactions(prev => {
+        const next = { ...prev };
+        delete next[messageId];
+        return next;
+      });
+
+      const res = await fetch('/api/chat/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId, userId: playerId }),
+      });
+
+      if (!res.ok) {
+        // Revert on failure
+        if (messageToDelete) {
+          setMessages(prev => [...prev, messageToDelete].sort((a, b) => 
+            new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+          ));
+        }
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e?.error || 'Failed to delete');
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Delete failed', err);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  // Check if user can delete a message (own message or admin)
+  const canDeleteMessage = useCallback((message: ChatMessage): boolean => {
+    if (!playerId) return false;
+    return message.senderId === playerId || isAdmin;
+  }, [playerId, isAdmin]);
+
   return (
     <div className="chat-panel">
       <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">Chat</h2>
       <div className="messages space-y-2 max-h-80 overflow-auto p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700">
         {messages.map((m) => (
-          <div key={m.id} className="message">
+          <div key={m.id} className="message group relative">
             <div className="text-sm text-gray-900 dark:text-gray-100">{m.message}</div>
             <div className="flex items-center gap-2 mt-1">
         {emojis.map((e) => (
@@ -239,6 +308,17 @@ function ChatPanel({ gameId, playerId }: ChatPanelProps) {
                   {e}
                 </button>
               ))}
+              {canDeleteMessage(m) && (
+                <button
+                  aria-label="Delete message"
+                  disabled={deleting === m.id}
+                  onClick={() => handleDeleteMessage(m.id)}
+                  className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
+                  title={m.senderId === playerId ? 'Delete your message' : 'Delete message (Admin)'}
+                >
+                  {deleting === m.id ? '...' : '🗑️'}
+                </button>
+              )}
               <div className="text-xs text-gray-600 dark:text-gray-400">
                 {Object.entries(reactions[m.id] || {}).map(([e, c]) => (
                   <span key={e} className="mr-2">{e} {c}</span>

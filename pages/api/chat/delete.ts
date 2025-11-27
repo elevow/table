@@ -3,42 +3,7 @@ import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { ChatService } from '../../../src/lib/services/chat-service';
 import { publishChatDeleted } from '../../../src/lib/realtime/publisher';
 import { getPool } from '../../../src/lib/database/pool';
-import { isAdminEmail } from '../../../src/utils/roleUtils';
-
-// Check if user is admin based on session
-async function isUserAdmin(req: NextApiRequest): Promise<boolean> {
-  try {
-    const authHeader = req.headers.authorization;
-    const sessionToken = authHeader?.replace('Bearer ', '') || req.cookies.session_token || req.cookies.auth_token;
-    
-    if (!sessionToken || sessionToken === 'null') {
-      return false;
-    }
-
-    const pool = getPool();
-    const client = await pool.connect();
-    
-    try {
-      const result = await client.query(
-        `SELECT u.email FROM users u 
-         JOIN auth_tokens at ON u.id = at.user_id 
-         WHERE at.token_hash = $1 AND at.expires_at > NOW()`,
-        [sessionToken]
-      );
-      
-      if (result.rows.length === 0) {
-        return false;
-      }
-      
-      const userEmail = result.rows[0].email;
-      return isAdminEmail(userEmail);
-    } finally {
-      client.release();
-    }
-  } catch {
-    return false;
-  }
-}
+import { isUserAdminBySession } from '../../../src/lib/api/admin-auth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -59,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const svc = new ChatService(pool);
     
     // Check if user is admin
-    const isAdmin = await isUserAdmin(req);
+    const isAdmin = await isUserAdminBySession(req, getPool);
     
     // Get the message before deletion to get roomId for broadcast
     const message = await svc.getMessage(String(messageId));

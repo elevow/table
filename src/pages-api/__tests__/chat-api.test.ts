@@ -16,6 +16,9 @@ jest.mock('../../../src/lib/realtime/publisher', () => ({
 jest.mock('../../../src/lib/database/pool', () => ({
   getPool: jest.fn().mockReturnValue({ query: jest.fn().mockResolvedValue({ rows: [] }), connect: jest.fn().mockResolvedValue({ query: jest.fn().mockResolvedValue({ rows: [] }), release: jest.fn() }) }),
 }));
+jest.mock('../../../src/lib/api/admin-auth', () => ({
+  isUserAdminBySession: jest.fn().mockResolvedValue(false),
+}));
 
 const mockService: any = {
   send: jest.fn(),

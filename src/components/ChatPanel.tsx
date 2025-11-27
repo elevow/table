@@ -261,9 +261,19 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
         return next;
       });
 
+      // Get auth token for admin authorization check
+      const authToken = typeof window !== 'undefined' 
+        ? localStorage.getItem('auth_token') || localStorage.getItem('session_token') 
+        : null;
+      
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      
       const res = await fetch('/api/chat/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ messageId, userId: playerId }),
       });
 

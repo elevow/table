@@ -167,8 +167,9 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
   const handleDeleteMessage = async (messageId: string) => {
     if (!playerId) return;
     setDeleting(messageId);
-    // Store the message for potential revert
-    const messageToDelete = messages.find(m => m.id === messageId);
+    // Store the message and its index for potential revert
+    const messageIndex = messages.findIndex(m => m.id === messageId);
+    const messageToDelete = messageIndex >= 0 ? messages[messageIndex] : null;
     try {
       // Optimistic removal
       setMessages(prev => prev.filter(m => m.id !== messageId));
@@ -190,11 +191,15 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
         body: JSON.stringify({ messageId, userId: playerId, isAdmin }),
       });
       if (!res.ok) {
-        // Revert on failure
+        // Revert on failure by inserting back at original position
         if (messageToDelete) {
-          setMessages(prev => [...prev, messageToDelete].sort((a, b) => 
-            new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
-          ));
+          setMessages(prev => {
+            const updated = [...prev];
+            // Insert at the original index, or at end if index is now out of bounds
+            const insertIndex = Math.min(messageIndex, updated.length);
+            updated.splice(insertIndex, 0, messageToDelete);
+            return updated;
+          });
         }
         const e = await res.json().catch(() => ({}));
         throw new Error(e?.error || 'Failed to delete');

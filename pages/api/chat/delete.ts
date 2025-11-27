@@ -22,11 +22,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     
     // Broadcast via Supabase Realtime if there's a room
+    // Note: Broadcast failures are non-critical - the delete already succeeded in the database.
+    // Connected clients will sync on their next fetch. This maintains consistency with other
+    // chat API endpoints (send, moderate) that also continue on broadcast failure.
     if (result.roomId) {
       try {
         await publishChatDeleted(result.roomId, { messageId: String(messageId), deletedBy: String(userId) });
       } catch {
-        // Continue if Supabase broadcast fails
+        // Continue if Supabase broadcast fails - delete was successful
       }
     }
     

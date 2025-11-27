@@ -1,5 +1,5 @@
 import { randomInt } from 'crypto';
-import { Server as SocketServer } from 'socket.io';
+import type { Broadcaster } from './broadcaster';
 import { PlayerAction, TableState, Player, DisconnectionState, RunItTwicePrompt, Card } from '../types/poker';
 import { ActionValidator } from './action-validator';
 import { StateManager } from './state-manager';
@@ -17,7 +17,7 @@ interface ActionResponse {
 
 export class ActionManager {
   private stateManager: StateManager;
-  private io: SocketServer;
+  private io: Broadcaster;
   private actionTimeouts: Map<string, NodeJS.Timeout>;
   // US-032: Track player disconnections with grace period and scheduled auto-actions
   private disconnects: Map<string, DisconnectionState>;
@@ -27,7 +27,7 @@ export class ActionManager {
   // Timed auto-runout timers (per table) for all-in reveals
   private autoRunoutTimers: Map<string, NodeJS.Timeout[]> = new Map();
 
-  constructor(stateManager: StateManager, io: SocketServer) {
+  constructor(stateManager: StateManager, io: Broadcaster) {
     this.stateManager = stateManager;
     this.io = io;
     this.actionTimeouts = new Map();
@@ -86,135 +86,7 @@ export class ActionManager {
   }
 
   private setupSocketHandlers(): void {
-    this.io.on('connection', (socket) => {
-      // On join, clear any pending disconnection state for this player if known
-      socket.on('join_table', ({ tableId, playerId }: { tableId: string; playerId: string }) => {
-        const key = `${tableId}:${playerId}`;
-        const disc = this.disconnects.get(key);
-        if (disc) {
-          // Player reconnected within grace period; cancel auto-action
-          this.clearAutoActionTimeout(key);
-          this.disconnects.delete(key);
-        }
-  (socket as any).playerId = playerId;
-  socket.join(tableId);
-  // Also join a personal room for per-player events (e.g., timebank updates)
-  socket.join(playerId);
-      });
-      socket.on('player_action', (action: PlayerAction, callback: (response: ActionResponse) => void) => {
-        // Remember identity and ensure socket is in the room for broadcasts
-        (socket as any).playerId = action.playerId;
-        socket.join(action.tableId);
-        this.handlePlayerAction(action)
-          .then(response => callback(response))
-          .catch(error => callback({ success: false, error: error.message }));
-      });
-
-      // Run It Twice enable/decline request; only the designated player may respond while a prompt is pending
-      socket.on('enable_run_it_twice', async (
-        { tableId, runs, playerId }: { tableId: string; runs: number; playerId?: string },
-        cb?: (resp: { success: boolean; error?: string }) => void
-      ) => {
-        try {
-          if (!tableId || typeof runs !== 'number') { cb?.({ success: false, error: 'Invalid parameters' }); return; }
-          const state = this.stateManager.getState(tableId);
-          if (!state) { cb?.({ success: false, error: 'Table not found' }); return; }
-          if (state.runItTwice?.enabled) { cb?.({ success: false, error: 'Already enabled' }); return; }
-          const requesterId = playerId || (socket as any).playerId;
-          const prompt = state.runItTwicePrompt;
-          if (prompt) {
-            if (!requesterId) { cb?.({ success: false, error: 'Unknown player' }); return; }
-            if (prompt.playerId !== requesterId) { cb?.({ success: false, error: 'Not authorized for Run It Twice decision' }); return; }
-          }
-          if (state.communityCards.length >= 5 || state.stage === 'showdown') { cb?.({ success: false, error: 'Too late' }); return; }
-          const anyAllIn = state.players.some(p => p.isAllIn);
-          if (!anyAllIn) { cb?.({ success: false, error: 'No all-in present' }); return; }
-          const activeCount = state.players.filter(p => !p.isFolded).length;
-          const maxRuns = Math.max(1, activeCount);
-          if (runs < 1 || runs > maxRuns) { cb?.({ success: false, error: `Runs must be 1-${maxRuns}` }); return; }
-
-          const awaitingPrompt = !!prompt;
-          if (awaitingPrompt && runs <= 1) {
-            console.debug('[auto-runout] Run It Twice declined; revealing all hands and resuming runout', { tableId, requesterId });
-            const revealedState = this.mergeEngineHoleCards(tableId, state);
-            this.stateManager.updateState(tableId, {
-              players: revealedState.players,
-              runItTwicePrompt: null,
-              activePlayer: '' as any,
-              runItTwicePromptDisabled: true,
-            });
-            const resumeState: TableState = {
-              ...revealedState,
-              runItTwicePrompt: null,
-              activePlayer: '' as any,
-              runItTwicePromptDisabled: true,
-            };
-            this.maybeScheduleAutoRunout(tableId, resumeState);
-            cb?.({ success: true });
-            return;
-          }
-
-          if (!awaitingPrompt && runs === 1) {
-            cb?.({ success: false, error: 'Multiple runs required' });
-            return;
-          }
-
-          const engine = this.getOrCreateEngine(tableId, state);
-          // Sync public info (hole + community) into engine clone state
-          const engState = (engine as any).getState();
-          engState.communityCards = [...state.communityCards];
-          engState.players.forEach((ep: any) => {
-            const sp = state.players.find(p => p.id === ep.id);
-            if (sp?.holeCards) ep.holeCards = sp.holeCards;
-            ep.isAllIn = sp?.isAllIn;
-            ep.isFolded = sp?.isFolded;
-          });
-
-          engine.enableRunItTwice(runs);
-          const rit = engine.getState().runItTwice;
-          const revealedState = this.mergeEngineHoleCards(tableId, state);
-          this.stateManager.updateState(tableId, {
-            players: revealedState.players,
-            runItTwice: rit,
-            runItTwicePrompt: null,
-            activePlayer: '' as any,
-            runItTwicePromptDisabled: true,
-          });
-          this.io.to(tableId).emit('rit_enabled', { tableId, runs, rit });
-          const updatedState: TableState = {
-            ...revealedState,
-            runItTwice: rit,
-            runItTwicePrompt: null,
-            activePlayer: '' as any,
-            runItTwicePromptDisabled: true,
-          };
-          this.maybeScheduleAutoRunout(tableId, updatedState);
-          cb?.({ success: true });
-        } catch (e: any) {
-          cb?.({ success: false, error: e?.message || 'Failed to enable Run It Twice' });
-        }
-      });
-
-      // US-034: Allow clients to consume their time bank for the active turn
-      socket.on('use_timebank', (
-        { tableId, playerId }: { tableId: string; playerId: string },
-        callback?: (resp: { success: boolean }) => void
-      ) => {
-        const success = this.timerManager.useTimeBank(tableId, playerId);
-        if (callback) callback({ success });
-      });
-
-      // Track disconnects and schedule auto-actions
-      socket.on('disconnect', (reason) => {
-        // Expect client to have identified with last join_table; if not, skip
-        const rooms = Array.from(socket.rooms).filter(r => r !== socket.id);
-        const tableId = rooms[0];
-        const playerId = (socket as any).playerId as string | undefined;
-        if (!tableId || !playerId) return;
-
-        this.scheduleAutoAction(tableId, playerId);
-      });
-    });
+    // Socket.IO handlers have been removed. Event handling is now done via HTTP/Supabase.
   }
 
   public async handlePlayerAction(action: PlayerAction): Promise<ActionResponse> {

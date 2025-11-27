@@ -13,7 +13,6 @@ export default function InvitesList({ userId, kind = 'incoming', page = 1, limit
   const [data, setData] = useState<Paginated<FriendInviteRecord> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [socket, setSocket] = useState<any>(null);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -25,57 +24,6 @@ export default function InvitesList({ userId, kind = 'incoming', page = 1, limit
       .finally(() => setLoading(false));
     return () => ctl.abort();
   }, [userId, kind, page, limit]);
-
-  // Initialize socket connection (non-blocking)
-  useEffect(() => {
-    const initSocket = async () => {
-      try {
-        const { getSocket } = await import('../lib/clientSocket');
-        const socketInstance = await getSocket();
-        setSocket(socketInstance);
-      } catch (error) {
-        console.warn('Invites socket initialization failed, continuing without real-time updates:', error);
-      }
-    };
-    
-    // Don't block page load for socket initialization
-    setTimeout(() => {
-      initSocket();
-    }, 400);
-  }, []);
-
-  // Realtime: join personal room and listen for invites updates
-  useEffect(() => {
-    if (!socket || !userId) return;
-
-    const onCreated = ({ invite }: { invite: FriendInviteRecord }) => {
-      // Only update if relevant to this list type
-      const relevant = kind === 'incoming' ? invite.inviteeId === userId : invite.inviterId === userId;
-      if (!relevant) return;
-      setData(prev => {
-        if (!prev) return prev;
-        const exists = prev.items.some(i => i.id === invite.id);
-        const items = exists ? prev.items.map(i => (i.id === invite.id ? invite : i)) : [invite, ...prev.items];
-        return { ...prev, items };
-      });
-    };
-
-    const onUpdated = ({ invite }: { invite: FriendInviteRecord }) => {
-      const relevant = kind === 'incoming' ? invite.inviteeId === userId : invite.inviterId === userId;
-      if (!relevant) return;
-      setData(prev => (prev ? { ...prev, items: prev.items.map(i => (i.id === invite.id ? invite : i)) } : prev));
-    };
-
-    // Ensure we are in our personal room (server joins on gameplay, but friends page may be standalone)
-    socket.emit('join_table', { tableId: `user:${userId}`, playerId: userId });
-    socket.on('friends:invite_created', onCreated);
-    socket.on('friends:invite_updated', onUpdated);
-
-    return () => {
-      socket.off('friends:invite_created', onCreated);
-      socket.off('friends:invite_updated', onUpdated);
-    };
-  }, [userId, kind, socket]);
 
   const items = useMemo(() => data?.items ?? [], [data]);
 

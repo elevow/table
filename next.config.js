@@ -33,7 +33,7 @@ module.exports = (phase, { defaultConfig }) => {
               )[1];
               
               // Major vendors go to their own chunk, rest go to vendors
-              const majorVendors = ['react', 'react-dom', 'next', 'socket.io-client'];
+              const majorVendors = ['react', 'react-dom', 'next'];
               if (majorVendors.includes(packageName)) {
                 return `vendor-${packageName}`;
               }

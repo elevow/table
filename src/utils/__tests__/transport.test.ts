@@ -1,13 +1,33 @@
-import { getTransportMode, setTransportMode } from '../transport';
+import { getTransportMode, setTransportMode, TransportMode } from '../transport';
 
-describe('transport', () => {
-  it('should return default transport mode', () => {
-    const mode = getTransportMode();
-    expect(['socket', 'supabase', 'hybrid']).toContain(mode);
+describe('Transport Utility', () => {
+  describe('getTransportMode()', () => {
+    it('should always return supabase', () => {
+      expect(getTransportMode()).toBe('supabase');
+    });
+
+    it('should return supabase type', () => {
+      const mode: TransportMode = getTransportMode();
+      expect(mode).toBe('supabase');
+    });
   });
 
-  it('should handle setTransportMode in test environment', () => {
-    // In Node.js test environment, window is undefined, so this should not throw
-    expect(() => setTransportMode('supabase')).not.toThrow();
+  describe('setTransportMode()', () => {
+    it('should not throw when called with supabase', () => {
+      expect(() => setTransportMode('supabase')).not.toThrow();
+    });
+
+    it('should still return supabase after calling setTransportMode', () => {
+      setTransportMode('supabase');
+      expect(getTransportMode()).toBe('supabase');
+    });
+  });
+
+  describe('TransportMode type', () => {
+    it('should only allow supabase as a valid value', () => {
+      // This is a compile-time check, but we can verify at runtime
+      const validMode: TransportMode = 'supabase';
+      expect(validMode).toBe('supabase');
+    });
   });
 });

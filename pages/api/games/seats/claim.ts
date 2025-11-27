@@ -1,17 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import type { Server as HttpServer } from 'http';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
 import { publishSeatClaimed, publishSeatState } from '../../../../src/lib/realtime/publisher';
 import { fetchRoomRebuyLimit } from '../../../../src/lib/shared/rebuy-limit';
 import { getPlayerRebuyInfo, recordBuyin } from '../../../../src/lib/shared/rebuy-tracker';
 
-interface NextApiResponseServerIO extends NextApiResponse {
-  socket: any & {
-    server: HttpServer & { io?: any };
-  };
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponseServerIO) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
@@ -64,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseS
 
     const seatPayload = { seatNumber, playerId, playerName, chips: Number(chips) || 20 };
 
-    // Fan out to Supabase realtime (best-effort)
+    // Fan out to Supabase realtime
     try {
       await Promise.all([
         publishSeatClaimed(String(tableId), seatPayload),
@@ -73,19 +66,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseS
     } catch (pubErr) {
       console.warn('Seat claim Supabase publish failed:', pubErr);
     }
-
-    // Broadcast via Socket.IO if server is present (hybrid support)
-    try {
-      const io = res.socket?.server?.io;
-      if (io) {
-        io.to(`table_${tableId}`).emit('seat_claimed', {
-          seatNumber,
-          playerId,
-          playerName,
-          chips: Number(chips) || 20,
-        });
-      }
-    } catch {}
 
     const rebuyRecord = recordBuyin(roomId, playerId);
 

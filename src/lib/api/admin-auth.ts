@@ -37,7 +37,7 @@ export async function isUserAdminBySession(req: NextApiRequest, getPool: () => a
       const result = await client.query(
         `SELECT u.email FROM users u 
          JOIN auth_tokens at ON u.id = at.user_id 
-         WHERE at.token_hash = $1 AND at.type = 'session' AND at.expires_at > NOW()`,
+         WHERE at.token_hash = $1 AND at.expires_at > NOW()`,
         [sessionToken]
       );
       

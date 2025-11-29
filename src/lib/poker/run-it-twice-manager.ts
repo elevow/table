@@ -172,16 +172,22 @@ export const determineRunItTwicePrompt = (state: TableState, boardOverride?: Car
 
     let weakest = contenders[0];
     let weakestGroup = [contenders[0]];
+    let strongest = contenders[0];
     for (let i = 1; i < contenders.length; i++) {
       const candidate = contenders[i];
-      const cmp = HandEvaluator.compareHands(candidate.hand, weakest.hand);
+      const cmpWeak = HandEvaluator.compareHands(candidate.hand, weakest.hand);
       // compareHands returns 1 if first hand wins, -1 if second wins
       // So negative cmp means candidate is weaker than current weakest
-      if (cmp < 0) {
+      if (cmpWeak < 0) {
         weakest = candidate;
         weakestGroup = [candidate];
-      } else if (cmp === 0) {
+      } else if (cmpWeak === 0) {
         weakestGroup.push(candidate);
+      }
+      // Track strongest hand
+      const cmpStrong = HandEvaluator.compareHands(candidate.hand, strongest.hand);
+      if (cmpStrong > 0) {
+        strongest = candidate;
       }
     }
 
@@ -203,6 +209,7 @@ export const determineRunItTwicePrompt = (state: TableState, boardOverride?: Car
       createdAt: Date.now(),
       boardCardsCount: board.length,
       handDescription: chosen.description || undefined,
+      highestHandDescription: strongest.description || undefined,
       handDescriptionsByPlayer: Object.keys(handDescriptionsByPlayer).length ? handDescriptionsByPlayer : undefined,
       eligiblePlayerIds: contenders.map((c) => c.playerId),
       tiedWith: tiedWith.length ? tiedWith : undefined,

@@ -2848,7 +2848,7 @@ export default function GamePage() {
           
           {/* Less critical component in viewport */}
           <div ref={chatPanelRef} className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6">
-            <ChatPanel gameId={String(id)} playerId={playerId} />
+            <ChatPanel gameId={String(id)} playerId={playerId} isAdmin={userRole === 'admin'} />
           </div>
 
           {/* Settings panel moved next to stats above; bottom button removed */}

@@ -326,6 +326,9 @@ export default function GamePage() {
   // Auto next-hand fallback timer ref
   const autoNextHandTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoNextHandScheduledRef = useRef<boolean>(false);
+  // Auto-runout timer ref (for all-in street reveals)
+  const autoRunoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoRunoutInProgressRef = useRef<boolean>(false);
   // Visual accessibility options
   const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
   // Dealer's Choice: pending choice prompt from server
@@ -500,6 +503,95 @@ export default function GamePage() {
       autoNextHandScheduledRef.current = false;
     };
   }, [pokerGameState?.stage, id, playerId]);
+
+  // Client-side auto-runout: when all-in detected and community cards remaining, poll server every 5s
+  useEffect(() => {
+    if (!id || typeof id !== 'string') return;
+    if (!pokerGameState) return;
+
+    const stage = pokerGameState.stage;
+    const players = pokerGameState.players || [];
+    const communityCards = pokerGameState.communityCards || [];
+    const runItTwicePrompt = pokerGameState.runItTwicePrompt;
+
+    // Check if we need auto-runout:
+    // 1. Not at showdown
+    // 2. At least 2 active (non-folded) players
+    // 3. At least one all-in player
+    // 4. At most 1 non-all-in player (betting is closed)
+    // 5. Community cards < 5 (more to reveal)
+    // 6. No run-it-twice prompt active
+    const activePlayers = players.filter((p: any) => !p.isFolded);
+    const activeCount = activePlayers.length;
+    const anyAllIn = activePlayers.some((p: any) => p.isAllIn);
+    const nonAllInCount = activePlayers.filter((p: any) => !p.isAllIn).length;
+    const communityLen = communityCards.length;
+    const needsMoreCards = communityLen < 5;
+
+    const shouldAutoRunout = stage !== 'showdown' &&
+      activeCount >= 2 &&
+      anyAllIn &&
+      nonAllInCount <= 1 &&
+      needsMoreCards &&
+      !runItTwicePrompt;
+
+    console.log('[client auto-runout] check:', {
+      stage,
+      activeCount,
+      anyAllIn,
+      nonAllInCount,
+      communityLen,
+      needsMoreCards,
+      hasPrompt: !!runItTwicePrompt,
+      shouldAutoRunout
+    });
+
+    if (!shouldAutoRunout) {
+      if (autoRunoutTimerRef.current) {
+        clearTimeout(autoRunoutTimerRef.current);
+        autoRunoutTimerRef.current = null;
+      }
+      autoRunoutInProgressRef.current = false;
+      return;
+    }
+
+    // Already have a timer scheduled
+    if (autoRunoutTimerRef.current || autoRunoutInProgressRef.current) {
+      return;
+    }
+
+    autoRunoutInProgressRef.current = true;
+    console.log('[client auto-runout] scheduling advance in 5 seconds');
+    
+    autoRunoutTimerRef.current = setTimeout(async () => {
+      try {
+        console.log('[client auto-runout] calling /api/games/advance-runout');
+        const response = await fetch('/api/games/advance-runout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tableId: id }),
+        });
+        const data = await response.json();
+        console.log('[client auto-runout] response:', data);
+      } catch (e) {
+        console.warn('[client auto-runout] request failed:', e);
+      } finally {
+        if (autoRunoutTimerRef.current) {
+          clearTimeout(autoRunoutTimerRef.current);
+          autoRunoutTimerRef.current = null;
+        }
+        autoRunoutInProgressRef.current = false;
+      }
+    }, 5000);
+
+    return () => {
+      if (autoRunoutTimerRef.current) {
+        clearTimeout(autoRunoutTimerRef.current);
+        autoRunoutTimerRef.current = null;
+      }
+      autoRunoutInProgressRef.current = false;
+    };
+  }, [pokerGameState, id]);
   
   // Periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {

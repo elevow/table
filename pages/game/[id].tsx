@@ -1002,6 +1002,7 @@ export default function GamePage() {
     const viewerDesc = viewerId ? runItTwicePrompt.handDescriptionsByPlayer?.[viewerId] : null;
     return viewerDesc || runItTwicePrompt.handDescription || null;
   }, [runItTwicePrompt, playerId]);
+  const runItTwiceHighestHandDescription = runItTwicePrompt?.highestHandDescription || null;
   const runItTwiceBoards = Array.isArray(pokerGameState?.runItTwice?.boards)
     ? pokerGameState.runItTwice.boards
     : [];
@@ -2515,9 +2516,9 @@ export default function GamePage() {
               </div>
               <div className="mt-3 text-sm text-purple-900 dark:text-purple-100 space-y-2">
                 <p>You currently have the lowest revealed hand and must choose how the board finishes.</p>
-                {runItTwiceViewerHandDescription && (
+                {runItTwiceHighestHandDescription && (
                   <p className="text-[13px] text-purple-800 dark:text-purple-200">
-                    Current best: <span className="font-semibold">{runItTwiceViewerHandDescription}</span>
+                    Current best: <span className="font-semibold">{runItTwiceHighestHandDescription}</span>
                   </p>
                 )}
                 {!!runItTwicePromptTieNames.length && (
@@ -2565,9 +2566,9 @@ export default function GamePage() {
                   {' '}
                   chooses how many boards to run after the all-in showdown.
                 </p>
-                {runItTwiceViewerHandDescription && (
+                {runItTwiceHighestHandDescription && (
                   <p className="text-[13px] text-purple-800 dark:text-purple-200">
-                    Current best hand: <span className="font-semibold">{runItTwiceViewerHandDescription}</span>
+                    Current best hand: <span className="font-semibold">{runItTwiceHighestHandDescription}</span>
                   </p>
                 )}
                 {!!runItTwicePromptTieNames.length && (

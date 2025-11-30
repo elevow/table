@@ -163,6 +163,7 @@ export interface RunItTwicePrompt {
   createdAt: number; // epoch ms when prompt issued
   boardCardsCount: number; // number of community cards visible at prompt time
   handDescription?: string; // textual summary of their current best hand
+  highestHandDescription?: string; // textual summary of the highest hand among eligible players
   handDescriptionsByPlayer?: Record<string, string>; // per-player best-hand description for eligible players
   eligiblePlayerIds: string[]; // players considered when determining lowest hand
   tiedWith?: string[]; // other players with identical strength when tie-breaking randomly

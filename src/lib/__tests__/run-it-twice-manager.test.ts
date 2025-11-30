@@ -88,6 +88,28 @@ describe('run-it-twice-manager', () => {
     expect(enriched.activePlayer).toBe('weak');
   });
 
+  it('includes highestHandDescription for the strongest hand player', () => {
+    const state = makeState();
+    const prompt = maybeCreateRunItPrompt(tableId, state, {
+      communityOverride: flop,
+      boardVisibleCount: flop.length,
+      stageOverride: 'flop',
+    });
+
+    expect(prompt).toBeTruthy();
+    // The weak player should make the decision (lowest hand)
+    expect(prompt!.playerId).toBe('weak');
+    // The handDescription should be the weak player's hand (lowest hand)
+    expect(prompt!.handDescription).toBeDefined();
+    // The highestHandDescription should be the strong player's hand
+    expect(prompt!.highestHandDescription).toBeDefined();
+    // The highest hand should be different from the lowest hand
+    expect(prompt!.highestHandDescription).not.toBe(prompt!.handDescription);
+    // Verify both players' hands are in handDescriptionsByPlayer
+    expect(prompt!.handDescriptionsByPlayer?.['weak']).toBe(prompt!.handDescription);
+    expect(prompt!.handDescriptionsByPlayer?.['strong']).toBe(prompt!.highestHandDescription);
+  });
+
   it('does not mask board when no prompt exists', () => {
     const state = makeState();
     const enriched = enrichStateWithRunIt(tableId, state);

@@ -4,7 +4,6 @@ import dynamic from 'next/dynamic';
 import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
 import { useComponentPerformance } from '../../src/utils/performance-monitor';
 import { createInvite } from '../../src/services/friends-ui';
-import { determineUserRole } from '../../src/utils/roleUtils';
 import { useUserAvatar } from '../../src/hooks/useUserAvatar';
 import Avatar from '../../src/components/Avatar';
 import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
@@ -1699,35 +1698,37 @@ export default function GamePage() {
 
   // Determine user role - separate useEffect to prevent infinite loops
   useEffect(() => {
-    const determineRole = () => {
+    const determineRole = async () => {
       try {
         const token = localStorage.getItem('auth_token');
-        const userStr = localStorage.getItem('user');
         
         if (!token) {
           setUserRole('guest');
           return;
         }
         
-        if (userStr) {
-          try {
-            const user = JSON.parse(userStr);
-            if (user && user.email) {
-              // eslint-disable-next-line no-console
-              console.log('[GamePage] Determining role for email:', user.email);
-              const role = determineUserRole(user.email, false);
-              // eslint-disable-next-line no-console
-              console.log('[GamePage] Determined role:', role);
-              setUserRole(role);
-              return;
-            }
-          } catch (parseError) {
-            console.warn('Could not parse user data:', parseError);
-          }
-        }
+        // Call the server-side API to check admin status
+        // (environment variables like ADMIN_EMAILS are only available server-side)
+        const res = await fetch('/api/auth/check-admin', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
         
-        // Fallback to player if token exists but no user email available
-        setUserRole('player');
+        if (res.ok) {
+          const data = await res.json();
+          // eslint-disable-next-line no-console
+          console.log('[GamePage] Admin check response:', data);
+          
+          if (data.isAdmin) {
+            setUserRole('admin');
+          } else {
+            setUserRole('player');
+          }
+        } else {
+          // Fallback to player if API fails
+          setUserRole('player');
+        }
       } catch (error) {
         console.warn('Could not determine user role:', error);
         setUserRole('guest');

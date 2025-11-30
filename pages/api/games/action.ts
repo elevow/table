@@ -142,8 +142,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const enrichedState = await broadcastState(gameState, { action, playerId, amount });
 
     const shouldScheduleAutoRunout = autoEligible && !issuedPrompt;
+    console.log('[action.ts] autoRunout check:', { autoEligible, issuedPrompt: !!issuedPrompt, shouldScheduleAutoRunout });
     if (shouldScheduleAutoRunout) {
-      scheduleSupabaseAutoRunout(tableId, engine, (state, meta) => broadcastState(state, meta).then(() => {}));
+      console.log('[action.ts] calling scheduleSupabaseAutoRunout');
+      const scheduled = scheduleSupabaseAutoRunout(tableId, engine, (state, meta) => {
+        console.log('[action.ts] auto-runout broadcast callback:', meta.action);
+        return broadcastState(state, meta).then(() => {});
+      });
+      console.log('[action.ts] scheduleSupabaseAutoRunout returned:', scheduled);
     }
 
     return res.status(200).json({ success: true, gameState: enrichedState });

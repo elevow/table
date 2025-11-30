@@ -19,7 +19,8 @@ function getIo(res: NextApiResponse): any | null {
 }
 
 // Server-side lock to prevent duplicate reveals
-const getRunoutLocks = (): Map<string, { lastAdvanceTime: number; lastCommunityLen: number }> => {
+// Tracks what stage we've already revealed TO (the resulting stage after reveal)
+const getRunoutLocks = (): Map<string, { lastAdvanceTime: number; lastRevealedStage: string }> => {
   const g = global as any;
   if (!g.__runoutLocks) {
     g.__runoutLocks = new Map();
@@ -57,17 +58,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     console.log('[advance-runout] called for tableId:', tableId, 'stage:', state.stage, 'communityCards:', communityLen);
 
-    // Check for duplicate requests using server-side lock
-    const locks = getRunoutLocks();
-    const lock = locks.get(tableId);
-    const now = Date.now();
-    
-    // If we've already advanced within the last 4 seconds for this community length, skip
-    if (lock && lock.lastCommunityLen === communityLen && (now - lock.lastAdvanceTime) < 4000) {
-      console.log('[advance-runout] duplicate request detected, skipping (last advance:', now - lock.lastAdvanceTime, 'ms ago)');
-      return res.status(200).json({ success: false, reason: 'duplicate_request' });
-    }
-
     // Check if we should advance the runout
     if (!isAutoRunoutEligible(state)) {
       console.log('[advance-runout] not eligible for auto-runout');
@@ -84,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ success: false, reason: 'already_showdown' });
     }
     
-    // Determine next street to reveal
+    // Determine next street to reveal based on community cards
     let nextStreet: 'flop' | 'turn' | 'river' | 'showdown' | null = null;
     if (communityLen < 3) {
       nextStreet = 'flop';
@@ -101,8 +91,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ success: false, reason: 'no_more_streets' });
     }
 
-    // Update the lock before proceeding
-    locks.set(tableId, { lastAdvanceTime: now, lastCommunityLen: communityLen });
+    // Check for duplicate requests using server-side lock
+    // We track what stage we've already revealed TO, not what we started with
+    const locks = getRunoutLocks();
+    const lock = locks.get(tableId);
+    const now = Date.now();
+    
+    // If we've already revealed TO this stage within the last 4 seconds, skip
+    if (lock && lock.lastRevealedStage === nextStreet && (now - lock.lastAdvanceTime) < 4000) {
+      console.log('[advance-runout] duplicate request detected for', nextStreet, '- skipping (last advance:', now - lock.lastAdvanceTime, 'ms ago)');
+      return res.status(200).json({ success: false, reason: 'duplicate_request', street: nextStreet });
+    }
+
+    // Update the lock with the stage we're about to reveal TO
+    locks.set(tableId, { lastAdvanceTime: now, lastRevealedStage: nextStreet });
 
     console.log('[advance-runout] advancing to', nextStreet);
 
@@ -192,6 +194,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       stage: nextStreet,
       activePlayer: '' as any,
     };
+
+    // Also update the engine state to keep it in sync
+    try {
+      const engineState = engine.getState();
+      engineState.communityCards = projectedCommunity;
+      engineState.stage = nextStreet;
+    } catch {
+      // Engine state update is best-effort
+    }
 
     const enrichedState = await broadcastState(staged, { action: `auto_runout_${nextStreet}` });
     console.log('[advance-runout]', nextStreet, 'broadcast complete');

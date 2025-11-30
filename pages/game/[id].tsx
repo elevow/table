@@ -329,6 +329,7 @@ export default function GamePage() {
   // Auto-runout timer ref (for all-in street reveals)
   const autoRunoutTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoRunoutInProgressRef = useRef<boolean>(false);
+  const autoRunoutLastCommunityLenRef = useRef<number>(-1);
   // Visual accessibility options
   const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
   // Dealer's Choice: pending choice prompt from server
@@ -543,7 +544,8 @@ export default function GamePage() {
       communityLen,
       needsMoreCards,
       hasPrompt: !!runItTwicePrompt,
-      shouldAutoRunout
+      shouldAutoRunout,
+      lastCommunityLen: autoRunoutLastCommunityLenRef.current
     });
 
     if (!shouldAutoRunout) {
@@ -552,20 +554,30 @@ export default function GamePage() {
         autoRunoutTimerRef.current = null;
       }
       autoRunoutInProgressRef.current = false;
+      autoRunoutLastCommunityLenRef.current = -1;
       return;
     }
 
-    // Already have a timer scheduled
-    if (autoRunoutTimerRef.current || autoRunoutInProgressRef.current) {
+    // Skip if we already scheduled for this community card count
+    if (autoRunoutLastCommunityLenRef.current === communityLen) {
+      console.log('[client auto-runout] already scheduled for communityLen:', communityLen);
       return;
     }
 
+    // Already have a timer scheduled for a different community length - clear it
+    if (autoRunoutTimerRef.current) {
+      clearTimeout(autoRunoutTimerRef.current);
+      autoRunoutTimerRef.current = null;
+    }
+
+    // Mark that we're scheduling for this community length
+    autoRunoutLastCommunityLenRef.current = communityLen;
     autoRunoutInProgressRef.current = true;
-    console.log('[client auto-runout] scheduling advance in 5 seconds');
+    console.log('[client auto-runout] scheduling advance in 5 seconds for communityLen:', communityLen);
     
     autoRunoutTimerRef.current = setTimeout(async () => {
       try {
-        console.log('[client auto-runout] calling /api/games/advance-runout');
+        console.log('[client auto-runout] calling /api/games/advance-runout for communityLen:', communityLen);
         const response = await fetch('/api/games/advance-runout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

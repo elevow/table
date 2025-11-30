@@ -5,6 +5,7 @@ import {
   enrichStateWithRunIt,
   isAutoRunoutEligible,
 } from '../../../src/lib/poker/run-it-twice-manager';
+import { clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import type { TableState } from '../../../src/types/poker';
 
 function getIo(res: NextApiResponse): any | null {
@@ -16,6 +17,15 @@ function getIo(res: NextApiResponse): any | null {
     return null;
   }
 }
+
+// Server-side lock to prevent duplicate reveals
+const getRunoutLocks = (): Map<string, { lastAdvanceTime: number; lastCommunityLen: number }> => {
+  const g = global as any;
+  if (!g.__runoutLocks) {
+    g.__runoutLocks = new Map();
+  }
+  return g.__runoutLocks;
+};
 
 /**
  * API endpoint to advance the auto-runout to the next street.
@@ -32,6 +42,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    // Clear any server-side auto-runout timers since client is now polling
+    clearSupabaseAutoRunout(tableId);
+    
     // Get the active game engine
     const g: any = global as any;
     const engine = g?.activeGames?.get(tableId);
@@ -40,7 +53,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const state = engine.getState();
-    console.log('[advance-runout] called for tableId:', tableId, 'stage:', state.stage, 'communityCards:', state.communityCards?.length);
+    const communityLen = Array.isArray(state.communityCards) ? state.communityCards.length : 0;
+    
+    console.log('[advance-runout] called for tableId:', tableId, 'stage:', state.stage, 'communityCards:', communityLen);
+
+    // Check for duplicate requests using server-side lock
+    const locks = getRunoutLocks();
+    const lock = locks.get(tableId);
+    const now = Date.now();
+    
+    // If we've already advanced within the last 4 seconds for this community length, skip
+    if (lock && lock.lastCommunityLen === communityLen && (now - lock.lastAdvanceTime) < 4000) {
+      console.log('[advance-runout] duplicate request detected, skipping (last advance:', now - lock.lastAdvanceTime, 'ms ago)');
+      return res.status(200).json({ success: false, reason: 'duplicate_request' });
+    }
 
     // Check if we should advance the runout
     if (!isAutoRunoutEligible(state)) {
@@ -57,8 +83,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.log('[advance-runout] already at showdown');
       return res.status(200).json({ success: false, reason: 'already_showdown' });
     }
-
-    const communityLen = Array.isArray(state.communityCards) ? state.communityCards.length : 0;
     
     // Determine next street to reveal
     let nextStreet: 'flop' | 'turn' | 'river' | 'showdown' | null = null;
@@ -76,6 +100,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.log('[advance-runout] no more streets to reveal');
       return res.status(200).json({ success: false, reason: 'no_more_streets' });
     }
+
+    // Update the lock before proceeding
+    locks.set(tableId, { lastAdvanceTime: now, lastCommunityLen: communityLen });
 
     console.log('[advance-runout] advancing to', nextStreet);
 

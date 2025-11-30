@@ -119,6 +119,9 @@ export class ChatManager {
     }
 
     // Delete associated reactions first
+    // NOTE: The database schema should enforce a foreign key constraint on chat_reactions.message_id
+    // referencing chat_messages.id with ON DELETE CASCADE, so reactions are deleted automatically.
+    // This explicit deletion handles cases where the constraint may not exist.
     await this.pool.query(
       `DELETE FROM chat_reactions WHERE message_id = $1`,
       [messageId]

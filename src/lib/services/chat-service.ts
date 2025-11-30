@@ -39,11 +39,26 @@ export class ChatService {
     return this.mgr.moderate(messageId, moderatorId, hide);
   }
 
+  /**
+   * Retrieves a chat message by its ID.
+   * @param messageId - The unique identifier of the message
+   * @returns The chat message if found, null otherwise
+   * @throws Error if messageId is empty or invalid
+   */
   async getMessage(messageId: string) {
     if (!messageId) throw new Error('messageId required');
     return this.mgr.getMessage(messageId);
   }
 
+  /**
+   * Deletes a chat message and its associated reactions.
+   * Users can delete their own messages, admins can delete any message.
+   * @param messageId - The unique identifier of the message to delete
+   * @param userId - The ID of the user requesting the deletion
+   * @param isAdmin - Whether the requesting user has admin privileges
+   * @returns Object indicating whether the deletion was successful
+   * @throws Error if messageId or userId is empty, message not found, or user not authorized
+   */
   async deleteMessage(messageId: string, userId: string, isAdmin: boolean) {
     if (!messageId) throw new Error('messageId required');
     if (!userId) throw new Error('userId required');

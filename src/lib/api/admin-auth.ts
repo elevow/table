@@ -1,10 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import type { Pool } from 'pg';
 import { isAdminEmail } from '../../utils/roleUtils';
 
 // Simple admin auth guard using a shared token header.
 // In production, replace with session-based RBAC.
 export function isAdminAuthorized(req: NextApiRequest): boolean {
-  const headerToken = req.headers['x-admin-token'] || req.headers['X-Admin-Token' as any];
+  const headerToken = req.headers['x-admin-token'] || req.headers['X-Admin-Token' as keyof typeof req.headers];
   const token = Array.isArray(headerToken) ? headerToken[0] : headerToken;
   const expected = process.env.ADMIN_API_TOKEN;
   if (!expected) return false;
@@ -21,7 +22,7 @@ export function requireAdmin(req: NextApiRequest, res: NextApiResponse): boolean
 
 // Session-based admin check using auth_tokens table.
 // This checks the user's email against the ADMIN_EMAILS environment variable.
-export async function isUserAdminBySession(req: NextApiRequest, getPool: () => any): Promise<boolean> {
+export async function isUserAdminBySession(req: NextApiRequest, getPool: () => Pool): Promise<boolean> {
   try {
     const authHeader = req.headers.authorization;
     const sessionToken = authHeader?.replace('Bearer ', '') || req.cookies.session_token || req.cookies.auth_token;

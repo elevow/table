@@ -12,7 +12,10 @@ describe('admin-auth', () => {
     jest.restoreAllMocks();
   });
 
-  const makeReq = (headers: Record<string, any> = {}, cookies: Record<string, any> = {}): NextApiRequest => {
+  const makeReq = (
+    headers: Record<string, string | string[] | undefined> = {},
+    cookies: Record<string, string> = {}
+  ): NextApiRequest => {
     return { headers, cookies } as unknown as NextApiRequest;
   };
 

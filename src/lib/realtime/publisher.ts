@@ -74,6 +74,11 @@ export async function publishChatModerated(roomId: string, payload: { messageId:
   await supa.channel(`chat:${roomId}`).send({ type: 'broadcast', event: 'chat_moderated', payload });
 }
 
+/**
+ * Broadcasts a chat message deletion event to all users in a room via Supabase Realtime.
+ * @param roomId - The ID of the room where the message was deleted
+ * @param payload - Object containing the deleted messageId and the userId who deleted it
+ */
 export async function publishChatDeleted(roomId: string, payload: { messageId: string; deletedBy: string }) {
   const supa = getSupabaseServer();
   if (!supa) return;

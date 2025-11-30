@@ -2,9 +2,14 @@ import type { Pool } from 'pg';
 import { ChatManager } from '../chat-manager';
 import type { ChatMessageRow } from '../../../types/chat';
 
+// Mock pool type for testing - allows access to the query mock
+interface MockPool extends Pool {
+  query: jest.Mock;
+}
+
 describe('ChatManager', () => {
-  const makePool = () => {
-    return { query: jest.fn() } as unknown as Pool;
+  const makePool = (): MockPool => {
+    return { query: jest.fn() } as unknown as MockPool;
   };
 
   const makeRow = (overrides: Partial<ChatMessageRow> = {}): ChatMessageRow => ({
@@ -22,15 +27,14 @@ describe('ChatManager', () => {
 
   test('send() inserts a room message and maps result', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
     const row = makeRow({ is_private: false, recipient_id: null });
-    query.mockResolvedValueOnce({ rows: [row] });
+    pool.query.mockResolvedValueOnce({ rows: [row] });
 
     const mgr = new ChatManager(pool);
     const result = await mgr.send({ roomId: 'room-1', senderId: 'user-1', message: 'hi' });
 
-    expect(query).toHaveBeenCalledTimes(1);
-    const [sql, params] = query.mock.calls[0];
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    const [sql, params] = pool.query.mock.calls[0];
     expect(sql).toContain('INSERT INTO chat_messages');
     expect(params).toEqual(['room-1', 'user-1', 'hi', false, null]);
 
@@ -50,15 +54,14 @@ describe('ChatManager', () => {
 
   test('send() inserts a private message and maps result', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
     const row = makeRow({ is_private: true, room_id: null, recipient_id: 'u2' });
-    query.mockResolvedValueOnce({ rows: [row] });
+    pool.query.mockResolvedValueOnce({ rows: [row] });
 
     const mgr = new ChatManager(pool);
     const result = await mgr.send({ senderId: 'user-1', message: 'secret', isPrivate: true, recipientId: 'user-2' });
 
-    expect(query).toHaveBeenCalledTimes(1);
-    const [sql, params] = query.mock.calls[0];
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    const [sql, params] = pool.query.mock.calls[0];
     expect(sql).toContain('INSERT INTO chat_messages');
     expect(params).toEqual([null, 'user-1', 'secret', true, 'user-2']);
     expect(result.isPrivate).toBe(true);
@@ -69,7 +72,7 @@ describe('ChatManager', () => {
     const pool = makePool();
     const mgr = new ChatManager(pool);
 
-    await expect(mgr.send({ roomId: 'r1', senderId: '', message: 'x' } as any)).rejects.toThrow('senderId required');
+    await expect(mgr.send({ roomId: 'r1', senderId: '', message: 'x' } as Parameters<typeof mgr.send>[0])).rejects.toThrow('senderId required');
     await expect(mgr.send({ roomId: 'r1', senderId: 'u1', message: '   ' })).rejects.toThrow('message required');
   });
 
@@ -88,15 +91,14 @@ describe('ChatManager', () => {
 
   test('listRoomMessages() queries with before=null and clamps high limit to 200', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
     const rows = [makeRow({ id: 'm1' }), makeRow({ id: 'm2' })];
-    query.mockResolvedValueOnce({ rows });
+    pool.query.mockResolvedValueOnce({ rows });
 
     const mgr = new ChatManager(pool);
     const result = await mgr.listRoomMessages({ roomId: 'r1', limit: 999 });
 
-    expect(query).toHaveBeenCalledTimes(1);
-    const [sql, params] = query.mock.calls[0];
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    const [sql, params] = pool.query.mock.calls[0];
     expect(sql).toContain('WHERE room_id = $1 AND is_private = FALSE');
     // params: [roomId, before, limit]
     expect(params[0]).toBe('r1');
@@ -107,32 +109,30 @@ describe('ChatManager', () => {
 
   test('listRoomMessages() uses provided before and clamps low limit to 1', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
     const rows = [makeRow({ id: 'm3' })];
-    query.mockResolvedValueOnce({ rows });
+    pool.query.mockResolvedValueOnce({ rows });
 
     const before = new Date('2024-12-31T23:59:59Z').toISOString();
     const mgr = new ChatManager(pool);
     await mgr.listRoomMessages({ roomId: 'r2', before, limit: 0 });
 
-    const [, params] = query.mock.calls[0];
+    const [, params] = pool.query.mock.calls[0];
     expect(params).toEqual(['r2', before, 1]);
   });
 
   test('listPrivateMessages() queries with symmetric participants and default limit', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
     const rows = [
       makeRow({ id: 'p1', is_private: true, room_id: null, sender_id: 'a', recipient_id: 'b' }),
       makeRow({ id: 'p2', is_private: true, room_id: null, sender_id: 'b', recipient_id: 'a' }),
     ];
-    query.mockResolvedValueOnce({ rows });
+    pool.query.mockResolvedValueOnce({ rows });
 
     const mgr = new ChatManager(pool);
     const result = await mgr.listPrivateMessages({ userAId: 'a', userBId: 'b' });
 
-    expect(query).toHaveBeenCalledTimes(1);
-    const [sql, params] = query.mock.calls[0];
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    const [sql, params] = pool.query.mock.calls[0];
     expect(sql).toContain('WHERE is_private = TRUE');
     // params: [userAId, userBId, before, limit]
     expect(params).toEqual(['a', 'b', null, 50]);
@@ -141,27 +141,25 @@ describe('ChatManager', () => {
 
   test('listPrivateMessages() respects before and limit', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
-    query.mockResolvedValueOnce({ rows: [] });
+    pool.query.mockResolvedValueOnce({ rows: [] });
 
     const before = new Date('2025-02-01T10:00:00Z').toISOString();
     const mgr = new ChatManager(pool);
     await mgr.listPrivateMessages({ userAId: 'x', userBId: 'y', before, limit: 10 });
 
-    const [, params] = query.mock.calls[0];
+    const [, params] = pool.query.mock.calls[0];
     expect(params).toEqual(['x', 'y', before, 10]);
   });
 
   test('moderate() updates row and maps result', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
     const row = makeRow({ id: 'm100', is_moderated: true, moderator_id: 'mod-1', moderated_at: new Date().toISOString() });
-    query.mockResolvedValueOnce({ rows: [row] });
+    pool.query.mockResolvedValueOnce({ rows: [row] });
 
     const mgr = new ChatManager(pool);
     const out = await mgr.moderate('m100', 'mod-1', true);
-    expect(query).toHaveBeenCalledTimes(1);
-    const [sql, params] = query.mock.calls[0];
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    const [sql, params] = pool.query.mock.calls[0];
     expect(sql).toContain('UPDATE chat_messages');
     expect(params).toEqual(['m100', true, 'mod-1']);
     expect(out.isModerated).toBe(true);
@@ -170,8 +168,7 @@ describe('ChatManager', () => {
 
   test('moderate() throws when message not found', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
-    query.mockResolvedValueOnce({ rows: [] });
+    pool.query.mockResolvedValueOnce({ rows: [] });
 
     const mgr = new ChatManager(pool);
     await expect(mgr.moderate('missing', 'mod-1', false)).rejects.toThrow('message not found');
@@ -179,22 +176,20 @@ describe('ChatManager', () => {
 
   test('getMessage() returns message when found', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
     const row = makeRow({ id: 'm123', sender_id: 'u1' });
-    query.mockResolvedValueOnce({ rows: [row] });
+    pool.query.mockResolvedValueOnce({ rows: [row] });
 
     const mgr = new ChatManager(pool);
     const result = await mgr.getMessage('m123');
 
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(pool.query).toHaveBeenCalledTimes(1);
     expect(result?.id).toBe('m123');
     expect(result?.senderId).toBe('u1');
   });
 
   test('getMessage() returns null when not found', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
-    query.mockResolvedValueOnce({ rows: [] });
+    pool.query.mockResolvedValueOnce({ rows: [] });
 
     const mgr = new ChatManager(pool);
     const result = await mgr.getMessage('nonexistent');
@@ -210,46 +205,43 @@ describe('ChatManager', () => {
 
   test('deleteMessage() deletes message when user is sender', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
     const row = makeRow({ id: 'm123', sender_id: 'u1' });
     // getMessage query
-    query.mockResolvedValueOnce({ rows: [row] });
+    pool.query.mockResolvedValueOnce({ rows: [row] });
     // delete reactions query
-    query.mockResolvedValueOnce({ rowCount: 0 });
+    pool.query.mockResolvedValueOnce({ rowCount: 0 });
     // delete message query
-    query.mockResolvedValueOnce({ rowCount: 1 });
+    pool.query.mockResolvedValueOnce({ rowCount: 1 });
 
     const mgr = new ChatManager(pool);
     const result = await mgr.deleteMessage('m123', 'u1', false);
 
-    expect(query).toHaveBeenCalledTimes(3);
+    expect(pool.query).toHaveBeenCalledTimes(3);
     expect(result).toEqual({ deleted: true });
   });
 
   test('deleteMessage() deletes message when user is admin (not sender)', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
     const row = makeRow({ id: 'm123', sender_id: 'u1' });
     // getMessage query
-    query.mockResolvedValueOnce({ rows: [row] });
+    pool.query.mockResolvedValueOnce({ rows: [row] });
     // delete reactions query
-    query.mockResolvedValueOnce({ rowCount: 0 });
+    pool.query.mockResolvedValueOnce({ rowCount: 0 });
     // delete message query
-    query.mockResolvedValueOnce({ rowCount: 1 });
+    pool.query.mockResolvedValueOnce({ rowCount: 1 });
 
     const mgr = new ChatManager(pool);
     const result = await mgr.deleteMessage('m123', 'admin-user', true);
 
-    expect(query).toHaveBeenCalledTimes(3);
+    expect(pool.query).toHaveBeenCalledTimes(3);
     expect(result).toEqual({ deleted: true });
   });
 
   test('deleteMessage() throws when user is not authorized', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
     const row = makeRow({ id: 'm123', sender_id: 'u1' });
     // getMessage query
-    query.mockResolvedValueOnce({ rows: [row] });
+    pool.query.mockResolvedValueOnce({ rows: [row] });
 
     const mgr = new ChatManager(pool);
     await expect(mgr.deleteMessage('m123', 'other-user', false)).rejects.toThrow('not authorized to delete this message');
@@ -257,8 +249,7 @@ describe('ChatManager', () => {
 
   test('deleteMessage() throws when message not found', async () => {
     const pool = makePool();
-    const query = (pool as any).query as jest.Mock;
-    query.mockResolvedValueOnce({ rows: [] });
+    pool.query.mockResolvedValueOnce({ rows: [] });
 
     const mgr = new ChatManager(pool);
     await expect(mgr.deleteMessage('nonexistent', 'u1', false)).rejects.toThrow('message not found');

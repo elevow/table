@@ -26,16 +26,7 @@ export async function isUserAdminBySession(req: NextApiRequest, getPool: () => a
     const authHeader = req.headers.authorization;
     const sessionToken = authHeader?.replace('Bearer ', '') || req.cookies.session_token || req.cookies.auth_token;
     
-    // eslint-disable-next-line no-console
-    console.log('[isUserAdminBySession] Token check:', { 
-      hasAuthHeader: !!authHeader, 
-      hasSessionToken: !!sessionToken,
-      tokenIsNull: sessionToken === 'null'
-    });
-    
     if (!sessionToken || sessionToken === 'null') {
-      // eslint-disable-next-line no-console
-      console.log('[isUserAdminBySession] No valid session token');
       return false;
     }
 
@@ -50,26 +41,16 @@ export async function isUserAdminBySession(req: NextApiRequest, getPool: () => a
         [sessionToken]
       );
       
-      // eslint-disable-next-line no-console
-      console.log('[isUserAdminBySession] Query result rows:', result.rows.length);
-      
       if (result.rows.length === 0) {
-        // eslint-disable-next-line no-console
-        console.log('[isUserAdminBySession] No user found for token');
         return false;
       }
       
       const userEmail = result.rows[0].email;
-      const adminResult = isAdminEmail(userEmail);
-      // eslint-disable-next-line no-console
-      console.log('[isUserAdminBySession] Email check:', { userEmail, isAdmin: adminResult });
-      return adminResult;
+      return isAdminEmail(userEmail);
     } finally {
       client.release();
     }
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('[isUserAdminBySession] Error:', error);
+  } catch {
     return false;
   }
 }

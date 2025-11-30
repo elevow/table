@@ -1717,8 +1717,6 @@ export default function GamePage() {
         
         if (res.ok) {
           const data = await res.json();
-          // eslint-disable-next-line no-console
-          console.log('[GamePage] Admin check response:', data);
           
           if (data.isAdmin) {
             setUserRole('admin');

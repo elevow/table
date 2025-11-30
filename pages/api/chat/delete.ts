@@ -13,9 +13,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { messageId: rawMessageId, userId: rawUserId } = req.body || {};
     
-    // eslint-disable-next-line no-console
-    console.log('[API/chat/delete] Request received:', { rawMessageId, rawUserId });
-    
     if (!rawMessageId) {
       return res.status(400).json({ error: 'messageId required' });
     }
@@ -32,29 +29,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     // Check if user is admin
     const isAdmin = await isUserAdminBySession(req, getPool);
-    // eslint-disable-next-line no-console
-    console.log('[API/chat/delete] Admin check result:', { isAdmin, hasAuthHeader: !!req.headers.authorization });
     
     // Get the message before deletion to get roomId for broadcast
     const message = await svc.getMessage(messageId);
     if (!message) {
-      // eslint-disable-next-line no-console
-      console.log('[API/chat/delete] Message not found:', messageId);
       return res.status(404).json({ error: 'message not found' });
     }
     
-    // eslint-disable-next-line no-console
-    console.log('[API/chat/delete] Authorization check:', { 
-      messageSenderId: message.senderId, 
-      userId, 
-      isAdmin, 
-      senderMatch: message.senderId === userId 
-    });
-    
     // Check authorization: user must be sender or admin
     if (message.senderId !== userId && !isAdmin) {
-      // eslint-disable-next-line no-console
-      console.log('[API/chat/delete] Authorization denied');
       return res.status(403).json({ error: 'not authorized to delete this message' });
     }
     

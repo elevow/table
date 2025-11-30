@@ -9,9 +9,6 @@ interface ChatPanelProps {
 }
 
 function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
-  // eslint-disable-next-line no-console
-  console.log('[ChatPanel] Props:', { gameId, playerId, isAdmin });
-  
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -251,15 +248,6 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
       const originalIndex = messages.findIndex(m => m.id === messageId);
       const messageToDelete = originalIndex >= 0 ? messages[originalIndex] : null;
       
-      // eslint-disable-next-line no-console
-      console.log('[ChatPanel] Attempting to delete message:', { 
-        messageId, 
-        playerId, 
-        isAdmin, 
-        messageSenderId: messageToDelete?.senderId,
-        isOwnMessage: messageToDelete?.senderId === playerId 
-      });
-      
       // Optimistic removal
       setMessages(prev => prev.filter(m => m.id !== messageId));
       setReactions(prev => {
@@ -277,9 +265,6 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
       const authToken = typeof window !== 'undefined' 
         ? localStorage.getItem('auth_token') || localStorage.getItem('session_token') 
         : null;
-      
-      // eslint-disable-next-line no-console
-      console.log('[ChatPanel] Auth token present:', !!authToken);
       
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (authToken) {
@@ -304,12 +289,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
           });
         }
         const e = await res.json().catch(() => ({}));
-        // eslint-disable-next-line no-console
-        console.error('[ChatPanel] Delete API error:', { status: res.status, error: e?.error });
         throw new Error(e?.error || 'Failed to delete');
-      } else {
-        // eslint-disable-next-line no-console
-        console.log('[ChatPanel] Delete successful for messageId:', messageId);
       }
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -322,16 +302,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
   // Check if user can delete a message (own message or admin)
   const canDeleteMessage = useCallback((message: ChatMessage): boolean => {
     if (!playerId) return false;
-    const canDelete = message.senderId === playerId || isAdmin;
-    // eslint-disable-next-line no-console
-    console.log('[ChatPanel] canDeleteMessage:', { 
-      messageId: message.id, 
-      senderId: message.senderId, 
-      playerId, 
-      isAdmin, 
-      canDelete 
-    });
-    return canDelete;
+    return message.senderId === playerId || isAdmin;
   }, [playerId, isAdmin]);
 
   return (

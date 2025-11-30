@@ -208,15 +208,13 @@ describe('ChatManager', () => {
     const row = makeRow({ id: 'm123', sender_id: 'u1' });
     // getMessage query
     pool.query.mockResolvedValueOnce({ rows: [row] });
-    // delete reactions query
-    pool.query.mockResolvedValueOnce({ rowCount: 0 });
-    // delete message query
+    // delete message query (reactions are deleted via ON DELETE CASCADE)
     pool.query.mockResolvedValueOnce({ rowCount: 1 });
 
     const mgr = new ChatManager(pool);
     const result = await mgr.deleteMessage('m123', 'u1', false);
 
-    expect(pool.query).toHaveBeenCalledTimes(3);
+    expect(pool.query).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ deleted: true });
   });
 
@@ -225,15 +223,13 @@ describe('ChatManager', () => {
     const row = makeRow({ id: 'm123', sender_id: 'u1' });
     // getMessage query
     pool.query.mockResolvedValueOnce({ rows: [row] });
-    // delete reactions query
-    pool.query.mockResolvedValueOnce({ rowCount: 0 });
-    // delete message query
+    // delete message query (reactions are deleted via ON DELETE CASCADE)
     pool.query.mockResolvedValueOnce({ rowCount: 1 });
 
     const mgr = new ChatManager(pool);
     const result = await mgr.deleteMessage('m123', 'admin-user', true);
 
-    expect(pool.query).toHaveBeenCalledTimes(3);
+    expect(pool.query).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ deleted: true });
   });
 

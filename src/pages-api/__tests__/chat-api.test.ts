@@ -7,6 +7,7 @@ import moderateHandler from '../../../pages/api/chat/moderate';
 import deleteHandler from '../../../pages/api/chat/delete';
 
 // The connect/release mock is needed for isUserAdminBySession, which uses client.query for admin authentication.
+// The connect/release mock is needed for isUserAdminBySession, which uses client.query for admin authentication.
 jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({ query: jest.fn().mockResolvedValue({ rows: [] }), connect: jest.fn().mockResolvedValue({ query: jest.fn().mockResolvedValue({ rows: [] }), release: jest.fn() }) })) }));
 jest.mock('../../../src/lib/api/rate-limit', () => ({ rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 }) }));
 jest.mock('../../../src/lib/realtime/publisher', () => ({

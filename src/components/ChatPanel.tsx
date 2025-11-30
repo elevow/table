@@ -7,6 +7,11 @@ interface ChatPanelProps {
   playerId?: string;
   /**
    * Whether the current user has admin privileges.
+  * Admins can delete any message, not just their own.
+  * This should be determined server-side to ensure security.
+  */
+  /**
+   * Whether the current user has admin privileges.
    * Admins can delete any message, not just their own.
    * This should be determined server-side to ensure security.
    */

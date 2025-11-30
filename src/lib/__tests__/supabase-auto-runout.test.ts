@@ -105,8 +105,8 @@ describe('supabase-auto-runout', () => {
     expect(prepArgs?.community).toEqual(state.communityCards);
     expect(prepArgs?.known).toEqual(expect.arrayContaining(state.players.flatMap((p) => p.holeCards || [])));
 
-    // First street reveals immediately (0ms)
-    await jest.advanceTimersByTimeAsync(0);
+    // First street reveals after 5 seconds
+    await jest.advanceTimersByTimeAsync(5000);
     expect(broadcast).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ stage: 'turn', communityCards: expect.arrayContaining([{ rank: '2', suit: 'clubs' }]) }),
@@ -114,7 +114,7 @@ describe('supabase-auto-runout', () => {
     );
     expect(state.communityCards).toHaveLength(3);
 
-    // Second street after 5 seconds
+    // Second street after another 5 seconds
     await jest.advanceTimersByTimeAsync(5000);
     expect(broadcast).toHaveBeenNthCalledWith(
       2,
@@ -160,8 +160,8 @@ describe('supabase-auto-runout', () => {
     const scheduled = scheduleSupabaseAutoRunout(tableId, engine as any, broadcast);
     expect(scheduled).toBe(true);
 
-    // Flop reveals immediately (0ms)
-    await jest.advanceTimersByTimeAsync(0);
+    // Flop reveals after 5 seconds
+    await jest.advanceTimersByTimeAsync(5000);
     expect(broadcast).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ 
@@ -175,7 +175,7 @@ describe('supabase-auto-runout', () => {
       { action: 'auto_runout_flop' },
     );
 
-    // Turn after 5 seconds
+    // Turn after another 5 seconds (10 total)
     await jest.advanceTimersByTimeAsync(5000);
     expect(broadcast).toHaveBeenNthCalledWith(
       2,
@@ -186,7 +186,7 @@ describe('supabase-auto-runout', () => {
       { action: 'auto_runout_turn' },
     );
 
-    // River after another 5 seconds (10 total)
+    // River after another 5 seconds (15 total)
     await jest.advanceTimersByTimeAsync(5000);
     expect(broadcast).toHaveBeenNthCalledWith(
       3,
@@ -197,7 +197,7 @@ describe('supabase-auto-runout', () => {
       { action: 'auto_runout_river' },
     );
 
-    // Showdown after another 5 seconds (15 total)
+    // Showdown after another 5 seconds (20 total)
     await jest.advanceTimersByTimeAsync(5000);
     expect(engine.runItTwiceNow).toHaveBeenCalledTimes(1);
     expect(broadcast).toHaveBeenLastCalledWith(

@@ -128,7 +128,7 @@ export const scheduleSupabaseAutoRunout = (
     const timers: NodeJS.Timeout[] = [];
     getTimerMap().set(tableId, timers);
 
-    let delay = 0;
+    let delay = 5000;
     steps.forEach((street) => {
       const timer = setTimeout(() => {
         revealStreet(tableId, street, engine, broadcast, timers).catch(() => clearSupabaseAutoRunout(tableId));

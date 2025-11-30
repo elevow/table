@@ -405,7 +405,7 @@ export class ActionManager {
   console.debug('[auto-runout] hiding UI immediately on schedule', { tableId });
   this.stateManager.updateState(tableId, { activePlayer: '' as any });
 
-  let delay = 0; // Start immediately, then 5 seconds between reveals
+  let delay = 5000; // 5 seconds before each reveal
       steps.forEach((street) => {
         const t = setTimeout(() => {
           try {

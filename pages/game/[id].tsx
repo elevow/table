@@ -1699,13 +1699,35 @@ export default function GamePage() {
 
   // Determine user role - separate useEffect to prevent infinite loops
   useEffect(() => {
-    const determineRole = async () => {
+    const determineRole = () => {
       try {
         const token = localStorage.getItem('auth_token');
-        if (token) {
-          const role = await determineUserRole(token);
-          setUserRole(role);
+        const userStr = localStorage.getItem('user');
+        
+        if (!token) {
+          setUserRole('guest');
+          return;
         }
+        
+        if (userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            if (user && user.email) {
+              // eslint-disable-next-line no-console
+              console.log('[GamePage] Determining role for email:', user.email);
+              const role = determineUserRole(user.email, false);
+              // eslint-disable-next-line no-console
+              console.log('[GamePage] Determined role:', role);
+              setUserRole(role);
+              return;
+            }
+          } catch (parseError) {
+            console.warn('Could not parse user data:', parseError);
+          }
+        }
+        
+        // Fallback to player if token exists but no user email available
+        setUserRole('player');
       } catch (error) {
         console.warn('Could not determine user role:', error);
         setUserRole('guest');

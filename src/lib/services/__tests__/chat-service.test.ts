@@ -32,6 +32,8 @@ describe('ChatService', () => {
       listRoomMessages: jest.fn(),
       listPrivateMessages: jest.fn(),
       moderate: jest.fn(),
+      getMessage: jest.fn(),
+      deleteMessage: jest.fn(),
       addReaction: jest.fn(),
       removeReaction: jest.fn(),
       listReactions: jest.fn(),
@@ -310,6 +312,77 @@ describe('ChatService', () => {
 
     it('should throw error when moderatorId is missing', async () => {
       await expect(chatService.moderate('msg123', '')).rejects.toThrow('moderatorId required');
+    });
+  });
+
+  describe('getMessage', () => {
+    it('should get a message by ID', async () => {
+      const messageId = 'msg123';
+      const expectedMessage: ChatMessage = {
+        id: messageId,
+        senderId: 'user123',
+        message: 'Hello',
+        roomId: 'room123',
+        recipientId: null,
+        isPrivate: false,
+        sentAt: new Date().toISOString(),
+        isModerated: false,
+        moderatedAt: null,
+        moderatorId: null
+      };
+
+      mockChatManager.getMessage.mockResolvedValue(expectedMessage);
+
+      const result = await chatService.getMessage(messageId);
+
+      expect(mockChatManager.getMessage).toHaveBeenCalledWith(messageId);
+      expect(result).toEqual(expectedMessage);
+    });
+
+    it('should return null when message not found', async () => {
+      mockChatManager.getMessage.mockResolvedValue(null);
+
+      const result = await chatService.getMessage('nonexistent');
+
+      expect(result).toBeNull();
+    });
+
+    it('should throw error when messageId is missing', async () => {
+      await expect(chatService.getMessage('')).rejects.toThrow('messageId required');
+    });
+  });
+
+  describe('deleteMessage', () => {
+    it('should delete a message when user is the sender', async () => {
+      const messageId = 'msg123';
+      const userId = 'user123';
+
+      mockChatManager.deleteMessage.mockResolvedValue({ deleted: true });
+
+      const result = await chatService.deleteMessage(messageId, userId, false);
+
+      expect(mockChatManager.deleteMessage).toHaveBeenCalledWith(messageId, userId, false);
+      expect(result).toEqual({ deleted: true });
+    });
+
+    it('should delete a message when user is admin', async () => {
+      const messageId = 'msg123';
+      const adminId = 'admin123';
+
+      mockChatManager.deleteMessage.mockResolvedValue({ deleted: true });
+
+      const result = await chatService.deleteMessage(messageId, adminId, true);
+
+      expect(mockChatManager.deleteMessage).toHaveBeenCalledWith(messageId, adminId, true);
+      expect(result).toEqual({ deleted: true });
+    });
+
+    it('should throw error when messageId is missing', async () => {
+      await expect(chatService.deleteMessage('', 'user123', false)).rejects.toThrow('messageId required');
+    });
+
+    it('should throw error when userId is missing', async () => {
+      await expect(chatService.deleteMessage('msg123', '', false)).rejects.toThrow('userId required');
     });
   });
 

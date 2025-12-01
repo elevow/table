@@ -95,6 +95,42 @@ export class ChatManager {
     return mapRow(res.rows[0] as ChatMessageRow);
   }
 
+  async getMessage(messageId: string): Promise<ChatMessage | null> {
+    if (!messageId) throw new Error('messageId required');
+    const res = await this.pool.query(
+      `SELECT * FROM chat_messages WHERE id = $1`,
+      [messageId]
+    );
+    if (!res.rows[0]) return null;
+    return mapRow(res.rows[0] as ChatMessageRow);
+  }
+
+  async deleteMessage(messageId: string, userId: string, isAdmin: boolean): Promise<{ deleted: boolean }> {
+    if (!messageId) throw new Error('messageId required');
+    if (!userId) throw new Error('userId required');
+
+    // First, get the message to check ownership
+    const message = await this.getMessage(messageId);
+    if (!message) throw new Error('message not found');
+
+    // Allow deletion if user is the sender or is an admin
+    if (message.senderId !== userId && !isAdmin) {
+      throw new Error('not authorized to delete this message');
+    }
+
+    // Delete associated reactions first
+    // NOTE: The database schema should enforce a foreign key constraint on chat_reactions.message_id
+    // referencing chat_messages.id with ON DELETE CASCADE, so reactions are deleted automatically.
+    // NOTE: The database schema must enforce a foreign key constraint on chat_reactions.message_id
+    // referencing chat_messages.id with ON DELETE CASCADE, so reactions are deleted automatically.
+    // Delete the message
+    const res = await this.pool.query(
+      `DELETE FROM chat_messages WHERE id = $1`,
+      [messageId]
+    );
+    return { deleted: (res.rowCount ?? 0) > 0 };
+  }
+
   // US-063: Emoji reactions
   private mapReaction(r: ChatReactionRow): ChatReaction {
     return {

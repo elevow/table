@@ -6,7 +6,7 @@ import {
   maybeCreateRunItPrompt,
   isAutoRunoutEligible,
 } from '../../../src/lib/poker/run-it-twice-manager';
-import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
+import { clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import type { Card, GameStage, TableState } from '../../../src/types/poker';
 
 function getIo(res: NextApiResponse): any | null {
@@ -141,16 +141,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const enrichedState = await broadcastState(gameState, { action, playerId, amount });
 
+    // Note: Auto-runout is now handled by client-side polling in serverless environments.
+    // The scheduleSupabaseAutoRunout timers don't work reliably in Vercel because functions terminate after response.
+    // See /api/games/advance-runout for the client-polling approach.
     const shouldScheduleAutoRunout = autoEligible && !issuedPrompt;
     console.log('[action.ts] autoRunout check:', { autoEligible, issuedPrompt: !!issuedPrompt, shouldScheduleAutoRunout });
-    if (shouldScheduleAutoRunout) {
-      console.log('[action.ts] calling scheduleSupabaseAutoRunout');
-      const scheduled = scheduleSupabaseAutoRunout(tableId, engine, (state, meta) => {
-        console.log('[action.ts] auto-runout broadcast callback:', meta.action);
-        return broadcastState(state, meta).then(() => {});
-      });
-      console.log('[action.ts] scheduleSupabaseAutoRunout returned:', scheduled);
-    }
+    // Server-side scheduling disabled - client handles polling via /api/games/advance-runout
 
     return res.status(200).json({ success: true, gameState: enrichedState });
   } catch (e: any) {

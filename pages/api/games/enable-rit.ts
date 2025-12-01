@@ -7,7 +7,7 @@ import {
   enrichStateWithRunIt,
   isAutoRunoutEligible,
 } from '../../../src/lib/poker/run-it-twice-manager';
-import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
+import { clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import type { TableState } from '../../../src/types/poker';
 
 function getIo(res: NextApiResponse): any | null {
@@ -151,9 +151,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const enrichedState = await broadcastState(updatedState, { action: actionName, playerId, runs });
 
-    if (isAutoRunoutEligible(updatedState)) {
-      scheduleSupabaseAutoRunout(tableId, engine, (state, meta) => broadcastState(state, meta).then(() => {}));
-    }
+    // Note: Auto-runout is now handled by client-side polling in serverless environments.
+    // The scheduleSupabaseAutoRunout timers don't work reliably in Vercel because functions terminate after response.
+    // See /api/games/advance-runout for the client-polling approach.
+    console.log('[enable-rit] autoRunout eligible:', isAutoRunoutEligible(updatedState), '- client will handle polling');
 
     return res.status(200).json({ success: true, runs, gameState: enrichedState });
   } catch (e: any) {

@@ -7,6 +7,7 @@ import { GameService } from '../../../src/lib/services/game-service';
 import { resolveVariantAndMode, defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
+import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
 
 function getIo(res: NextApiResponse): any | null {
   try {
@@ -212,7 +213,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } catch {}
 
     const enrichedFinalState = enrichStateWithRunIt(tableId, gameState);
-    return res.status(201).json({ success: true, gameState: enrichedFinalState });
+    // Sanitize the response for the requesting player - hide other players' hole cards
+    // unless it's showdown or an all-in situation
+    const sanitizedState = sanitizeStateForPlayer(enrichedFinalState, playerId);
+    return res.status(201).json({ success: true, gameState: sanitizedState });
   } catch (e: any) {
     return res.status(400).json({ error: e?.message || 'Failed to start game' });
   }

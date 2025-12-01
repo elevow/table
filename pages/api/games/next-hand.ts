@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { publishGameStateUpdate, publishAwaitingDealerChoice, publishRebuyPrompt } from '../../../src/lib/realtime/publisher';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
+import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
 import { fetchRoomRebuyLimit } from '../../../src/lib/shared/rebuy-limit';
 import { getPlayerRebuyInfo } from '../../../src/lib/shared/rebuy-tracker';
 import {
@@ -156,7 +157,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           timestamp: new Date().toISOString(),
         });
 
-        return res.status(200).json({ success: true, gameState: enrichedState });
+        // Sanitize the response for the requesting player - hide other players' hole cards
+        // unless it's showdown or an all-in situation
+        const sanitizedState = sanitizeStateForPlayer(enrichedState, playerId);
+        return res.status(200).json({ success: true, gameState: sanitizedState });
       };
 
       const promptDealerChoice = async () => {

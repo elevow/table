@@ -8,6 +8,7 @@ import {
   isAutoRunoutEligible,
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
+import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
 import type { TableState } from '../../../src/types/poker';
 
 function getIo(res: NextApiResponse): any | null {
@@ -155,7 +156,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       scheduleSupabaseAutoRunout(tableId, engine, (state, meta) => broadcastState(state, meta).then(() => {}));
     }
 
-    return res.status(200).json({ success: true, runs, gameState: enrichedState });
+    // Sanitize the response for the requesting player - hide other players' hole cards
+    // unless it's showdown or an all-in situation
+    // Note: In RIT scenarios, this should typically show all cards since it's an all-in situation
+    const sanitizedState = sanitizeStateForPlayer(enrichedState, playerId);
+
+    return res.status(200).json({ success: true, runs, gameState: sanitizedState });
   } catch (e: any) {
     console.error('Error processing Run-It-Twice response:', e);
     return res.status(500).json({ error: e?.message || 'Internal server error' });

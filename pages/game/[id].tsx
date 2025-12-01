@@ -574,13 +574,19 @@ export default function GamePage() {
     autoRunoutInProgressRef.current = true;
     console.log('[client auto-runout] scheduling advance in 5 seconds for communityLen:', communityLen);
     
+    // Capture current game state for the request (needed for serverless fallback)
+    const currentGameState = pokerGameState;
+    
     autoRunoutTimerRef.current = setTimeout(async () => {
       try {
         console.log('[client auto-runout] calling /api/games/advance-runout for communityLen:', communityLen);
         const response = await fetch('/api/games/advance-runout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tableId: id }),
+          body: JSON.stringify({ 
+            tableId: id,
+            gameState: currentGameState // Pass game state for serverless fallback
+          }),
         });
         const data = await response.json();
         console.log('[client auto-runout] response:', data);

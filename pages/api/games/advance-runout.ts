@@ -6,7 +6,7 @@ import {
   isAutoRunoutEligible,
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
-import type { TableState } from '../../../src/types/poker';
+import type { TableState, Card } from '../../../src/types/poker';
 
 function getIo(res: NextApiResponse): any | null {
   try {
@@ -28,15 +28,85 @@ const getRunoutLocks = (): Map<string, { lastAdvanceTime: number; lastRevealedSt
   return g.__runoutLocks;
 };
 
+// Generate a standard 52-card deck
+const generateDeck = (): Card[] => {
+  const ranks: Card['rank'][] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+  const suits: Card['suit'][] = ['hearts', 'diamonds', 'clubs', 'spades'];
+  const deck: Card[] = [];
+  for (const suit of suits) {
+    for (const rank of ranks) {
+      deck.push({ rank, suit });
+    }
+  }
+  return deck;
+};
+
+// Simple seeded random number generator for deterministic card dealing
+const seededRandom = (seed: number): (() => number) => {
+  let state = seed;
+  return () => {
+    state = (state * 1103515245 + 12345) & 0x7fffffff;
+    return state / 0x7fffffff;
+  };
+};
+
+// Shuffle an array using Fisher-Yates with seeded RNG
+const shuffleWithSeed = <T>(array: T[], seed: number): T[] => {
+  const result = [...array];
+  const random = seededRandom(seed);
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+};
+
+// Generate the next cards for the runout using deterministic seeding
+const generateNextCards = (
+  tableId: string,
+  communityCards: Card[],
+  holeCards: Card[],
+  street: 'flop' | 'turn' | 'river'
+): Card[] => {
+  // Create a deterministic seed from the tableId and existing cards
+  // This ensures that given the same state, we always generate the same future cards
+  const existingCards = [...communityCards, ...holeCards];
+  const cardString = existingCards.map(c => `${c.rank}${c.suit}`).sort().join(',');
+  const seedString = `${tableId}:${cardString}`;
+  let seed = 0;
+  for (let i = 0; i < seedString.length; i++) {
+    seed = ((seed << 5) - seed + seedString.charCodeAt(i)) >>> 0;
+  }
+
+  // Generate a shuffled deck excluding cards already in use
+  const deck = generateDeck();
+  const usedCardKeys = new Set(existingCards.map(c => `${c.rank}${c.suit}`));
+  const availableCards = deck.filter(c => !usedCardKeys.has(`${c.rank}${c.suit}`));
+  const shuffledDeck = shuffleWithSeed(availableCards, seed);
+
+  // Deal the appropriate number of cards for the street
+  const cardsNeeded = street === 'flop' ? Math.max(0, 3 - communityCards.length) :
+                      street === 'turn' ? Math.max(0, 4 - communityCards.length) :
+                      Math.max(0, 5 - communityCards.length);
+  
+  return shuffledDeck.slice(0, cardsNeeded);
+};
+
 /**
  * API endpoint to advance the auto-runout to the next street.
  * This is called by the client every 5 seconds when an all-in has occurred
  * and there are remaining community cards to reveal.
+ * 
+ * In serverless environments, the game engine may not be in memory, so we
+ * accept the current game state from the client and generate cards deterministically.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { tableId } = (req.body || {}) as { tableId?: string };
+  const { tableId, gameState: clientGameState } = (req.body || {}) as { 
+    tableId?: string;
+    gameState?: TableState;
+  };
 
   if (!tableId) {
     return res.status(400).json({ error: 'Missing tableId' });
@@ -46,14 +116,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Clear any server-side auto-runout timers since client is now polling
     clearSupabaseAutoRunout(tableId);
     
-    // Get the active game engine
+    // Try to get state from in-memory engine first, fall back to client-provided state
     const g: any = global as any;
     const engine = g?.activeGames?.get(tableId);
-    if (!engine) {
+    
+    let state: TableState;
+    let useEngineForCards = false;
+    
+    if (engine) {
+      state = engine.getState();
+      useEngineForCards = typeof engine.previewRabbitHunt === 'function';
+      console.log('[advance-runout] using in-memory engine');
+    } else if (clientGameState) {
+      state = clientGameState;
+      console.log('[advance-runout] using client-provided game state (serverless fallback)');
+    } else {
+      console.log('[advance-runout] no game state available');
       return res.status(404).json({ error: 'No active game found for this table' });
     }
-
-    const state = engine.getState();
+    
     const communityLen = Array.isArray(state.communityCards) ? state.communityCards.length : 0;
     
     console.log('[advance-runout] called for tableId:', tableId, 'stage:', state.stage, 'communityCards:', communityLen);
@@ -92,7 +173,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Check for duplicate requests using server-side lock
-    // We track what stage we've already revealed TO, not what we started with
     const locks = getRunoutLocks();
     const lock = locks.get(tableId);
     const now = Date.now();
@@ -142,23 +222,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (nextStreet === 'showdown') {
       // Finalize to showdown
-      const ritEnabled = !!state.runItTwice?.enabled;
-      try {
-        if (ritEnabled && typeof engine.runItTwiceNow === 'function') {
-          engine.runItTwiceNow();
-        } else if (typeof engine.finalizeToShowdown === 'function') {
-          engine.finalizeToShowdown();
-        }
-      } catch (err) {
-        console.log('[advance-runout] error during finalize:', err);
-        if (typeof engine.finalizeToShowdown === 'function') {
-          try { engine.finalizeToShowdown(); } catch { /* ignore */ }
+      if (engine) {
+        const ritEnabled = !!state.runItTwice?.enabled;
+        try {
+          if (ritEnabled && typeof engine.runItTwiceNow === 'function') {
+            engine.runItTwiceNow();
+          } else if (typeof engine.finalizeToShowdown === 'function') {
+            engine.finalizeToShowdown();
+          }
+          state = engine.getState();
+        } catch (err) {
+          console.log('[advance-runout] error during finalize:', err);
         }
       }
-      const finalState = engine.getState();
+      
       const resolved: TableState = {
-        ...finalState,
-        stage: finalState.stage || 'showdown',
+        ...state,
+        stage: 'showdown',
         activePlayer: '' as any,
       };
       const enrichedState = await broadcastState(resolved, { action: 'auto_runout_showdown' });
@@ -166,23 +246,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ success: true, street: 'showdown', gameState: enrichedState });
     }
 
-    // Reveal the next street
-    if (typeof engine.previewRabbitHunt !== 'function') {
-      console.log('[advance-runout] previewRabbitHunt not available');
-      return res.status(200).json({ success: false, reason: 'preview_not_available' });
+    // Generate the cards for the next street
+    let cards: Card[] = [];
+    
+    if (useEngineForCards && engine) {
+      // Use engine's previewRabbitHunt if available
+      try {
+        const known = state.players?.flatMap((p: any) => p.holeCards || []) || [];
+        engine.prepareRabbitPreview?.({ community: state.communityCards, known });
+        const preview = engine.previewRabbitHunt(nextStreet) as { cards?: any[] } | void;
+        cards = Array.isArray(preview?.cards) ? preview!.cards! : [];
+      } catch (err) {
+        console.log('[advance-runout] engine previewRabbitHunt failed:', err);
+        useEngineForCards = false;
+      }
     }
-
-    // Prepare rabbit preview if needed
-    try {
-      const known = state.players?.flatMap((p: any) => p.holeCards || []) || [];
-      engine.prepareRabbitPreview?.({ community: state.communityCards, known });
-    } catch {
-      // preview preparation is best-effort
+    
+    if (!useEngineForCards || cards.length === 0) {
+      // Generate cards deterministically from game state
+      const holeCards = state.players?.flatMap((p: any) => p.holeCards || []) || [];
+      cards = generateNextCards(tableId, state.communityCards || [], holeCards, nextStreet);
+      console.log('[advance-runout] generated cards deterministically:', cards);
     }
-
-    const preview = engine.previewRabbitHunt(nextStreet) as { cards?: any[] } | void;
-    const cards = Array.isArray(preview?.cards) ? preview!.cards! : [];
-    console.log('[advance-runout] preview cards for', nextStreet, ':', cards);
+    
+    console.log('[advance-runout] cards for', nextStreet, ':', cards);
 
     const projectedCommunity = Array.isArray(state.communityCards)
       ? [...state.communityCards, ...cards]
@@ -195,13 +282,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       activePlayer: '' as any,
     };
 
-    // Also update the engine state to keep it in sync
-    try {
-      const engineState = engine.getState();
-      engineState.communityCards = projectedCommunity;
-      engineState.stage = nextStreet;
-    } catch {
-      // Engine state update is best-effort
+    // Update engine state if available
+    if (engine) {
+      try {
+        const engineState = engine.getState();
+        engineState.communityCards = projectedCommunity;
+        engineState.stage = nextStreet;
+      } catch {
+        // Engine state update is best-effort
+      }
     }
 
     const enrichedState = await broadcastState(staged, { action: `auto_runout_${nextStreet}` });

@@ -4,7 +4,6 @@ import dynamic from 'next/dynamic';
 import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
 import { useComponentPerformance } from '../../src/utils/performance-monitor';
 import { createInvite } from '../../src/services/friends-ui';
-import { determineUserRole } from '../../src/utils/roleUtils';
 import { useUserAvatar } from '../../src/hooks/useUserAvatar';
 import Avatar from '../../src/components/Avatar';
 import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
@@ -1807,9 +1806,31 @@ export default function GamePage() {
     const determineRole = async () => {
       try {
         const token = localStorage.getItem('auth_token');
-        if (token) {
-          const role = await determineUserRole(token);
-          setUserRole(role);
+        
+        if (!token) {
+          setUserRole('guest');
+          return;
+        }
+        
+        // Call the server-side API to check admin status
+        // (environment variables like ADMIN_EMAILS are only available server-side)
+        const res = await fetch('/api/auth/check-admin', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          
+          if (data.isAdmin) {
+            setUserRole('admin');
+          } else {
+            setUserRole('player');
+          }
+        } else {
+          // Fallback to player if API fails
+          setUserRole('player');
         }
       } catch (error) {
         console.warn('Could not determine user role:', error);
@@ -2953,7 +2974,7 @@ export default function GamePage() {
           
           {/* Less critical component in viewport */}
           <div ref={chatPanelRef} className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6">
-            <ChatPanel gameId={String(id)} playerId={playerId} />
+            <ChatPanel gameId={String(id)} playerId={playerId} isAdmin={userRole === 'admin'} />
           </div>
 
           {/* Settings panel moved next to stats above; bottom button removed */}

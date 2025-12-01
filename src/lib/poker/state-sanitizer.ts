@@ -13,26 +13,40 @@ import { TableState, Player, Card } from '../../types/poker';
  * In an all-in situation, hole cards should be revealed to all players.
  */
 export function isAllInSituation(state: TableState): boolean {
-  const activePlayers = state.players.filter(p => !p.isFolded);
-  if (activePlayers.length < 2) return false;
+  // Single pass through players to calculate all needed values
+  let activeCount = 0;
+  let allInCount = 0;
+  let nonAllInPlayer: Player | null = null;
+  let nonAllInCount = 0;
   
-  // All active players must be all-in for this to be an all-in situation
-  // OR only one player is not all-in and betting is effectively closed (they've matched the bet)
-  const allInCount = activePlayers.filter(p => p.isAllIn).length;
-  const nonAllInPlayers = activePlayers.filter(p => !p.isAllIn);
+  for (const player of state.players) {
+    if (!player.isFolded) {
+      activeCount++;
+      if (player.isAllIn) {
+        allInCount++;
+      } else {
+        nonAllInCount++;
+        nonAllInPlayer = player;
+      }
+    }
+  }
   
+  // Need at least 2 active players for an all-in situation
+  if (activeCount < 2) return false;
+  
+  // Need at least one all-in player
   if (allInCount === 0) return false;
   
   // True all-in situation: all active players are all-in
-  if (nonAllInPlayers.length === 0) return true;
+  if (nonAllInCount === 0) return true;
   
   // Partial all-in situation: only one non-all-in player remaining and they've matched the bet
-  // This means betting is effectively over
-  if (nonAllInPlayers.length === 1) {
+  // This means betting is effectively over - no more betting action is possible
+  if (nonAllInCount === 1 && nonAllInPlayer) {
     const currentBet = state.currentBet || 0;
-    const player = nonAllInPlayers[0];
-    // Player has matched the current bet (or there's no more betting action possible)
-    return player.currentBet >= currentBet;
+    // Using >= because the player may have over-called or there could be side pot situations
+    // where their bet exceeds the current main pot bet level
+    return nonAllInPlayer.currentBet >= currentBet;
   }
   
   return false;
@@ -71,11 +85,10 @@ function sanitizePlayer(
     return player;
   }
   
-  // Hide other players' hole cards
-  return {
-    ...player,
-    holeCards: undefined
-  };
+  // Hide other players' hole cards by setting to undefined (matches the optional type)
+  // Using object destructuring to create a new object without copying holeCards
+  const { holeCards: _hidden, ...playerWithoutCards } = player;
+  return playerWithoutCards as Player;
 }
 
 /**
@@ -96,6 +109,8 @@ export function sanitizeStateForPlayer(
   );
   
   // Also handle stud variant state if present
+  // Note: When revealAllCards is true (showdown or all-in), we skip this block and 
+  // the original studState with all cards is preserved
   let sanitizedStudState = state.studState;
   if (state.studState && !revealAllCards) {
     const sanitizedPlayerCards: Record<string, { downCards: Card[]; upCards: Card[] }> = {};
@@ -105,10 +120,12 @@ export function sanitizeStateForPlayer(
         // Show all own cards
         sanitizedPlayerCards[playerId] = cards;
       } else {
-        // For other players, hide down cards but show up cards (public in stud)
+        // For other players during active play (not showdown/all-in):
+        // - Hide down cards (face-down, private to the player)
+        // - Show up cards (face-up, visible to everyone at the table)
         sanitizedPlayerCards[playerId] = {
           downCards: [], // Hide down cards
-          upCards: cards.upCards // Up cards are always visible
+          upCards: cards.upCards // Up cards are public in stud variants
         };
       }
     }

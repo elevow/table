@@ -549,7 +549,7 @@ export default function GamePage() {
       alive = false;
       if (timer) clearInterval(timer);
     };
-  }, [id, playerId, seatAssignments, gameStarted, pokerGameState]);
+  }, [id, playerId, seatAssignments, gameStarted, pokerGameState, computeDealerChoicePrompt]);
 
   // Seat management functions
   const claimSeat = async (seatNumber: number) => {
@@ -682,7 +682,7 @@ export default function GamePage() {
   };
 
   // Poker action handlers
-  const handlePokerAction = async (action: string, amount?: number) => {
+  const handlePokerAction = useCallback(async (action: string, amount?: number) => {
     if (!pokerGameState || !playerId) {
       console.warn('Cannot perform action: missing game state or player ID');
       return;
@@ -727,19 +727,19 @@ export default function GamePage() {
         pendingActionRef.current = false;
       }, 500);
     }
-  };
+  }, [pokerGameState, playerId, id]);
 
-  const handleFold = () => handlePokerAction('fold');
-  const handleCheck = () => handlePokerAction('check');
-  const handleCall = () => {
+  const handleFold = useCallback(() => handlePokerAction('fold'), [handlePokerAction]);
+  const handleCheck = useCallback(() => handlePokerAction('check'), [handlePokerAction]);
+  const handleCall = useCallback(() => {
     if (pokerGameState?.currentBet) {
       const playerInGame = pokerGameState.players.find((p: any) => p.id === playerId);
       const callAmount = pokerGameState.currentBet - (playerInGame?.currentBet || 0);
       handlePokerAction('call', callAmount);
     }
-  };
-  const handleBet = (amount: number) => handlePokerAction('bet', amount);
-  const handleRaise = (amount: number) => handlePokerAction('raise', amount);
+  }, [pokerGameState, playerId, handlePokerAction]);
+  const handleBet = useCallback((amount: number) => handlePokerAction('bet', amount), [handlePokerAction]);
+  const handleRaise = useCallback((amount: number) => handlePokerAction('raise', amount), [handlePokerAction]);
 
   // Get current player's hole cards
   const getCurrentPlayerCards = () => {
@@ -754,13 +754,13 @@ export default function GamePage() {
     return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud';
   };
 
-  const getStudCardsForPlayer = (pid: string) => {
+  const getStudCardsForPlayer = useCallback((pid: string) => {
     const st = (pokerGameState as any)?.studState?.playerCards?.[pid];
     return {
       down: Array.isArray(st?.downCards) ? st.downCards : [],
       up: Array.isArray(st?.upCards) ? st.upCards : [],
     } as { down: any[]; up: any[] };
-  };
+  }, [pokerGameState]);
 
   type HandSummary = { primary: string | null; highLabel: string | null; lowLabel: string | null };
 
@@ -891,7 +891,7 @@ export default function GamePage() {
       console.warn('Hand summary computation failed:', e);
       return fallback;
     }
-  }, [pokerGameState, playerId]);
+  }, [pokerGameState, playerId, getStudCardsForPlayer]);
 
   // Defensive: compute remaining non-folded players from current state
   const getActiveNonFoldedPlayers = useCallback(() => {
@@ -916,24 +916,24 @@ export default function GamePage() {
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
-  const getMinBet = () => {
+  const getMinBet = useCallback(() => {
     const bb = Number(pokerGameState?.bigBlind || 0) || 0;
     const me = getMe();
     const stack = Number(me?.stack || 0) || 0;
     // If short-stacked, min becomes all-in (short bet allowed)
     return Math.min(Math.max(bb, 0.01), stack + Number(me?.currentBet || 0));
-  };
+  }, [pokerGameState?.bigBlind, getMe]);
 
-  const getBetBounds = () => {
+  const getBetBounds = useCallback(() => {
     const me = getMe();
     const prev = Number(me?.currentBet || 0);
     const stack = Number(me?.stack || 0);
     const min = getMinBet();
     const max = prev + stack; // total target for all-in
     return { min: Number(min.toFixed(2)), max: Number(max.toFixed(2)) };
-  };
+  }, [getMe, getMinBet]);
 
-  const getRaiseBounds = () => {
+  const getRaiseBounds = useCallback(() => {
     const state = pokerGameState as any;
     const me = getMe();
     const currentBet = Number(state?.currentBet || 0);
@@ -946,19 +946,19 @@ export default function GamePage() {
     const min = Math.min(minTotal, maxTotal);
     const max = maxTotal;
     return { min: Number(min.toFixed(2)), max: Number(max.toFixed(2)) };
-  };
+  }, [pokerGameState, getMe]);
 
   // Pot-Limit helpers
-  const getPotLimitPlayersShape = () => {
+  const getPotLimitPlayersShape = useCallback(() => {
     const arr = Array.isArray(pokerGameState?.players) ? pokerGameState.players : [];
     return arr.map((p: any) => ({
       currentBet: Number(p?.currentBet || 0),
       isFolded: !!(p?.isFolded || p?.folded),
       isAllIn: !!p?.isAllIn,
     }));
-  };
+  }, [pokerGameState?.players]);
 
-  const getPotLimitBetBounds = () => {
+  const getPotLimitBetBounds = useCallback(() => {
     const me = getMe();
     if (!me) return { min: 0, max: 0 };
     const prev = Number(me.currentBet || 0);
@@ -969,9 +969,9 @@ export default function GamePage() {
     const bb = Number(pokerGameState?.bigBlind || 0) || 0.01;
     const min = Math.min(Math.max(bb, 0.01), maxTotal);
     return { min: Number(min.toFixed(2)), max: Number(maxTotal.toFixed(2)) };
-  };
+  }, [getMe, pokerGameState?.pot, pokerGameState?.bigBlind, getPotLimitPlayersShape]);
 
-  const getPotLimitRaiseBounds = () => {
+  const getPotLimitRaiseBounds = useCallback(() => {
     const me = getMe();
     if (!me) return { min: 0, max: 0 };
     const prev = Number(me.currentBet || 0);
@@ -984,7 +984,7 @@ export default function GamePage() {
     const minTotal = currentBet + minRaise;
     const min = Math.min(minTotal, maxTotal);
     return { min: Number(min.toFixed(2)), max: Number(maxTotal.toFixed(2)) };
-  };
+  }, [getMe, pokerGameState?.pot, pokerGameState?.currentBet, pokerGameState?.minRaise, getPotLimitPlayersShape]);
 
   // --- Run It Twice (RIT) helpers ---
   const runItTwicePrompt = pokerGameState?.runItTwicePrompt || null;
@@ -1097,7 +1097,7 @@ export default function GamePage() {
       const { min, max } = mode === 'no-limit' ? getRaiseBounds() : getPotLimitRaiseBounds();
       setRaiseInput(clamp(min, min, max));
     }
-  }, [pokerGameState, playerId]);
+  }, [pokerGameState, playerId, getBetBounds, getPotLimitBetBounds, getRaiseBounds, getPotLimitRaiseBounds]);
 
   // If Auto Fold is enabled and it's our turn, immediately fold and clear the checkbox
   useEffect(() => {
@@ -1110,7 +1110,7 @@ export default function GamePage() {
     // Execute fold and clear autoFold to prevent repeated triggers
     handleFold();
     setAutoFold(false);
-  }, [autoFold, pokerGameState?.activePlayer, pokerGameState?.stage, playerId]);
+  }, [autoFold, pokerGameState, playerId, handleFold]);
 
   // If Auto Call is enabled and it's our turn, immediately call (even if amount is 0) and clear the checkbox
   useEffect(() => {
@@ -1127,7 +1127,7 @@ export default function GamePage() {
     if (neededAmount === 0 && autoCheck) return;
     handlePokerAction('call', neededAmount);
     setAutoCall(false);
-  }, [autoCall, autoFold, pokerGameState?.activePlayer, pokerGameState?.currentBet, pokerGameState?.stage, playerId]);
+  }, [autoCall, autoFold, autoCheck, pokerGameState, playerId, handlePokerAction]);
 
   // If Auto Check is enabled and it's our turn with no bet required, immediately check and clear the checkbox
   useEffect(() => {
@@ -1144,7 +1144,7 @@ export default function GamePage() {
       handleCheck();
       setAutoCheck(false);
     }
-  }, [autoCheck, autoFold, pokerGameState?.activePlayer, pokerGameState?.currentBet, pokerGameState?.stage, playerId]);
+  }, [autoCheck, autoFold, pokerGameState, playerId, handleCheck]);
 
   // Get position for current player's hole cards based on their seat
   const getCurrentPlayerCardsPosition = () => {

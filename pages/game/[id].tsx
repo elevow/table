@@ -505,9 +505,11 @@ export default function GamePage() {
   }, [pokerGameState?.stage, id, playerId]);
 
   // Client-side auto-runout: when all-in detected and community cards remaining, poll server every 5s
+  // Only the "leader" client (first active player by seat order) should poll to prevent duplicates
   useEffect(() => {
     if (!id || typeof id !== 'string') return;
     if (!pokerGameState) return;
+    if (!playerId) return; // Need to know who we are
 
     const stage = pokerGameState.stage;
     const players = pokerGameState.players || [];
@@ -528,12 +530,23 @@ export default function GamePage() {
     const communityLen = communityCards.length;
     const needsMoreCards = communityLen < 5;
 
+    // Determine if this client is the "leader" (first active player by seat number)
+    // Only the leader should poll to prevent duplicate requests from multiple clients
+    const sortedActivePlayers = [...activePlayers].sort((a: any, b: any) => {
+      const seatA = typeof a.seatNumber === 'number' ? a.seatNumber : 999;
+      const seatB = typeof b.seatNumber === 'number' ? b.seatNumber : 999;
+      return seatA - seatB;
+    });
+    const leaderPlayerId = sortedActivePlayers[0]?.id;
+    const isLeader = playerId === leaderPlayerId;
+
     const shouldAutoRunout = stage !== 'showdown' &&
       activeCount >= 2 &&
       anyAllIn &&
       nonAllInCount <= 1 &&
       needsMoreCards &&
-      !runItTwicePrompt;
+      !runItTwicePrompt &&
+      isLeader; // Only leader should poll
 
     console.log('[client auto-runout] check:', {
       stage,
@@ -543,6 +556,9 @@ export default function GamePage() {
       communityLen,
       needsMoreCards,
       hasPrompt: !!runItTwicePrompt,
+      isLeader,
+      playerId,
+      leaderPlayerId,
       shouldAutoRunout,
       lastCommunityLen: autoRunoutLastCommunityLenRef.current
     });
@@ -608,7 +624,7 @@ export default function GamePage() {
       }
       autoRunoutInProgressRef.current = false;
     };
-  }, [pokerGameState, id]);
+  }, [pokerGameState, id, playerId]);
   
   // Periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {

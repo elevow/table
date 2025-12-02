@@ -8,6 +8,8 @@ import {
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import type { Card, GameStage, TableState } from '../../../src/types/poker';
+import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
+import { getPool } from '../../../src/lib/database/pool';
 
 function getIo(res: NextApiResponse): any | null {
   try {
@@ -141,9 +143,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const enrichedState = await broadcastState(gameState, { action, playerId, amount });
 
+    // Post hand result to chat when the game reaches showdown
+    if (enrichedState.stage === 'showdown' && preActionStage !== 'showdown') {
+      try {
+        const pool = getPool();
+        await postHandResultToChat(pool, tableId, enrichedState);
+      } catch (chatError) {
+        // Log but don't fail the action if chat posting fails
+        console.warn('Failed to post hand result to chat:', chatError);
+      }
+    }
+
     const shouldScheduleAutoRunout = autoEligible && !issuedPrompt;
     if (shouldScheduleAutoRunout) {
-      scheduleSupabaseAutoRunout(tableId, engine, (state, meta) => broadcastState(state, meta).then(() => {}));
+      // Track whether we've already posted the hand result for auto-runout
+      let handResultPosted = false;
+      scheduleSupabaseAutoRunout(tableId, engine, async (state, meta) => {
+        await broadcastState(state, meta);
+        // Post hand result to chat when auto-runout reaches showdown
+        if (state.stage === 'showdown' && !handResultPosted) {
+          handResultPosted = true;
+          try {
+            const pool = getPool();
+            await postHandResultToChat(pool, tableId, state);
+          } catch (chatError) {
+            console.warn('Failed to post hand result to chat (auto-runout):', chatError);
+          }
+        }
+      });
     }
 
     return res.status(200).json({ success: true, gameState: enrichedState });

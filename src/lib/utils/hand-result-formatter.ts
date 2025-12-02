@@ -1,5 +1,6 @@
 import type { TableState, Card, Player } from '../../types/poker';
 import { HandEvaluator } from '../poker/hand-evaluator';
+import type { HandInterface } from '../../types/poker-engine';
 
 /**
  * System sender ID used for hand result messages
@@ -23,6 +24,29 @@ export interface FormattedHandResult {
   message: string;
   winners: HandWinner[];
   isWinByFold: boolean;
+}
+
+/**
+ * Result of evaluating a player's hand
+ */
+interface PlayerHandEvaluation {
+  player: Player;
+  hand: HandInterface;
+  label: string;
+}
+
+/**
+ * Checks if the variant is a Hi-Lo variant
+ */
+function isHiLoVariant(variant?: string): boolean {
+  return variant === 'omaha-hi-lo' || variant === 'seven-card-stud-hi-lo';
+}
+
+/**
+ * Checks if the variant is an Omaha variant
+ */
+function isOmahaVariant(variant?: string): boolean {
+  return variant === 'omaha' || variant === 'omaha-hi-lo';
 }
 
 /**
@@ -62,7 +86,7 @@ function getHandDescription(
       return '';
     }
     
-    if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+    if (isOmahaVariant(variant)) {
       if (holeCards.length >= 4 && communityCards.length >= 3) {
         const ranking = HandEvaluator.getOmahaHandRanking(holeCards, communityCards);
         return ranking.name || '';
@@ -115,7 +139,7 @@ export function formatHandResult(state: TableState): FormattedHandResult | null 
   }
 
   // Handle Hi-Lo variants with split pots
-  if ((variant === 'omaha-hi-lo' || variant === 'seven-card-stud-hi-lo') && state.lastHiLoResult) {
+  if (isHiLoVariant(variant) && state.lastHiLoResult) {
     const highWinners = state.lastHiLoResult.high || [];
     const lowWinners = state.lastHiLoResult.low || [];
     
@@ -194,13 +218,12 @@ export function formatHandResult(state: TableState): FormattedHandResult | null 
   // Standard showdown: evaluate hands and determine winners
   try {
     // Evaluate all active players' hands
-    type EvalResult = { player: Player; hand: any; label: string };
-    const evaluations: EvalResult[] = [];
+    const evaluations: PlayerHandEvaluation[] = [];
     
     for (const player of activePlayers) {
       const holeCards = player.holeCards || [];
       
-      if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+      if (isOmahaVariant(variant)) {
         if (holeCards.length >= 4 && communityCards.length >= 3) {
           const { hand } = HandEvaluator.evaluateOmahaHand(holeCards, communityCards);
           const ranking = HandEvaluator.getOmahaHandRanking(holeCards, communityCards);
@@ -221,7 +244,7 @@ export function formatHandResult(state: TableState): FormattedHandResult | null 
     }
 
     // Find the best hand(s)
-    let bestEvals: EvalResult[] = [evaluations[0]];
+    let bestEvals: PlayerHandEvaluation[] = [evaluations[0]];
     for (let i = 1; i < evaluations.length; i++) {
       const cmp = HandEvaluator.compareHands(evaluations[i].hand, bestEvals[0].hand);
       if (cmp > 0) {

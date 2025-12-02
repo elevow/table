@@ -1,6 +1,6 @@
 import type { NextPage } from 'next';
 import Head from 'next/head';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { getPrefetcher } from '../src/utils/code-splitting';
 import { useComponentPerformance } from '../src/utils/performance-monitor';
@@ -11,7 +11,6 @@ import CombinedPlayerStats from '../src/components/CombinedPlayerStats';
 
 const Dashboard: NextPage = () => {
   const router = useRouter();
-  const chatContainerRef = useRef(null);
   const { markInteraction } = useComponentPerformance('DashboardPage');
   
   // Room code join functionality
@@ -139,11 +138,6 @@ const Dashboard: NextPage = () => {
     // Initialize the prefetcher
     const prefetcher = getPrefetcher();
     
-    // Observe the chat container for viewport-based loading
-    if (chatContainerRef.current) {
-      prefetcher.observeComponent(chatContainerRef.current, 'ChatPanel');
-    }
-    
     // Mark this interaction for performance tracking
     const endMark = markInteraction('initial-load', { 
       route: 'dashboard',
@@ -253,12 +247,6 @@ const Dashboard: NextPage = () => {
         
         {/* Admin Panel - Only visible to admin users */}
         <AdminRoomsPanel />
-        
-        {/* Chat panel that loads when scrolled into view */}
-        <div ref={chatContainerRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Community Chat</h2>
-          <p className="text-gray-600 dark:text-gray-300">Chat panel will load when scrolled into view</p>
-        </div>
       </main>
     </div>
   );

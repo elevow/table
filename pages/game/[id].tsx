@@ -1945,8 +1945,9 @@ export default function GamePage() {
     
     try {
       // Stand up from the seat before leaving - this properly clears all seat state,
-      // localStorage, and notifies the server. This ensures the player can sit down
-      // again if they re-enter the game room.
+      // localStorage, and notifies the server (fire-and-forget). This ensures the player
+      // can sit down again if they re-enter the game room.
+      // Note: standUp() is intentionally fire-and-forget for instant navigation UX.
       if (currentPlayerSeat) {
         standUp();
       }

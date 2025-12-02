@@ -1757,6 +1757,13 @@ export default function GamePage() {
               persistSeatNumber(lastSeatStorageKey, parseInt(seatNumber));
               setPlayerChips(assignment?.chips || 0);
               try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
+            } else {
+              // Player is not in any seat according to server - clear local seat state
+              // This handles the case where the player left the game but localStorage had stale data
+              setCurrentPlayerSeat(null);
+              persistSeatNumber(lastSeatStorageKey, null);
+              setPlayerChips(0);
+              try { if (id) localStorage.removeItem(`chips_${playerId}_${id}`); } catch {}
             }
           }
         }
@@ -1937,18 +1944,11 @@ export default function GamePage() {
     console.log('Current router state:', router.asPath, router.pathname);
     
     try {
-      // Notify server that player is leaving via HTTP
-      if (playerId && currentPlayerSeat) {
-        fetch('/api/games/seats/stand', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tableId: id, playerId })
-        }).catch(() => {});
-      }
-      
-      // Clear any game-specific data
+      // Stand up from the seat before leaving - this properly clears all seat state,
+      // localStorage, and notifies the server. This ensures the player can sit down
+      // again if they re-enter the game room.
       if (currentPlayerSeat) {
-        localStorage.removeItem(`chips_${playerId}_${id}`);
+        standUp();
       }
       
       // Use direct navigation for reliability

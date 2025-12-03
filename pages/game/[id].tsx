@@ -602,7 +602,10 @@ export default function GamePage() {
         // This ensures we send the latest state to the server
         const currentState = pokerGameStateRef.current;
         const currentCommunityLen = currentState?.communityCards?.length || 0;
-        console.log('[client auto-runout] calling /api/games/advance-runout for scheduledCommunityLen:', scheduledFromCommunityLen, 'currentCommunityLen:', currentCommunityLen);
+        const currentStage = currentState?.stage || 'unknown';
+        console.log('[client auto-runout] timer fired - scheduledCommunityLen:', scheduledFromCommunityLen, 'currentCommunityLen:', currentCommunityLen, 'currentStage:', currentStage);
+        console.log('[client auto-runout] currentState communityCards:', currentState?.communityCards);
+        console.log('[client auto-runout] calling /api/games/advance-runout');
         const response = await fetch('/api/games/advance-runout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

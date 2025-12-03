@@ -126,10 +126,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (engine) {
       state = engine.getState();
       useEngineForCards = typeof engine.previewRabbitHunt === 'function';
-      console.log('[advance-runout] using in-memory engine');
+      console.log('[advance-runout] using in-memory engine, stage:', state.stage, 'communityCards:', state.communityCards?.length || 0);
     } else if (clientGameState) {
       state = clientGameState;
-      console.log('[advance-runout] using client-provided game state (serverless fallback)');
+      console.log('[advance-runout] using client-provided game state (serverless fallback), stage:', state.stage, 'communityCards:', state.communityCards?.length || 0);
+      console.log('[advance-runout] client communityCards detail:', JSON.stringify(state.communityCards || []));
     } else {
       console.log('[advance-runout] no game state available');
       return res.status(404).json({ error: 'No active game found for this table' });
@@ -137,7 +138,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     const communityLen = Array.isArray(state.communityCards) ? state.communityCards.length : 0;
     
-    console.log('[advance-runout] called for tableId:', tableId, 'stage:', state.stage, 'communityCards:', communityLen);
+    console.log('[advance-runout] processing request - tableId:', tableId, 'stage:', state.stage, 'communityLen:', communityLen);
 
     // Check if we should advance the runout
     if (!isAutoRunoutEligible(state)) {
@@ -166,6 +167,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } else {
       nextStreet = 'showdown';
     }
+
+    console.log('[advance-runout] determined nextStreet:', nextStreet, 'based on communityLen:', communityLen);
 
     if (!nextStreet) {
       console.log('[advance-runout] no more streets to reveal');

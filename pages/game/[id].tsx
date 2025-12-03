@@ -1944,12 +1944,35 @@ export default function GamePage() {
     console.log('Current router state:', router.asPath, router.pathname);
     
     try {
-      // Stand up from the seat before leaving - this properly clears all seat state,
-      // localStorage, and notifies the server (fire-and-forget). This ensures the player
-      // can sit down again if they re-enter the game room.
-      // Note: standUp() is intentionally fire-and-forget for instant navigation UX.
+      // If seated, stand up and WAIT for server to process so other players are notified
+      // before we navigate away. This ensures the seat_vacated broadcast is sent.
       if (currentPlayerSeat) {
-        standUp();
+        const seatToVacate = currentPlayerSeat;
+        
+        // Clear local state immediately for responsive UI
+        const newAssignments = {
+          ...seatAssignments,
+          [currentPlayerSeat]: null
+        };
+        setSeatAssignments(newAssignments);
+        setCurrentPlayerSeat(null);
+        persistSeatNumber(lastSeatStorageKey, null);
+        setPlayerChips(0);
+        
+        // Clear localStorage
+        localStorage.setItem(`seats_${id}`, JSON.stringify(newAssignments));
+        localStorage.removeItem(`chips_${playerId}_${id}`);
+        
+        // Wait for server notification so other players see the seat vacated
+        try {
+          await fetch('/api/games/seats/stand', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tableId: id, seatNumber: seatToVacate, playerId })
+          });
+        } catch (fetchErr) {
+          console.warn('Failed to notify server of seat vacation:', fetchErr);
+        }
       }
       
       // Use direct navigation for reliability

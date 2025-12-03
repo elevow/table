@@ -2,7 +2,6 @@ import type { NextPage } from 'next';
 import Head from 'next/head';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import { getPrefetcher } from '../src/utils/code-splitting';
 import { useComponentPerformance } from '../src/utils/performance-monitor';
 import { useUserAvatar } from '../src/hooks/useUserAvatar';
 import Avatar from '../src/components/Avatar';
@@ -135,9 +134,6 @@ const Dashboard: NextPage = () => {
   };
   
   useEffect(() => {
-    // Initialize the prefetcher
-    const prefetcher = getPrefetcher();
-    
     // Mark this interaction for performance tracking
     const endMark = markInteraction('initial-load', { 
       route: 'dashboard',
@@ -147,7 +143,6 @@ const Dashboard: NextPage = () => {
     // End the performance mark after everything is loaded
     return () => {
       if (typeof endMark === 'function') endMark();
-      prefetcher.cleanup();
     };
   }, [markInteraction]);
   

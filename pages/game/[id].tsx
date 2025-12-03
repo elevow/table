@@ -315,9 +315,12 @@ export default function GamePage() {
   const [gameStarted, setGameStarted] = useState(false);
   const [pokerGameState, setPokerGameState] = useState<any>(null);
   const pokerStageRef = useRef<string | undefined>(undefined);
+  // Ref to access current game state inside timeouts/callbacks
+  const pokerGameStateRef = useRef<any>(null);
   useEffect(() => {
     pokerStageRef.current = pokerGameState?.stage;
-  }, [pokerGameState?.stage]);
+    pokerGameStateRef.current = pokerGameState;
+  }, [pokerGameState?.stage, pokerGameState]);
   // Track last received sequence number to prevent out-of-order updates
   const lastSeqRef = useRef<number>(0);
   // Prevent duplicate action submissions
@@ -588,26 +591,39 @@ export default function GamePage() {
     // Mark that we're scheduling for this community length
     autoRunoutLastCommunityLenRef.current = communityLen;
     autoRunoutInProgressRef.current = true;
-    console.log('[client auto-runout] scheduling advance in 5 seconds for communityLen:', communityLen);
+    console.log('[client auto-runout] scheduling advance in 5 seconds for communityLen:', communityLen, 'stage:', stage);
     
-    // Capture current game state for the request (needed for serverless fallback)
-    const currentGameState = pokerGameState;
+    // Store the community length we're advancing FROM (not the length we captured)
+    const scheduledFromCommunityLen = communityLen;
     
     autoRunoutTimerRef.current = setTimeout(async () => {
       try {
-        console.log('[client auto-runout] calling /api/games/advance-runout for communityLen:', communityLen);
+        // Use the CURRENT game state at time of request via ref (not stale closure value)
+        // This ensures we send the latest state to the server
+        const currentState = pokerGameStateRef.current;
+        const currentCommunityLen = currentState?.communityCards?.length || 0;
+        console.log('[client auto-runout] calling /api/games/advance-runout for scheduledCommunityLen:', scheduledFromCommunityLen, 'currentCommunityLen:', currentCommunityLen);
         const response = await fetch('/api/games/advance-runout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             tableId: id,
-            gameState: currentGameState // Pass game state for serverless fallback
+            gameState: currentState // Use current state via ref
           }),
         });
         const data = await response.json();
         console.log('[client auto-runout] response:', data);
+        
+        // Reset the tracking ref after successful request to allow next scheduling
+        // This fixes the issue where the ref stays at the old value and blocks new schedules
+        if (data.success) {
+          console.log('[client auto-runout] resetting lastCommunityLen after successful advance');
+          autoRunoutLastCommunityLenRef.current = -1;
+        }
       } catch (e) {
         console.warn('[client auto-runout] request failed:', e);
+        // Reset on error too to allow retry
+        autoRunoutLastCommunityLenRef.current = -1;
       } finally {
         if (autoRunoutTimerRef.current) {
           clearTimeout(autoRunoutTimerRef.current);

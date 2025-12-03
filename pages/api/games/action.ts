@@ -7,10 +7,15 @@ import {
   isAutoRunoutEligible,
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
-import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
+import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import type { Card, GameStage, TableState } from '../../../src/types/poker';
 
-function getIo(res: NextApiResponse): any | null {
+// Socket.io server type (simplified to avoid external dependency)
+type SocketIOServer = {
+  to: (room: string) => { emit: (event: string, data: unknown) => void };
+};
+
+function getIo(res: NextApiResponse): SocketIOServer | null {
   try {
     // @ts-ignore
     const io = (res as any)?.socket?.server?.io;
@@ -53,16 +58,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       : [];
     const preActionStage: GameStage | undefined = currentState?.stage;
 
-    const broadcastState = async (state: TableState, lastAction: any) => {
+    const broadcastState = async (state: TableState, lastAction: unknown) => {
       const enrichedState = enrichStateWithRunIt(tableId, state);
+      // Sanitize state for broadcast - hide all hole cards unless showdown/all-in
+      const broadcastSafeState = sanitizeStateForBroadcast(enrichedState);
       try {
         const seq = nextSeq(tableId);
         await publishGameStateUpdate(tableId, {
-          gameState: enrichedState,
+          gameState: broadcastSafeState,
           lastAction,
           timestamp: new Date().toISOString(),
           seq,
-        } as any);
+        });
       } catch (e) {
         console.warn('Failed to publish game state to Supabase:', e);
       }
@@ -72,7 +79,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (io) {
           const seq = nextSeq(tableId);
           io.to(`table_${tableId}`).emit('game_state_update', {
-            gameState: enrichedState,
+            gameState: broadcastSafeState,
             lastAction,
             timestamp: new Date().toISOString(),
             seq,
@@ -152,8 +159,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const sanitizedState = sanitizeStateForPlayer(enrichedState, playerId);
 
     return res.status(200).json({ success: true, gameState: sanitizedState });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Error processing poker action:', e);
-    return res.status(500).json({ error: e?.message || 'Internal server error' });
+    const errorMessage =
+      typeof e === 'object' && e !== null && 'message' in e && typeof (e as { message: unknown }).message === 'string'
+        ? (e as { message: string }).message
+        : 'Internal server error';
+    return res.status(500).json({ error: errorMessage });
   }
 }

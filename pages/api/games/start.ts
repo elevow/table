@@ -7,9 +7,14 @@ import { GameService } from '../../../src/lib/services/game-service';
 import { resolveVariantAndMode, defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
-import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
+import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 
-function getIo(res: NextApiResponse): any | null {
+// Socket.io server type (simplified to avoid external dependency)
+type SocketIOServer = {
+  to: (room: string) => { emit: (event: string, data: unknown) => void };
+};
+
+function getIo(res: NextApiResponse): SocketIOServer | null {
   try {
     // @ts-ignore
     const io = (res as any)?.socket?.server?.io;
@@ -169,16 +174,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Broadcast initial state via Supabase for supabase-only mode
     try {
       const enrichedState = enrichStateWithRunIt(tableId, gameState);
+      // Sanitize state for broadcast - hide all hole cards unless showdown/all-in
+      const broadcastSafeState = sanitizeStateForBroadcast(enrichedState);
       const seqStart = nextSeq(tableId);
       await publishGameStateUpdate(tableId, {
-        gameState: enrichedState,
+        gameState: broadcastSafeState,
         lastAction: { action: 'game_started', startedBy: playerId },
         timestamp: new Date().toISOString(),
         seq: seqStart,
         variant: resolvedVariant,
         bettingMode: resolvedMode,
-      } as any);
-    } catch {}
+      });
+    } catch { /* Swallow broadcast errors */ }
 
     // Additionally announce Dealer's Choice context ONLY if this is a Dealer's Choice table
     // Check if the room configuration specifies dealer's choice variant
@@ -188,18 +195,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const playerCount = Array.isArray(gameState.players) ? gameState.players.length : 0;
         const dealerIdx = playerCount > 0 ? ((rawDealerIdx + 1) % playerCount) : rawDealerIdx;
         const dealerId = Array.isArray(gameState.players) && gameState.players[dealerIdx]?.id ? String(gameState.players[dealerIdx].id) : undefined;
-  const allowed = allowedDcVariants;
+        const allowed = allowedDcVariants;
         const payload = {
           dealerId,
           allowedVariants: allowed,
           current: 'texas-holdem', // Default to Texas Hold'em for first hand
-          suggestedBettingMode: defaultBettingModeForVariant('texas-holdem' as any),
+          suggestedBettingMode: defaultBettingModeForVariant('texas-holdem'),
         };
         const seqChoice = nextSeq(tableId);
         await publishAwaitingDealerChoice(tableId, { ...payload, seq: seqChoice });
         const io = getIo(res);
         if (io) io.to(`table_${tableId}`).emit('awaiting_dealer_choice', { ...payload, timestamp: new Date().toISOString(), seq: seqChoice });
-      } catch {}
+      } catch { /* Swallow broadcast errors */ }
     }
 
     // Also emit over socket if available (hybrid compatibility)
@@ -207,17 +214,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const io = getIo(res);
       if (io) {
         const enrichedState = enrichStateWithRunIt(tableId, gameState);
+        // Sanitize state for broadcast - hide all hole cards unless showdown/all-in
+        const broadcastSafeState = sanitizeStateForBroadcast(enrichedState);
         const seqStartEcho = nextSeq(tableId);
-        io.to(`table_${tableId}`).emit('game_started', { startedBy: playerId, playerName: seatedPlayers.find(p => p.playerId === playerId)?.playerName || 'Unknown Player', seatedPlayers, gameState: enrichedState, timestamp: new Date().toISOString(), seq: seqStartEcho });
+        io.to(`table_${tableId}`).emit('game_started', { startedBy: playerId, playerName: seatedPlayers.find(p => p.playerId === playerId)?.playerName || 'Unknown Player', seatedPlayers, gameState: broadcastSafeState, timestamp: new Date().toISOString(), seq: seqStartEcho });
       }
-    } catch {}
+    } catch { /* Swallow broadcast errors */ }
 
     const enrichedFinalState = enrichStateWithRunIt(tableId, gameState);
     // Sanitize the response for the requesting player - hide other players' hole cards
     // unless it's showdown or an all-in situation
     const sanitizedState = sanitizeStateForPlayer(enrichedFinalState, playerId);
     return res.status(201).json({ success: true, gameState: sanitizedState });
-  } catch (e: any) {
-    return res.status(400).json({ error: e?.message || 'Failed to start game' });
+  } catch (e: unknown) {
+    let errorMessage = 'Failed to start game';
+    if (typeof e === 'object' && e !== null && 'message' in e && typeof (e as { message: unknown }).message === 'string') {
+      errorMessage = (e as { message: string }).message;
+    }
+    return res.status(400).json({ error: errorMessage });
   }
 }

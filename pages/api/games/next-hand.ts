@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { publishGameStateUpdate, publishAwaitingDealerChoice, publishRebuyPrompt } from '../../../src/lib/realtime/publisher';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
-import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
+import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { fetchRoomRebuyLimit } from '../../../src/lib/shared/rebuy-limit';
 import { getPlayerRebuyInfo } from '../../../src/lib/shared/rebuy-tracker';
 import {
@@ -148,10 +148,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         const gameState = engine.getState();
         const enrichedState = enrichStateWithRunIt(tableId, gameState);
+        // Sanitize state for broadcast - hide all hole cards unless showdown/all-in
+        const broadcastSafeState = sanitizeStateForBroadcast(enrichedState);
         const sequence = nextSeq(tableId);
 
         await publishGameStateUpdate(tableId, {
-          gameState: enrichedState,
+          gameState: broadcastSafeState,
           sequence,
           lastAction: { action: 'next_hand_started', playerId },
           timestamp: new Date().toISOString(),

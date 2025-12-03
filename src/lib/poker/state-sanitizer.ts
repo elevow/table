@@ -40,12 +40,13 @@ export function isAllInSituation(state: TableState): boolean {
   // True all-in situation: all active players are all-in
   if (nonAllInCount === 0) return true;
   
-  // Partial all-in situation: only one non-all-in player remaining and they've matched the bet
-  // This means betting is effectively over - no more betting action is possible
+  // Partial all-in situation: only one non-all-in player remaining and they've matched the bet.
+  // In poker, when all opponents are all-in, the remaining player cannot make meaningful bets
+  // (since no one can call/raise), so betting is effectively complete and cards are revealed.
   if (nonAllInCount === 1 && nonAllInPlayer) {
     const currentBet = state.currentBet || 0;
-    // Using >= because the player may have over-called or there could be side pot situations
-    // where their bet exceeds the current main pot bet level
+    // The player has called or raised to match/exceed the current bet,
+    // meaning betting action is complete for this round (side pot situations may result in their bet exceeding the main pot bet level)
     return nonAllInPlayer.currentBet >= currentBet;
   }
   
@@ -87,8 +88,8 @@ function sanitizePlayer(
   
   // Hide other players' hole cards by setting to undefined (matches the optional type)
   // Using object destructuring to create a new object without copying holeCards
-  const { holeCards: _hidden, ...playerWithoutCards } = player;
-  return playerWithoutCards as Player;
+  const { holeCards: _, ...playerWithoutCards } = player;
+  return { ...playerWithoutCards, holeCards: undefined };
 }
 
 /**
@@ -160,4 +161,52 @@ export function sanitizeStateForAllPlayers(
   }
   
   return result;
+}
+
+/**
+ * Sanitizes game state for public broadcast where no specific viewer is known.
+ * Hides all hole cards unless cards should be revealed (showdown or all-in).
+ * 
+ * This is used for Supabase broadcasts where we can't send per-player data.
+ * Each player's own cards will be visible from their API responses.
+ * 
+ * @param state - The full game state
+ * @returns A sanitized state with hole cards hidden unless at showdown/all-in
+ */
+export function sanitizeStateForBroadcast(state: TableState): TableState {
+  // If cards should be revealed (showdown or all-in), return state as-is
+  if (shouldRevealHoleCards(state)) {
+    return state;
+  }
+  
+  // Hide all hole cards for broadcast
+  const sanitizedPlayers = state.players.map(player => {
+    const { holeCards: _, ...playerWithoutCards } = player;
+    return { ...playerWithoutCards, holeCards: undefined };
+  });
+  
+  // Also handle stud variant state if present
+  let sanitizedStudState = state.studState;
+  if (state.studState) {
+    const sanitizedPlayerCards: Record<string, { downCards: Card[]; upCards: Card[] }> = {};
+    
+    for (const [playerId, cards] of Object.entries(state.studState.playerCards)) {
+      // For broadcasts, hide all down cards but show up cards (always public in stud)
+      sanitizedPlayerCards[playerId] = {
+        downCards: [], // Hide down cards
+        upCards: cards.upCards // Up cards are public in stud variants
+      };
+    }
+    
+    sanitizedStudState = {
+      ...state.studState,
+      playerCards: sanitizedPlayerCards
+    };
+  }
+  
+  return {
+    ...state,
+    players: sanitizedPlayers,
+    studState: sanitizedStudState
+  };
 }

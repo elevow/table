@@ -2,9 +2,10 @@ import {
   isAllInSituation,
   shouldRevealHoleCards,
   sanitizeStateForPlayer,
-  sanitizeStateForAllPlayers
+  sanitizeStateForAllPlayers,
+  sanitizeStateForBroadcast
 } from '../state-sanitizer';
-import { TableState, Player, Card } from '../../../types/poker';
+import { TableState, Player } from '../../../types/poker';
 
 const createPlayer = (id: string, overrides: Partial<Player> = {}): Player => ({
   id,
@@ -316,6 +317,94 @@ describe('state-sanitizer', () => {
       const p2View = sanitizedMap.get('p2');
       expect(p2View?.players.find(p => p.id === 'p1')?.holeCards).toBeUndefined();
       expect(p2View?.players.find(p => p.id === 'p2')?.holeCards).toBeDefined();
+    });
+  });
+
+  describe('sanitizeStateForBroadcast', () => {
+    it('should hide all hole cards during normal play', () => {
+      const state = createState({ stage: 'flop' });
+      const sanitized = sanitizeStateForBroadcast(state);
+      
+      sanitized.players.forEach(p => {
+        expect(p.holeCards).toBeUndefined();
+      });
+    });
+
+    it('should show all hole cards at showdown', () => {
+      const state = createState({ stage: 'showdown' });
+      const sanitized = sanitizeStateForBroadcast(state);
+      
+      sanitized.players.forEach(p => {
+        expect(p.holeCards).toBeDefined();
+        expect(p.holeCards?.length).toBe(2);
+      });
+    });
+
+    it('should show all hole cards in all-in situation', () => {
+      const state = createState({
+        stage: 'flop',
+        players: [
+          createPlayer('p1', { isAllIn: true }),
+          createPlayer('p2', { isAllIn: true }),
+          createPlayer('p3', { isFolded: true })
+        ]
+      });
+      const sanitized = sanitizeStateForBroadcast(state);
+      
+      const p1 = sanitized.players.find(p => p.id === 'p1');
+      const p2 = sanitized.players.find(p => p.id === 'p2');
+      
+      expect(p1?.holeCards).toBeDefined();
+      expect(p2?.holeCards).toBeDefined();
+    });
+
+    it('should preserve other player properties when hiding cards', () => {
+      const state = createState({ stage: 'flop' });
+      const sanitized = sanitizeStateForBroadcast(state);
+      
+      const p1 = sanitized.players.find(p => p.id === 'p1');
+      expect(p1?.id).toBe('p1');
+      expect(p1?.name).toBe('Player p1');
+      expect(p1?.stack).toBe(1000);
+    });
+
+    it('should hide stud down cards but show up cards during normal play', () => {
+      const studState: TableState = createState({
+        stage: 'fourth',
+        variant: 'seven-card-stud',
+        studState: {
+          playerCards: {
+            p1: {
+              downCards: [
+                { suit: 'hearts', rank: 'A' },
+                { suit: 'spades', rank: 'K' }
+              ],
+              upCards: [
+                { suit: 'diamonds', rank: 'Q' }
+              ]
+            },
+            p2: {
+              downCards: [
+                { suit: 'clubs', rank: 'J' },
+                { suit: 'hearts', rank: '10' }
+              ],
+              upCards: [
+                { suit: 'spades', rank: '9' }
+              ]
+            }
+          }
+        }
+      });
+
+      const sanitized = sanitizeStateForBroadcast(studState);
+      
+      // All down cards should be hidden
+      expect(sanitized.studState?.playerCards.p1.downCards).toHaveLength(0);
+      expect(sanitized.studState?.playerCards.p2.downCards).toHaveLength(0);
+      
+      // Up cards should be visible
+      expect(sanitized.studState?.playerCards.p1.upCards).toHaveLength(1);
+      expect(sanitized.studState?.playerCards.p2.upCards).toHaveLength(1);
     });
   });
 });

@@ -184,6 +184,7 @@ export default function GamePage() {
     sb?: number;
     bb?: number;
     numberOfRebuys?: number | 'unlimited';
+    timeBetweenRounds?: number;
   } | null>(null);
   
   // Seat management state - initialize dynamically based on maxPlayers
@@ -428,7 +429,10 @@ export default function GamePage() {
         const numberOfRebuys = typeof cfg?.numberOfRebuys === 'number'
           ? cfg.numberOfRebuys
           : 'unlimited';
-        setRoomConfig({ variant, bettingMode, sb, bb, numberOfRebuys });
+        const timeBetweenRounds = typeof cfg?.timeBetweenRounds === 'number'
+          ? cfg.timeBetweenRounds
+          : 5; // Default to 5 seconds
+        setRoomConfig({ variant, bettingMode, sb, bb, numberOfRebuys, timeBetweenRounds });
       } catch {}
     };
     fetchRoom();
@@ -447,7 +451,7 @@ export default function GamePage() {
     });
   }, [seatAssignments, playerId, loadPlayerAvatar]);
 
-  // Client-side fallback: after showdown, request next hand after 5s if server didn't start it
+  // Client-side fallback: after showdown, request next hand based on configured time between rounds
   useEffect(() => {
     // Guard: need table id and a valid game state
     if (!id || typeof id !== 'string') return;
@@ -466,11 +470,14 @@ export default function GamePage() {
       return;
     }
 
+    // Use configured timeBetweenRounds (default 5 seconds) converted to milliseconds
+    const delayMs = (roomConfig?.timeBetweenRounds ?? 5) * 1000;
+
     autoNextHandScheduledRef.current = true;
     autoNextHandTimerRef.current = setTimeout(async () => {
       try {
         if (pokerStageRef.current === 'showdown') {
-          console.log('[client auto] Requesting next hand after 5s');
+          console.log(`[client auto] Requesting next hand after ${delayMs / 1000}s`);
           const response = await fetch('/api/games/next-hand', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -489,7 +496,7 @@ export default function GamePage() {
         }
         autoNextHandScheduledRef.current = false;
       }
-    }, 5000);
+    }, delayMs);
 
     return () => {
       if (autoNextHandTimerRef.current) {
@@ -498,7 +505,7 @@ export default function GamePage() {
       }
       autoNextHandScheduledRef.current = false;
     };
-  }, [pokerGameState?.stage, id, playerId]);
+  }, [pokerGameState?.stage, id, playerId, roomConfig?.timeBetweenRounds]);
   
   // Periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {
@@ -2863,7 +2870,7 @@ export default function GamePage() {
             )}
             {showSettings && (
               <div className="mt-4">
-                <GameSettings gameId={String(id)} onSettingsChange={(s: any) => setHighContrastCards(!!s?.highContrastCards)} />
+                <GameSettings gameId={String(id)} onSettingsChange={(s: any) => setHighContrastCards(!!s?.highContrastCards)} isAdmin={userRole === 'admin'} />
               </div>
             )}
           </div>

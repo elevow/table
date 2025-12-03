@@ -10,7 +10,6 @@ import {
 import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import type { TableState } from '../../../src/types/poker';
 import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
-import { getPool } from '../../../src/lib/database/pool';
 
 function getIo(res: NextApiResponse): any | null {
   try {
@@ -162,8 +161,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (state.stage === 'showdown' && !handResultPosted) {
           handResultPosted = true;
           try {
-            const pool = getPool();
-            await postHandResultToChat(pool, tableId, state);
+            await postHandResultToChat(tableId, state);
           } catch (chatError) {
             console.warn('Failed to post hand result to chat (auto-runout):', chatError);
           }

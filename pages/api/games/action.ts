@@ -9,7 +9,6 @@ import {
 import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import type { Card, GameStage, TableState } from '../../../src/types/poker';
 import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
-import { getPool } from '../../../src/lib/database/pool';
 
 function getIo(res: NextApiResponse): any | null {
   try {
@@ -146,8 +145,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Post hand result to chat when the game reaches showdown
     if (enrichedState.stage === 'showdown' && preActionStage !== 'showdown') {
       try {
-        const pool = getPool();
-        await postHandResultToChat(pool, tableId, enrichedState);
+        await postHandResultToChat(tableId, enrichedState);
       } catch (chatError) {
         // Log but don't fail the action if chat posting fails
         console.warn('Failed to post hand result to chat:', chatError);
@@ -164,8 +162,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (state.stage === 'showdown' && !handResultPosted) {
           handResultPosted = true;
           try {
-            const pool = getPool();
-            await postHandResultToChat(pool, tableId, state);
+            await postHandResultToChat(tableId, state);
           } catch (chatError) {
             console.warn('Failed to post hand result to chat (auto-runout):', chatError);
           }

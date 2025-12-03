@@ -1,19 +1,17 @@
-import type { Pool } from 'pg';
 import type { TableState } from '../../types/poker';
-import { ChatService } from '../services/chat-service';
 import { publishChatMessage } from '../realtime/publisher';
 import { formatHandResult, SYSTEM_SENDER_ID } from './hand-result-formatter';
+import { randomUUID } from 'crypto';
 
 /**
  * Posts a hand result as a system message in the chat for a game room.
+ * System messages are broadcast via Supabase Realtime but not stored in the database.
  * 
- * @param pool - Database connection pool
  * @param tableId - The table/room ID where the game is played
  * @param state - The current table state (should be at showdown stage)
- * @returns The created chat message, or null if no message was posted
+ * @returns The broadcast message, or null if no message was posted
  */
 export async function postHandResultToChat(
-  pool: Pool,
   tableId: string,
   state: TableState
 ): Promise<any | null> {
@@ -24,19 +22,23 @@ export async function postHandResultToChat(
       return null;
     }
 
-    // Create the chat service and send the message
-    const chatService = new ChatService(pool);
-    const message = await chatService.send({
+    // Create a system message object (not persisted to database)
+    const message = {
+      id: randomUUID(),
       roomId: tableId,
       senderId: SYSTEM_SENDER_ID,
       message: result.message,
       isPrivate: false,
-    });
+      recipientId: null,
+      sentAt: new Date().toISOString(),
+      isModerated: false,
+      moderatedAt: null,
+      moderatorId: null,
+      isSystem: true, // Flag to indicate this is a system message
+    };
 
     // Broadcast the message via Supabase Realtime
-    if (message?.roomId) {
-      await publishChatMessage(message.roomId, { message });
-    }
+    await publishChatMessage(tableId, { message });
 
     return message;
   } catch (error) {

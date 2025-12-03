@@ -2,7 +2,7 @@
  * This is a mock component for demonstration purposes.
  * In a real implementation, you would have a fully functional game settings component.
  */
-import { useEffect, useState, memo } from 'react';
+import { useEffect, useState, useRef, memo } from 'react';
 
 interface GameSettingsProps {
   gameId: string;
@@ -19,6 +19,12 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
     timeBank: 30,
     highContrastCards: false,
   });
+
+  // Use a ref to store the callback to avoid re-triggering effects
+  const onSettingsChangeRef = useRef(onSettingsChange);
+  useEffect(() => {
+    onSettingsChangeRef.current = onSettingsChange;
+  }, [onSettingsChange]);
   
   useEffect(() => {
     // Log when the component is loaded to demonstrate code splitting
@@ -29,11 +35,14 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
       const raw = localStorage.getItem(`game_settings_${gameId}`);
       if (raw) {
         const saved = JSON.parse(raw);
-        setSettings(prev => ({ ...prev, ...saved }));
-        // Notify parent of initial load
-        if (typeof onSettingsChange === 'function') {
-          onSettingsChange({ ...settings, ...saved });
-        }
+        setSettings(prev => {
+          const merged = { ...prev, ...saved };
+          // Notify parent of initial load with merged settings
+          if (typeof onSettingsChangeRef.current === 'function') {
+            onSettingsChangeRef.current(merged);
+          }
+          return merged;
+        });
       }
     } catch {}
   }, [gameId]);
@@ -44,8 +53,8 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
       localStorage.setItem(`game_settings_${gameId}`, JSON.stringify(settings));
     } catch {}
     // Notify parent on any change
-    if (typeof onSettingsChange === 'function') {
-      onSettingsChange(settings);
+    if (typeof onSettingsChangeRef.current === 'function') {
+      onSettingsChangeRef.current(settings);
     }
   }, [gameId, settings]);
   

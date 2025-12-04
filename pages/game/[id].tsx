@@ -249,12 +249,14 @@ export default function GamePage() {
             if (!hadCards) return gameState;
             
             // Preserve our hole cards by merging them into the new state
-            const mergedPlayers = gameState.players?.map((p: any) => {
-              if (p.id === playerId) {
-                return { ...p, holeCards: prevHoleCards };
-              }
-              return p;
-            });
+            const mergedPlayers = Array.isArray(gameState.players)
+              ? gameState.players.map((p: any) => {
+                  if (p.id === playerId) {
+                    return { ...p, holeCards: prevHoleCards };
+                  }
+                  return p;
+                })
+              : gameState.players;
             
             // Also preserve stud state down cards for current player if applicable
             let mergedStudState = gameState.studState;
@@ -270,7 +272,7 @@ export default function GamePage() {
                   playerCards: {
                     ...gameState.studState.playerCards,
                     [playerId]: {
-                      ...newStudCards,
+                      upCards: newStudCards?.upCards || [],
                       downCards: prevStudCards.downCards,
                     },
                   },

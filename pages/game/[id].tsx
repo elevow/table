@@ -260,9 +260,9 @@ export default function GamePage() {
             
             // Also preserve stud state down cards for current player if applicable
             let mergedStudState = gameState.studState;
-            if (gameState.studState && prevState.studState) {
-              const prevStudCards = prevState.studState.playerCards?.[playerId];
-              const newStudCards = gameState.studState.playerCards?.[playerId];
+            if (gameState.studState?.playerCards && prevState.studState?.playerCards) {
+              const prevStudCards = prevState.studState.playerCards[playerId];
+              const newStudCards = gameState.studState.playerCards[playerId];
               const hadDownCards = Array.isArray(prevStudCards?.downCards) && prevStudCards.downCards.length > 0;
               const missingDownCards = !Array.isArray(newStudCards?.downCards) || newStudCards.downCards.length === 0;
               

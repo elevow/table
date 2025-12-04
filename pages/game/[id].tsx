@@ -223,7 +223,67 @@ export default function GamePage() {
         }
         
         if (gameState) {
-          setPokerGameState(gameState);
+          // Preserve current player's hole cards from broadcast state
+          // Broadcasts hide all hole cards for security, but we need to keep our own cards
+          // visible if we already have them from a previous state or API response
+          setPokerGameState((prevState: any) => {
+            if (!prevState || !playerId) return gameState;
+            
+            // Find the current player in both states
+            const prevMe = prevState.players?.find((p: any) => p.id === playerId);
+            const newMe = gameState.players?.find((p: any) => p.id === playerId);
+            
+            // Check if we should preserve hole cards:
+            // 1. Previous state had our hole cards
+            // 2. New state is missing our hole cards (undefined or empty)
+            // 3. Hand number/round hasn't changed (if tracked) - or check that stage isn't showing a new hand reset
+            const prevHoleCards = prevMe?.holeCards;
+            const newHoleCards = newMe?.holeCards;
+            const hadCards = Array.isArray(prevHoleCards) && prevHoleCards.length > 0;
+            const missingCards = !Array.isArray(newHoleCards) || newHoleCards.length === 0;
+            
+            // If the new state already has our cards visible (showdown, all-in, or API response), use them
+            if (!missingCards) return gameState;
+            
+            // If we had no previous cards to preserve, use the new state as-is
+            if (!hadCards) return gameState;
+            
+            // Preserve our hole cards by merging them into the new state
+            const mergedPlayers = gameState.players?.map((p: any) => {
+              if (p.id === playerId) {
+                return { ...p, holeCards: prevHoleCards };
+              }
+              return p;
+            });
+            
+            // Also preserve stud state down cards for current player if applicable
+            let mergedStudState = gameState.studState;
+            if (gameState.studState && prevState.studState) {
+              const prevStudCards = prevState.studState.playerCards?.[playerId];
+              const newStudCards = gameState.studState.playerCards?.[playerId];
+              const hadDownCards = Array.isArray(prevStudCards?.downCards) && prevStudCards.downCards.length > 0;
+              const missingDownCards = !Array.isArray(newStudCards?.downCards) || newStudCards.downCards.length === 0;
+              
+              if (hadDownCards && missingDownCards) {
+                mergedStudState = {
+                  ...gameState.studState,
+                  playerCards: {
+                    ...gameState.studState.playerCards,
+                    [playerId]: {
+                      ...newStudCards,
+                      downCards: prevStudCards.downCards,
+                    },
+                  },
+                };
+              }
+            }
+            
+            return {
+              ...gameState,
+              players: mergedPlayers,
+              studState: mergedStudState,
+            };
+          });
           setGameStarted(true);
           console.log('🎮 Game state updated:', gameState.stage, 'activePlayer:', gameState.activePlayer, 'seq:', seq);
 
@@ -675,6 +735,14 @@ export default function GamePage() {
       if (!response.ok) {
         const err = await response.json();
         console.error('Start game failed:', err);
+      } else {
+        // Use the API response to set initial game state
+        // The API returns a sanitized state that includes the current player's hole cards
+        const data = await response.json();
+        if (data.gameState) {
+          setPokerGameState(data.gameState);
+          console.log('🎴 Initial game state set with player cards from API');
+        }
       }
     } catch (error) {
       console.error('Error starting game:', error);
@@ -718,6 +786,14 @@ export default function GamePage() {
       if (!response.ok) {
         const err = await response.json();
         console.error('Poker action failed:', err);
+      } else {
+        // Use the API response to update game state
+        // The API returns a sanitized state that includes the current player's hole cards
+        const data = await response.json();
+        if (data.gameState) {
+          setPokerGameState(data.gameState);
+          console.log('🎴 Game state updated with player cards from action API');
+        }
       }
     } catch (error) {
       console.error('Error performing poker action:', error);

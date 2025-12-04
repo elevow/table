@@ -1539,12 +1539,17 @@ export default function GamePage() {
           setMaxPlayers(roomMaxPlayers);
           console.log(`Room ${id} supports ${roomMaxPlayers} players`);
           
-          // Re-initialize seat assignments with correct number of seats
-          const seats: Record<number, { playerId: string; playerName: string; chips: number } | null> = {};
-          for (let i = 1; i <= roomMaxPlayers; i++) {
-            seats[i] = null;
-          }
-          setSeatAssignments(seats);
+          // Only extend seat assignments if needed, don't reset existing data
+          // Seat data comes from initSeatState and realtime updates
+          setSeatAssignments(prev => {
+            const updated = { ...prev };
+            for (let i = 1; i <= roomMaxPlayers; i++) {
+              if (!(i in updated)) {
+                updated[i] = null;
+              }
+            }
+            return updated;
+          });
         } else {
           console.warn('Failed to fetch room info, using default 6 seats');
         }
@@ -1747,6 +1752,29 @@ export default function GamePage() {
         if (resp.ok) {
           const data = await resp.json();
           if (data?.seats) {
+            // Check if server has actual seat data (not all nulls)
+            const serverHasSeats = Object.values(data.seats).some((s: any) => s !== null);
+            
+            // Get existing localStorage data
+            let localSeats: Record<string, any> | null = null;
+            try {
+              const savedSeats = localStorage.getItem(`seats_${id}`);
+              if (savedSeats) {
+                localSeats = JSON.parse(savedSeats);
+              }
+            } catch {}
+            const localHasSeats = localSeats && Object.values(localSeats).some((s: any) => s !== null);
+            
+            // If server has no seats but localStorage does, prefer localStorage
+            // This handles the case where server state was lost (e.g., serverless cold start)
+            // Realtime broadcasts will keep things in sync going forward
+            if (!serverHasSeats && localHasSeats) {
+              console.log('Server returned empty seats but localStorage has data, using localStorage');
+              setSeatStateReady(true);
+              // Don't overwrite - let localStorage loading effect handle it
+              return;
+            }
+            
             setSeatAssignments(data.seats);
             setSeatStateReady(true);
             try { if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats)); } catch {}

@@ -226,16 +226,38 @@ export default function GamePage() {
           // Check if this is a new hand/game start where we need to fetch our cards
           const lastAction = payload.lastAction;
           const isNewHand = lastAction?.action === 'game_started' || lastAction?.action === 'new_hand_started' || lastAction?.action === 'next_hand_started';
-          const meInState = gameState.players?.find((p: any) => p.id === playerId);
+          
+          // Try to find our player ID - use currentPlayerSeat + seatAssignments as fallback
+          let effectivePlayerId = playerId;
+          if (!effectivePlayerId && currentPlayerSeat && seatAssignments[currentPlayerSeat]) {
+            effectivePlayerId = seatAssignments[currentPlayerSeat]!.playerId;
+          }
+          
+          const meInState = gameState.players?.find((p: any) => p.id === effectivePlayerId);
           const missingMyCards = meInState && (!Array.isArray(meInState.holeCards) || meInState.holeCards.length === 0);
           const isParticipant = meInState && !meInState.isFolded;
           const shouldShowCards = gameState.stage !== 'showdown' && gameState.stage !== 'awaiting-dealer-choice';
           
+          // Debug logging for card fetch conditions
+          console.log('🎴 Card fetch check:', {
+            isNewHand,
+            playerId,
+            effectivePlayerId,
+            currentPlayerSeat,
+            meInState: !!meInState,
+            missingMyCards,
+            isParticipant,
+            shouldShowCards,
+            lastAction: lastAction?.action,
+            stage: gameState.stage,
+            playerIds: gameState.players?.map((p: any) => p.id)
+          });
+          
           // If this is a new hand and we're a participant but don't have our cards,
           // fetch our player-specific state from the API
-          if (isNewHand && missingMyCards && isParticipant && shouldShowCards && playerId && id) {
+          if (isNewHand && missingMyCards && isParticipant && shouldShowCards && effectivePlayerId && id) {
             console.log('🎴 New hand detected without cards, fetching player-specific state...');
-            fetch(`/api/games/state?tableId=${id}&playerId=${playerId}`)
+            fetch(`/api/games/state?tableId=${id}&playerId=${effectivePlayerId}`)
               .then(resp => {
                 if (!resp.ok) {
                   throw new Error(`HTTP ${resp.status}`);
@@ -255,11 +277,13 @@ export default function GamePage() {
           // Broadcasts hide all hole cards for security, but we need to keep our own cards
           // visible if we already have them from a previous state or API response
           setPokerGameState((prevState: any) => {
-            if (!prevState || !playerId) return gameState;
+            // Use effectivePlayerId which may come from currentPlayerSeat if playerId is not set
+            const resolvedPlayerId = effectivePlayerId || playerId;
+            if (!prevState || !resolvedPlayerId) return gameState;
             
             // Find the current player in both states
-            const prevMe = prevState.players?.find((p: any) => p.id === playerId);
-            const newMe = gameState.players?.find((p: any) => p.id === playerId);
+            const prevMe = prevState.players?.find((p: any) => p.id === resolvedPlayerId);
+            const newMe = gameState.players?.find((p: any) => p.id === resolvedPlayerId);
             
             // Check if we should preserve hole cards:
             // 1. Previous state had our hole cards
@@ -279,7 +303,7 @@ export default function GamePage() {
             // Preserve our hole cards by merging them into the new state
             const mergedPlayers = Array.isArray(gameState.players)
               ? gameState.players.map((p: any) => {
-                  if (p.id === playerId) {
+                  if (p.id === resolvedPlayerId) {
                     return { ...p, holeCards: prevHoleCards };
                   }
                   return p;
@@ -289,8 +313,8 @@ export default function GamePage() {
             // Also preserve stud state down cards for current player if applicable
             let mergedStudState = gameState.studState;
             if (gameState.studState?.playerCards && prevState.studState?.playerCards) {
-              const prevStudCards = prevState.studState.playerCards[playerId];
-              const newStudCards = gameState.studState.playerCards[playerId];
+              const prevStudCards = prevState.studState.playerCards[resolvedPlayerId];
+              const newStudCards = gameState.studState.playerCards[resolvedPlayerId];
               const hadDownCards = Array.isArray(prevStudCards?.downCards) && prevStudCards.downCards.length > 0;
               const missingDownCards = !Array.isArray(newStudCards?.downCards) || newStudCards.downCards.length === 0;
               
@@ -299,7 +323,7 @@ export default function GamePage() {
                   ...gameState.studState,
                   playerCards: {
                     ...gameState.studState.playerCards,
-                    [playerId]: {
+                    [resolvedPlayerId]: {
                       upCards: newStudCards?.upCards || [],
                       downCards: prevStudCards.downCards,
                     },

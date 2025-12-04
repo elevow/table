@@ -223,6 +223,34 @@ export default function GamePage() {
         }
         
         if (gameState) {
+          // Check if this is a new hand/game start where we need to fetch our cards
+          const lastAction = payload.lastAction;
+          const isNewHand = lastAction?.action === 'game_started' || lastAction?.action === 'new_hand_started' || lastAction?.action === 'next_hand_started';
+          const meInState = gameState.players?.find((p: any) => p.id === playerId);
+          const missingMyCards = meInState && (!Array.isArray(meInState.holeCards) || meInState.holeCards.length === 0);
+          const isParticipant = meInState && !meInState.isFolded;
+          const shouldShowCards = gameState.stage !== 'showdown' && gameState.stage !== 'awaiting-dealer-choice';
+          
+          // If this is a new hand and we're a participant but don't have our cards,
+          // fetch our player-specific state from the API
+          if (isNewHand && missingMyCards && isParticipant && shouldShowCards && playerId && id) {
+            console.log('🎴 New hand detected without cards, fetching player-specific state...');
+            fetch(`/api/games/state?tableId=${id}&playerId=${playerId}`)
+              .then(resp => {
+                if (!resp.ok) {
+                  throw new Error(`HTTP ${resp.status}`);
+                }
+                return resp.json();
+              })
+              .then(data => {
+                if (data.gameState) {
+                  setPokerGameState(data.gameState);
+                  console.log('🎴 Player-specific state fetched with hole cards');
+                }
+              })
+              .catch(err => console.warn('Failed to fetch player-specific state:', err));
+          }
+          
           // Preserve current player's hole cards from broadcast state
           // Broadcasts hide all hole cards for security, but we need to keep our own cards
           // visible if we already have them from a previous state or API response

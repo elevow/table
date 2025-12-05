@@ -235,7 +235,7 @@ export default function GamePage() {
               knownHoleCardsRef.current = myHoleCards;
             }
             // If broadcast hides our cards but we know them, restore them
-            else if (knownHoleCardsRef.current && (!myHoleCards || myHoleCards.length === 0)) {
+            else if (knownHoleCardsRef.current && (!Array.isArray(myHoleCards) || myHoleCards.length === 0)) {
               // Only preserve cards if we're in an active hand (not showdown)
               // and the hand ID matches (new hand should clear known cards)
               if (gameState.stage !== 'showdown') {
@@ -367,6 +367,8 @@ export default function GamePage() {
   const autoRunoutLastCommunityLenRef = useRef<number>(-1);
   // Track player's own hole cards to preserve them when broadcast state hides them
   const knownHoleCardsRef = useRef<any[] | null>(null);
+  // Track if we've already attempted to fetch hole cards for this stage
+  const holeCardsFetchAttemptedRef = useRef<string | null>(null);
   // Visual accessibility options
   const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
   // Dealer's Choice: pending choice prompt from server
@@ -565,7 +567,11 @@ export default function GamePage() {
     
     // Only fetch if we're in an active hand (not preflop waiting, not showdown)
     const stage = pokerGameState.stage;
-    if (!stage || stage === 'showdown') return;
+    if (!stage || stage === 'showdown') {
+      // Reset fetch attempt tracker when not in active hand
+      holeCardsFetchAttemptedRef.current = null;
+      return;
+    }
     
     // Check if we're a player in this game
     const myPlayer = pokerGameState.players?.find((p: any) => p.id === playerId);
@@ -575,11 +581,22 @@ export default function GamePage() {
     if (Array.isArray(myPlayer.holeCards) && myPlayer.holeCards.length > 0) {
       // Update our known cards ref
       knownHoleCardsRef.current = myPlayer.holeCards;
+      holeCardsFetchAttemptedRef.current = null; // Reset for next hand
       return;
     }
     
     // If we have known cards in our ref, we've already merged them
     if (knownHoleCardsRef.current && knownHoleCardsRef.current.length > 0) return;
+    
+    // Create a unique key for this fetch attempt to prevent duplicate fetches
+    const fetchKey = `${id}:${playerId}:${stage}`;
+    if (holeCardsFetchAttemptedRef.current === fetchKey) {
+      // Already attempted to fetch for this stage, don't retry
+      return;
+    }
+    
+    // Mark that we're attempting to fetch
+    holeCardsFetchAttemptedRef.current = fetchKey;
     
     // We're in a hand but don't have our cards - fetch them from the server
     console.log('[game] fetching hole cards - player in hand but no cards visible');

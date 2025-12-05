@@ -44,6 +44,18 @@ export class DeckManager {
     return [...this.deck];
   }
 
+  // Serialize deck state for persistence
+  public serialize(): Card[] {
+    return [...this.deck];
+  }
+
+  // Restore deck from serialized state
+  public static fromSerialized(cards: Card[]): DeckManager {
+    const dm = new DeckManager();
+    dm.deck = [...cards];
+    return dm;
+  }
+
   // US-029: Helper to create an ad-hoc deck excluding given cards (e.g., for run-it-twice)
   public static fromExcluding(exclude: Card[], seed?: number): DeckManager {
     const dm = new DeckManager();

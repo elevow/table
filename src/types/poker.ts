@@ -4,6 +4,9 @@ export type GameStage =
   | 'third' | 'fourth' | 'fifth' | 'sixth' | 'seventh' // Seven-card Stud
   | 'awaiting-dealer-choice'; // Dealer's Choice pre-hand pause
 
+// Game variant type - shared across TableState and PokerEngine
+export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud';
+
 export interface Card {
   suit: 'hearts' | 'diamonds' | 'clubs' | 'spades';
   rank: '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A';
@@ -45,7 +48,7 @@ export interface TableState {
   minRaise: number;
   lastRaise: number;
   // Optional game variant; when set to 'omaha' or 'omaha-hi-lo', rules and dealing are adapted accordingly
-  variant?: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud';
+  variant?: GameVariant;
   // Betting mode for the table: 'no-limit' (default) or 'pot-limit'
   bettingMode?: 'no-limit' | 'pot-limit';
   // Policy: when true, Run It Twice requires unanimous consent from all active players

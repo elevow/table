@@ -223,7 +223,121 @@ export default function GamePage() {
         }
         
         if (gameState) {
-          setPokerGameState(gameState);
+          // Check if this is a new hand/game start where we need to fetch our cards
+          const lastAction = payload.lastAction;
+          const isNewHand = lastAction?.action === 'game_started' || lastAction?.action === 'new_hand_started' || lastAction?.action === 'next_hand_started';
+          
+          // Try to find our player ID - use currentPlayerSeat + seatAssignments as fallback
+          let effectivePlayerId = playerId;
+          if (!effectivePlayerId && currentPlayerSeat && seatAssignments[currentPlayerSeat]) {
+            effectivePlayerId = seatAssignments[currentPlayerSeat]!.playerId;
+          }
+          
+          const meInState = gameState.players?.find((p: any) => p.id === effectivePlayerId);
+          const missingMyCards = meInState && (!Array.isArray(meInState.holeCards) || meInState.holeCards.length === 0);
+          const isParticipant = meInState && !meInState.isFolded;
+          const shouldShowCards = gameState.stage !== 'showdown' && gameState.stage !== 'awaiting-dealer-choice';
+          
+          // Debug logging for card fetch conditions
+          console.log('🎴 Card fetch check:', {
+            isNewHand,
+            playerId,
+            effectivePlayerId,
+            currentPlayerSeat,
+            meInState: !!meInState,
+            missingMyCards,
+            isParticipant,
+            shouldShowCards,
+            lastAction: lastAction?.action,
+            stage: gameState.stage,
+            playerIds: gameState.players?.map((p: any) => p.id)
+          });
+          
+          // If this is a new hand and we're a participant but don't have our cards,
+          // fetch our player-specific state from the API
+          if (isNewHand && missingMyCards && isParticipant && shouldShowCards && effectivePlayerId && id) {
+            console.log('🎴 New hand detected without cards, fetching player-specific state...');
+            fetch(`/api/games/state?tableId=${id}&playerId=${effectivePlayerId}`)
+              .then(resp => {
+                if (!resp.ok) {
+                  throw new Error(`HTTP ${resp.status}`);
+                }
+                return resp.json();
+              })
+              .then(data => {
+                if (data.gameState) {
+                  setPokerGameState(data.gameState);
+                  console.log('🎴 Player-specific state fetched with hole cards');
+                }
+              })
+              .catch(err => console.warn('Failed to fetch player-specific state:', err));
+          }
+          
+          // Preserve current player's hole cards from broadcast state
+          // Broadcasts hide all hole cards for security, but we need to keep our own cards
+          // visible if we already have them from a previous state or API response
+          setPokerGameState((prevState: any) => {
+            // Use effectivePlayerId which may come from currentPlayerSeat if playerId is not set
+            const resolvedPlayerId = effectivePlayerId || playerId;
+            if (!prevState || !resolvedPlayerId) return gameState;
+            
+            // Find the current player in both states
+            const prevMe = prevState.players?.find((p: any) => p.id === resolvedPlayerId);
+            const newMe = gameState.players?.find((p: any) => p.id === resolvedPlayerId);
+            
+            // Check if we should preserve hole cards:
+            // 1. Previous state had our hole cards
+            // 2. New state is missing our hole cards (undefined or empty)
+            // 3. Hand number/round hasn't changed (if tracked) - or check that stage isn't showing a new hand reset
+            const prevHoleCards = prevMe?.holeCards;
+            const newHoleCards = newMe?.holeCards;
+            const hadCards = Array.isArray(prevHoleCards) && prevHoleCards.length > 0;
+            const missingCards = !Array.isArray(newHoleCards) || newHoleCards.length === 0;
+            
+            // If the new state already has our cards visible (showdown, all-in, or API response), use them
+            if (!missingCards) return gameState;
+            
+            // If we had no previous cards to preserve, use the new state as-is
+            if (!hadCards) return gameState;
+            
+            // Preserve our hole cards by merging them into the new state
+            const mergedPlayers = Array.isArray(gameState.players)
+              ? gameState.players.map((p: any) => {
+                  if (p.id === resolvedPlayerId) {
+                    return { ...p, holeCards: prevHoleCards };
+                  }
+                  return p;
+                })
+              : gameState.players;
+            
+            // Also preserve stud state down cards for current player if applicable
+            let mergedStudState = gameState.studState;
+            if (gameState.studState?.playerCards && prevState.studState?.playerCards) {
+              const prevStudCards = prevState.studState.playerCards[resolvedPlayerId];
+              const newStudCards = gameState.studState.playerCards[resolvedPlayerId];
+              const hadDownCards = Array.isArray(prevStudCards?.downCards) && prevStudCards.downCards.length > 0;
+              const missingDownCards = !Array.isArray(newStudCards?.downCards) || newStudCards.downCards.length === 0;
+              
+              if (hadDownCards && missingDownCards) {
+                mergedStudState = {
+                  ...gameState.studState,
+                  playerCards: {
+                    ...gameState.studState.playerCards,
+                    [resolvedPlayerId]: {
+                      upCards: newStudCards?.upCards || [],
+                      downCards: prevStudCards.downCards,
+                    },
+                  },
+                };
+              }
+            }
+            
+            return {
+              ...gameState,
+              players: mergedPlayers,
+              studState: mergedStudState,
+            };
+          });
           setGameStarted(true);
           console.log('🎮 Game state updated:', gameState.stage, 'activePlayer:', gameState.activePlayer, 'seq:', seq);
 
@@ -549,7 +663,7 @@ export default function GamePage() {
       alive = false;
       if (timer) clearInterval(timer);
     };
-  }, [id, playerId, seatAssignments, gameStarted, pokerGameState]);
+  }, [id, playerId, seatAssignments, gameStarted, pokerGameState, computeDealerChoicePrompt]);
 
   // Seat management functions
   const claimSeat = async (seatNumber: number) => {
@@ -675,6 +789,14 @@ export default function GamePage() {
       if (!response.ok) {
         const err = await response.json();
         console.error('Start game failed:', err);
+      } else {
+        // Use the API response to set initial game state
+        // The API returns a sanitized state that includes the current player's hole cards
+        const data = await response.json();
+        if (data.gameState) {
+          setPokerGameState(data.gameState);
+          console.log('🎴 Initial game state set with player cards from API');
+        }
       }
     } catch (error) {
       console.error('Error starting game:', error);
@@ -682,7 +804,7 @@ export default function GamePage() {
   };
 
   // Poker action handlers
-  const handlePokerAction = async (action: string, amount?: number) => {
+  const handlePokerAction = useCallback(async (action: string, amount?: number) => {
     if (!pokerGameState || !playerId) {
       console.warn('Cannot perform action: missing game state or player ID');
       return;
@@ -718,6 +840,14 @@ export default function GamePage() {
       if (!response.ok) {
         const err = await response.json();
         console.error('Poker action failed:', err);
+      } else {
+        // Use the API response to update game state
+        // The API returns a sanitized state that includes the current player's hole cards
+        const data = await response.json();
+        if (data.gameState) {
+          setPokerGameState(data.gameState);
+          console.log('🎴 Game state updated with player cards from action API');
+        }
       }
     } catch (error) {
       console.error('Error performing poker action:', error);
@@ -727,19 +857,19 @@ export default function GamePage() {
         pendingActionRef.current = false;
       }, 500);
     }
-  };
+  }, [pokerGameState, playerId, id]);
 
-  const handleFold = () => handlePokerAction('fold');
-  const handleCheck = () => handlePokerAction('check');
-  const handleCall = () => {
+  const handleFold = useCallback(() => handlePokerAction('fold'), [handlePokerAction]);
+  const handleCheck = useCallback(() => handlePokerAction('check'), [handlePokerAction]);
+  const handleCall = useCallback(() => {
     if (pokerGameState?.currentBet) {
       const playerInGame = pokerGameState.players.find((p: any) => p.id === playerId);
       const callAmount = pokerGameState.currentBet - (playerInGame?.currentBet || 0);
       handlePokerAction('call', callAmount);
     }
-  };
-  const handleBet = (amount: number) => handlePokerAction('bet', amount);
-  const handleRaise = (amount: number) => handlePokerAction('raise', amount);
+  }, [pokerGameState, playerId, handlePokerAction]);
+  const handleBet = useCallback((amount: number) => handlePokerAction('bet', amount), [handlePokerAction]);
+  const handleRaise = useCallback((amount: number) => handlePokerAction('raise', amount), [handlePokerAction]);
 
   // Get current player's hole cards
   const getCurrentPlayerCards = () => {
@@ -754,13 +884,13 @@ export default function GamePage() {
     return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud';
   };
 
-  const getStudCardsForPlayer = (pid: string) => {
+  const getStudCardsForPlayer = useCallback((pid: string) => {
     const st = (pokerGameState as any)?.studState?.playerCards?.[pid];
     return {
       down: Array.isArray(st?.downCards) ? st.downCards : [],
       up: Array.isArray(st?.upCards) ? st.upCards : [],
     } as { down: any[]; up: any[] };
-  };
+  }, [pokerGameState]);
 
   type HandSummary = { primary: string | null; highLabel: string | null; lowLabel: string | null };
 
@@ -891,7 +1021,7 @@ export default function GamePage() {
       console.warn('Hand summary computation failed:', e);
       return fallback;
     }
-  }, [pokerGameState, playerId]);
+  }, [pokerGameState, playerId, getStudCardsForPlayer]);
 
   // Defensive: compute remaining non-folded players from current state
   const getActiveNonFoldedPlayers = useCallback(() => {
@@ -916,24 +1046,24 @@ export default function GamePage() {
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
-  const getMinBet = () => {
+  const getMinBet = useCallback(() => {
     const bb = Number(pokerGameState?.bigBlind || 0) || 0;
     const me = getMe();
     const stack = Number(me?.stack || 0) || 0;
     // If short-stacked, min becomes all-in (short bet allowed)
     return Math.min(Math.max(bb, 0.01), stack + Number(me?.currentBet || 0));
-  };
+  }, [pokerGameState?.bigBlind, getMe]);
 
-  const getBetBounds = () => {
+  const getBetBounds = useCallback(() => {
     const me = getMe();
     const prev = Number(me?.currentBet || 0);
     const stack = Number(me?.stack || 0);
     const min = getMinBet();
     const max = prev + stack; // total target for all-in
     return { min: Number(min.toFixed(2)), max: Number(max.toFixed(2)) };
-  };
+  }, [getMe, getMinBet]);
 
-  const getRaiseBounds = () => {
+  const getRaiseBounds = useCallback(() => {
     const state = pokerGameState as any;
     const me = getMe();
     const currentBet = Number(state?.currentBet || 0);
@@ -946,19 +1076,19 @@ export default function GamePage() {
     const min = Math.min(minTotal, maxTotal);
     const max = maxTotal;
     return { min: Number(min.toFixed(2)), max: Number(max.toFixed(2)) };
-  };
+  }, [pokerGameState, getMe]);
 
   // Pot-Limit helpers
-  const getPotLimitPlayersShape = () => {
+  const getPotLimitPlayersShape = useCallback(() => {
     const arr = Array.isArray(pokerGameState?.players) ? pokerGameState.players : [];
     return arr.map((p: any) => ({
       currentBet: Number(p?.currentBet || 0),
       isFolded: !!(p?.isFolded || p?.folded),
       isAllIn: !!p?.isAllIn,
     }));
-  };
+  }, [pokerGameState?.players]);
 
-  const getPotLimitBetBounds = () => {
+  const getPotLimitBetBounds = useCallback(() => {
     const me = getMe();
     if (!me) return { min: 0, max: 0 };
     const prev = Number(me.currentBet || 0);
@@ -969,9 +1099,9 @@ export default function GamePage() {
     const bb = Number(pokerGameState?.bigBlind || 0) || 0.01;
     const min = Math.min(Math.max(bb, 0.01), maxTotal);
     return { min: Number(min.toFixed(2)), max: Number(maxTotal.toFixed(2)) };
-  };
+  }, [getMe, pokerGameState?.pot, pokerGameState?.bigBlind, getPotLimitPlayersShape]);
 
-  const getPotLimitRaiseBounds = () => {
+  const getPotLimitRaiseBounds = useCallback(() => {
     const me = getMe();
     if (!me) return { min: 0, max: 0 };
     const prev = Number(me.currentBet || 0);
@@ -984,7 +1114,7 @@ export default function GamePage() {
     const minTotal = currentBet + minRaise;
     const min = Math.min(minTotal, maxTotal);
     return { min: Number(min.toFixed(2)), max: Number(maxTotal.toFixed(2)) };
-  };
+  }, [getMe, pokerGameState?.pot, pokerGameState?.currentBet, pokerGameState?.minRaise, getPotLimitPlayersShape]);
 
   // --- Run It Twice (RIT) helpers ---
   const runItTwicePrompt = pokerGameState?.runItTwicePrompt || null;
@@ -1097,7 +1227,7 @@ export default function GamePage() {
       const { min, max } = mode === 'no-limit' ? getRaiseBounds() : getPotLimitRaiseBounds();
       setRaiseInput(clamp(min, min, max));
     }
-  }, [pokerGameState, playerId]);
+  }, [pokerGameState, playerId, getBetBounds, getPotLimitBetBounds, getRaiseBounds, getPotLimitRaiseBounds]);
 
   // If Auto Fold is enabled and it's our turn, immediately fold and clear the checkbox
   useEffect(() => {
@@ -1110,7 +1240,7 @@ export default function GamePage() {
     // Execute fold and clear autoFold to prevent repeated triggers
     handleFold();
     setAutoFold(false);
-  }, [autoFold, pokerGameState?.activePlayer, pokerGameState?.stage, playerId]);
+  }, [autoFold, pokerGameState, playerId, handleFold]);
 
   // If Auto Call is enabled and it's our turn, immediately call (even if amount is 0) and clear the checkbox
   useEffect(() => {
@@ -1127,7 +1257,7 @@ export default function GamePage() {
     if (neededAmount === 0 && autoCheck) return;
     handlePokerAction('call', neededAmount);
     setAutoCall(false);
-  }, [autoCall, autoFold, pokerGameState?.activePlayer, pokerGameState?.currentBet, pokerGameState?.stage, playerId]);
+  }, [autoCall, autoFold, autoCheck, pokerGameState, playerId, handlePokerAction]);
 
   // If Auto Check is enabled and it's our turn with no bet required, immediately check and clear the checkbox
   useEffect(() => {
@@ -1144,7 +1274,7 @@ export default function GamePage() {
       handleCheck();
       setAutoCheck(false);
     }
-  }, [autoCheck, autoFold, pokerGameState?.activePlayer, pokerGameState?.currentBet, pokerGameState?.stage, playerId]);
+  }, [autoCheck, autoFold, pokerGameState, playerId, handleCheck]);
 
   // Get position for current player's hole cards based on their seat
   const getCurrentPlayerCardsPosition = () => {

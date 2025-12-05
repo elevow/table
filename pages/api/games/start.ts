@@ -8,6 +8,7 @@ import { resolveVariantAndMode, defaultBettingModeForVariant } from '../../../sr
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
+import { persistEngineState } from '../../../src/lib/poker/engine-persistence';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -166,6 +167,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         pot: Number(gameState.pot) || 0,
         state: Object.keys(stateForDb).length ? stateForDb : undefined,
       });
+      
+      // Persist full engine state for serverless recovery
+      await persistEngineState(tableId, engine);
     } catch (e) {
       // Swallow persistence errors to keep local dev flows working without DB
       try { console.warn('[games/start] DB persistence skipped:', (e as any)?.message || e); } catch {}

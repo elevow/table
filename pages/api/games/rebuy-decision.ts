@@ -10,6 +10,7 @@ import { recordBuyin } from '../../../src/lib/shared/rebuy-tracker';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
+import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 
 /**
  * After a rebuy decision, check if we can start the next hand.
@@ -47,6 +48,9 @@ async function maybeStartNextHand(tableId: string, engine: any): Promise<boolean
     if (typeof engine.startNewHand === 'function') {
       engine.startNewHand();
       
+      // Persist engine state for serverless recovery
+      await persistEngineState(tableId, engine);
+      
       const newState = engine.getState();
       const enrichedState = enrichStateWithRunIt(tableId, newState);
       const sequence = nextSeq(tableId);
@@ -77,8 +81,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Missing or invalid parameters' });
     }
 
-    const g: any = global as any;
-    const engine = g?.activeGames?.get(tableId);
+    const engine = await getOrRestoreEngine(tableId);
 
     if (decision === 'yes') {
       const availability = await getRebuyAvailability(tableId, playerId);
@@ -103,6 +106,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             player.hasActed = false;
           }
         }
+        // Persist engine state after rebuy
+        await persistEngineState(tableId, engine);
       }
 
       // Update seat assignment

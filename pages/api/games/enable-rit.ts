@@ -9,6 +9,7 @@ import {
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
+import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import type { TableState } from '../../../src/types/poker';
 
 // Socket.io server type (simplified to avoid external dependency)
@@ -68,9 +69,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'No active Run-It-Twice prompt for this player' });
     }
 
-    // Get the active game engine
-    const g: any = global as any;
-    const engine = g?.activeGames?.get(tableId);
+    // Get the active game engine from memory or restore from database
+    const engine = await getOrRestoreEngine(tableId);
     if (!engine) {
       return res.status(404).json({ error: 'No active game found for this table' });
     }
@@ -156,6 +156,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       updatedState = revealAllHoleCards(engine, baseState);
       actionName = 'run_it_twice_enabled';
     }
+
+    // Persist engine state for serverless recovery
+    await persistEngineState(tableId, engine);
 
     const enrichedState = await broadcastState(updatedState, { action: actionName, playerId, runs });
 

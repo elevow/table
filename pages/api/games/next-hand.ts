@@ -14,8 +14,9 @@ import {
 } from '../../../src/lib/server/rebuy-state';
 import { autoStandPlayer } from '../../../src/lib/server/rebuy-actions';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import type { GameVariant } from '../../../src/types/poker';
 
-const DEFAULT_DEALERS_CHOICE_VARIANTS = ['texas-holdem', 'omaha', 'omaha-hi-lo', 'seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'];
+const DEFAULT_DEALERS_CHOICE_VARIANTS: GameVariant[] = ['texas-holdem', 'omaha', 'omaha-hi-lo', 'seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'];
 
 const NEXT_HAND_LOCK_KEY = '__NEXT_HAND_LOCKS__';
 
@@ -33,7 +34,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { tableId, playerId, variant } = req.body;
+    const { tableId, playerId, variant: rawVariant } = req.body;
+    
+    // Validate variant if provided
+    const isValidVariant = (v: unknown): v is GameVariant => 
+      typeof v === 'string' && DEFAULT_DEALERS_CHOICE_VARIANTS.includes(v as GameVariant);
+    const variant: GameVariant | undefined = isValidVariant(rawVariant) ? rawVariant : undefined;
 
     if (!tableId || !playerId) {
       return res.status(400).json({ error: 'Missing tableId or playerId' });
@@ -121,11 +127,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json({ success: true, awaitingRebuyDecisions: true, pending: pendingRebuyCount(tableId) });
       }
 
-      const applyVariantAndStart = async ({ chosenVariant, dcStepCount }: { chosenVariant?: string; dcStepCount?: number } = {}) => {
+      const applyVariantAndStart = async ({ chosenVariant, dcStepCount }: { chosenVariant?: GameVariant; dcStepCount?: number } = {}) => {
         let mutated = false;
         if (chosenVariant) {
           if (typeof engine.setVariant === 'function') {
-            engine.setVariant(chosenVariant as 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud');
+            engine.setVariant(chosenVariant);
           }
           const nextMode = (chosenVariant === 'omaha' || chosenVariant === 'omaha-hi-lo') ? 'pot-limit' : (roomConfig.bettingMode || 'no-limit');
           if (typeof engine.setBettingMode === 'function') {

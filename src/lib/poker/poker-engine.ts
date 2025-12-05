@@ -1,4 +1,4 @@
-import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking } from '../../types/poker';
+import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking, GameVariant } from '../../types/poker';
 import { RunItTwiceOutcomeInput } from '../../types/game-history';
 import { HandEvaluator } from './hand-evaluator';
 import { PotCalculator } from './pot-calculator';
@@ -1036,7 +1036,7 @@ export class PokerEngine {
   }
 
   // Allow changing variant at runtime before a hand starts
-  public setVariant(variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud'): void {
+  public setVariant(variant: GameVariant): void {
     if (variant) {
       this.state.variant = variant;
     } else {
@@ -1264,8 +1264,9 @@ export class PokerEngine {
     requireRitUnanimous: boolean;
     ritConsents: string[];
   } {
+    // Use JSON serialization for deep cloning to ensure complete state capture
     return {
-      tableState: { ...this.state },
+      tableState: JSON.parse(JSON.stringify(this.state)),
       deck: this.deckManager.serialize(),
       removedPlayers: Array.from(this.removedPlayers),
       rabbitPreviewed: this.rabbitPreviewed,

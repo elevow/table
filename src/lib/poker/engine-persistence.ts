@@ -62,19 +62,40 @@ export async function restoreEngineFromDb(tableId: string): Promise<PokerEngine 
       return null;
     }
     
-    const serialized = result.rows[0].state as SerializedEngineState;
+    const raw = result.rows[0].state;
     
-    // Validate that we have the required fields
-    if (!serialized.tableState || !serialized.deck) {
-      console.warn('[engine-persistence] Invalid serialized state - missing required fields');
+    // Runtime validation of the serialized state structure
+    if (!isValidSerializedState(raw)) {
+      console.warn('[engine-persistence] Invalid serialized state - validation failed');
       return null;
     }
     
-    return PokerEngine.fromSerialized(serialized);
+    return PokerEngine.fromSerialized(raw);
   } catch (error) {
     console.warn('[engine-persistence] Failed to restore engine from DB:', error);
     return null;
   }
+}
+
+/**
+ * Type guard to validate the serialized state structure at runtime
+ */
+function isValidSerializedState(data: unknown): data is SerializedEngineState {
+  if (!data || typeof data !== 'object') return false;
+  const obj = data as Record<string, unknown>;
+  
+  // Check required fields
+  if (!obj.tableState || typeof obj.tableState !== 'object') return false;
+  if (!Array.isArray(obj.deck)) return false;
+  
+  // Validate tableState has minimum required structure
+  const ts = obj.tableState as Record<string, unknown>;
+  if (typeof ts.tableId !== 'string') return false;
+  if (!Array.isArray(ts.players)) return false;
+  if (typeof ts.smallBlind !== 'number') return false;
+  if (typeof ts.bigBlind !== 'number') return false;
+  
+  return true;
 }
 
 /**

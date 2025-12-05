@@ -833,8 +833,9 @@ export default function GamePage() {
         console.log('[client auto-runout] response:', JSON.stringify(data));
         console.log('[client auto-runout] response street:', data.street, 'expected:', currentCommunityLen < 3 ? 'flop' : currentCommunityLen < 4 ? 'turn' : currentCommunityLen < 5 ? 'river' : 'showdown');
         
-        // Reset the tracking ref after successful request to allow next scheduling
-        // This fixes the issue where the ref stays at the old value and blocks new schedules
+        // After successful request, update the tracking ref to the NEW community length
+        // This prevents the effect from scheduling another advance when the broadcast arrives
+        // (the broadcast will have the same communityLen as we just set)
         if (data.success) {
           // Apply the game state from the response immediately
           // This ensures we don't rely on the broadcast (which may arrive out-of-order and be ignored)
@@ -844,14 +845,23 @@ export default function GamePage() {
             console.log('[client auto-runout] applying game state from response, new communityLen:', newCommunityLen, 'stage:', newStage);
             console.log('[client auto-runout] state has', data.gameState.communityCards?.length || 0, 'community cards:', JSON.stringify(data.gameState.communityCards || []));
             
-            // Reset the tracking ref to -1 to allow the effect to schedule the next advance
-            // The effect will run after setPokerGameState and pick up the new state
-            console.log('[client auto-runout] resetting lastCommunityLen to -1 to allow next scheduling');
-            autoRunoutLastCommunityLenRef.current = -1;
+            // Set the tracking ref to the NEW community length (after advance)
+            // This prevents duplicate scheduling when the broadcast arrives with the same state
+            // The effect will run after setPokerGameState with communityLen matching this ref, 
+            // so it will log "already scheduled" and skip, preventing duplicate advances
+            console.log('[client auto-runout] setting lastCommunityLen to NEW value:', newCommunityLen, 'to prevent duplicate on broadcast');
+            autoRunoutLastCommunityLenRef.current = newCommunityLen;
             
-            // Update the ref first before setting state so the effect sees -1
+            // Update the ref first before setting state so the effect sees the updated value
             pokerGameStateRef.current = data.gameState;
             setPokerGameState(data.gameState);
+            
+            // After state is set, reset to -1 to allow NEXT round's scheduling
+            // Use setTimeout to ensure this runs after the effect triggered by setPokerGameState
+            setTimeout(() => {
+              console.log('[client auto-runout] resetting lastCommunityLen to -1 to allow next round scheduling');
+              autoRunoutLastCommunityLenRef.current = -1;
+            }, 100);
           } else {
             console.log('[client auto-runout] resetting lastCommunityLen to -1 (no gameState in response)');
             autoRunoutLastCommunityLenRef.current = -1;

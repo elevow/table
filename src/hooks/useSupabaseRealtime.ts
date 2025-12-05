@@ -11,6 +11,14 @@ type Callbacks = {
   onRebuyResult?: (p: any) => void;
 };
 
+// Track active channels to prevent conflicts when multiple components subscribe
+// Store callback refs instead of callback objects so we always get the latest version
+const activeChannels = new Map<string, { 
+  channel: any; 
+  refCount: number; 
+  callbackRefs: Set<React.MutableRefObject<Callbacks | undefined>>;
+}>();
+
 export function useSupabaseRealtime(tableId?: string | string[], callbacks?: Callbacks) {
   const tbl = typeof tableId === 'string' ? tableId : Array.isArray(tableId) ? tableId[0] : undefined;
   const cbsRef = useRef<Callbacks | undefined>(callbacks);
@@ -20,20 +28,79 @@ export function useSupabaseRealtime(tableId?: string | string[], callbacks?: Cal
     if (!tbl) return;
     const supa = getSupabaseBrowser();
     if (!supa) return;
-    const channel = supa.channel(`table:${tbl}`);
-
-    channel
-      .on('broadcast', { event: 'seat_claimed' }, (p) => cbsRef.current?.onSeatClaimed?.(p.payload))
-      .on('broadcast', { event: 'seat_vacated' }, (p) => cbsRef.current?.onSeatVacated?.(p.payload))
-      .on('broadcast', { event: 'seat_state' }, (p) => cbsRef.current?.onSeatState?.(p.payload))
-      .on('broadcast', { event: 'game_state_update' }, (p) => cbsRef.current?.onGameStateUpdate?.(p.payload))
-      .on('broadcast', { event: 'awaiting_dealer_choice' }, (p) => cbsRef.current?.onAwaitingDealerChoice?.(p.payload))
-      .on('broadcast', { event: 'rebuy_prompt' }, (p) => cbsRef.current?.onRebuyPrompt?.(p.payload))
-      .on('broadcast', { event: 'rebuy_result' }, (p) => cbsRef.current?.onRebuyResult?.(p.payload))
-      .subscribe();
+    
+    const channelName = `table:${tbl}`;
+    let channelEntry = activeChannels.get(channelName);
+    
+    // If no active channel for this table, create one
+    if (!channelEntry) {
+      const channel = supa.channel(channelName);
+      channelEntry = { 
+        channel, 
+        refCount: 0, 
+        callbackRefs: new Set() 
+      };
+      
+      // Set up event handlers that dispatch to all registered callback refs
+      // Using refs ensures we always call the latest callback version
+      channel
+        .on('broadcast', { event: 'seat_claimed' }, (p) => {
+          channelEntry!.callbackRefs.forEach(ref => {
+            try { ref.current?.onSeatClaimed?.(p.payload); } catch (e) { console.error('[realtime] seat_claimed error:', e); }
+          });
+        })
+        .on('broadcast', { event: 'seat_vacated' }, (p) => {
+          channelEntry!.callbackRefs.forEach(ref => {
+            try { ref.current?.onSeatVacated?.(p.payload); } catch (e) { console.error('[realtime] seat_vacated error:', e); }
+          });
+        })
+        .on('broadcast', { event: 'seat_state' }, (p) => {
+          channelEntry!.callbackRefs.forEach(ref => {
+            try { ref.current?.onSeatState?.(p.payload); } catch (e) { console.error('[realtime] seat_state error:', e); }
+          });
+        })
+        .on('broadcast', { event: 'game_state_update' }, (p) => {
+          console.log('[realtime] game_state_update broadcast received, seq:', p?.payload?.seq, 'refs:', channelEntry!.callbackRefs.size);
+          channelEntry!.callbackRefs.forEach(ref => {
+            try { ref.current?.onGameStateUpdate?.(p.payload); } catch (e) { console.error('[realtime] game_state_update error:', e); }
+          });
+        })
+        .on('broadcast', { event: 'awaiting_dealer_choice' }, (p) => {
+          channelEntry!.callbackRefs.forEach(ref => {
+            try { ref.current?.onAwaitingDealerChoice?.(p.payload); } catch (e) { console.error('[realtime] awaiting_dealer_choice error:', e); }
+          });
+        })
+        .on('broadcast', { event: 'rebuy_prompt' }, (p) => {
+          channelEntry!.callbackRefs.forEach(ref => {
+            try { ref.current?.onRebuyPrompt?.(p.payload); } catch (e) { console.error('[realtime] rebuy_prompt error:', e); }
+          });
+        })
+        .on('broadcast', { event: 'rebuy_result' }, (p) => {
+          channelEntry!.callbackRefs.forEach(ref => {
+            try { ref.current?.onRebuyResult?.(p.payload); } catch (e) { console.error('[realtime] rebuy_result error:', e); }
+          });
+        })
+        .subscribe();
+      
+      activeChannels.set(channelName, channelEntry);
+    }
+    
+    // Register this hook's callback ref
+    channelEntry.refCount++;
+    channelEntry.callbackRefs.add(cbsRef);
 
     return () => {
-      try { channel.unsubscribe(); } catch {}
+      if (channelEntry) {
+        // Remove our callback ref
+        channelEntry.callbackRefs.delete(cbsRef);
+        channelEntry.refCount--;
+        
+        // If no more subscribers, clean up the channel
+        if (channelEntry.refCount <= 0) {
+          try { channelEntry.channel.unsubscribe(); } catch {}
+          activeChannels.delete(channelName);
+        }
+      }
     };
   }, [tbl]);
 }

@@ -714,7 +714,7 @@ export default function GamePage() {
     fetchMyState();
   }, [id, playerId, pokerGameState?.stage, pokerGameState?.players]);
 
-  // Client-side auto-runout: when all-in detected and community cards remaining, poll server every 5s
+   // Client-side auto-runout: when all-in detected and community cards remaining, poll server every 5s
   // Only the "leader" client (first active player by seat order) should poll to prevent duplicates
   useEffect(() => {
     if (!id || typeof id !== 'string') return;
@@ -742,6 +742,8 @@ export default function GamePage() {
     const communityLen = communityCards.length;
     const needsMoreCards = communityLen < 5;
     const bettingComplete = !activePlayer; // No player to act means betting is done
+    
+    console.log('[client auto-runout] EFFECT TRIGGERED - stage:', stage, 'communityLen:', communityLen, 'lastCommunityLenRef:', autoRunoutLastCommunityLenRef.current);
 
     // Determine if this client is the "leader" (first active player by seat number)
     // Only the leader should poll to prevent duplicate requests from multiple clients
@@ -834,14 +836,25 @@ export default function GamePage() {
         // Reset the tracking ref after successful request to allow next scheduling
         // This fixes the issue where the ref stays at the old value and blocks new schedules
         if (data.success) {
-          console.log('[client auto-runout] resetting lastCommunityLen after successful advance');
-          autoRunoutLastCommunityLenRef.current = -1;
-          
           // Apply the game state from the response immediately
           // This ensures we don't rely on the broadcast (which may arrive out-of-order and be ignored)
           if (data.gameState) {
-            console.log('[client auto-runout] applying game state from response, new communityLen:', data.gameState.communityCards?.length, 'stage:', data.gameState.stage);
+            const newCommunityLen = data.gameState.communityCards?.length || 0;
+            const newStage = data.gameState.stage;
+            console.log('[client auto-runout] applying game state from response, new communityLen:', newCommunityLen, 'stage:', newStage);
+            console.log('[client auto-runout] state has', data.gameState.communityCards?.length || 0, 'community cards:', JSON.stringify(data.gameState.communityCards || []));
+            
+            // Reset the tracking ref to -1 to allow the effect to schedule the next advance
+            // The effect will run after setPokerGameState and pick up the new state
+            console.log('[client auto-runout] resetting lastCommunityLen to -1 to allow next scheduling');
+            autoRunoutLastCommunityLenRef.current = -1;
+            
+            // Update the ref first before setting state so the effect sees -1
+            pokerGameStateRef.current = data.gameState;
             setPokerGameState(data.gameState);
+          } else {
+            console.log('[client auto-runout] resetting lastCommunityLen to -1 (no gameState in response)');
+            autoRunoutLastCommunityLenRef.current = -1;
           }
         }
       } catch (e) {

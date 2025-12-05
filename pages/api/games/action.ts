@@ -7,9 +7,16 @@ import {
   isAutoRunoutEligible,
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
+import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
+import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import type { Card, GameStage, TableState } from '../../../src/types/poker';
 
-function getIo(res: NextApiResponse): any | null {
+// Socket.io server type (simplified to avoid external dependency)
+type SocketIOServer = {
+  to: (room: string) => { emit: (event: string, data: unknown) => void };
+};
+
+function getIo(res: NextApiResponse): SocketIOServer | null {
   try {
     // @ts-ignore
     const io = (res as any)?.socket?.server?.io;
@@ -34,9 +41,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Get the active game engine from global storage
-    const g: any = global as any;
-    const engine = g?.activeGames?.get(tableId);
+    // Get the active game engine from memory or restore from database
+    const engine = await getOrRestoreEngine(tableId);
     if (!engine) {
       return res.status(404).json({ error: 'No active game found for this table' });
     }
@@ -52,16 +58,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       : [];
     const preActionStage: GameStage | undefined = currentState?.stage;
 
-    const broadcastState = async (state: TableState, lastAction: any) => {
+    const broadcastState = async (state: TableState, lastAction: unknown) => {
       const enrichedState = enrichStateWithRunIt(tableId, state);
+      // Sanitize state for broadcast - hide all hole cards unless showdown/all-in
+      const broadcastSafeState = sanitizeStateForBroadcast(enrichedState);
       try {
         const seq = nextSeq(tableId);
         await publishGameStateUpdate(tableId, {
-          gameState: enrichedState,
+          gameState: broadcastSafeState,
           lastAction,
           timestamp: new Date().toISOString(),
           seq,
-        } as any);
+        });
       } catch (e) {
         console.warn('Failed to publish game state to Supabase:', e);
       }
@@ -71,7 +79,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (io) {
           const seq = nextSeq(tableId);
           io.to(`table_${tableId}`).emit('game_state_update', {
-            gameState: enrichedState,
+            gameState: broadcastSafeState,
             lastAction,
             timestamp: new Date().toISOString(),
             seq,
@@ -111,6 +119,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: e?.message || 'Action failed' });
     }
 
+    // Persist the updated engine state to database for serverless recovery
+    await persistEngineState(tableId, engine);
+
     // Get updated game state
     let gameState = engine.getState();
 
@@ -146,9 +157,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       scheduleSupabaseAutoRunout(tableId, engine, (state, meta) => broadcastState(state, meta).then(() => {}));
     }
 
-    return res.status(200).json({ success: true, gameState: enrichedState });
-  } catch (e: any) {
+    // Sanitize the response for the requesting player - hide other players' hole cards
+    // unless it's showdown or an all-in situation
+    const sanitizedState = sanitizeStateForPlayer(enrichedState, playerId);
+
+    return res.status(200).json({ success: true, gameState: sanitizedState });
+  } catch (e: unknown) {
     console.error('Error processing poker action:', e);
-    return res.status(500).json({ error: e?.message || 'Internal server error' });
+    const errorMessage =
+      typeof e === 'object' && e !== null && 'message' in e && typeof (e as { message: unknown }).message === 'string'
+        ? (e as { message: string }).message
+        : 'Internal server error';
+    return res.status(500).json({ error: errorMessage });
   }
 }

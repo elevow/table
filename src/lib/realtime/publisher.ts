@@ -28,6 +28,7 @@ export async function publishSeatState(tableId: string, payload: any) {
 export async function publishGameStateUpdate(tableId: string, payload: any) {
   const supa = getSupabaseServer();
   if (!supa) return;
+  console.log('[publisher] Publishing game_state_update with seq:', payload?.seq);
   await supa.channel(`table:${tableId}`).send({ type: 'broadcast', event: 'game_state_update', payload });
 }
 

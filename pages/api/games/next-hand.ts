@@ -14,6 +14,9 @@ import {
 } from '../../../src/lib/server/rebuy-state';
 import { autoStandPlayer } from '../../../src/lib/server/rebuy-actions';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { getPool } from '../../../src/lib/database/pool';
+import { GameService } from '../../../src/lib/services/game-service';
+import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import type { GameVariant } from '../../../src/types/poker';
 
 const DEFAULT_DEALERS_CHOICE_VARIANTS: GameVariant[] = ['texas-holdem', 'omaha', 'omaha-hi-lo', 'seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'];
@@ -48,7 +51,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Get the active game engine from memory or restore from database
     const g: any = global as any;
     const engine = await getOrRestoreEngine(tableId);
-    const roomConfig = g?.roomConfigs?.get(tableId);
+    
+    // First check in-memory cache for roomConfig
+    let roomConfig = g?.roomConfigs?.get(tableId);
+    
+    // If roomConfig not in memory, try to restore it from the database
+    if (!roomConfig) {
+      try {
+        const pool = getPool();
+        const gameService = new GameService(pool);
+        const room = await gameService.getRoomById(tableId);
+        
+        if (room) {
+          const config = room.configuration || {};
+          const blinds = room.blindLevels || {};
+          
+          // Reconstruct roomConfig from database room record
+          // Note: variant could be 'dealers-choice' which is not in GameVariant type
+          const variantFromDb = (config as any)?.variant as string | undefined;
+          const bettingModeFromDb = (config as any)?.bettingMode as 'no-limit' | 'pot-limit' | undefined;
+          const isDealersChoiceDb = variantFromDb === 'dealers-choice';
+          
+          roomConfig = {
+            variant: variantFromDb || 'texas-holdem',
+            bettingMode: bettingModeFromDb || defaultBettingModeForVariant((variantFromDb || 'texas-holdem') as any),
+            smallBlind: Number((blinds as any)?.sb) || Number((blinds as any)?.smallBlind) || 1,
+            bigBlind: Number((blinds as any)?.bb) || Number((blinds as any)?.bigBlind) || 2,
+            mode: isDealersChoiceDb ? 'dealers-choice' : 'fixed',
+            allowedVariants: isDealersChoiceDb ? DEFAULT_DEALERS_CHOICE_VARIANTS : undefined,
+            chosenVariant: isDealersChoiceDb ? ((config as any)?.chosenVariant || 'texas-holdem') : undefined,
+            dcStepCount: isDealersChoiceDb ? ((config as any)?.dcStepCount || 0) : undefined,
+          };
+          
+          // Cache the restored roomConfig in memory for subsequent requests
+          if (!g.roomConfigs) {
+            g.roomConfigs = new Map<string, any>();
+          }
+          g.roomConfigs.set(tableId, roomConfig);
+          console.log(`[next-hand] Restored roomConfig for table ${tableId} from database`);
+        }
+      } catch (error) {
+        console.warn('[next-hand] Failed to restore roomConfig from database:', error);
+      }
+    }
     
     if (!engine || !roomConfig) {
       return res.status(404).json({ error: 'No active game or room configuration found for this table' });
@@ -60,9 +105,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       : DEFAULT_DEALERS_CHOICE_VARIANTS;
 
     const persistRoomConfig = () => {
-      if (g?.roomConfigs?.set) {
-        g.roomConfigs.set(tableId, roomConfig);
+      if (!g.roomConfigs) {
+        g.roomConfigs = new Map<string, any>();
       }
+      g.roomConfigs.set(tableId, roomConfig);
     };
 
     const locks = getNextHandLocks();

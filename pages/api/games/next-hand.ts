@@ -19,6 +19,32 @@ import { GameService } from '../../../src/lib/services/game-service';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import type { GameVariant } from '../../../src/types/poker';
 
+// Type definitions for room configuration from database
+interface RoomConfiguration {
+  variant?: string;
+  bettingMode?: 'no-limit' | 'pot-limit';
+  chosenVariant?: string;
+  dcStepCount?: number;
+}
+
+interface BlindLevels {
+  sb?: number;
+  smallBlind?: number;
+  bb?: number;
+  bigBlind?: number;
+}
+
+// Helper function to safely extract numeric value from blinds
+function extractBlindValue(blinds: BlindLevels, ...keys: (keyof BlindLevels)[]): number {
+  for (const key of keys) {
+    const value = blinds[key];
+    if (typeof value === 'number' && !isNaN(value)) {
+      return value;
+    }
+  }
+  return 0;
+}
+
 const DEFAULT_DEALERS_CHOICE_VARIANTS: GameVariant[] = ['texas-holdem', 'omaha', 'omaha-hi-lo', 'seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'];
 
 const NEXT_HAND_LOCK_KEY = '__NEXT_HAND_LOCKS__';
@@ -63,24 +89,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const room = await gameService.getRoomById(tableId);
         
         if (room) {
-          const config = room.configuration || {};
-          const blinds = room.blindLevels || {};
+          const config = (room.configuration || {}) as RoomConfiguration;
+          const blinds = (room.blindLevels || {}) as BlindLevels;
           
           // Reconstruct roomConfig from database room record
-          // Note: variant could be 'dealers-choice' which is not in GameVariant type
-          const variantFromDb = (config as any)?.variant as string | undefined;
-          const bettingModeFromDb = (config as any)?.bettingMode as 'no-limit' | 'pot-limit' | undefined;
+          // Note: variant could be 'dealers-choice' which extends beyond GameVariant type
+          const variantFromDb = config.variant;
+          const bettingModeFromDb = config.bettingMode;
           const isDealersChoiceDb = variantFromDb === 'dealers-choice';
+          const resolvedVariant = variantFromDb || 'texas-holdem';
           
           roomConfig = {
-            variant: variantFromDb || 'texas-holdem',
-            bettingMode: bettingModeFromDb || defaultBettingModeForVariant((variantFromDb || 'texas-holdem') as any),
-            smallBlind: Number((blinds as any)?.sb) || Number((blinds as any)?.smallBlind) || 1,
-            bigBlind: Number((blinds as any)?.bb) || Number((blinds as any)?.bigBlind) || 2,
+            variant: resolvedVariant,
+            bettingMode: bettingModeFromDb || defaultBettingModeForVariant(resolvedVariant as Parameters<typeof defaultBettingModeForVariant>[0]),
+            smallBlind: extractBlindValue(blinds, 'sb', 'smallBlind') || 1,
+            bigBlind: extractBlindValue(blinds, 'bb', 'bigBlind') || 2,
             mode: isDealersChoiceDb ? 'dealers-choice' : 'fixed',
             allowedVariants: isDealersChoiceDb ? DEFAULT_DEALERS_CHOICE_VARIANTS : undefined,
-            chosenVariant: isDealersChoiceDb ? ((config as any)?.chosenVariant || 'texas-holdem') : undefined,
-            dcStepCount: isDealersChoiceDb ? ((config as any)?.dcStepCount || 0) : undefined,
+            chosenVariant: isDealersChoiceDb ? (config.chosenVariant || 'texas-holdem') : undefined,
+            dcStepCount: isDealersChoiceDb ? (config.dcStepCount || 0) : undefined,
           };
           
           // Cache the restored roomConfig in memory for subsequent requests

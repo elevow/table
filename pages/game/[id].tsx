@@ -223,7 +223,40 @@ export default function GamePage() {
         }
         
         if (gameState) {
-          setPokerGameState(gameState);
+          // Preserve player's own hole cards if broadcast hides them
+          // Broadcasts use sanitizeStateForBroadcast which hides all hole cards during active play
+          let mergedState = gameState;
+          if (playerId && Array.isArray(gameState.players)) {
+            const myPlayer = gameState.players.find((p: any) => p.id === playerId);
+            const myHoleCards = myPlayer?.holeCards;
+            
+            // If we receive hole cards from server, update our known cards
+            if (Array.isArray(myHoleCards) && myHoleCards.length > 0) {
+              knownHoleCardsRef.current = myHoleCards;
+            }
+            // If broadcast hides our cards but we know them, restore them
+            else if (knownHoleCardsRef.current && (!myHoleCards || myHoleCards.length === 0)) {
+              // Only preserve cards if we're in an active hand (not showdown)
+              // and the hand ID matches (new hand should clear known cards)
+              if (gameState.stage !== 'showdown') {
+                mergedState = {
+                  ...gameState,
+                  players: gameState.players.map((p: any) => 
+                    p.id === playerId ? { ...p, holeCards: knownHoleCardsRef.current } : p
+                  )
+                };
+                console.log('[game] preserved known hole cards for player');
+              }
+            }
+            
+            // Clear known cards when a new hand starts or we're at idle
+            if (gameState.stage === 'showdown' && !Array.isArray(myHoleCards)) {
+              // At showdown, if server sends cards, keep them; otherwise clear our cached cards
+              // since we shouldn't persist cards across hands
+            }
+          }
+          
+          setPokerGameState(mergedState);
           setGameStarted(true);
           console.log('🎮 Game state updated:', gameState.stage, 'activePlayer:', gameState.activePlayer, 'seq:', seq);
 
@@ -332,6 +365,8 @@ export default function GamePage() {
   const autoRunoutTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoRunoutInProgressRef = useRef<boolean>(false);
   const autoRunoutLastCommunityLenRef = useRef<number>(-1);
+  // Track player's own hole cards to preserve them when broadcast state hides them
+  const knownHoleCardsRef = useRef<any[] | null>(null);
   // Visual accessibility options
   const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
   // Dealer's Choice: pending choice prompt from server
@@ -478,6 +513,8 @@ export default function GamePage() {
       try {
         if (pokerStageRef.current === 'showdown') {
           console.log('[client auto] Requesting next hand after 5s');
+          // Clear known hole cards before starting new hand
+          knownHoleCardsRef.current = null;
           const response = await fetch('/api/games/next-hand', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -485,6 +522,20 @@ export default function GamePage() {
           });
           if (!response.ok) {
             console.warn('Next hand request failed:', await response.text());
+          } else {
+            // Extract hole cards from response for the new hand
+            try {
+              const data = await response.json();
+              if (data.gameState?.players) {
+                const myPlayer = data.gameState.players.find((p: any) => p.id === playerId);
+                if (myPlayer?.holeCards && Array.isArray(myPlayer.holeCards) && myPlayer.holeCards.length > 0) {
+                  knownHoleCardsRef.current = myPlayer.holeCards;
+                  console.log('[game] stored new hole cards from next-hand:', myPlayer.holeCards.length, 'cards');
+                }
+              }
+            } catch {
+              // Ignore parse errors
+            }
           }
         }
       } catch (e) {
@@ -506,6 +557,64 @@ export default function GamePage() {
       autoNextHandScheduledRef.current = false;
     };
   }, [pokerGameState?.stage, id, playerId]);
+
+  // Fetch player's hole cards if they're in a hand but don't have cards
+  // This handles the case where a player joins mid-hand or receives a broadcast without their cards
+  useEffect(() => {
+    if (!id || typeof id !== 'string' || !playerId || !pokerGameState) return;
+    
+    // Only fetch if we're in an active hand (not preflop waiting, not showdown)
+    const stage = pokerGameState.stage;
+    if (!stage || stage === 'showdown') return;
+    
+    // Check if we're a player in this game
+    const myPlayer = pokerGameState.players?.find((p: any) => p.id === playerId);
+    if (!myPlayer) return;
+    
+    // If we already have hole cards, nothing to do
+    if (Array.isArray(myPlayer.holeCards) && myPlayer.holeCards.length > 0) {
+      // Update our known cards ref
+      knownHoleCardsRef.current = myPlayer.holeCards;
+      return;
+    }
+    
+    // If we have known cards in our ref, we've already merged them
+    if (knownHoleCardsRef.current && knownHoleCardsRef.current.length > 0) return;
+    
+    // We're in a hand but don't have our cards - fetch them from the server
+    console.log('[game] fetching hole cards - player in hand but no cards visible');
+    const fetchMyState = async () => {
+      try {
+        const response = await fetch(`/api/games/my-state?tableId=${id}&playerId=${playerId}`);
+        if (!response.ok) {
+          console.warn('[game] failed to fetch my state:', response.status);
+          return;
+        }
+        const data = await response.json();
+        if (data.success && data.gameState?.players) {
+          const me = data.gameState.players.find((p: any) => p.id === playerId);
+          if (me?.holeCards && Array.isArray(me.holeCards) && me.holeCards.length > 0) {
+            knownHoleCardsRef.current = me.holeCards;
+            console.log('[game] fetched hole cards:', me.holeCards.length, 'cards');
+            // Update state to include our cards
+            setPokerGameState((prev: any) => {
+              if (!prev?.players) return prev;
+              return {
+                ...prev,
+                players: prev.players.map((p: any) => 
+                  p.id === playerId ? { ...p, holeCards: me.holeCards } : p
+                )
+              };
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('[game] error fetching hole cards:', e);
+      }
+    };
+    
+    fetchMyState();
+  }, [id, playerId, pokerGameState?.stage, pokerGameState?.players]);
 
   // Client-side auto-runout: when all-in detected and community cards remaining, poll server every 5s
   // Only the "leader" client (first active player by seat order) should poll to prevent duplicates
@@ -820,6 +929,23 @@ export default function GamePage() {
       if (!response.ok) {
         const err = await response.json();
         console.error('Start game failed:', err);
+      } else {
+        // Use the response to get our hole cards (response has sanitized state with our cards visible)
+        try {
+          const data = await response.json();
+          if (data.gameState) {
+            // Extract our hole cards from the response and store them
+            const myPlayer = data.gameState.players?.find((p: any) => p.id === playerId);
+            if (myPlayer?.holeCards && Array.isArray(myPlayer.holeCards) && myPlayer.holeCards.length > 0) {
+              knownHoleCardsRef.current = myPlayer.holeCards;
+              console.log('[game] stored hole cards from start response:', myPlayer.holeCards.length, 'cards');
+            }
+            // Also set the game state (will merge with broadcast state via the ref)
+            setPokerGameState(data.gameState);
+          }
+        } catch (e) {
+          console.warn('Failed to parse start game response:', e);
+        }
       }
     } catch (error) {
       console.error('Error starting game:', error);
@@ -863,6 +989,19 @@ export default function GamePage() {
       if (!response.ok) {
         const err = await response.json();
         console.error('Poker action failed:', err);
+      } else {
+        // Extract our hole cards from the response if available
+        try {
+          const data = await response.json();
+          if (data.gameState?.players) {
+            const myPlayer = data.gameState.players.find((p: any) => p.id === playerId);
+            if (myPlayer?.holeCards && Array.isArray(myPlayer.holeCards) && myPlayer.holeCards.length > 0) {
+              knownHoleCardsRef.current = myPlayer.holeCards;
+            }
+          }
+        } catch {
+          // Ignore parse errors
+        }
       }
     } catch (error) {
       console.error('Error performing poker action:', error);
@@ -2239,6 +2378,8 @@ export default function GamePage() {
                           onClick={async () => {
                             try {
                               if (!id || !playerId) return;
+                              // Clear known hole cards before starting new hand
+                              knownHoleCardsRef.current = null;
                               const response = await fetch('/api/games/next-hand', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -2246,6 +2387,20 @@ export default function GamePage() {
                               });
                               if (!response.ok) {
                                 console.warn('Dealer choice failed:', await response.text());
+                              } else {
+                                // Extract hole cards from response for the new hand
+                                try {
+                                  const data = await response.json();
+                                  if (data.gameState?.players) {
+                                    const myPlayer = data.gameState.players.find((p: any) => p.id === playerId);
+                                    if (myPlayer?.holeCards && Array.isArray(myPlayer.holeCards) && myPlayer.holeCards.length > 0) {
+                                      knownHoleCardsRef.current = myPlayer.holeCards;
+                                      console.log('[game] stored new hole cards from dealer choice next-hand:', myPlayer.holeCards.length, 'cards');
+                                    }
+                                  }
+                                } catch {
+                                  // Ignore parse errors
+                                }
                               }
                             } catch (err) {
                               console.warn('Dealer choice failed:', err);

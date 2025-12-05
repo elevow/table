@@ -11,6 +11,7 @@ import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../sr
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import type { TableState } from '../../../src/types/poker';
+import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -163,7 +164,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const enrichedState = await broadcastState(updatedState, { action: actionName, playerId, runs });
 
     if (isAutoRunoutEligible(updatedState)) {
-      scheduleSupabaseAutoRunout(tableId, engine, (state, meta) => broadcastState(state, meta).then(() => {}));
+      // Track whether we've already posted the hand result for auto-runout
+      let handResultPosted = false;
+      scheduleSupabaseAutoRunout(tableId, engine, async (state, meta) => {
+        await broadcastState(state, meta);
+        // Post hand result to chat when auto-runout reaches showdown
+        if (state.stage === 'showdown' && !handResultPosted) {
+          handResultPosted = true;
+          try {
+            await postHandResultToChat(tableId, state);
+          } catch (chatError) {
+            console.warn('Failed to post hand result to chat (auto-runout):', chatError);
+          }
+        }
+      });
     }
 
     // Sanitize the response for the requesting player - hide other players' hole cards

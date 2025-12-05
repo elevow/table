@@ -8,7 +8,9 @@ import {
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
+import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import type { Card, GameStage, TableState } from '../../../src/types/poker';
+import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -40,9 +42,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Get the active game engine from global storage
-    const g: any = global as any;
-    const engine = g?.activeGames?.get(tableId);
+    // Get the active game engine from memory or restore from database
+    const engine = await getOrRestoreEngine(tableId);
     if (!engine) {
       return res.status(404).json({ error: 'No active game found for this table' });
     }
@@ -119,6 +120,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: e?.message || 'Action failed' });
     }
 
+    // Persist the updated engine state to database for serverless recovery
+    await persistEngineState(tableId, engine);
+
     // Get updated game state
     let gameState = engine.getState();
 
@@ -149,12 +153,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const enrichedState = await broadcastState(gameState, { action, playerId, amount });
 
-    // Note: Auto-runout is now handled by client-side polling in serverless environments.
-    // The scheduleSupabaseAutoRunout timers don't work reliably in Vercel because functions terminate after response.
-    // See /api/games/advance-runout for the client-polling approach.
+    // Post hand result to chat when the game reaches showdown
+    if (enrichedState.stage === 'showdown' && preActionStage !== 'showdown') {
+      try {
+        await postHandResultToChat(tableId, enrichedState);
+      } catch (chatError) {
+        // Log but don't fail the action if chat posting fails
+        console.warn('Failed to post hand result to chat:', chatError);
+      }
+    }
+
     const shouldScheduleAutoRunout = autoEligible && !issuedPrompt;
-    console.log('[action.ts] autoRunout check:', { autoEligible, issuedPrompt: !!issuedPrompt, shouldScheduleAutoRunout });
-    // Server-side scheduling disabled - client handles polling via /api/games/advance-runout
+    if (shouldScheduleAutoRunout) {
+      // Track whether we've already posted the hand result for auto-runout
+      let handResultPosted = false;
+      scheduleSupabaseAutoRunout(tableId, engine, async (state, meta) => {
+        await broadcastState(state, meta);
+        // Post hand result to chat when auto-runout reaches showdown
+        if (state.stage === 'showdown' && !handResultPosted) {
+          handResultPosted = true;
+          try {
+            await postHandResultToChat(tableId, state);
+          } catch (chatError) {
+            console.warn('Failed to post hand result to chat (auto-runout):', chatError);
+          }
+        }
+      });
+    }
 
     // Sanitize the response for the requesting player - hide other players' hole cards
     // unless it's showdown or an all-in situation

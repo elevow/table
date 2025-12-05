@@ -9,7 +9,9 @@ import {
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
+import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import type { TableState } from '../../../src/types/poker';
+import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -68,9 +70,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'No active Run-It-Twice prompt for this player' });
     }
 
-    // Get the active game engine
-    const g: any = global as any;
-    const engine = g?.activeGames?.get(tableId);
+    // Get the active game engine from memory or restore from database
+    const engine = await getOrRestoreEngine(tableId);
     if (!engine) {
       return res.status(404).json({ error: 'No active game found for this table' });
     }
@@ -157,12 +158,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       actionName = 'run_it_twice_enabled';
     }
 
+    // Persist engine state for serverless recovery
+    await persistEngineState(tableId, engine);
+
     const enrichedState = await broadcastState(updatedState, { action: actionName, playerId, runs });
 
-    // Note: Auto-runout is now handled by client-side polling in serverless environments.
-    // The scheduleSupabaseAutoRunout timers don't work reliably in Vercel because functions terminate after response.
-    // See /api/games/advance-runout for the client-polling approach.
-    console.log('[enable-rit] autoRunout eligible:', isAutoRunoutEligible(updatedState), '- client will handle polling');
+    if (isAutoRunoutEligible(updatedState)) {
+      // Track whether we've already posted the hand result for auto-runout
+      let handResultPosted = false;
+      scheduleSupabaseAutoRunout(tableId, engine, async (state, meta) => {
+        await broadcastState(state, meta);
+        // Post hand result to chat when auto-runout reaches showdown
+        if (state.stage === 'showdown' && !handResultPosted) {
+          handResultPosted = true;
+          try {
+            await postHandResultToChat(tableId, state);
+          } catch (chatError) {
+            console.warn('Failed to post hand result to chat (auto-runout):', chatError);
+          }
+        }
+      });
+    }
 
     // Sanitize the response for the requesting player - hide other players' hole cards
     // unless it's showdown or an all-in situation

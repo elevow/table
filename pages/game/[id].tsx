@@ -804,9 +804,15 @@ export default function GamePage() {
     }
 
     // Mark that we're scheduling for this community length
-    autoRunoutLastCommunityLenRef.current = communityLen;
+    // We mark the EXPECTED new length (communityLen + cards to be added) to prevent
+    // duplicate scheduling when the broadcast arrives with the new state before our response
+    // - flop (0 cards) -> turn (4 cards): mark as 4 (will receive 4 via broadcast)
+    // - turn (3 cards) -> river (4 cards): mark as 4 (will receive 4 via broadcast)
+    // - turn (4 cards) -> river (5 cards): mark as 5 (will receive 5 via broadcast)
+    const expectedNewLen = communityLen < 3 ? 3 : communityLen < 4 ? 4 : 5;
+    autoRunoutLastCommunityLenRef.current = expectedNewLen;
     autoRunoutInProgressRef.current = true;
-    console.log('[client auto-runout] scheduling advance in 5 seconds for communityLen:', communityLen, 'stage:', stage);
+    console.log('[client auto-runout] scheduling advance in 5 seconds for communityLen:', communityLen, 'stage:', stage, 'expectedNewLen:', expectedNewLen);
     
     // Store the community length we're advancing FROM (not the length we captured)
     const scheduledFromCommunityLen = communityLen;
@@ -845,23 +851,14 @@ export default function GamePage() {
             console.log('[client auto-runout] applying game state from response, new communityLen:', newCommunityLen, 'stage:', newStage);
             console.log('[client auto-runout] state has', data.gameState.communityCards?.length || 0, 'community cards:', JSON.stringify(data.gameState.communityCards || []));
             
-            // Set the tracking ref to the NEW community length (after advance)
-            // This prevents duplicate scheduling when the broadcast arrives with the same state
-            // The effect will run after setPokerGameState with communityLen matching this ref, 
-            // so it will log "already scheduled" and skip, preventing duplicate advances
-            console.log('[client auto-runout] setting lastCommunityLen to NEW value:', newCommunityLen, 'to prevent duplicate on broadcast');
-            autoRunoutLastCommunityLenRef.current = newCommunityLen;
-            
             // Update the ref first before setting state so the effect sees the updated value
             pokerGameStateRef.current = data.gameState;
             setPokerGameState(data.gameState);
             
-            // After state is set, reset to -1 to allow NEXT round's scheduling
-            // Use setTimeout to ensure this runs after the effect triggered by setPokerGameState
-            setTimeout(() => {
-              console.log('[client auto-runout] resetting lastCommunityLen to -1 to allow next round scheduling');
-              autoRunoutLastCommunityLenRef.current = -1;
-            }, 100);
+            // Reset the ref immediately so the effect can schedule the next round
+            // The effect will run after setPokerGameState and see -1, allowing it to schedule river
+            console.log('[client auto-runout] resetting lastCommunityLen to -1 to allow next round scheduling');
+            autoRunoutLastCommunityLenRef.current = -1;
           } else {
             console.log('[client auto-runout] resetting lastCommunityLen to -1 (no gameState in response)');
             autoRunoutLastCommunityLenRef.current = -1;

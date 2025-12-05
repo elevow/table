@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
+import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
 
 /**
  * GET /api/games/state?tableId=xxx&playerId=yyy
@@ -22,9 +23,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Get the active game engine from global storage
-    const g: any = global as any;
-    const engine = g?.activeGames?.get(tableId);
+    // Get the active game engine from memory or restore from database
+    const engine = await getOrRestoreEngine(tableId);
     
     if (!engine || typeof engine.getState !== 'function') {
       return res.status(404).json({ error: 'No active game found for this table' });

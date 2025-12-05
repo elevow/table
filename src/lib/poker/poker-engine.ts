@@ -1036,7 +1036,7 @@ export class PokerEngine {
   }
 
   // Allow changing variant at runtime before a hand starts
-  public setVariant(variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo'): void {
+  public setVariant(variant: 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud'): void {
     if (variant) {
       this.state.variant = variant;
     } else {
@@ -1249,5 +1249,84 @@ export class PokerEngine {
     const validRanks = new Set(['2','3','4','5','6','7','8','9','10','J','Q','K','A']);
     if (!validRanks.has(rankStr)) throw new Error(`Invalid card rank: ${s}`);
     return { rank: rankStr as Card['rank'], suit: suitMap[suit] };
+  }
+
+  /**
+   * Serialize the engine state for persistence (e.g., to database).
+   * This captures the full game state including the deck, allowing the engine
+   * to be reconstructed in a stateless serverless environment.
+   */
+  public serialize(): {
+    tableState: TableState;
+    deck: Card[];
+    removedPlayers: string[];
+    rabbitPreviewed: number;
+    requireRitUnanimous: boolean;
+    ritConsents: string[];
+  } {
+    return {
+      tableState: { ...this.state },
+      deck: this.deckManager.serialize(),
+      removedPlayers: Array.from(this.removedPlayers),
+      rabbitPreviewed: this.rabbitPreviewed,
+      requireRitUnanimous: this.requireRitUnanimous,
+      ritConsents: Array.from(this.ritConsents),
+    };
+  }
+
+  /**
+   * Restore/reconstruct a PokerEngine from serialized state.
+   * This is used to restore the game in serverless environments where
+   * the in-memory state may not persist between requests.
+   */
+  public static fromSerialized(data: {
+    tableState: TableState;
+    deck: Card[];
+    removedPlayers?: string[];
+    rabbitPreviewed?: number;
+    requireRitUnanimous?: boolean;
+    ritConsents?: string[];
+  }): PokerEngine {
+    const { tableState, deck } = data;
+    
+    // Create engine with the preserved state
+    const engine = new PokerEngine(
+      tableState.tableId,
+      tableState.players,
+      tableState.smallBlind,
+      tableState.bigBlind,
+      {
+        variant: tableState.variant,
+        bettingMode: tableState.bettingMode || 'no-limit',
+        requireRunItTwiceUnanimous: data.requireRitUnanimous || tableState.requireRunItTwiceUnanimous,
+      }
+    );
+
+    // Restore full state (overwrite what constructor set)
+    engine.state = { ...tableState };
+
+    // Restore deck from serialized cards
+    engine.deckManager = DeckManager.fromSerialized(deck);
+
+    // Restore internal tracking state
+    if (data.removedPlayers) {
+      engine.removedPlayers = new Set(data.removedPlayers);
+    }
+    if (typeof data.rabbitPreviewed === 'number') {
+      engine.rabbitPreviewed = data.rabbitPreviewed;
+    }
+    if (typeof data.requireRitUnanimous === 'boolean') {
+      engine.requireRitUnanimous = data.requireRitUnanimous;
+    }
+    if (data.ritConsents) {
+      engine.ritConsents = new Set(data.ritConsents);
+    }
+
+    // Re-initialize managers with restored state
+    engine.bettingManager = new BettingManager(tableState.smallBlind, tableState.bigBlind);
+    engine.bettingManager.setMode(tableState.bettingMode || 'no-limit');
+    engine.gameStateManager = new GameStateManager(engine.state);
+
+    return engine;
   }
 }

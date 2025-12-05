@@ -8,6 +8,7 @@ import {
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
+import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import type { Card, GameStage, TableState } from '../../../src/types/poker';
 
 // Socket.io server type (simplified to avoid external dependency)
@@ -40,9 +41,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Get the active game engine from global storage
-    const g: any = global as any;
-    const engine = g?.activeGames?.get(tableId);
+    // Get the active game engine from memory or restore from database
+    const engine = await getOrRestoreEngine(tableId);
     if (!engine) {
       return res.status(404).json({ error: 'No active game found for this table' });
     }
@@ -118,6 +118,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } catch (e: any) {
       return res.status(400).json({ error: e?.message || 'Action failed' });
     }
+
+    // Persist the updated engine state to database for serverless recovery
+    await persistEngineState(tableId, engine);
 
     // Get updated game state
     let gameState = engine.getState();

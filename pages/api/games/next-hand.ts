@@ -13,6 +13,7 @@ import {
   setPendingRebuy,
 } from '../../../src/lib/server/rebuy-state';
 import { autoStandPlayer } from '../../../src/lib/server/rebuy-actions';
+import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 
 const DEFAULT_DEALERS_CHOICE_VARIANTS = ['texas-holdem', 'omaha', 'omaha-hi-lo', 'seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'];
 
@@ -38,9 +39,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Missing tableId or playerId' });
     }
 
-    // Get the active game engine from global storage
+    // Get the active game engine from memory or restore from database
     const g: any = global as any;
-    const engine = g?.activeGames?.get(tableId);
+    const engine = await getOrRestoreEngine(tableId);
     const roomConfig = g?.roomConfigs?.get(tableId);
     
     if (!engine || !roomConfig) {
@@ -124,7 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         let mutated = false;
         if (chosenVariant) {
           if (typeof engine.setVariant === 'function') {
-            engine.setVariant(chosenVariant);
+            engine.setVariant(chosenVariant as 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud');
           }
           const nextMode = (chosenVariant === 'omaha' || chosenVariant === 'omaha-hi-lo') ? 'pot-limit' : (roomConfig.bettingMode || 'no-limit');
           if (typeof engine.setBettingMode === 'function') {
@@ -145,6 +146,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         clearRunItState(tableId);
 
         engine.startNewHand();
+
+        // Persist engine state for serverless recovery
+        await persistEngineState(tableId, engine);
 
         const gameState = engine.getState();
         const enrichedState = enrichStateWithRunIt(tableId, gameState);

@@ -811,8 +811,8 @@ export default function GamePage() {
         const currentCommunityLen = currentState?.communityCards?.length || 0;
         const currentStage = currentState?.stage || 'unknown';
         console.log('[client auto-runout] timer fired - scheduledCommunityLen:', scheduledFromCommunityLen, 'currentCommunityLen:', currentCommunityLen, 'currentStage:', currentStage);
-        console.log('[client auto-runout] currentState communityCards:', currentState?.communityCards);
-        console.log('[client auto-runout] calling /api/games/advance-runout');
+        console.log('[client auto-runout] currentState communityCards:', JSON.stringify(currentState?.communityCards || []));
+        console.log('[client auto-runout] SENDING REQUEST with communityLen:', currentCommunityLen, 'to advance to:', currentCommunityLen < 3 ? 'flop' : currentCommunityLen < 4 ? 'turn' : currentCommunityLen < 5 ? 'river' : 'showdown');
         const response = await fetch('/api/games/advance-runout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -822,13 +822,21 @@ export default function GamePage() {
           }),
         });
         const data = await response.json();
-        console.log('[client auto-runout] response:', data);
+        console.log('[client auto-runout] response:', JSON.stringify(data));
+        console.log('[client auto-runout] response street:', data.street, 'expected:', currentCommunityLen < 3 ? 'flop' : currentCommunityLen < 4 ? 'turn' : currentCommunityLen < 5 ? 'river' : 'showdown');
         
         // Reset the tracking ref after successful request to allow next scheduling
         // This fixes the issue where the ref stays at the old value and blocks new schedules
         if (data.success) {
           console.log('[client auto-runout] resetting lastCommunityLen after successful advance');
           autoRunoutLastCommunityLenRef.current = -1;
+          
+          // Apply the game state from the response immediately
+          // This ensures we don't rely on the broadcast (which may arrive out-of-order and be ignored)
+          if (data.gameState) {
+            console.log('[client auto-runout] applying game state from response, new communityLen:', data.gameState.communityCards?.length, 'stage:', data.gameState.stage);
+            setPokerGameState(data.gameState);
+          }
         }
       } catch (e) {
         console.warn('[client auto-runout] request failed:', e);

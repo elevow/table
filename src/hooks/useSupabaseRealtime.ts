@@ -60,6 +60,7 @@ export function useSupabaseRealtime(tableId?: string | string[], callbacks?: Cal
           });
         })
         .on('broadcast', { event: 'game_state_update' }, (p) => {
+          console.log('[realtime] game_state_update broadcast received, seq:', p?.payload?.seq, 'refs:', channelEntry!.callbackRefs.size);
           channelEntry!.callbackRefs.forEach(ref => {
             try { ref.current?.onGameStateUpdate?.(p.payload); } catch (e) { console.error('[realtime] game_state_update error:', e); }
           });

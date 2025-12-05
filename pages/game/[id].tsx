@@ -725,6 +725,7 @@ export default function GamePage() {
     const players = pokerGameState.players || [];
     const communityCards = pokerGameState.communityCards || [];
     const runItTwicePrompt = pokerGameState.runItTwicePrompt;
+    const activePlayer = pokerGameState.activePlayer; // Player whose turn it is
 
     // Check if we need auto-runout:
     // 1. Not at showdown
@@ -733,12 +734,14 @@ export default function GamePage() {
     // 4. At most 1 non-all-in player (betting is closed)
     // 5. Community cards < 5 (more to reveal)
     // 6. No run-it-twice prompt active
+    // 7. No active player (betting action is complete for this street)
     const activePlayers = players.filter((p: any) => !p.isFolded);
     const activeCount = activePlayers.length;
     const anyAllIn = activePlayers.some((p: any) => p.isAllIn);
     const nonAllInCount = activePlayers.filter((p: any) => !p.isAllIn).length;
     const communityLen = communityCards.length;
     const needsMoreCards = communityLen < 5;
+    const bettingComplete = !activePlayer; // No player to act means betting is done
 
     // Determine if this client is the "leader" (first active player by seat number)
     // Only the leader should poll to prevent duplicate requests from multiple clients
@@ -756,6 +759,7 @@ export default function GamePage() {
       nonAllInCount <= 1 &&
       needsMoreCards &&
       !runItTwicePrompt &&
+      bettingComplete && // Betting must be done for this street
       isLeader; // Only leader should poll
 
     console.log('[client auto-runout] check:', {
@@ -766,6 +770,8 @@ export default function GamePage() {
       communityLen,
       needsMoreCards,
       hasPrompt: !!runItTwicePrompt,
+      bettingComplete,
+      activePlayer: activePlayer || '(none)',
       isLeader,
       playerId,
       leaderPlayerId,

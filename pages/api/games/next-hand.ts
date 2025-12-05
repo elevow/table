@@ -233,11 +233,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const enrichedState = enrichStateWithRunIt(tableId, gameState);
         // Sanitize state for broadcast - hide all hole cards unless showdown/all-in
         const broadcastSafeState = sanitizeStateForBroadcast(enrichedState);
-        const sequence = nextSeq(tableId);
+        const seq = nextSeq(tableId);
 
         await publishGameStateUpdate(tableId, {
           gameState: broadcastSafeState,
-          sequence,
+          seq,
           lastAction: { action: 'next_hand_started', playerId },
           timestamp: new Date().toISOString(),
         });

@@ -429,9 +429,12 @@ export default function GamePage() {
   const [gameStarted, setGameStarted] = useState(false);
   const [pokerGameState, setPokerGameState] = useState<any>(null);
   const pokerStageRef = useRef<string | undefined>(undefined);
+  // Ref to access current game state inside timeouts/callbacks
+  const pokerGameStateRef = useRef<any>(null);
   useEffect(() => {
     pokerStageRef.current = pokerGameState?.stage;
-  }, [pokerGameState?.stage]);
+    pokerGameStateRef.current = pokerGameState;
+  }, [pokerGameState?.stage, pokerGameState]);
   // Track last received sequence number to prevent out-of-order updates
   const lastSeqRef = useRef<number>(0);
   // Prevent duplicate action submissions
@@ -439,6 +442,14 @@ export default function GamePage() {
   // Auto next-hand fallback timer ref
   const autoNextHandTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoNextHandScheduledRef = useRef<boolean>(false);
+  // Auto-runout timer ref (for all-in street reveals)
+  const autoRunoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoRunoutInProgressRef = useRef<boolean>(false);
+  const autoRunoutLastCommunityLenRef = useRef<number>(-1);
+  // Track player's own hole cards to preserve them when broadcast state hides them
+  const knownHoleCardsRef = useRef<any[] | null>(null);
+  // Track if we've already attempted to fetch hole cards for this stage
+  const holeCardsFetchAttemptedRef = useRef<string | null>(null);
   // Visual accessibility options
   const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
   // Dealer's Choice: pending choice prompt from server
@@ -585,6 +596,8 @@ export default function GamePage() {
       try {
         if (pokerStageRef.current === 'showdown') {
           console.log('[client auto] Requesting next hand after 5s');
+          // Clear known hole cards before starting new hand
+          knownHoleCardsRef.current = null;
           const response = await fetch('/api/games/next-hand', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -592,6 +605,20 @@ export default function GamePage() {
           });
           if (!response.ok) {
             console.warn('Next hand request failed:', await response.text());
+          } else {
+            // Extract hole cards from response for the new hand
+            try {
+              const data = await response.json();
+              if (data.gameState?.players) {
+                const myPlayer = data.gameState.players.find((p: any) => p.id === playerId);
+                if (myPlayer?.holeCards && Array.isArray(myPlayer.holeCards) && myPlayer.holeCards.length > 0) {
+                  knownHoleCardsRef.current = myPlayer.holeCards;
+                  console.log('[game] stored new hole cards from next-hand:', myPlayer.holeCards.length, 'cards');
+                }
+              }
+            } catch {
+              // Ignore parse errors
+            }
           }
         }
       } catch (e) {
@@ -613,6 +640,265 @@ export default function GamePage() {
       autoNextHandScheduledRef.current = false;
     };
   }, [pokerGameState?.stage, id, playerId]);
+
+  // Fetch player's hole cards if they're in a hand but don't have cards
+  // This handles the case where a player joins mid-hand or receives a broadcast without their cards
+  useEffect(() => {
+    if (!id || typeof id !== 'string' || !playerId || !pokerGameState) return;
+    
+    // Only fetch if we're in an active hand (not preflop waiting, not showdown)
+    const stage = pokerGameState.stage;
+    if (!stage || stage === 'showdown') {
+      // Reset fetch attempt tracker when not in active hand
+      holeCardsFetchAttemptedRef.current = null;
+      return;
+    }
+    
+    // Check if we're a player in this game
+    const myPlayer = pokerGameState.players?.find((p: any) => p.id === playerId);
+    if (!myPlayer) return;
+    
+    // If we already have hole cards, nothing to do
+    if (Array.isArray(myPlayer.holeCards) && myPlayer.holeCards.length > 0) {
+      // Update our known cards ref
+      knownHoleCardsRef.current = myPlayer.holeCards;
+      holeCardsFetchAttemptedRef.current = null; // Reset for next hand
+      return;
+    }
+    
+    // If we have known cards in our ref, we've already merged them
+    if (knownHoleCardsRef.current && knownHoleCardsRef.current.length > 0) return;
+    
+    // Create a unique key for this fetch attempt to prevent duplicate fetches
+    const fetchKey = `${id}:${playerId}:${stage}`;
+    if (holeCardsFetchAttemptedRef.current === fetchKey) {
+      // Already attempted to fetch for this stage, don't retry
+      return;
+    }
+    
+    // Mark that we're attempting to fetch
+    holeCardsFetchAttemptedRef.current = fetchKey;
+    
+    // We're in a hand but don't have our cards - fetch them from the server
+    console.log('[game] fetching hole cards - player in hand but no cards visible');
+    const fetchMyState = async () => {
+      try {
+        const response = await fetch(`/api/games/my-state?tableId=${id}&playerId=${playerId}`);
+        if (!response.ok) {
+          console.warn('[game] failed to fetch my state:', response.status);
+          return;
+        }
+        const data = await response.json();
+        if (data.success && data.gameState?.players) {
+          const me = data.gameState.players.find((p: any) => p.id === playerId);
+          if (me?.holeCards && Array.isArray(me.holeCards) && me.holeCards.length > 0) {
+            knownHoleCardsRef.current = me.holeCards;
+            console.log('[game] fetched hole cards:', me.holeCards.length, 'cards');
+            // Update state to include our cards
+            setPokerGameState((prev: any) => {
+              if (!prev?.players) return prev;
+              return {
+                ...prev,
+                players: prev.players.map((p: any) => 
+                  p.id === playerId ? { ...p, holeCards: me.holeCards } : p
+                )
+              };
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('[game] error fetching hole cards:', e);
+      }
+    };
+    
+    fetchMyState();
+  }, [id, playerId, pokerGameState?.stage, pokerGameState?.players]);
+
+   // Client-side auto-runout: when all-in detected and community cards remaining, poll server every 5s
+  // Only the "leader" client (first active player by seat order) should poll to prevent duplicates
+  useEffect(() => {
+    if (!id || typeof id !== 'string') return;
+    if (!pokerGameState) return;
+    if (!playerId) return; // Need to know who we are
+
+    const stage = pokerGameState.stage;
+    const players = pokerGameState.players || [];
+    const communityCards = pokerGameState.communityCards || [];
+    const runItTwicePrompt = pokerGameState.runItTwicePrompt;
+    const activePlayer = pokerGameState.activePlayer; // Player whose turn it is
+
+    // Check if we need auto-runout:
+    // 1. Not at showdown
+    // 2. At least 2 active (non-folded) players
+    // 3. At least one all-in player
+    // 4. At most 1 non-all-in player (betting is closed)
+    // 5. Community cards < 5 (more to reveal)
+    // 6. No run-it-twice prompt active
+    // 7. No active player (betting action is complete for this street)
+    const activePlayers = players.filter((p: any) => !p.isFolded);
+    const activeCount = activePlayers.length;
+    const anyAllIn = activePlayers.some((p: any) => p.isAllIn);
+    const nonAllInCount = activePlayers.filter((p: any) => !p.isAllIn).length;
+    const communityLen = communityCards.length;
+    const needsMoreCards = communityLen < 5;
+    const bettingComplete = !activePlayer; // No player to act means betting is done
+    
+    console.log('[client auto-runout] EFFECT TRIGGERED - stage:', stage, 'communityLen:', communityLen, 'lastCommunityLenRef:', autoRunoutLastCommunityLenRef.current);
+
+    // Determine if this client is the "leader" (first active player by seat number)
+    // Only the leader should poll to prevent duplicate requests from multiple clients
+    const sortedActivePlayers = [...activePlayers].sort((a: any, b: any) => {
+      const seatA = typeof a.seatNumber === 'number' ? a.seatNumber : 999;
+      const seatB = typeof b.seatNumber === 'number' ? b.seatNumber : 999;
+      return seatA - seatB;
+    });
+    const leaderPlayerId = sortedActivePlayers[0]?.id;
+    const isLeader = playerId === leaderPlayerId;
+
+    const shouldAutoRunout = stage !== 'showdown' &&
+      activeCount >= 2 &&
+      anyAllIn &&
+      nonAllInCount <= 1 &&
+      needsMoreCards &&
+      !runItTwicePrompt &&
+      bettingComplete && // Betting must be done for this street
+      isLeader; // Only leader should poll
+
+    console.log('[client auto-runout] check:', {
+      stage,
+      activeCount,
+      anyAllIn,
+      nonAllInCount,
+      communityLen,
+      needsMoreCards,
+      hasPrompt: !!runItTwicePrompt,
+      bettingComplete,
+      activePlayer: activePlayer || '(none)',
+      isLeader,
+      playerId,
+      leaderPlayerId,
+      shouldAutoRunout,
+      lastCommunityLen: autoRunoutLastCommunityLenRef.current
+    });
+
+    if (!shouldAutoRunout) {
+      console.log('[client auto-runout] NOT scheduling - reason:', {
+        stageIsShowdown: stage === 'showdown',
+        activeCountLt2: activeCount < 2,
+        noAllIn: !anyAllIn,
+        tooManyNonAllIn: nonAllInCount > 1,
+        noMoreCards: !needsMoreCards,
+        hasPrompt: !!runItTwicePrompt,
+        bettingIncomplete: !bettingComplete,
+        notLeader: !isLeader
+      });
+      if (autoRunoutTimerRef.current) {
+        clearTimeout(autoRunoutTimerRef.current);
+        autoRunoutTimerRef.current = null;
+      }
+      autoRunoutInProgressRef.current = false;
+      autoRunoutLastCommunityLenRef.current = -1;
+      return;
+    }
+
+    // Skip if we already scheduled for this or a later community card count
+    // We track the EXPECTED new length, so we should skip if:
+    // 1. ref is set to expected length from our current count (already scheduled from this count)
+    // 2. ref is set to a higher expected length (already scheduled from a higher count)
+    const expectedNewLen = communityLen < 3 ? 3 : communityLen < 4 ? 4 : 5;
+    if (autoRunoutLastCommunityLenRef.current >= expectedNewLen && autoRunoutLastCommunityLenRef.current !== -1) {
+      console.log('[client auto-runout] already scheduled for expectedNewLen:', autoRunoutLastCommunityLenRef.current, 'current expectedNewLen:', expectedNewLen);
+      return;
+    }
+
+    // Already have a timer scheduled for a different community length - clear it
+    if (autoRunoutTimerRef.current) {
+      clearTimeout(autoRunoutTimerRef.current);
+      autoRunoutTimerRef.current = null;
+    }
+
+    // Mark that we're scheduling for this community length
+    // We mark the EXPECTED new length (communityLen + cards to be added) to prevent
+    // duplicate scheduling when the broadcast arrives with the new state before our response
+    // - preflop (0 cards) -> flop (3 cards): mark as 3
+    // - flop (3 cards) -> turn (4 cards): mark as 4
+    // - turn (4 cards) -> river (5 cards): mark as 5
+    autoRunoutLastCommunityLenRef.current = expectedNewLen;
+    autoRunoutInProgressRef.current = true;
+    console.log('[client auto-runout] scheduling advance in 5 seconds for communityLen:', communityLen, 'stage:', stage, 'expectedNewLen:', expectedNewLen);
+    
+    // Store the community length we're advancing FROM (not the length we captured)
+    const scheduledFromCommunityLen = communityLen;
+    
+    autoRunoutTimerRef.current = setTimeout(async () => {
+      try {
+        // Use the CURRENT game state at time of request via ref (not stale closure value)
+        // This ensures we send the latest state to the server
+        const currentState = pokerGameStateRef.current;
+        const currentCommunityLen = currentState?.communityCards?.length || 0;
+        const currentStage = currentState?.stage || 'unknown';
+        console.log('[client auto-runout] timer fired - scheduledCommunityLen:', scheduledFromCommunityLen, 'currentCommunityLen:', currentCommunityLen, 'currentStage:', currentStage);
+        console.log('[client auto-runout] currentState communityCards:', JSON.stringify(currentState?.communityCards || []));
+        console.log('[client auto-runout] SENDING REQUEST with communityLen:', currentCommunityLen, 'to advance to:', currentCommunityLen < 3 ? 'flop' : currentCommunityLen < 4 ? 'turn' : currentCommunityLen < 5 ? 'river' : 'showdown');
+        const response = await fetch('/api/games/advance-runout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            tableId: id,
+            gameState: currentState // Use current state via ref
+          }),
+        });
+        const data = await response.json();
+        console.log('[client auto-runout] response:', JSON.stringify(data));
+        console.log('[client auto-runout] response street:', data.street, 'expected:', currentCommunityLen < 3 ? 'flop' : currentCommunityLen < 4 ? 'turn' : currentCommunityLen < 5 ? 'river' : 'showdown');
+        
+        // After successful request, update the tracking ref to the NEW community length
+        // This prevents the effect from scheduling another advance when the broadcast arrives
+        // (the broadcast will have the same communityLen as we just set)
+        if (data.success) {
+          // Apply the game state from the response immediately
+          // This ensures we don't rely on the broadcast (which may arrive out-of-order and be ignored)
+          if (data.gameState) {
+            const newCommunityLen = data.gameState.communityCards?.length || 0;
+            const newStage = data.gameState.stage;
+            console.log('[client auto-runout] applying game state from response, new communityLen:', newCommunityLen, 'stage:', newStage);
+            console.log('[client auto-runout] state has', data.gameState.communityCards?.length || 0, 'community cards:', JSON.stringify(data.gameState.communityCards || []));
+            
+            // Update the ref first before setting state so the effect sees the updated value
+            pokerGameStateRef.current = data.gameState;
+            setPokerGameState(data.gameState);
+            
+            // Reset the ref immediately so the effect can schedule the next round
+            // The effect will run after setPokerGameState and see -1, allowing it to schedule river
+            console.log('[client auto-runout] resetting lastCommunityLen to -1 to allow next round scheduling');
+            autoRunoutLastCommunityLenRef.current = -1;
+            console.log('[client auto-runout] ref reset complete, waiting for effect to re-run with new state');
+          } else {
+            console.log('[client auto-runout] resetting lastCommunityLen to -1 (no gameState in response)');
+            autoRunoutLastCommunityLenRef.current = -1;
+          }
+        }
+      } catch (e) {
+        console.warn('[client auto-runout] request failed:', e);
+        // Reset on error too to allow retry
+        autoRunoutLastCommunityLenRef.current = -1;
+      } finally {
+        if (autoRunoutTimerRef.current) {
+          clearTimeout(autoRunoutTimerRef.current);
+          autoRunoutTimerRef.current = null;
+        }
+        autoRunoutInProgressRef.current = false;
+      }
+    }, 5000);
+
+    return () => {
+      if (autoRunoutTimerRef.current) {
+        clearTimeout(autoRunoutTimerRef.current);
+        autoRunoutTimerRef.current = null;
+      }
+      autoRunoutInProgressRef.current = false;
+    };
+  }, [pokerGameState, id, playerId]);
   
   // Periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {
@@ -2224,6 +2510,8 @@ export default function GamePage() {
                           onClick={async () => {
                             try {
                               if (!id || !playerId) return;
+                              // Clear known hole cards before starting new hand
+                              knownHoleCardsRef.current = null;
                               const response = await fetch('/api/games/next-hand', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -2231,6 +2519,20 @@ export default function GamePage() {
                               });
                               if (!response.ok) {
                                 console.warn('Dealer choice failed:', await response.text());
+                              } else {
+                                // Extract hole cards from response for the new hand
+                                try {
+                                  const data = await response.json();
+                                  if (data.gameState?.players) {
+                                    const myPlayer = data.gameState.players.find((p: any) => p.id === playerId);
+                                    if (myPlayer?.holeCards && Array.isArray(myPlayer.holeCards) && myPlayer.holeCards.length > 0) {
+                                      knownHoleCardsRef.current = myPlayer.holeCards;
+                                      console.log('[game] stored new hole cards from dealer choice next-hand:', myPlayer.holeCards.length, 'cards');
+                                    }
+                                  }
+                                } catch {
+                                  // Ignore parse errors
+                                }
                               }
                             } catch (err) {
                               console.warn('Dealer choice failed:', err);

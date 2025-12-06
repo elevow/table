@@ -105,6 +105,7 @@ describe('supabase-auto-runout', () => {
     expect(prepArgs?.community).toEqual(state.communityCards);
     expect(prepArgs?.known).toEqual(expect.arrayContaining(state.players.flatMap((p) => p.holeCards || [])));
 
+    // First street reveals after 5 seconds
     await jest.advanceTimersByTimeAsync(5000);
     expect(broadcast).toHaveBeenNthCalledWith(
       1,
@@ -113,6 +114,7 @@ describe('supabase-auto-runout', () => {
     );
     expect(state.communityCards).toHaveLength(3);
 
+    // Second street after another 5 seconds
     await jest.advanceTimersByTimeAsync(5000);
     expect(broadcast).toHaveBeenNthCalledWith(
       2,
@@ -121,6 +123,7 @@ describe('supabase-auto-runout', () => {
     );
     expect(state.communityCards).toHaveLength(3);
 
+    // Showdown after another 5 seconds
     await jest.advanceTimersByTimeAsync(5000);
     expect(engine.runItTwiceNow).toHaveBeenCalledTimes(1);
     expect(broadcast).toHaveBeenLastCalledWith(
@@ -143,5 +146,63 @@ describe('supabase-auto-runout', () => {
     expect(broadcast).not.toHaveBeenCalled();
     expect(engine.previewRabbitHunt).not.toHaveBeenCalled();
     expect(engine.prepareRabbitPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it('reveals all streets with 5 second delays on preflop all-in', async () => {
+    // Preflop all-in: no community cards yet
+    const state = makeState({
+      stage: 'preflop',
+      communityCards: [],
+    });
+    const engine = makeEngine(state);
+    const broadcast = jest.fn().mockResolvedValue(undefined);
+
+    const scheduled = scheduleSupabaseAutoRunout(tableId, engine as any, broadcast);
+    expect(scheduled).toBe(true);
+
+    // Flop reveals after 5 seconds
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(broadcast).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ 
+        stage: 'flop', 
+        communityCards: expect.arrayContaining([
+          { rank: '2', suit: 'hearts' },
+          { rank: '3', suit: 'hearts' },
+          { rank: '4', suit: 'hearts' },
+        ]) 
+      }),
+      { action: 'auto_runout_flop' },
+    );
+
+    // Turn after another 5 seconds (10 total)
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(broadcast).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ 
+        stage: 'turn', 
+        communityCards: expect.arrayContaining([{ rank: '2', suit: 'clubs' }]) 
+      }),
+      { action: 'auto_runout_turn' },
+    );
+
+    // River after another 5 seconds (15 total)
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(broadcast).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ 
+        stage: 'river', 
+        communityCards: expect.arrayContaining([{ rank: '8', suit: 'clubs' }]) 
+      }),
+      { action: 'auto_runout_river' },
+    );
+
+    // Showdown after another 5 seconds (20 total)
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(engine.runItTwiceNow).toHaveBeenCalledTimes(1);
+    expect(broadcast).toHaveBeenLastCalledWith(
+      expect.objectContaining({ stage: 'showdown' }),
+      { action: 'auto_runout_showdown' },
+    );
   });
 });

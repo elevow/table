@@ -745,15 +745,23 @@ export default function GamePage() {
     
     console.log('[client auto-runout] EFFECT TRIGGERED - stage:', stage, 'communityLen:', communityLen, 'lastCommunityLenRef:', autoRunoutLastCommunityLenRef.current);
 
-    // Determine if this client is the "leader" (first active player by seat number)
+    // Determine if this client is the "leader" (first active player by position)
     // Only the leader should poll to prevent duplicate requests from multiple clients
     const sortedActivePlayers = [...activePlayers].sort((a: any, b: any) => {
-      const seatA = typeof a.seatNumber === 'number' ? a.seatNumber : 999;
-      const seatB = typeof b.seatNumber === 'number' ? b.seatNumber : 999;
-      return seatA - seatB;
+      const posA = typeof a.position === 'number' ? a.position : 999;
+      const posB = typeof b.position === 'number' ? b.position : 999;
+      return posA - posB;
     });
     const leaderPlayerId = sortedActivePlayers[0]?.id;
     const isLeader = playerId === leaderPlayerId;
+    
+    console.log('[client auto-runout] leader check:', {
+      activePlayers: activePlayers.map((p: any) => ({ id: p.id?.substring(0, 8), position: p.position })),
+      sortedFirst: sortedActivePlayers[0]?.id?.substring(0, 8),
+      leaderPlayerId: leaderPlayerId?.substring(0, 8),
+      playerId: playerId?.substring(0, 8),
+      isLeader
+    });
 
     const shouldAutoRunout = stage !== 'showdown' &&
       activeCount >= 2 &&
@@ -872,7 +880,8 @@ export default function GamePage() {
             // The effect will run after setPokerGameState and see -1, allowing it to schedule river
             console.log('[client auto-runout] resetting lastCommunityLen to -1 to allow next round scheduling');
             autoRunoutLastCommunityLenRef.current = -1;
-            console.log('[client auto-runout] ref reset complete, waiting for effect to re-run with new state');
+            console.log('[client auto-runout] ref reset complete - lastCommunityLenRef is now:', autoRunoutLastCommunityLenRef.current, 'communityLen in new state:', newCommunityLen);
+            console.log('[client auto-runout] NEXT: effect should run with communityLen:', newCommunityLen, 'and schedule advance to:', newCommunityLen < 3 ? 'flop' : newCommunityLen < 4 ? 'turn' : newCommunityLen < 5 ? 'river' : 'showdown');
           } else {
             console.log('[client auto-runout] resetting lastCommunityLen to -1 (no gameState in response)');
             autoRunoutLastCommunityLenRef.current = -1;

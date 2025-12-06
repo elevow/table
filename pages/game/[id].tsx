@@ -782,6 +782,16 @@ export default function GamePage() {
     });
 
     if (!shouldAutoRunout) {
+      console.log('[client auto-runout] NOT scheduling - reason:', {
+        stageIsShowdown: stage === 'showdown',
+        activeCountLt2: activeCount < 2,
+        noAllIn: !anyAllIn,
+        tooManyNonAllIn: nonAllInCount > 1,
+        noMoreCards: !needsMoreCards,
+        hasPrompt: !!runItTwicePrompt,
+        bettingIncomplete: !bettingComplete,
+        notLeader: !isLeader
+      });
       if (autoRunoutTimerRef.current) {
         clearTimeout(autoRunoutTimerRef.current);
         autoRunoutTimerRef.current = null;
@@ -862,6 +872,7 @@ export default function GamePage() {
             // The effect will run after setPokerGameState and see -1, allowing it to schedule river
             console.log('[client auto-runout] resetting lastCommunityLen to -1 to allow next round scheduling');
             autoRunoutLastCommunityLenRef.current = -1;
+            console.log('[client auto-runout] ref reset complete, waiting for effect to re-run with new state');
           } else {
             console.log('[client auto-runout] resetting lastCommunityLen to -1 (no gameState in response)');
             autoRunoutLastCommunityLenRef.current = -1;

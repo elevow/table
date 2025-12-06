@@ -791,9 +791,13 @@ export default function GamePage() {
       return;
     }
 
-    // Skip if we already scheduled for this community card count
-    if (autoRunoutLastCommunityLenRef.current === communityLen) {
-      console.log('[client auto-runout] already scheduled for communityLen:', communityLen);
+    // Skip if we already scheduled for this or a later community card count
+    // We track the EXPECTED new length, so we should skip if:
+    // 1. ref is set to expected length from our current count (already scheduled from this count)
+    // 2. ref is set to a higher expected length (already scheduled from a higher count)
+    const expectedNewLen = communityLen < 3 ? 3 : communityLen < 4 ? 4 : 5;
+    if (autoRunoutLastCommunityLenRef.current >= expectedNewLen && autoRunoutLastCommunityLenRef.current !== -1) {
+      console.log('[client auto-runout] already scheduled for expectedNewLen:', autoRunoutLastCommunityLenRef.current, 'current expectedNewLen:', expectedNewLen);
       return;
     }
 
@@ -806,10 +810,9 @@ export default function GamePage() {
     // Mark that we're scheduling for this community length
     // We mark the EXPECTED new length (communityLen + cards to be added) to prevent
     // duplicate scheduling when the broadcast arrives with the new state before our response
-    // - flop (0 cards) -> turn (4 cards): mark as 4 (will receive 4 via broadcast)
-    // - turn (3 cards) -> river (4 cards): mark as 4 (will receive 4 via broadcast)
-    // - turn (4 cards) -> river (5 cards): mark as 5 (will receive 5 via broadcast)
-    const expectedNewLen = communityLen < 3 ? 3 : communityLen < 4 ? 4 : 5;
+    // - preflop (0 cards) -> flop (3 cards): mark as 3
+    // - flop (3 cards) -> turn (4 cards): mark as 4
+    // - turn (4 cards) -> river (5 cards): mark as 5
     autoRunoutLastCommunityLenRef.current = expectedNewLen;
     autoRunoutInProgressRef.current = true;
     console.log('[client auto-runout] scheduling advance in 5 seconds for communityLen:', communityLen, 'stage:', stage, 'expectedNewLen:', expectedNewLen);

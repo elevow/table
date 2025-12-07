@@ -896,6 +896,11 @@ export default function GamePage() {
           // and the stage has actually changed
           console.log('[client auto-runout] resetting scheduledFromStage from', autoRunoutScheduledFromStageRef.current, 'to null');
           autoRunoutScheduledFromStageRef.current = null;
+          
+          // Force effect to re-run even if Supabase broadcast already updated state
+          // This ensures we schedule for the next street after the API response
+          console.log('[client auto-runout] incrementing trigger to force effect re-run');
+          setAutoRunoutTrigger(t => t + 1);
         } else {
           console.log('[client auto-runout] response failed or no gameState - resetting');
           autoRunoutScheduledFromStageRef.current = null;
@@ -920,7 +925,7 @@ export default function GamePage() {
       }
       autoRunoutInProgressRef.current = false;
     };
-  }, [pokerGameState, id, playerId]);
+  }, [pokerGameState, id, playerId, autoRunoutTrigger]);
   
   // Periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {

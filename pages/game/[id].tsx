@@ -276,7 +276,7 @@ export default function GamePage() {
           // Preserve current player's hole cards from broadcast state
           // Broadcasts hide all hole cards for security, but we need to keep our own cards
           // visible if we already have them from a previous state or API response
-          console.log('[Supabase broadcast] processing game state, communityLen:', gameState.communityCards?.length, 'stage:', gameState.stage, 'autoRunoutLastCommunityLenRef:', autoRunoutLastCommunityLenRef?.current);
+          console.log('[Supabase broadcast] processing game state, communityLen:', gameState.communityCards?.length, 'stage:', gameState.stage, 'scheduledFromStage:', autoRunoutScheduledFromStageRef?.current);
           setPokerGameState((prevState: any) => {
             // Use effectivePlayerId which may come from currentPlayerSeat if playerId is not set
             const resolvedPlayerId = effectivePlayerId || playerId;
@@ -446,9 +446,11 @@ export default function GamePage() {
   // Auto-runout timer ref (for all-in street reveals)
   const autoRunoutTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoRunoutInProgressRef = useRef<boolean>(false);
-  const autoRunoutLastCommunityLenRef = useRef<number>(-1);
-  // Trigger to force auto-runout effect to re-run after applying API response state
-  const [autoRunoutTrigger, setAutoRunoutTrigger] = useState(0);
+  // Track the stage we last scheduled an advance FROM - prevents duplicate scheduling
+  // Values: 'preflop' | 'flop' | 'turn' | null (null means ready to schedule)
+  const autoRunoutScheduledFromStageRef = useRef<string | null>(null);
+  // Track if we're currently waiting for an API response
+  const autoRunoutWaitingForResponseRef = useRef<boolean>(false);
   // Track player's own hole cards to preserve them when broadcast state hides them
   const knownHoleCardsRef = useRef<any[] | null>(null);
   // Track if we've already attempted to fetch hole cards for this stage
@@ -746,7 +748,9 @@ export default function GamePage() {
     const needsMoreCards = communityLen < 5;
     const bettingComplete = !activePlayer; // No player to act means betting is done
     
-    console.log('[client auto-runout] EFFECT TRIGGERED - stage:', stage, 'communityLen:', communityLen, 'lastCommunityLenRef:', autoRunoutLastCommunityLenRef.current);
+    console.log('[client auto-runout] EFFECT TRIGGERED - stage:', stage, 'communityLen:', communityLen, 
+      'scheduledFromStage:', autoRunoutScheduledFromStageRef.current, 
+      'waitingForResponse:', autoRunoutWaitingForResponseRef.current);
 
     // Determine if this client is the "leader" (first active player by position)
     // Only the leader should poll to prevent duplicate requests from multiple clients
@@ -789,7 +793,7 @@ export default function GamePage() {
       playerId,
       leaderPlayerId,
       shouldAutoRunout,
-      lastCommunityLen: autoRunoutLastCommunityLenRef.current
+      scheduledFromStage: autoRunoutScheduledFromStageRef.current
     });
 
     if (!shouldAutoRunout) {
@@ -808,110 +812,97 @@ export default function GamePage() {
         autoRunoutTimerRef.current = null;
       }
       autoRunoutInProgressRef.current = false;
-      autoRunoutLastCommunityLenRef.current = -1;
+      // Only reset scheduledFromStage if we don't need auto-runout at all (not due to showdown/5 cards)
+      // This prevents re-scheduling if the effect just runs again due to a state update
+      if (stage === 'showdown' || communityLen >= 5) {
+        autoRunoutScheduledFromStageRef.current = null;
+      }
       return;
     }
 
-    // Skip if we already scheduled for this or a later community card count
-    // We track the EXPECTED new length, so we should skip if:
-    // 1. ref is set to expected length from our current count (already scheduled from this count)
-    // 2. ref is set to a higher expected length (already scheduled from a higher count)
-    const expectedNewLen = communityLen < 3 ? 3 : communityLen < 4 ? 4 : 5;
-    if (autoRunoutLastCommunityLenRef.current >= expectedNewLen && autoRunoutLastCommunityLenRef.current !== -1) {
-      console.log('[client auto-runout] already scheduled for expectedNewLen:', autoRunoutLastCommunityLenRef.current, 'current expectedNewLen:', expectedNewLen);
+    // Skip if we already scheduled from this stage and are waiting for response
+    // This prevents duplicate scheduling when broadcasts arrive before our response
+    if (autoRunoutScheduledFromStageRef.current === stage) {
+      console.log('[client auto-runout] already scheduled from stage:', stage, '- skipping');
       return;
     }
 
-    // Already have a timer scheduled for a different community length - clear it
+    // If we're waiting for a response from a previous request, don't schedule
+    if (autoRunoutWaitingForResponseRef.current) {
+      console.log('[client auto-runout] waiting for previous response - skipping');
+      return;
+    }
+
+    // Already have a timer - clear it
     if (autoRunoutTimerRef.current) {
       clearTimeout(autoRunoutTimerRef.current);
       autoRunoutTimerRef.current = null;
     }
 
-    // Mark that we're scheduling for this community length
-    // We mark the EXPECTED new length (communityLen + cards to be added) to prevent
-    // duplicate scheduling when the broadcast arrives with the new state before our response
-    // - preflop (0 cards) -> flop (3 cards): mark as 3
-    // - flop (3 cards) -> turn (4 cards): mark as 4
-    // - turn (4 cards) -> river (5 cards): mark as 5
-    autoRunoutLastCommunityLenRef.current = expectedNewLen;
+    // Mark that we're scheduling from this stage
+    autoRunoutScheduledFromStageRef.current = stage;
     autoRunoutInProgressRef.current = true;
-    console.log('[client auto-runout] scheduling advance in 5 seconds for communityLen:', communityLen, 'stage:', stage, 'expectedNewLen:', expectedNewLen);
     
-    // Store the community length we're advancing FROM (not the length we captured)
-    const scheduledFromCommunityLen = communityLen;
+    const nextStreet = communityLen < 3 ? 'flop' : communityLen < 4 ? 'turn' : 'river';
+    console.log('[client auto-runout] scheduling advance in 5 seconds from stage:', stage, 'to:', nextStreet);
     
     autoRunoutTimerRef.current = setTimeout(async () => {
       try {
+        // Mark that we're now waiting for a response
+        autoRunoutWaitingForResponseRef.current = true;
+        
         // Use the CURRENT game state at time of request via ref (not stale closure value)
-        // This ensures we send the latest state to the server
         const currentState = pokerGameStateRef.current;
         const currentCommunityLen = currentState?.communityCards?.length || 0;
         const currentStage = currentState?.stage || 'unknown';
-        console.log('[client auto-runout] timer fired - scheduledCommunityLen:', scheduledFromCommunityLen, 'currentCommunityLen:', currentCommunityLen, 'currentStage:', currentStage);
-        console.log('[client auto-runout] currentState communityCards:', JSON.stringify(currentState?.communityCards || []));
-        console.log('[client auto-runout] SENDING REQUEST with communityLen:', currentCommunityLen, 'to advance to:', currentCommunityLen < 3 ? 'flop' : currentCommunityLen < 4 ? 'turn' : currentCommunityLen < 5 ? 'river' : 'showdown');
+        
+        // If the stage changed since we scheduled, don't send the request
+        // This handles the case where another request completed while we were waiting
+        if (currentStage !== stage) {
+          console.log('[client auto-runout] timer fired but stage changed from', stage, 'to', currentStage, '- skipping request');
+          autoRunoutScheduledFromStageRef.current = null;
+          autoRunoutWaitingForResponseRef.current = false;
+          return;
+        }
+        
+        console.log('[client auto-runout] timer fired - stage:', currentStage, 'communityLen:', currentCommunityLen);
+        console.log('[client auto-runout] SENDING REQUEST to advance from', currentStage, 'to', nextStreet);
+        
         const response = await fetch('/api/games/advance-runout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             tableId: id,
-            gameState: currentState // Use current state via ref
+            gameState: currentState
           }),
         });
         const data = await response.json();
         console.log('[client auto-runout] response:', JSON.stringify(data));
-        console.log('[client auto-runout] response street:', data.street, 'expected:', currentCommunityLen < 3 ? 'flop' : currentCommunityLen < 4 ? 'turn' : currentCommunityLen < 5 ? 'river' : 'showdown');
+        console.log('[client auto-runout] response street:', data.street, 'expected:', nextStreet);
         
-        // After successful request, update the tracking ref to the NEW community length
-        // This prevents the effect from scheduling another advance when the broadcast arrives
-        // (the broadcast will have the same communityLen as we just set)
-        if (data.success) {
-          // Apply the game state from the response immediately
-          // This ensures we don't rely on the broadcast (which may arrive out-of-order and be ignored)
-          if (data.gameState) {
-            const newCommunityLen = data.gameState.communityCards?.length || 0;
-            const newStage = data.gameState.stage;
-            console.log('[client auto-runout] applying game state from response, new communityLen:', newCommunityLen, 'stage:', newStage);
-            console.log('[client auto-runout] state has', data.gameState.communityCards?.length || 0, 'community cards:', JSON.stringify(data.gameState.communityCards || []));
-            
-            // Update the ref first before setting state so the effect sees the updated value
-            pokerGameStateRef.current = data.gameState;
-            setPokerGameState(data.gameState);
-            
-            // Reset the ref immediately so the effect can schedule the next round
-            // The effect will run after setPokerGameState and see -1, allowing it to schedule river
-            console.log('[client auto-runout] resetting lastCommunityLen to -1 to allow next round scheduling');
-            autoRunoutLastCommunityLenRef.current = -1;
-            console.log('[client auto-runout] ref reset complete - lastCommunityLenRef is now:', autoRunoutLastCommunityLenRef.current, 'communityLen in new state:', newCommunityLen);
-            console.log('[client auto-runout] NEXT: effect should run with communityLen:', newCommunityLen, 'and schedule advance to:', newCommunityLen < 3 ? 'flop' : newCommunityLen < 4 ? 'turn' : newCommunityLen < 5 ? 'river' : 'showdown');
-            
-            // Force effect to re-run by incrementing trigger state
-            // This addresses a race condition where:
-            // 1. The Supabase broadcast arrives with turn state and sets pokerGameState
-            // 2. The effect runs and sees autoRunoutLastCommunityLenRef >= expectedNewLen (skips)
-            // 3. Our API response arrives and resets ref to -1
-            // 4. But React doesn't re-run the effect because pokerGameState didn't change
-            // By incrementing this trigger, we force the effect to re-run
-            console.log('[client auto-runout] incrementing trigger to force effect re-run');
-            setAutoRunoutTrigger(prev => prev + 1);
-            
-            // Force effect to re-evaluate by using a small delay - this ensures the state has settled
-            // before the effect dependency check happens (addresses React batching)
-            setTimeout(() => {
-              console.log('[client auto-runout] POST-SETTLE check - lastCommunityLenRef:', autoRunoutLastCommunityLenRef.current, 
-                'pokerGameStateRef communityLen:', pokerGameStateRef.current?.communityCards?.length);
-            }, 50);
-          } else {
-            console.log('[client auto-runout] resetting lastCommunityLen to -1 (no gameState in response)');
-            autoRunoutLastCommunityLenRef.current = -1;
-          }
+        if (data.success && data.gameState) {
+          const newStage = data.gameState.stage;
+          const newCommunityLen = data.gameState.communityCards?.length || 0;
+          console.log('[client auto-runout] SUCCESS - new stage:', newStage, 'new communityLen:', newCommunityLen);
+          
+          // Update state from response
+          pokerGameStateRef.current = data.gameState;
+          setPokerGameState(data.gameState);
+          
+          // Reset tracking to allow scheduling for the NEW stage
+          // This is the key fix: we only clear the scheduled stage when we get a successful response
+          // and the stage has actually changed
+          console.log('[client auto-runout] resetting scheduledFromStage from', autoRunoutScheduledFromStageRef.current, 'to null');
+          autoRunoutScheduledFromStageRef.current = null;
+        } else {
+          console.log('[client auto-runout] response failed or no gameState - resetting');
+          autoRunoutScheduledFromStageRef.current = null;
         }
       } catch (e) {
         console.warn('[client auto-runout] request failed:', e);
-        // Reset on error too to allow retry
-        autoRunoutLastCommunityLenRef.current = -1;
+        autoRunoutScheduledFromStageRef.current = null;
       } finally {
+        autoRunoutWaitingForResponseRef.current = false;
         if (autoRunoutTimerRef.current) {
           clearTimeout(autoRunoutTimerRef.current);
           autoRunoutTimerRef.current = null;
@@ -927,7 +918,7 @@ export default function GamePage() {
       }
       autoRunoutInProgressRef.current = false;
     };
-  }, [pokerGameState, id, playerId, autoRunoutTrigger]);
+  }, [pokerGameState, id, playerId]);
   
   // Periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {

@@ -276,6 +276,7 @@ export default function GamePage() {
           // Preserve current player's hole cards from broadcast state
           // Broadcasts hide all hole cards for security, but we need to keep our own cards
           // visible if we already have them from a previous state or API response
+          console.log('[Supabase broadcast] processing game state, communityLen:', gameState.communityCards?.length, 'stage:', gameState.stage, 'autoRunoutLastCommunityLenRef:', autoRunoutLastCommunityLenRef?.current);
           setPokerGameState((prevState: any) => {
             // Use effectivePlayerId which may come from currentPlayerSeat if playerId is not set
             const resolvedPlayerId = effectivePlayerId || playerId;
@@ -882,6 +883,13 @@ export default function GamePage() {
             autoRunoutLastCommunityLenRef.current = -1;
             console.log('[client auto-runout] ref reset complete - lastCommunityLenRef is now:', autoRunoutLastCommunityLenRef.current, 'communityLen in new state:', newCommunityLen);
             console.log('[client auto-runout] NEXT: effect should run with communityLen:', newCommunityLen, 'and schedule advance to:', newCommunityLen < 3 ? 'flop' : newCommunityLen < 4 ? 'turn' : newCommunityLen < 5 ? 'river' : 'showdown');
+            
+            // Force effect to re-evaluate by using a small delay - this ensures the state has settled
+            // before the effect dependency check happens (addresses React batching)
+            setTimeout(() => {
+              console.log('[client auto-runout] POST-SETTLE check - lastCommunityLenRef:', autoRunoutLastCommunityLenRef.current, 
+                'pokerGameStateRef communityLen:', pokerGameStateRef.current?.communityCards?.length);
+            }, 50);
           } else {
             console.log('[client auto-runout] resetting lastCommunityLen to -1 (no gameState in response)');
             autoRunoutLastCommunityLenRef.current = -1;

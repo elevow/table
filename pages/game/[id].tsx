@@ -463,6 +463,8 @@ export default function GamePage() {
   const autoRunoutWaitingForResponseRef = useRef<boolean>(false);
   // Counter to force effect re-run after API response (since broadcast may have already updated state)
   const [autoRunoutTrigger, setAutoRunoutTrigger] = useState(0);
+  // Track the last stage we processed for auto-runout - used to detect stage transitions
+  const autoRunoutLastProcessedStageRef = useRef<string | null>(null);
   // Track player's own hole cards to preserve them when broadcast state hides them
   const knownHoleCardsRef = useRef<any[] | null>(null);
   // Track if we've already attempted to fetch hole cards for this stage

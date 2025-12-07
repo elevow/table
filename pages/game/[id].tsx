@@ -888,25 +888,31 @@ export default function GamePage() {
           const newCommunityLen = data.gameState.communityCards?.length || 0;
           console.log('[client auto-runout] SUCCESS - new stage:', newStage, 'new communityLen:', newCommunityLen);
           
-          // Update state from response
+          // Reset tracking FIRST, before state updates
+          // This ensures if the effect runs immediately from setPokerGameState, it can schedule
+          console.log('[client auto-runout] resetting refs - scheduledFromStage from', autoRunoutScheduledFromStageRef.current, 'to null, waitingForResponse to false');
+          autoRunoutScheduledFromStageRef.current = null;
+          autoRunoutWaitingForResponseRef.current = false;
+          
+          // Update state from response (may trigger effect immediately)
           pokerGameStateRef.current = data.gameState;
           setPokerGameState(data.gameState);
           
-          // Reset tracking to allow scheduling for the NEW stage
-          console.log('[client auto-runout] resetting scheduledFromStage from', autoRunoutScheduledFromStageRef.current, 'to null');
-          autoRunoutScheduledFromStageRef.current = null;
-          
-          // Reset waitingForResponse immediately (don't wait for finally block)
-          // This ensures the effect can schedule when it re-runs
-          autoRunoutWaitingForResponseRef.current = false;
-          
           // Force effect to re-run even if Supabase broadcast already updated state
-          // Use setTimeout to ensure this happens after current render cycle
-          console.log('[client auto-runout] scheduling trigger increment for next tick');
+          // Use multiple deferred calls to ensure the effect runs after React's render cycle
+          console.log('[client auto-runout] scheduling trigger increments');
+          
+          // Immediate increment (in case React batches efficiently)
+          setAutoRunoutTrigger(t => {
+            console.log('[client auto-runout] incrementing trigger immediately from', t, 'to', t + 1);
+            return t + 1;
+          });
+          
+          // Also schedule another increment for next tick (backup)
           setTimeout(() => {
-            console.log('[client auto-runout] incrementing trigger now');
+            console.log('[client auto-runout] incrementing trigger in setTimeout');
             setAutoRunoutTrigger(t => t + 1);
-          }, 0);
+          }, 50);
         } else {
           console.log('[client auto-runout] response failed or no gameState - resetting');
           autoRunoutScheduledFromStageRef.current = null;

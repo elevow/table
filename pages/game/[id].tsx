@@ -752,7 +752,8 @@ export default function GamePage() {
     
     console.log('[client auto-runout] EFFECT TRIGGERED - stage:', stage, 'communityLen:', communityLen, 
       'scheduledFromStage:', autoRunoutScheduledFromStageRef.current, 
-      'waitingForResponse:', autoRunoutWaitingForResponseRef.current);
+      'waitingForResponse:', autoRunoutWaitingForResponseRef.current,
+      'trigger:', autoRunoutTrigger);
 
     // Determine if this client is the "leader" (first active player by position)
     // Only the leader should poll to prevent duplicate requests from multiple clients
@@ -879,10 +880,10 @@ export default function GamePage() {
           }),
         });
         const data = await response.json();
-        console.log('[client auto-runout] response:', JSON.stringify(data));
-        console.log('[client auto-runout] response street:', data.street, 'expected:', nextStreet);
+        console.log('[client auto-runout] response received, success:', data.success, 'street:', data.street, 'hasGameState:', !!data.gameState);
         
         if (data.success && data.gameState) {
+          console.log('[client auto-runout] entering success block');
           const newStage = data.gameState.stage;
           const newCommunityLen = data.gameState.communityCards?.length || 0;
           console.log('[client auto-runout] SUCCESS - new stage:', newStage, 'new communityLen:', newCommunityLen);
@@ -892,15 +893,20 @@ export default function GamePage() {
           setPokerGameState(data.gameState);
           
           // Reset tracking to allow scheduling for the NEW stage
-          // This is the key fix: we only clear the scheduled stage when we get a successful response
-          // and the stage has actually changed
           console.log('[client auto-runout] resetting scheduledFromStage from', autoRunoutScheduledFromStageRef.current, 'to null');
           autoRunoutScheduledFromStageRef.current = null;
           
+          // Reset waitingForResponse immediately (don't wait for finally block)
+          // This ensures the effect can schedule when it re-runs
+          autoRunoutWaitingForResponseRef.current = false;
+          
           // Force effect to re-run even if Supabase broadcast already updated state
-          // This ensures we schedule for the next street after the API response
-          console.log('[client auto-runout] incrementing trigger to force effect re-run');
-          setAutoRunoutTrigger(t => t + 1);
+          // Use setTimeout to ensure this happens after current render cycle
+          console.log('[client auto-runout] scheduling trigger increment for next tick');
+          setTimeout(() => {
+            console.log('[client auto-runout] incrementing trigger now');
+            setAutoRunoutTrigger(t => t + 1);
+          }, 0);
         } else {
           console.log('[client auto-runout] response failed or no gameState - resetting');
           autoRunoutScheduledFromStageRef.current = null;
@@ -909,6 +915,7 @@ export default function GamePage() {
         console.warn('[client auto-runout] request failed:', e);
         autoRunoutScheduledFromStageRef.current = null;
       } finally {
+        console.log('[client auto-runout] finally block - resetting waitingForResponse to false');
         autoRunoutWaitingForResponseRef.current = false;
         if (autoRunoutTimerRef.current) {
           clearTimeout(autoRunoutTimerRef.current);

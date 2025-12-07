@@ -451,6 +451,8 @@ export default function GamePage() {
   const autoRunoutScheduledFromStageRef = useRef<string | null>(null);
   // Track if we're currently waiting for an API response
   const autoRunoutWaitingForResponseRef = useRef<boolean>(false);
+  // Counter to force effect re-run after API response (since broadcast may have already updated state)
+  const [autoRunoutTrigger, setAutoRunoutTrigger] = useState(0);
   // Track player's own hole cards to preserve them when broadcast state hides them
   const knownHoleCardsRef = useRef<any[] | null>(null);
   // Track if we've already attempted to fetch hole cards for this stage

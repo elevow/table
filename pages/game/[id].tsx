@@ -276,7 +276,17 @@ export default function GamePage() {
           // Preserve current player's hole cards from broadcast state
           // Broadcasts hide all hole cards for security, but we need to keep our own cards
           // visible if we already have them from a previous state or API response
-          console.log('[Supabase broadcast] processing game state, communityLen:', gameState.communityCards?.length, 'stage:', gameState.stage, 'scheduledFromStage:', autoRunoutScheduledFromStageRef?.current);
+          console.log('[Supabase broadcast] processing game state, communityLen:', gameState.communityCards?.length, 'stage:', gameState.stage, 'scheduledFromStage:', autoRunoutScheduledFromStageRef?.current, 'waitingForResponse:', autoRunoutWaitingForResponseRef?.current);
+          
+          // If we're waiting for an auto-runout API response, skip this broadcast update
+          // This ensures the API response triggers a clean state change and effect re-run
+          if (autoRunoutWaitingForResponseRef?.current) {
+            console.log('[Supabase broadcast] SKIPPING state update - waiting for auto-runout API response');
+            // Still update ref so timer callback sees current state
+            pokerGameStateRef.current = gameState;
+            return;
+          }
+          
           setPokerGameState((prevState: any) => {
             // Use effectivePlayerId which may come from currentPlayerSeat if playerId is not set
             const resolvedPlayerId = effectivePlayerId || playerId;

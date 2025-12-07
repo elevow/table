@@ -447,6 +447,8 @@ export default function GamePage() {
   const autoRunoutTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoRunoutInProgressRef = useRef<boolean>(false);
   const autoRunoutLastCommunityLenRef = useRef<number>(-1);
+  // Trigger to force auto-runout effect to re-run after applying API response state
+  const [autoRunoutTrigger, setAutoRunoutTrigger] = useState(0);
   // Track player's own hole cards to preserve them when broadcast state hides them
   const knownHoleCardsRef = useRef<any[] | null>(null);
   // Track if we've already attempted to fetch hole cards for this stage
@@ -884,6 +886,16 @@ export default function GamePage() {
             console.log('[client auto-runout] ref reset complete - lastCommunityLenRef is now:', autoRunoutLastCommunityLenRef.current, 'communityLen in new state:', newCommunityLen);
             console.log('[client auto-runout] NEXT: effect should run with communityLen:', newCommunityLen, 'and schedule advance to:', newCommunityLen < 3 ? 'flop' : newCommunityLen < 4 ? 'turn' : newCommunityLen < 5 ? 'river' : 'showdown');
             
+            // Force effect to re-run by incrementing trigger state
+            // This addresses a race condition where:
+            // 1. The Supabase broadcast arrives with turn state and sets pokerGameState
+            // 2. The effect runs and sees autoRunoutLastCommunityLenRef >= expectedNewLen (skips)
+            // 3. Our API response arrives and resets ref to -1
+            // 4. But React doesn't re-run the effect because pokerGameState didn't change
+            // By incrementing this trigger, we force the effect to re-run
+            console.log('[client auto-runout] incrementing trigger to force effect re-run');
+            setAutoRunoutTrigger(prev => prev + 1);
+            
             // Force effect to re-evaluate by using a small delay - this ensures the state has settled
             // before the effect dependency check happens (addresses React batching)
             setTimeout(() => {
@@ -915,7 +927,7 @@ export default function GamePage() {
       }
       autoRunoutInProgressRef.current = false;
     };
-  }, [pokerGameState, id, playerId]);
+  }, [pokerGameState, id, playerId, autoRunoutTrigger]);
   
   // Periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {

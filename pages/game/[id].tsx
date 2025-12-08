@@ -277,12 +277,12 @@ export default function GamePage() {
           // Broadcasts hide all hole cards for security, but we need to keep our own cards
           // visible if we already have them from a previous state or API response
           const waitingForResponseValue = autoRunoutWaitingForResponseRef?.current;
-          console.log('[Supabase broadcast] processing game state, communityLen:', gameState.communityCards?.length, 'stage:', gameState.stage, 'scheduledFromStage:', autoRunoutScheduledFromStageRef?.current, 'waitingForResponse:', waitingForResponseValue, 'refExists:', !!autoRunoutWaitingForResponseRef, 'refType:', typeof autoRunoutWaitingForResponseRef?.current);
+          console.log('🔴 CHECKPOINT: waitingForResponse=' + waitingForResponseValue + ' stage=' + gameState.stage + ' communityLen=' + (gameState.communityCards?.length || 0));
           
           // If we're waiting for an auto-runout API response, skip this broadcast update
           // This ensures the API response triggers a clean state change and effect re-run
           if (waitingForResponseValue) {
-            console.log('[Supabase broadcast] SKIPPING state update - waiting for auto-runout API response');
+            console.log('🔴 SKIPPING BROADCAST - waiting for API response');
             // Still update ref so timer callback sees current state
             pokerGameStateRef.current = gameState;
             return;
@@ -763,10 +763,7 @@ export default function GamePage() {
     const needsMoreCards = communityLen < 5;
     const bettingComplete = !activePlayer; // No player to act means betting is done
     
-    console.log('[client auto-runout] EFFECT TRIGGERED - stage:', stage, 'communityLen:', communityLen, 
-      'scheduledFromStage:', autoRunoutScheduledFromStageRef.current, 
-      'waitingForResponse:', autoRunoutWaitingForResponseRef.current,
-      'trigger:', autoRunoutTrigger);
+    console.log('🔵 EFFECT: stage=' + stage + ' communityLen=' + communityLen + ' trigger=' + autoRunoutTrigger + ' waitingForResponse=' + autoRunoutWaitingForResponseRef.current + ' scheduledFromStage=' + autoRunoutScheduledFromStageRef.current);
 
     // Determine if this client is the "leader" (first active player by position)
     // Only the leader should poll to prevent duplicate requests from multiple clients
@@ -860,13 +857,13 @@ export default function GamePage() {
     autoRunoutInProgressRef.current = true;
     
     const nextStreet = communityLen < 3 ? 'flop' : communityLen < 4 ? 'turn' : 'river';
-    console.log('[client auto-runout] scheduling advance in 5 seconds from stage:', stage, 'to:', nextStreet);
+    console.log('🔵 SCHEDULING: ' + stage + ' -> ' + nextStreet + ' in 5s');
     
     autoRunoutTimerRef.current = setTimeout(async () => {
       try {
         // Mark that we're now waiting for a response
         autoRunoutWaitingForResponseRef.current = true;
-        console.log('[client auto-runout] SET waitingForResponse = true');
+        console.log('🟢 TIMER START: waitingForResponse = true');
         
         // Use the CURRENT game state at time of request via ref (not stale closure value)
         const currentState = pokerGameStateRef.current;
@@ -882,8 +879,7 @@ export default function GamePage() {
           return;
         }
         
-        console.log('[client auto-runout] timer fired - stage:', currentStage, 'communityLen:', currentCommunityLen);
-        console.log('[client auto-runout] SENDING REQUEST to advance from', currentStage, 'to', nextStreet, '(waitingForResponse is now', autoRunoutWaitingForResponseRef.current, ')');
+        console.log('🟢 SENDING: from', currentStage, 'to', nextStreet);
         
         const response = await fetch('/api/games/advance-runout', {
           method: 'POST',
@@ -894,39 +890,34 @@ export default function GamePage() {
           }),
         });
         const data = await response.json();
-        console.log('[client auto-runout] response received, success:', data.success, 'street:', data.street, 'hasGameState:', !!data.gameState);
+        console.log('🟢 RESPONSE: success=' + data.success + ' street=' + data.street);
         
         if (data.success && data.gameState) {
-          console.log('[client auto-runout] entering success block');
           const newStage = data.gameState.stage;
           const newCommunityLen = data.gameState.communityCards?.length || 0;
-          console.log('[client auto-runout] SUCCESS - new stage:', newStage, 'new communityLen:', newCommunityLen);
+          console.log('🟢 SUCCESS: new stage=' + newStage + ' communityLen=' + newCommunityLen);
           
           // Reset tracking FIRST, before state updates
           // This ensures if the effect runs immediately from setPokerGameState, it can schedule
-          console.log('[client auto-runout] resetting refs - scheduledFromStage from', autoRunoutScheduledFromStageRef.current, 'to null, waitingForResponse to false');
           autoRunoutScheduledFromStageRef.current = null;
           autoRunoutWaitingForResponseRef.current = false;
+          console.log('🟢 REFS RESET: waitingForResponse=false, scheduledFromStage=null');
           
           // Update state from response (may trigger effect immediately)
           pokerGameStateRef.current = data.gameState;
-          console.log('[client auto-runout] calling setPokerGameState with turn state, stage:', data.gameState.stage, 'communityLen:', data.gameState.communityCards?.length);
           setPokerGameState(data.gameState);
-          console.log('[client auto-runout] setPokerGameState called, now scheduling triggers');
+          console.log('🟢 STATE SET: ' + newStage);
           
           // Force effect to re-run even if Supabase broadcast already updated state
           // Use multiple deferred calls to ensure the effect runs after React's render cycle
-          console.log('[client auto-runout] scheduling trigger increments');
-          
-          // Immediate increment (in case React batches efficiently)
           setAutoRunoutTrigger(t => {
-            console.log('[client auto-runout] incrementing trigger immediately from', t, 'to', t + 1);
+            console.log('🟢 TRIGGER INC: ' + t + ' -> ' + (t + 1));
             return t + 1;
           });
           
           // Also schedule another increment for next tick (backup)
           setTimeout(() => {
-            console.log('[client auto-runout] incrementing trigger in setTimeout');
+            console.log('🟢 TRIGGER BACKUP');
             setAutoRunoutTrigger(t => t + 1);
           }, 50);
         } else {

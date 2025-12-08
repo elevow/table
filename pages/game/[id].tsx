@@ -277,7 +277,7 @@ export default function GamePage() {
           // Broadcasts hide all hole cards for security, but we need to keep our own cards
           // visible if we already have them from a previous state or API response
           const waitingForResponseValue = autoRunoutWaitingForResponseRef?.current;
-          console.log('[Supabase broadcast] processing game state, communityLen:', gameState.communityCards?.length, 'stage:', gameState.stage, 'scheduledFromStage:', autoRunoutScheduledFromStageRef?.current, 'waitingForResponse:', waitingForResponseValue);
+          console.log('[Supabase broadcast] processing game state, communityLen:', gameState.communityCards?.length, 'stage:', gameState.stage, 'scheduledFromStage:', autoRunoutScheduledFromStageRef?.current, 'waitingForResponse:', waitingForResponseValue, 'refExists:', !!autoRunoutWaitingForResponseRef, 'refType:', typeof autoRunoutWaitingForResponseRef?.current);
           
           // If we're waiting for an auto-runout API response, skip this broadcast update
           // This ensures the API response triggers a clean state change and effect re-run
@@ -866,6 +866,7 @@ export default function GamePage() {
       try {
         // Mark that we're now waiting for a response
         autoRunoutWaitingForResponseRef.current = true;
+        console.log('[client auto-runout] SET waitingForResponse = true');
         
         // Use the CURRENT game state at time of request via ref (not stale closure value)
         const currentState = pokerGameStateRef.current;
@@ -882,7 +883,7 @@ export default function GamePage() {
         }
         
         console.log('[client auto-runout] timer fired - stage:', currentStage, 'communityLen:', currentCommunityLen);
-        console.log('[client auto-runout] SENDING REQUEST to advance from', currentStage, 'to', nextStreet);
+        console.log('[client auto-runout] SENDING REQUEST to advance from', currentStage, 'to', nextStreet, '(waitingForResponse is now', autoRunoutWaitingForResponseRef.current, ')');
         
         const response = await fetch('/api/games/advance-runout', {
           method: 'POST',

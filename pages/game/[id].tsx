@@ -909,17 +909,10 @@ export default function GamePage() {
           console.log('🟢 STATE SET: ' + newStage);
           
           // Force effect to re-run even if Supabase broadcast already updated state
-          // Use multiple deferred calls to ensure the effect runs after React's render cycle
           setAutoRunoutTrigger(t => {
             console.log('🟢 TRIGGER INC: ' + t + ' -> ' + (t + 1));
             return t + 1;
           });
-          
-          // Also schedule another increment for next tick (backup)
-          setTimeout(() => {
-            console.log('🟢 TRIGGER BACKUP');
-            setAutoRunoutTrigger(t => t + 1);
-          }, 50);
         } else {
           console.log('[client auto-runout] response failed or no gameState - resetting');
           autoRunoutScheduledFromStageRef.current = null;

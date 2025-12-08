@@ -276,11 +276,12 @@ export default function GamePage() {
           // Preserve current player's hole cards from broadcast state
           // Broadcasts hide all hole cards for security, but we need to keep our own cards
           // visible if we already have them from a previous state or API response
-          console.log('[Supabase broadcast] processing game state, communityLen:', gameState.communityCards?.length, 'stage:', gameState.stage, 'scheduledFromStage:', autoRunoutScheduledFromStageRef?.current, 'waitingForResponse:', autoRunoutWaitingForResponseRef?.current);
+          const waitingForResponseValue = autoRunoutWaitingForResponseRef?.current;
+          console.log('[Supabase broadcast] processing game state, communityLen:', gameState.communityCards?.length, 'stage:', gameState.stage, 'scheduledFromStage:', autoRunoutScheduledFromStageRef?.current, 'waitingForResponse:', waitingForResponseValue);
           
           // If we're waiting for an auto-runout API response, skip this broadcast update
           // This ensures the API response triggers a clean state change and effect re-run
-          if (autoRunoutWaitingForResponseRef?.current) {
+          if (waitingForResponseValue) {
             console.log('[Supabase broadcast] SKIPPING state update - waiting for auto-runout API response');
             // Still update ref so timer callback sees current state
             pokerGameStateRef.current = gameState;
@@ -908,7 +909,9 @@ export default function GamePage() {
           
           // Update state from response (may trigger effect immediately)
           pokerGameStateRef.current = data.gameState;
+          console.log('[client auto-runout] calling setPokerGameState with turn state, stage:', data.gameState.stage, 'communityLen:', data.gameState.communityCards?.length);
           setPokerGameState(data.gameState);
+          console.log('[client auto-runout] setPokerGameState called, now scheduling triggers');
           
           // Force effect to re-run even if Supabase broadcast already updated state
           // Use multiple deferred calls to ensure the effect runs after React's render cycle

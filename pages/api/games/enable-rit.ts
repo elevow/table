@@ -7,7 +7,7 @@ import {
   enrichStateWithRunIt,
   isAutoRunoutEligible,
 } from '../../../src/lib/poker/run-it-twice-manager';
-import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
+import { clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import type { TableState } from '../../../src/types/poker';
@@ -163,21 +163,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const enrichedState = await broadcastState(updatedState, { action: actionName, playerId, runs });
 
+    // Server-side scheduling removed - client now handles auto-runout scheduling
+    // Clear any existing server-side timers since client is polling
     if (isAutoRunoutEligible(updatedState)) {
-      // Track whether we've already posted the hand result for auto-runout
-      let handResultPosted = false;
-      scheduleSupabaseAutoRunout(tableId, engine, async (state, meta) => {
-        await broadcastState(state, meta);
-        // Post hand result to chat when auto-runout reaches showdown
-        if (state.stage === 'showdown' && !handResultPosted) {
-          handResultPosted = true;
-          try {
-            await postHandResultToChat(tableId, state);
-          } catch (chatError) {
-            console.warn('Failed to post hand result to chat (auto-runout):', chatError);
-          }
-        }
-      });
+      clearSupabaseAutoRunout(tableId);
     }
 
     // Sanitize the response for the requesting player - hide other players' hole cards

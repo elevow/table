@@ -6,6 +6,7 @@ import {
   isAutoRunoutEligible,
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
+import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
 import type { TableState, Card } from '../../../src/types/poker';
 
 function getIo(res: NextApiResponse): any | null {
@@ -246,6 +247,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
       const enrichedState = await broadcastState(resolved, { action: 'auto_runout_showdown' });
       console.log('[advance-runout] showdown broadcast complete');
+      
+      // Post hand result to chat when showdown is reached
+      try {
+        await postHandResultToChat(tableId, enrichedState);
+      } catch (chatError) {
+        console.warn('[advance-runout] Failed to post hand result to chat:', chatError);
+      }
+      
       return res.status(200).json({ success: true, street: 'showdown', gameState: enrichedState });
     }
 

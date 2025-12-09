@@ -774,14 +774,6 @@ export default function GamePage() {
     });
     const leaderPlayerId = sortedActivePlayers[0]?.id;
     const isLeader = playerId === leaderPlayerId;
-    
-    console.log('[client auto-runout] leader check:', {
-      activePlayers: activePlayers.map((p: any) => ({ id: p.id?.substring(0, 8), position: p.position })),
-      sortedFirst: sortedActivePlayers[0]?.id?.substring(0, 8),
-      leaderPlayerId: leaderPlayerId?.substring(0, 8),
-      playerId: playerId?.substring(0, 8),
-      isLeader
-    });
 
     const shouldAutoRunout = stage !== 'showdown' &&
       activeCount >= 2 &&
@@ -792,34 +784,8 @@ export default function GamePage() {
       bettingComplete && // Betting must be done for this street
       isLeader; // Only leader should poll
 
-    console.log('[client auto-runout] check:', {
-      stage,
-      activeCount,
-      anyAllIn,
-      nonAllInCount,
-      communityLen,
-      needsMoreCards,
-      hasPrompt: !!runItTwicePrompt,
-      bettingComplete,
-      activePlayer: activePlayer || '(none)',
-      isLeader,
-      playerId,
-      leaderPlayerId,
-      shouldAutoRunout,
-      scheduledFromStage: autoRunoutScheduledFromStageRef.current
-    });
-
     if (!shouldAutoRunout) {
-      console.log('[client auto-runout] NOT scheduling - reason:', {
-        stageIsShowdown: stage === 'showdown',
-        activeCountLt2: activeCount < 2,
-        noAllIn: !anyAllIn,
-        tooManyNonAllIn: nonAllInCount > 1,
-        noMoreCards: !needsMoreCards,
-        hasPrompt: !!runItTwicePrompt,
-        bettingIncomplete: !bettingComplete,
-        notLeader: !isLeader
-      });
+      console.log('🔵 NOT SCHEDULING: ' + (stage === 'showdown' ? 'showdown' : activeCount < 2 ? 'activeCount<2' : !anyAllIn ? 'noAllIn' : nonAllInCount > 1 ? 'tooManyNonAllIn' : !needsMoreCards ? 'noMoreCards' : !!runItTwicePrompt ? 'hasPrompt' : !bettingComplete ? 'bettingIncomplete' : 'notLeader'));
       if (autoRunoutTimerRef.current) {
         clearTimeout(autoRunoutTimerRef.current);
         autoRunoutTimerRef.current = null;
@@ -835,13 +801,13 @@ export default function GamePage() {
 
     // If we're waiting for a response from a previous request, don't schedule
     if (autoRunoutWaitingForResponseRef.current) {
-      console.log('[client auto-runout] waiting for previous response - skipping');
+      console.log('🔵 SKIP: waiting for response');
       return;
     }
 
     // Already have a timer - don't create another one
     if (autoRunoutTimerRef.current) {
-      console.log('[client auto-runout] timer already exists for stage - skipping');
+      console.log('🔵 SKIP: timer exists');
       return;
     }
 
@@ -865,7 +831,7 @@ export default function GamePage() {
         // If the stage changed since we scheduled, don't send the request
         // This handles the case where another request completed while we were waiting
         if (currentStage !== stage) {
-          console.log('[client auto-runout] timer fired but stage changed from', stage, 'to', currentStage, '- skipping request');
+          console.log('🟢 SKIP: stage changed from ' + stage + ' to ' + currentStage);
           autoRunoutScheduledFromStageRef.current = null;
           autoRunoutWaitingForResponseRef.current = false;
           return;
@@ -911,14 +877,13 @@ export default function GamePage() {
             return t + 1;
           });
         } else {
-          console.log('[client auto-runout] response failed or no gameState - resetting');
+          console.log('🟢 FAIL: no gameState in response');
           autoRunoutScheduledFromStageRef.current = null;
         }
       } catch (e) {
-        console.warn('[client auto-runout] request failed:', e);
+        console.log('🟢 ERROR:', e);
         autoRunoutScheduledFromStageRef.current = null;
       } finally {
-        console.log('[client auto-runout] finally block - cleanup');
         autoRunoutWaitingForResponseRef.current = false;
         autoRunoutInProgressRef.current = false;
       }

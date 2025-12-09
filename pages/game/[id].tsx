@@ -763,7 +763,7 @@ export default function GamePage() {
     const needsMoreCards = communityLen < 5;
     const bettingComplete = !activePlayer; // No player to act means betting is done
     
-    console.log('🔵 EFFECT: stage=' + stage + ' communityLen=' + communityLen + ' trigger=' + autoRunoutTrigger + ' waitingForResponse=' + autoRunoutWaitingForResponseRef.current + ' scheduledFromStage=' + autoRunoutScheduledFromStageRef.current);
+    console.log('🔵 EFFECT: stage=' + stage + ' communityLen=' + communityLen + ' trigger=' + autoRunoutTrigger + ' waitingForResponse=' + autoRunoutWaitingForResponseRef.current);
 
     // Determine if this client is the "leader" (first active player by position)
     // Only the leader should poll to prevent duplicate requests from multiple clients
@@ -791,11 +791,7 @@ export default function GamePage() {
         autoRunoutTimerRef.current = null;
       }
       autoRunoutInProgressRef.current = false;
-      // Only reset scheduledFromStage if we don't need auto-runout at all (not due to showdown/5 cards)
-      // This prevents re-scheduling if the effect just runs again due to a state update
-      if (stage === 'showdown' || communityLen >= 5) {
-        autoRunoutScheduledFromStageRef.current = null;
-      }
+      // Don't clear or reset refs here - they might be in use
       return;
     }
 
@@ -818,10 +814,9 @@ export default function GamePage() {
     
     autoRunoutTimerRef.current = setTimeout(async () => {
       try {
-        // Mark that we're now waiting for a response AND processing this stage
-        autoRunoutScheduledFromStageRef.current = stage;
+        // Mark that we're now waiting for a response
         autoRunoutWaitingForResponseRef.current = true;
-        console.log('🟢 TIMER START: waitingForResponse = true, scheduledFromStage = ' + stage);
+        console.log('🟢 TIMER START: waitingForResponse = true');
         
         // Use the CURRENT game state at time of request via ref (not stale closure value)
         const currentState = pokerGameStateRef.current;
@@ -832,7 +827,6 @@ export default function GamePage() {
         // This handles the case where another request completed while we were waiting
         if (currentStage !== stage) {
           console.log('🟢 SKIP: stage changed from ' + stage + ' to ' + currentStage);
-          autoRunoutScheduledFromStageRef.current = null;
           autoRunoutWaitingForResponseRef.current = false;
           return;
         }
@@ -857,14 +851,13 @@ export default function GamePage() {
           
           // Reset tracking FIRST, before state updates
           // This ensures if the effect runs immediately from setPokerGameState, it can schedule
-          autoRunoutScheduledFromStageRef.current = null;
           autoRunoutWaitingForResponseRef.current = false;
           // Clear timer ref immediately so effect can schedule next stage
           if (autoRunoutTimerRef.current) {
             clearTimeout(autoRunoutTimerRef.current);
             autoRunoutTimerRef.current = null;
           }
-          console.log('🟢 REFS RESET: waitingForResponse=false, scheduledFromStage=null, timer=null');
+          console.log('🟢 REFS RESET: waitingForResponse=false, timer=null');
           
           // Update state from response (may trigger effect immediately)
           pokerGameStateRef.current = data.gameState;
@@ -878,11 +871,9 @@ export default function GamePage() {
           });
         } else {
           console.log('🟢 FAIL: no gameState in response');
-          autoRunoutScheduledFromStageRef.current = null;
         }
       } catch (e) {
         console.log('🟢 ERROR:', e);
-        autoRunoutScheduledFromStageRef.current = null;
       } finally {
         autoRunoutWaitingForResponseRef.current = false;
         autoRunoutInProgressRef.current = false;

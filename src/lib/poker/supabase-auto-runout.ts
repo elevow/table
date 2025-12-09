@@ -74,6 +74,15 @@ const revealStreet = async (
     }
     const preview = engine.previewRabbitHunt(street) as { cards?: any[] } | void;
     const cards = Array.isArray(preview?.cards) ? preview!.cards! : [];
+    
+    // Keep engine's community in sync so subsequent previews compute correct deltas
+    try {
+      const es = engine.getState();
+      if (Array.isArray(es?.communityCards) && Array.isArray(cards) && cards.length > 0) {
+        es.communityCards.push(...cards);
+      }
+    } catch { /* ignore engine sync errors */ }
+    
     const projectedCommunity = Array.isArray(current.communityCards)
       ? [...current.communityCards, ...cards]
       : cards;

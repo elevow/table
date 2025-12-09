@@ -108,7 +108,12 @@ describe('Preflop all-in auto-runout', () => {
       2,
       expect.objectContaining({ 
         stage: 'turn',
-        communityCards: expect.arrayContaining([{ rank: '5', suit: 'clubs' }])
+        communityCards: expect.arrayContaining([
+          { rank: '2', suit: 'hearts' },
+          { rank: '3', suit: 'hearts' },
+          { rank: '4', suit: 'hearts' },
+          { rank: '5', suit: 'clubs' }
+        ])
       }),
       { action: 'auto_runout_turn' },
     );
@@ -119,7 +124,13 @@ describe('Preflop all-in auto-runout', () => {
       3,
       expect.objectContaining({ 
         stage: 'river',
-        communityCards: expect.arrayContaining([{ rank: '8', suit: 'diamonds' }])
+        communityCards: expect.arrayContaining([
+          { rank: '2', suit: 'hearts' },
+          { rank: '3', suit: 'hearts' },
+          { rank: '4', suit: 'hearts' },
+          { rank: '5', suit: 'clubs' },
+          { rank: '8', suit: 'diamonds' }
+        ])
       }),
       { action: 'auto_runout_river' },
     );

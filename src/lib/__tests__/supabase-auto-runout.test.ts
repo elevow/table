@@ -111,7 +111,7 @@ describe('supabase-auto-runout', () => {
       expect.objectContaining({ stage: 'turn', communityCards: expect.arrayContaining([{ rank: '2', suit: 'clubs' }]) }),
       { action: 'auto_runout_turn' },
     );
-    expect(state.communityCards).toHaveLength(3);
+    expect(state.communityCards).toHaveLength(4); // Turn card added to initial 3
 
     await jest.advanceTimersByTimeAsync(5000);
     expect(broadcast).toHaveBeenNthCalledWith(
@@ -119,7 +119,7 @@ describe('supabase-auto-runout', () => {
       expect.objectContaining({ stage: 'river', communityCards: expect.arrayContaining([{ rank: '8', suit: 'clubs' }]) }),
       { action: 'auto_runout_river' },
     );
-    expect(state.communityCards).toHaveLength(3);
+    expect(state.communityCards).toHaveLength(5); // River card added to previous 4
 
     await jest.advanceTimersByTimeAsync(5000);
     expect(engine.runItTwiceNow).toHaveBeenCalledTimes(1);

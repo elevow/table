@@ -73,7 +73,7 @@ const revealStreet = async (
       return;
     }
     const preview = engine.previewRabbitHunt(street) as { cards?: any[] } | void;
-    const cards = Array.isArray(preview?.cards) ? preview!.cards! : [];
+    const cards = preview && Array.isArray(preview.cards) ? preview.cards : [];
     
     // Keep engine's community in sync so subsequent previews compute correct deltas
     try {
@@ -153,7 +153,7 @@ export const runSupabaseAutoRunoutSync = async (
       if (typeof engine.previewRabbitHunt !== 'function') break;
       
       const preview = engine.previewRabbitHunt(street) as { cards?: any[] } | void;
-      const cards = Array.isArray(preview?.cards) ? preview.cards : [];
+      const cards = preview && Array.isArray(preview.cards) ? preview.cards : [];
       
       // Keep engine's community in sync
       try {

@@ -1,5 +1,5 @@
 import { TableState, Player, Card } from '../../types/poker';
-import { clearSupabaseAutoRunout, scheduleSupabaseAutoRunout } from '../poker/supabase-auto-runout';
+import { clearSupabaseAutoRunout, scheduleSupabaseAutoRunout, runSupabaseAutoRunoutSync } from '../poker/supabase-auto-runout';
 
 describe('supabase-auto-runout', () => {
   const tableId = 'supabase-auto-runout-test';
@@ -143,5 +143,45 @@ describe('supabase-auto-runout', () => {
     expect(broadcast).not.toHaveBeenCalled();
     expect(engine.previewRabbitHunt).not.toHaveBeenCalled();
     expect(engine.prepareRabbitPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs auto-runout synchronously with awaited delays', async () => {
+    const state = makeState();
+    const engine = makeEngine(state);
+    const broadcast = jest.fn().mockResolvedValue(undefined);
+
+    // Use real timers for this test since we're using await
+    jest.useRealTimers();
+
+    const startTime = Date.now();
+    const success = await runSupabaseAutoRunoutSync(tableId, engine as any, broadcast);
+    const endTime = Date.now();
+
+    expect(success).toBe(true);
+    
+    // Should have taken at least 15 seconds (3 reveals with 5s delays)
+    const duration = endTime - startTime;
+    expect(duration).toBeGreaterThanOrEqual(15000);
+    
+    // Should have broadcast turn, river, and showdown
+    expect(broadcast).toHaveBeenCalledTimes(3);
+    expect(broadcast).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ stage: 'turn' }),
+      { action: 'auto_runout_turn' },
+    );
+    expect(broadcast).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ stage: 'river' }),
+      { action: 'auto_runout_river' },
+    );
+    expect(broadcast).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ stage: 'showdown' }),
+      { action: 'auto_runout_showdown' },
+    );
+    
+    // Reset to fake timers for cleanup
+    jest.useFakeTimers();
   });
 });

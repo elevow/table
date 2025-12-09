@@ -893,7 +893,12 @@ export default function GamePage() {
           // This ensures if the effect runs immediately from setPokerGameState, it can schedule
           autoRunoutScheduledFromStageRef.current = null;
           autoRunoutWaitingForResponseRef.current = false;
-          console.log('🟢 REFS RESET: waitingForResponse=false, scheduledFromStage=null');
+          // Clear timer ref immediately so effect can schedule next stage
+          if (autoRunoutTimerRef.current) {
+            clearTimeout(autoRunoutTimerRef.current);
+            autoRunoutTimerRef.current = null;
+          }
+          console.log('🟢 REFS RESET: waitingForResponse=false, scheduledFromStage=null, timer=null');
           
           // Update state from response (may trigger effect immediately)
           pokerGameStateRef.current = data.gameState;
@@ -913,12 +918,8 @@ export default function GamePage() {
         console.warn('[client auto-runout] request failed:', e);
         autoRunoutScheduledFromStageRef.current = null;
       } finally {
-        console.log('[client auto-runout] finally block - resetting waitingForResponse to false');
+        console.log('[client auto-runout] finally block - cleanup');
         autoRunoutWaitingForResponseRef.current = false;
-        if (autoRunoutTimerRef.current) {
-          clearTimeout(autoRunoutTimerRef.current);
-          autoRunoutTimerRef.current = null;
-        }
         autoRunoutInProgressRef.current = false;
       }
     }, 5000);

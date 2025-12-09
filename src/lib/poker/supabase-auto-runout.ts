@@ -81,7 +81,10 @@ const revealStreet = async (
       if (Array.isArray(es?.communityCards) && Array.isArray(cards) && cards.length > 0) {
         es.communityCards.push(...cards);
       }
-    } catch { /* ignore engine sync errors */ }
+    } catch {
+      // Ignore engine sync errors - this is best-effort to maintain state between reveals
+      // Failure here shouldn't prevent the reveal from being broadcast
+    }
     
     const projectedCommunity = Array.isArray(current.communityCards)
       ? [...current.communityCards, ...cards]

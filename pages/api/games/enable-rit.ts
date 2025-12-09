@@ -7,7 +7,7 @@ import {
   enrichStateWithRunIt,
   isAutoRunoutEligible,
 } from '../../../src/lib/poker/run-it-twice-manager';
-import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
+import { clearSupabaseAutoRunout, runSupabaseAutoRunoutSync } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import type { TableState } from '../../../src/types/poker';
@@ -163,10 +163,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const enrichedState = await broadcastState(updatedState, { action: actionName, playerId, runs });
 
+    // Run auto-runout synchronously if eligible, keeping the API handler alive
     if (isAutoRunoutEligible(updatedState)) {
       // Track whether we've already posted the hand result for auto-runout
       let handResultPosted = false;
-      scheduleSupabaseAutoRunout(tableId, engine, async (state, meta) => {
+      // Use synchronous runout that awaits delays - this keeps the serverless function alive
+      await runSupabaseAutoRunoutSync(tableId, engine, async (state, meta) => {
         await broadcastState(state, meta);
         // Post hand result to chat when auto-runout reaches showdown
         if (state.stage === 'showdown' && !handResultPosted) {
@@ -180,10 +182,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    // Get final state after auto-runout completes
+    const finalState = engine.getState();
+    const finalEnrichedState = enrichStateWithRunIt(tableId, finalState);
+    
     // Sanitize the response for the requesting player - hide other players' hole cards
     // unless it's showdown or an all-in situation
     // Note: In RIT scenarios, this should typically show all cards since it's an all-in situation
-    const sanitizedState = sanitizeStateForPlayer(enrichedState, playerId);
+    const sanitizedState = sanitizeStateForPlayer(finalEnrichedState, playerId);
 
     return res.status(200).json({ success: true, runs, gameState: sanitizedState });
   } catch (e: unknown) {

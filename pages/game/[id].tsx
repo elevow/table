@@ -833,27 +833,18 @@ export default function GamePage() {
       return;
     }
 
-    // Skip if we already scheduled from this stage and are waiting for response
-    // This prevents duplicate scheduling when broadcasts arrive before our response
-    if (autoRunoutScheduledFromStageRef.current === stage) {
-      console.log('[client auto-runout] already scheduled from stage:', stage, '- skipping');
-      return;
-    }
-
     // If we're waiting for a response from a previous request, don't schedule
     if (autoRunoutWaitingForResponseRef.current) {
       console.log('[client auto-runout] waiting for previous response - skipping');
       return;
     }
 
-    // Already have a timer - clear it
+    // Already have a timer - don't create another one
     if (autoRunoutTimerRef.current) {
-      clearTimeout(autoRunoutTimerRef.current);
-      autoRunoutTimerRef.current = null;
+      console.log('[client auto-runout] timer already exists for stage - skipping');
+      return;
     }
 
-    // Mark that we're scheduling from this stage
-    autoRunoutScheduledFromStageRef.current = stage;
     autoRunoutInProgressRef.current = true;
     
     const nextStreet = communityLen < 3 ? 'flop' : communityLen < 4 ? 'turn' : 'river';
@@ -861,9 +852,10 @@ export default function GamePage() {
     
     autoRunoutTimerRef.current = setTimeout(async () => {
       try {
-        // Mark that we're now waiting for a response
+        // Mark that we're now waiting for a response AND processing this stage
+        autoRunoutScheduledFromStageRef.current = stage;
         autoRunoutWaitingForResponseRef.current = true;
-        console.log('🟢 TIMER START: waitingForResponse = true');
+        console.log('🟢 TIMER START: waitingForResponse = true, scheduledFromStage = ' + stage);
         
         // Use the CURRENT game state at time of request via ref (not stale closure value)
         const currentState = pokerGameStateRef.current;

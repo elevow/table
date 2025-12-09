@@ -159,7 +159,7 @@ describe('supabase-auto-runout', () => {
 
     expect(success).toBe(true);
     
-    // Should have taken at least 15 seconds (3 reveals with 5s delays)
+    // Should have taken at least 15 seconds (2 street reveals + showdown, with 5s delays before each)
     const duration = endTime - startTime;
     expect(duration).toBeGreaterThanOrEqual(15000);
     

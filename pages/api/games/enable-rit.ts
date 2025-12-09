@@ -7,7 +7,7 @@ import {
   enrichStateWithRunIt,
   isAutoRunoutEligible,
 } from '../../../src/lib/poker/run-it-twice-manager';
-import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout, runSupabaseAutoRunoutSync } from '../../../src/lib/poker/supabase-auto-runout';
+import { clearSupabaseAutoRunout, runSupabaseAutoRunoutSync } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import type { TableState } from '../../../src/types/poker';

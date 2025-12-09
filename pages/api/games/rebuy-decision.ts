@@ -11,6 +11,7 @@ import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { acquireNextHandLock, releaseNextHandLock } from '../../../src/lib/server/next-hand-lock';
 
 /**
  * After a rebuy decision, check if we can start the next hand.
@@ -39,30 +40,47 @@ async function maybeStartNextHand(tableId: string, engine: any): Promise<boolean
 
   // Need at least 2 players with money and no pending rebuy decisions
   if (playersWithMoney.length >= 2 && pendingCount === 0) {
-    console.log(`[rebuy-decision] Starting next hand for table ${tableId}`);
-    
-    // Clear Run-It-Twice state for new hand
-    clearRunItState(tableId);
+    // Try to acquire the next-hand lock to prevent race condition with next-hand endpoint
+    if (!acquireNextHandLock(tableId)) {
+      console.log(`[rebuy-decision] Next hand already being started for table ${tableId}, skipping`);
+      return false;
+    }
 
-    // Start the next hand
-    if (typeof engine.startNewHand === 'function') {
-      engine.startNewHand();
+    try {
+      // Double-check we're still at showdown after acquiring the lock
+      const currentState = engine.getState();
+      if (currentState.stage !== 'showdown') {
+        console.log(`[rebuy-decision] Stage changed to ${currentState.stage} after acquiring lock, skipping`);
+        return false;
+      }
+
+      console.log(`[rebuy-decision] Starting next hand for table ${tableId}`);
       
-      // Persist engine state for serverless recovery
-      await persistEngineState(tableId, engine);
-      
-      const newState = engine.getState();
-      const enrichedState = enrichStateWithRunIt(tableId, newState);
-      const sequence = nextSeq(tableId);
+      // Clear Run-It-Twice state for new hand
+      clearRunItState(tableId);
 
-      await publishGameStateUpdate(tableId, {
-        gameState: enrichedState,
-        seq: sequence,
-        lastAction: { action: 'next_hand_started', playerId: 'system', reason: 'rebuy_complete' },
-        timestamp: new Date().toISOString(),
-      });
+      // Start the next hand
+      if (typeof engine.startNewHand === 'function') {
+        engine.startNewHand();
+        
+        // Persist engine state for serverless recovery
+        await persistEngineState(tableId, engine);
+        
+        const newState = engine.getState();
+        const enrichedState = enrichStateWithRunIt(tableId, newState);
+        const sequence = nextSeq(tableId);
 
-      return true;
+        await publishGameStateUpdate(tableId, {
+          gameState: enrichedState,
+          seq: sequence,
+          lastAction: { action: 'next_hand_started', playerId: 'system', reason: 'rebuy_complete' },
+          timestamp: new Date().toISOString(),
+        });
+
+        return true;
+      }
+    } finally {
+      releaseNextHandLock(tableId);
     }
   }
 

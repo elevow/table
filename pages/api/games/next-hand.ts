@@ -18,6 +18,7 @@ import { getPool } from '../../../src/lib/database/pool';
 import { GameService } from '../../../src/lib/services/game-service';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import type { GameVariant } from '../../../src/types/poker';
+import { acquireNextHandLock, releaseNextHandLock } from '../../../src/lib/server/next-hand-lock';
 
 // Type definitions for room configuration from database
 interface RoomConfiguration {
@@ -46,16 +47,6 @@ function extractBlindValue(blinds: BlindLevels, ...keys: (keyof BlindLevels)[]):
 }
 
 const DEFAULT_DEALERS_CHOICE_VARIANTS: GameVariant[] = ['texas-holdem', 'omaha', 'omaha-hi-lo', 'seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'];
-
-const NEXT_HAND_LOCK_KEY = '__NEXT_HAND_LOCKS__';
-
-function getNextHandLocks(): Set<string> {
-  const g = globalThis as any;
-  if (!g[NEXT_HAND_LOCK_KEY]) {
-    g[NEXT_HAND_LOCK_KEY] = new Set<string>();
-  }
-  return g[NEXT_HAND_LOCK_KEY] as Set<string>;
-}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -138,11 +129,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       g.roomConfigs.set(tableId, roomConfig);
     };
 
-    const locks = getNextHandLocks();
-    if (locks.has(tableId)) {
+    if (!acquireNextHandLock(tableId)) {
       return res.status(409).json({ error: 'Next hand already being started' });
     }
-    locks.add(tableId);
     try {
       const currentState = typeof engine.getState === 'function' ? engine.getState() : undefined;
       const awaitingDealerChoiceStage = currentState?.stage === 'awaiting-dealer-choice';
@@ -297,7 +286,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Regular game: start next hand with same variant
       return applyVariantAndStart();
     } finally {
-      getNextHandLocks().delete(tableId);
+      releaseNextHandLock(tableId);
     }
   } catch (error) {
     console.error('Error starting next hand:', error);

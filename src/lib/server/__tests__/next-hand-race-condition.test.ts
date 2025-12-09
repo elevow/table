@@ -31,7 +31,6 @@ describe('Race condition prevention - next-hand vs rebuy-decision', () => {
     const rebuyEndpointFlow = async () => {
       // Try to acquire lock (simulating maybeStartNextHand in rebuy-decision.ts)
       if (!acquireNextHandLock(tableId)) {
-        console.log('[rebuy-decision] Lock already held, skipping hand start');
         return false;
       }
 
@@ -39,14 +38,12 @@ describe('Race condition prevention - next-hand vs rebuy-decision', () => {
         // Simulate checking stage is still showdown after acquiring lock
         const currentStage = 'showdown'; // Would be engine.getState().stage
         if (currentStage !== 'showdown') {
-          console.log('[rebuy-decision] Stage changed, skipping hand start');
           return false;
         }
 
         // Simulate starting the hand
         await new Promise(resolve => setTimeout(resolve, 10)); // Simulate async work
         rebuyEndpointStarted = true;
-        console.log('[rebuy-decision] Successfully started next hand');
         return true;
       } finally {
         releaseNextHandLock(tableId);
@@ -57,7 +54,6 @@ describe('Race condition prevention - next-hand vs rebuy-decision', () => {
     const nextHandEndpointFlow = async () => {
       // Try to acquire lock (simulating next-hand.ts)
       if (!acquireNextHandLock(tableId)) {
-        console.log('[next-hand] Lock already held, returning 409');
         return false;
       }
 
@@ -65,14 +61,12 @@ describe('Race condition prevention - next-hand vs rebuy-decision', () => {
         // Simulate checking stage
         const currentStage = 'preflop'; // After rebuy started it, stage changed
         if (currentStage !== 'showdown' && currentStage !== 'awaiting-dealer-choice') {
-          console.log('[next-hand] Hand in progress, should not happen with lock');
           return false;
         }
 
         // Simulate starting the hand
         await new Promise(resolve => setTimeout(resolve, 10)); // Simulate async work
         nextHandEndpointStarted = true;
-        console.log('[next-hand] Successfully started next hand');
         return true;
       } finally {
         releaseNextHandLock(tableId);

@@ -33,7 +33,9 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       if (typeof document !== 'undefined') {
         document.documentElement.classList.toggle('dark', initial === 'dark');
       }
-    } catch {}
+    } catch {
+      /* Ignore localStorage errors in SSR/incognito mode */
+    }
   }, []);
 
   const toggleTheme = () => {
@@ -41,7 +43,9 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     setTheme(next);
     try {
       localStorage.setItem('theme', next);
-    } catch {}
+    } catch {
+      /* Ignore localStorage errors in SSR/incognito mode */
+    }
     if (typeof document !== 'undefined') {
       document.documentElement.classList.toggle('dark', next === 'dark');
     }

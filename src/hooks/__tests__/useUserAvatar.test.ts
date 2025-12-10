@@ -155,10 +155,32 @@ describe('useUserAvatar', () => {
       expect(consoleMock.warn).toHaveBeenCalledWith('Failed to save avatar to storage:', expect.any(Error));
       expect(result.current.avatarData).toEqual(mockAvatarData);
     });
+
+    it('should not cache data for alias-based requests like "me"', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => mockAvatarData
+      });
+
+      const { result } = renderHook(() => useUserAvatar('me'));
+      
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+
+      // Should fetch from API since aliases are not cached
+      expect(mockFetch).toHaveBeenCalled();
+      // Should not try to save to localStorage for alias
+      expect(localStorageMock.setItem).not.toHaveBeenCalled();
+    });
   });
 
   describe('API integration', () => {
     it('should fetch avatar data from API when not in localStorage', async () => {
+      // Ensure no cached data and no auth token
+      localStorageMock.getItem.mockReturnValue(null);
+      
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -173,10 +195,33 @@ describe('useUserAvatar', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
       });
 
-      expect(mockFetch).toHaveBeenCalledWith('/api/avatars/user/user-123');
+      expect(mockFetch).toHaveBeenCalledWith('/api/avatars/user/user-123', { headers: {} });
       expect(result.current.avatarData).toEqual(mockAvatarData);
       expect(result.current.loading).toBe(false);
       expect(result.current.error).toBeNull();
+    });
+
+    it('should include authorization header when auth token is available', async () => {
+      localStorageMock.getItem.mockImplementation((key: string) => {
+        if (key === 'auth_token') return 'test-token-123';
+        return null;
+      });
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => mockAvatarData
+      });
+
+      const { result } = renderHook(() => useUserAvatar(mockUserId));
+      
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/avatars/user/user-123', {
+        headers: { Authorization: 'Bearer test-token-123' }
+      });
     });
 
     it('should handle 404 response gracefully', async () => {
@@ -187,6 +232,24 @@ describe('useUserAvatar', () => {
       });
 
       const { result } = renderHook(() => useUserAvatar(mockUserId));
+      
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+
+      expect(result.current.avatarData).toBeNull();
+      expect(result.current.loading).toBe(false);
+      expect(result.current.error).toBeNull();
+    });
+
+    it('should handle 401 response gracefully', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized'
+      });
+
+      const { result } = renderHook(() => useUserAvatar('me'));
       
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -278,7 +341,7 @@ describe('useUserAvatar', () => {
       });
 
       expect(localStorageMock.removeItem).toHaveBeenCalledWith('user_avatar_data_user-123');
-      expect(mockFetch).toHaveBeenCalledWith('/api/avatars/user/user-123');
+      expect(mockFetch).toHaveBeenCalledWith('/api/avatars/user/user-123', { headers: {} });
       expect(result.current.avatarData).toEqual(updatedAvatarData);
     });
 
@@ -371,7 +434,7 @@ describe('useUserAvatar', () => {
         await new Promise(resolve => setTimeout(resolve, 10));
       });
 
-      expect(mockFetch).toHaveBeenCalledWith('/api/avatars/user/user-1');
+      expect(mockFetch).toHaveBeenCalledWith('/api/avatars/user/user-1', { headers: {} });
       
       // Clear previous calls
       mockFetch.mockClear();
@@ -383,7 +446,7 @@ describe('useUserAvatar', () => {
         await new Promise(resolve => setTimeout(resolve, 10));
       });
 
-      expect(mockFetch).toHaveBeenCalledWith('/api/avatars/user/user-2');
+      expect(mockFetch).toHaveBeenCalledWith('/api/avatars/user/user-2', { headers: {} });
     });
 
     it('should handle non-Error exceptions', async () => {

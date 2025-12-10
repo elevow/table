@@ -51,10 +51,23 @@ export function useUserAvatar(userId: string) {
     setError(null);
     
     try {
-      const response = await fetch(`/api/avatars/user/${userId}`);
+      // Include auth token if available, especially for alias-based requests like 'me'
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const headers: HeadersInit = {};
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      
+      const response = await fetch(`/api/avatars/user/${userId}`, { headers });
       
       if (response.status === 404) {
         // No avatar found - this is ok
+        setAvatarData(null);
+        return;
+      }
+      
+      if (response.status === 401) {
+        // Not authenticated - this is ok, just don't show an avatar
         setAvatarData(null);
         return;
       }

@@ -83,7 +83,11 @@ const revealStreet = async (
         es.communityCards.push(...cards);
       }
       // Use engine's accumulated state after sync
-      projectedCommunity = Array.isArray(es?.communityCards) ? [...es.communityCards] : cards;
+      projectedCommunity = Array.isArray(es?.communityCards)
+        ? [...es.communityCards]
+        : Array.isArray(current.communityCards)
+          ? [...current.communityCards, ...cards]
+          : cards;
     } catch {
       // If sync fails, fall back to manual accumulation
       projectedCommunity = Array.isArray(current.communityCards)
@@ -164,7 +168,11 @@ export const runSupabaseAutoRunoutSync = async (
           es.communityCards.push(...cards);
         }
         // Use engine's accumulated state after sync
-        projectedCommunity = Array.isArray(es?.communityCards) ? [...es.communityCards] : cards;
+        projectedCommunity = Array.isArray(es?.communityCards)
+          ? [...es.communityCards]
+          : Array.isArray(current.communityCards)
+            ? [...current.communityCards, ...cards]
+            : cards;
       } catch {
         // If sync fails, fall back to manual accumulation
         projectedCommunity = Array.isArray(current.communityCards)

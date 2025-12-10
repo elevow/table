@@ -422,12 +422,12 @@ export class ActionManager {
             // Keep engine's community in sync so subsequent previews compute correct deltas
             let projectedCommunity: Card[];
             try {
-              const es = (engine as any).getState();
+              const es: TableState = (engine as any).getState();
               if (Array.isArray(es?.communityCards) && Array.isArray(cards) && cards.length > 0) {
                 es.communityCards.push(...cards);
               }
               // Use engine's accumulated state after sync
-              projectedCommunity = Array.isArray(es?.communityCards) ? [...es.communityCards] : cards;
+              projectedCommunity = Array.isArray(es?.communityCards) ? [...es.communityCards] : [...prev.communityCards, ...cards];
             } catch {
               // If sync fails, fall back to manual accumulation
               projectedCommunity = [...prev.communityCards, ...cards];

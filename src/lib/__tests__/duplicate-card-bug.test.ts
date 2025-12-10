@@ -81,7 +81,7 @@ describe('Duplicate community card bug test', () => {
     const engine = makeEngine(state);
     const broadcast = jest.fn().mockResolvedValue(undefined);
 
-    const scheduled = scheduleSupabaseAutoRunout(tableId, engine as any, broadcast);
+    const scheduled = scheduleSupabaseAutoRunout(tableId, engine, broadcast);
     expect(scheduled).toBe(true);
 
     // Advance 5 seconds - flop should be revealed (3 cards)
@@ -112,5 +112,14 @@ describe('Duplicate community card bug test', () => {
     expect(riverCall.stage).toBe('river');
     expect(riverCall.communityCards).toHaveLength(5); // SHOULD BE 5, not 6
     console.log('River communityCards:', riverCall.communityCards);
+    
+    // Check exact cards - no duplicates
+    expect(riverCall.communityCards).toEqual([
+      { rank: '2', suit: 'hearts' },
+      { rank: '4', suit: 'hearts' },
+      { rank: '6', suit: 'hearts' },
+      { rank: '8', suit: 'hearts' },
+      { rank: 'T', suit: 'diamonds' },
+    ]);
   });
 });

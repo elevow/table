@@ -76,7 +76,7 @@ const revealStreet = async (
     const cards = preview && Array.isArray(preview.cards) ? preview.cards : [];
     
     // Keep engine's community in sync so subsequent previews compute correct deltas
-    let projectedCommunity: any[];
+    let projectedCommunity: Card[];
     try {
       const es = engine.getState();
       if (Array.isArray(es?.communityCards) && Array.isArray(cards) && cards.length > 0) {
@@ -157,7 +157,7 @@ export const runSupabaseAutoRunoutSync = async (
       const cards = preview && Array.isArray(preview.cards) ? preview.cards : [];
       
       // Keep engine's community in sync
-      let projectedCommunity: any[];
+      let projectedCommunity: Card[];
       try {
         const es = engine.getState();
         if (Array.isArray(es?.communityCards) && Array.isArray(cards) && cards.length > 0) {

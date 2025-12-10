@@ -420,7 +420,7 @@ export class ActionManager {
             const cards = preview?.cards || [];
             console.debug('[auto-runout] preview results', { tableId, street, cards });
             // Keep engine's community in sync so subsequent previews compute correct deltas
-            let projectedCommunity: any[];
+            let projectedCommunity: Card[];
             try {
               const es = (engine as any).getState();
               if (Array.isArray(es?.communityCards) && Array.isArray(cards) && cards.length > 0) {

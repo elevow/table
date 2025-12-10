@@ -219,9 +219,10 @@ describe('postHandResultToChat', () => {
   });
 
   it('should generate different UUIDs for different calls', async () => {
-    const crypto = require('crypto');
+    // Access the mocked module
+    const { randomUUID } = jest.requireMock('crypto');
     let callCount = 0;
-    (crypto.randomUUID as jest.Mock).mockImplementation(() => `mock-uuid-${++callCount}`);
+    (randomUUID as jest.Mock).mockImplementation(() => `mock-uuid-${++callCount}`);
 
     const mockFormattedResult = {
       message: '🏆 Alice wins',

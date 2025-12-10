@@ -53,10 +53,7 @@ export function useUserAvatar(userId: string) {
     try {
       // Include auth token if available, especially for alias-based requests like 'me'
       const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-      const headers: HeadersInit = {};
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
+      const headers: HeadersInit = authToken ? { Authorization: `Bearer ${authToken}` } : {};
       
       const response = await fetch(`/api/avatars/user/${userId}`, { headers });
       

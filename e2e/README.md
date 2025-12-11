@@ -11,18 +11,27 @@ The smoke tests are designed to:
 - Validate responsive design across different screen sizes
 - Catch JavaScript errors and rendering issues
 
+## Documentation
+
+- **[MANUAL_TEST_CASES.md](MANUAL_TEST_CASES.md)** - Complete list of 48 manual test cases that define what should be tested
+- **[README.md](README.md)** - This file - How to run and write automated tests
+- **[../PLAYWRIGHT_TESTS.md](../PLAYWRIGHT_TESTS.md)** - Test execution summary and results
+
 ## Test Structure
 
 ```
 e2e/
+├── MANUAL_TEST_CASES.md       # Manual test case specifications (48 test cases)
 ├── tests/
-│   ├── homepage.spec.ts       # Login/registration page tests
-│   ├── dashboard.spec.ts      # Dashboard functionality tests
-│   ├── profile.spec.ts        # Profile page tests
-│   ├── game-creation.spec.ts  # Game creation page tests
-│   └── navigation.spec.ts     # General navigation and accessibility tests
+│   ├── homepage.spec.ts       # Login/registration page tests (TC-001 to TC-007)
+│   ├── dashboard.spec.ts      # Dashboard functionality tests (TC-008 to TC-017)
+│   ├── profile.spec.ts        # Profile page tests (TC-018 to TC-026)
+│   ├── game-creation.spec.ts  # Game creation page tests (TC-027 to TC-038)
+│   └── navigation.spec.ts     # General navigation tests (TC-039 to TC-048)
 └── README.md                  # This file
 ```
+
+Each automated test maps directly to one or more manual test cases documented in `MANUAL_TEST_CASES.md`.
 
 ## Prerequisites
 
@@ -277,14 +286,58 @@ The tests are configured to run in CI environments. When `CI=true`:
 - [Test Selectors](https://playwright.dev/docs/selectors)
 - [API Reference](https://playwright.dev/docs/api/class-test)
 
+## Manual vs Automated Testing
+
+### Test Development Process
+
+1. **Manual Test Cases First** - Start by documenting test cases in `MANUAL_TEST_CASES.md`:
+   - Define what to test (objective)
+   - List steps to perform
+   - Specify expected results
+   - Assign priority level
+
+2. **Automate the Tests** - Implement automated tests based on manual test cases:
+   - Reference the test case ID in test comments
+   - Follow the manual test steps in automation code
+   - Verify the same expected results
+
+3. **Keep Both Updated** - Maintain both documents:
+   - Update manual test cases when features change
+   - Update automated tests to match
+   - Document new test cases before automating
+
+### When to Use Manual vs Automated
+
+**Manual Testing is better for:**
+- Exploratory testing and finding edge cases
+- Visual design and UX evaluation
+- One-time or rarely executed tests
+- Tests requiring human judgment
+
+**Automated Testing is better for:**
+- Regression testing (run frequently)
+- Smoke tests before deployment
+- Tests that need to run on multiple browsers
+- Consistent, repeatable test execution
+
+**Current Status:**
+All 48 manual test cases (TC-001 to TC-048) have been automated. Manual test cases remain valuable for:
+- Understanding test intent and requirements
+- Manual verification when automation fails
+- Onboarding new team members
+- Creating new test cases before automation
+
 ## Contributing
 
 When adding new smoke tests:
-1. Follow the existing test structure
-2. Keep tests focused and independent
-3. Add descriptive comments
-4. Update this README if adding new test files
-5. Ensure tests pass locally before committing
+1. **First** - Document the manual test case in `MANUAL_TEST_CASES.md`
+2. **Then** - Implement the automated test in the appropriate spec file
+3. Reference the test case ID (e.g., TC-049) in your automation
+4. Follow the existing test structure
+5. Keep tests focused and independent
+6. Add descriptive comments
+7. Update this README if adding new test files
+8. Ensure tests pass locally before committing
 
 ## License
 

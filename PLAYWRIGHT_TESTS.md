@@ -2,8 +2,14 @@
 
 **Date:** 2025-12-11
 **Status:** ✅ All tests passing
-**Total Tests:** 49
+**Total Tests:** 49 automated tests (based on 48 manual test cases)
 **Pass Rate:** 100%
+
+## Documentation
+
+- **[e2e/MANUAL_TEST_CASES.md](e2e/MANUAL_TEST_CASES.md)** - Complete manual test case specifications (TC-001 to TC-048)
+- **[e2e/README.md](e2e/README.md)** - How to run and write automated tests
+- **This file** - Test execution results and summary
 
 ## Test Execution Summary
 
@@ -16,6 +22,8 @@ Running 49 tests using 1 worker
 ## Test Coverage by Feature
 
 ### Homepage Tests (7 tests)
+Automated from manual test cases TC-001 to TC-007
+
 - ✅ should load the homepage successfully
 - ✅ should display login form by default
 - ✅ should toggle between login and register forms
@@ -25,6 +33,8 @@ Running 49 tests using 1 worker
 - ✅ should have working links to password reset if available
 
 ### Dashboard Tests (10 tests)
+Automated from manual test cases TC-008 to TC-017
+
 - ✅ should load the dashboard page
 - ✅ should display room code input field
 - ✅ should display user avatar if authenticated
@@ -37,6 +47,8 @@ Running 49 tests using 1 worker
 - ✅ should not crash when joining invalid room code
 
 ### Profile Page Tests (10 tests)
+Automated from manual test cases TC-018 to TC-026
+
 - ✅ should load the profile page
 - ✅ should display user avatar area
 - ✅ should have avatar upload functionality
@@ -49,6 +61,8 @@ Running 49 tests using 1 worker
 - ✅ should have responsive layout
 
 ### Game Creation Tests (12 tests)
+Automated from manual test cases TC-027 to TC-038
+
 - ✅ should load the game creation page
 - ✅ should display game creation form
 - ✅ should have game configuration options
@@ -63,6 +77,8 @@ Running 49 tests using 1 worker
 - ✅ should be responsive on different screen sizes
 
 ### Navigation & Accessibility Tests (10 tests)
+Automated from manual test cases TC-039 to TC-048
+
 - ✅ should navigate between main pages without errors
 - ✅ should handle 404 page gracefully
 - ✅ should load without JavaScript errors

@@ -10,6 +10,7 @@ import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
 import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
+import type { GameSettings as GameSettingsType } from '../../src/components/GameSettings';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -1082,7 +1083,12 @@ export default function GamePage() {
 
   // Helper to render pot odds display
   const renderPotOdds = useCallback(() => {
-    if (!showPotOdds || !pokerGameState || (pokerGameState.currentBet || 0) === 0) {
+    if (!showPotOdds || !pokerGameState) {
+      return null;
+    }
+    
+    // Early return if no current bet - player can check/bet rather than call
+    if ((pokerGameState.currentBet || 0) === 0) {
       return null;
     }
     
@@ -1091,6 +1097,7 @@ export default function GamePage() {
     const betToCall = Number(pokerGameState.currentBet || 0) - myCurrentBet;
     const potSize = Number(pokerGameState.pot || 0);
     
+    // Double-check betToCall is positive (shouldn't happen given above check, but defensive)
     if (betToCall <= 0) {
       return null;
     }
@@ -3026,7 +3033,7 @@ export default function GamePage() {
             )}
             {showSettings && (
               <div className="mt-4">
-                <GameSettings gameId={String(id)} onSettingsChange={(s: any) => {
+                <GameSettings gameId={String(id)} onSettingsChange={(s: GameSettingsType) => {
                   setHighContrastCards(!!s?.highContrastCards);
                   setShowPotOdds(s?.showPotOdds ?? true);
                 }} />

@@ -4,13 +4,24 @@
  */
 import { useEffect, useState, useRef, memo } from 'react';
 
+export interface GameSettings {
+  soundEnabled: boolean;
+  chatEnabled: boolean;
+  notificationsEnabled: boolean;
+  autoFoldEnabled: boolean;
+  rabbitHuntEnabled: boolean;
+  timeBank: number;
+  highContrastCards: boolean;
+  showPotOdds: boolean;
+}
+
 interface GameSettingsProps {
   gameId: string;
-  onSettingsChange?: (settings: any) => void;
+  onSettingsChange?: (settings: GameSettings) => void;
 }
 
 function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<GameSettings>({
     soundEnabled: true,
     chatEnabled: true,
     notificationsEnabled: true,

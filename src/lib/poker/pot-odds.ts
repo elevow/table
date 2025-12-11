@@ -11,12 +11,15 @@
  * This calculates the pot-to-bet ratio, representing the odds being offered by the pot.
  * For example, "3.0:1" means you're getting 3-to-1 on your money.
  * 
- * @param potSize - The total size of the pot
- * @param betToCall - The amount the player needs to call
+ * Note: A pot size of 0 will return "0.0:1", representing a situation where
+ * there is no pot (e.g., first action preflop). This is intentionally allowed.
+ * 
+ * @param potSize - The total size of the pot (can be 0)
+ * @param betToCall - The amount the player needs to call (must be > 0)
  * @returns A formatted ratio string (e.g., "3:1") or null if invalid inputs
  */
 export function calculatePotOdds(potSize: number, betToCall: number): string | null {
-  // Validate inputs
+  // Validate inputs - pot can be 0, but bet must be positive
   if (betToCall <= 0 || potSize < 0) {
     return null;
   }

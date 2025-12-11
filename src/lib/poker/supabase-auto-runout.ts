@@ -76,19 +76,24 @@ const revealStreet = async (
     const cards = preview && Array.isArray(preview.cards) ? preview.cards : [];
     
     // Keep engine's community in sync so subsequent previews compute correct deltas
+    let projectedCommunity: Card[];
     try {
       const es = engine.getState();
       if (Array.isArray(es?.communityCards) && Array.isArray(cards) && cards.length > 0) {
         es.communityCards.push(...cards);
       }
+      // Use engine's accumulated state after sync
+      projectedCommunity = Array.isArray(es?.communityCards)
+        ? [...es.communityCards]
+        : Array.isArray(current.communityCards)
+          ? [...current.communityCards, ...cards]
+          : cards;
     } catch {
-      // Ignore engine sync errors - this is best-effort to maintain state between reveals
-      // Failure here shouldn't prevent the reveal from being broadcast
+      // If sync fails, fall back to manual accumulation
+      projectedCommunity = Array.isArray(current.communityCards)
+        ? [...current.communityCards, ...cards]
+        : cards;
     }
-    
-    const projectedCommunity = Array.isArray(current.communityCards)
-      ? [...current.communityCards, ...cards]
-      : cards;
     const staged: TableState = {
       ...current,
       communityCards: projectedCommunity,
@@ -156,16 +161,24 @@ export const runSupabaseAutoRunoutSync = async (
       const cards = preview && Array.isArray(preview.cards) ? preview.cards : [];
       
       // Keep engine's community in sync
+      let projectedCommunity: Card[];
       try {
         const es = engine.getState();
         if (Array.isArray(es?.communityCards) && Array.isArray(cards) && cards.length > 0) {
           es.communityCards.push(...cards);
         }
-      } catch { /* ignore */ }
-      
-      const projectedCommunity = Array.isArray(current.communityCards)
-        ? [...current.communityCards, ...cards]
-        : cards;
+        // Use engine's accumulated state after sync
+        projectedCommunity = Array.isArray(es?.communityCards)
+          ? [...es.communityCards]
+          : Array.isArray(current.communityCards)
+            ? [...current.communityCards, ...cards]
+            : cards;
+      } catch {
+        // If sync fails, fall back to manual accumulation
+        projectedCommunity = Array.isArray(current.communityCards)
+          ? [...current.communityCards, ...cards]
+          : cards;
+      }
       const staged: TableState = {
         ...current,
         communityCards: projectedCommunity,

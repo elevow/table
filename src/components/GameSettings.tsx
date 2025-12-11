@@ -18,6 +18,7 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
     rabbitHuntEnabled: false,
     timeBank: 30,
     highContrastCards: false,
+    showPotOdds: true,
   });
 
   // Use a ref to store the callback to avoid re-triggering effects
@@ -127,6 +128,19 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
           </label>
           <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
             When enabled: Hearts = Red, Diamonds = Yellow, Spades = Black, Clubs = Blue.
+          </div>
+        </div>
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.showPotOdds}
+              onChange={(e) => handleSettingChange('showPotOdds', e.target.checked)}
+            />
+            Show Pot Odds
+          </label>
+          <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+            Display the ratio between the pot size and the bet you are facing.
           </div>
         </div>
         <div className="setting-item">

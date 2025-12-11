@@ -8,6 +8,9 @@
 /**
  * Calculate pot odds as a ratio string (e.g., "3:1")
  * 
+ * This calculates the pot-to-bet ratio, representing the odds being offered by the pot.
+ * For example, "3.0:1" means you're getting 3-to-1 on your money.
+ * 
  * @param potSize - The total size of the pot
  * @param betToCall - The amount the player needs to call
  * @returns A formatted ratio string (e.g., "3:1") or null if invalid inputs
@@ -28,9 +31,12 @@ export function calculatePotOdds(potSize: number, betToCall: number): string | n
 /**
  * Calculate pot odds as a percentage
  * 
+ * This calculates the equity percentage needed to break even on a call.
+ * Formula: bet / (pot + bet) * 100
+ * 
  * @param potSize - The total size of the pot
  * @param betToCall - The amount the player needs to call
- * @returns The percentage of the pot the bet represents, or null if invalid inputs
+ * @returns The percentage of equity needed to break even, or null if invalid inputs
  */
 export function calculatePotOddsPercentage(potSize: number, betToCall: number): number | null {
   // Validate inputs

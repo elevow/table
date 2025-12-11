@@ -3018,7 +3018,7 @@ export default function GamePage() {
               <div className="mt-4">
                 <GameSettings gameId={String(id)} onSettingsChange={(s: any) => {
                   setHighContrastCards(!!s?.highContrastCards);
-                  setShowPotOdds(s?.showPotOdds !== false);
+                  setShowPotOdds(s?.showPotOdds ?? true);
                 }} />
               </div>
             )}

@@ -36,13 +36,14 @@ describe('Pot Odds Calculator', () => {
 
   describe('calculatePotOddsPercentage', () => {
     it('should calculate pot odds percentage correctly', () => {
-      // 50 to call into 100 pot = 50/(100+50) = 33.3%
+      // Calculates equity percentage needed to break even on the call
+      // 50 to call into 100 pot = 50/(100+50) = 33.3% equity needed
       expect(calculatePotOddsPercentage(100, 50)).toBe(33.3);
       
-      // 100 to call into 200 pot = 100/(200+100) = 33.3%
+      // 100 to call into 200 pot = 100/(200+100) = 33.3% equity needed
       expect(calculatePotOddsPercentage(200, 100)).toBe(33.3);
       
-      // 25 to call into 100 pot = 25/(100+25) = 20%
+      // 25 to call into 100 pot = 25/(100+25) = 20% equity needed
       expect(calculatePotOddsPercentage(100, 25)).toBe(20);
     });
 

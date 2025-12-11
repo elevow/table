@@ -11,10 +11,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "heroku-postbuild": "echo Skipping heroku-postbuild for Koyeb",
-    "db:up": "docker compose up -d db",
-    "db:down": "docker compose down",
-    "db:migrate": "node scripts/db-migrate.js",
-    "db:reset": "docker compose down -v && docker compose up -d db && node scripts/db-migrate.js"
+    "db:migrate": "node scripts/db-migrate.js"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.5",

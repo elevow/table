@@ -4,3 +4,8 @@ node_modules
 .next
 coverage
 tsconfig.tsbuildinfo
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/

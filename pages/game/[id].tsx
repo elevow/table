@@ -9,6 +9,7 @@ import Avatar from '../../src/components/Avatar';
 import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
 import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
+import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -441,6 +442,7 @@ export default function GamePage() {
   const autoNextHandScheduledRef = useRef<boolean>(false);
   // Visual accessibility options
   const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
+  const [showPotOdds, setShowPotOdds] = useState<boolean>(true);
   // Dealer's Choice: pending choice prompt from server
   const [awaitingDealerChoice, setAwaitingDealerChoice] = useState<null | { dealerId?: string; allowedVariants?: string[]; current?: string }>(null);
   const [selectedVariantDC, setSelectedVariantDC] = useState<string>('texas-holdem');
@@ -2400,6 +2402,27 @@ export default function GamePage() {
                   <div className="mb-3 text-sm text-gray-700 dark:text-gray-200">Your Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{summary.primary}</span></div>
                 ) : null;
               })()}
+              {/* Pot Odds Display */}
+              {showPotOdds && (pokerGameState.currentBet || 0) > 0 && (() => {
+                const me = getMe();
+                const myCurrentBet = Number(me?.currentBet || 0);
+                const betToCall = Number(pokerGameState.currentBet || 0) - myCurrentBet;
+                const potSize = Number(pokerGameState.pot || 0);
+                
+                if (betToCall > 0) {
+                  const potOddsDisplay = formatPotOdds(potSize, betToCall);
+                  if (potOddsDisplay) {
+                    return (
+                      <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+                        <div className="text-sm text-gray-700 dark:text-gray-300">
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">Pot Odds:</span> {potOddsDisplay}
+                        </div>
+                      </div>
+                    );
+                  }
+                }
+                return null;
+              })()}
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={handleFold}
@@ -2993,7 +3016,10 @@ export default function GamePage() {
             )}
             {showSettings && (
               <div className="mt-4">
-                <GameSettings gameId={String(id)} onSettingsChange={(s: any) => setHighContrastCards(!!s?.highContrastCards)} />
+                <GameSettings gameId={String(id)} onSettingsChange={(s: any) => {
+                  setHighContrastCards(!!s?.highContrastCards);
+                  setShowPotOdds(s?.showPotOdds !== false);
+                }} />
               </div>
             )}
           </div>

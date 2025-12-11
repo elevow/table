@@ -11,7 +11,7 @@ import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { OutsCalculator } from '../../src/lib/poker/outs-calculator';
 import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
-import { Card } from '../../src/types/poker';
+import { Card, Player, GameVariant } from '../../src/types/poker';
 import { HandInterface } from '../../src/types/poker-engine';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
@@ -2994,11 +2994,11 @@ export default function GamePage() {
               }
 
               // Find the best and worst hands among active players
-              const variant = pokerGameState?.variant as string | undefined;
+              const variant = pokerGameState?.variant;
               const board = pokerGameState.communityCards;
               
               type PlayerEval = { playerId: string; name: string; hand: HandInterface; holeCards: Card[] };
-              const evals: PlayerEval[] = activePlayers.map((p: any) => {
+              const evals: PlayerEval[] = activePlayers.map((p: Player) => {
                 let hand;
                 if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
                   const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
@@ -3028,7 +3028,7 @@ export default function GamePage() {
                     worst.holeCards,
                     best.holeCards,
                     board,
-                    variant as any
+                    variant as GameVariant | undefined
                   );
 
                   if (outsResult.outs.length > 0) {

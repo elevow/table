@@ -123,17 +123,20 @@ export class OutsCalculator {
     const oddsNextCard = unknownCount > 0 ? (outsCount / unknownCount) * 100 : 0;
     
     // Calculate odds by river (if we're not at river yet)
-    const cardsToRiver = 5 - communityCards.length;
+    const MAX_COMMUNITY_CARDS = 5; // Texas Hold'em and Omaha have 5 community cards
+    const cardsToRiver = MAX_COMMUNITY_CARDS - communityCards.length;
     let oddsByRiver: number | undefined;
     
     if (cardsToRiver > 1) {
-      // Probability of NOT hitting on any of the remaining cards
-      // For each subsequent card, calculate probability of missing
+      // Probability of NOT hitting any outs across remaining cards
+      // This is calculated as: P(miss card 1) * P(miss card 2 | miss card 1) * ...
+      // When drawing without replacement, both numerator and denominator decrease
       let missAll = 1;
       for (let i = 0; i < cardsToRiver; i++) {
-        const remainingCards = unknownCount - i;
-        const remainingOuts = outsCount; // Outs don't decrease since we're checking if ANY out appears
-        const missThisCard = (remainingCards - remainingOuts) / remainingCards;
+        const cardsLeftInDeck = unknownCount - i;
+        const outsLeftInDeck = outsCount; // Outs remain available until drawn
+        const nonOutsLeft = cardsLeftInDeck - outsLeftInDeck;
+        const missThisCard = nonOutsLeft / cardsLeftInDeck;
         missAll *= missThisCard;
       }
       oddsByRiver = (1 - missAll) * 100;

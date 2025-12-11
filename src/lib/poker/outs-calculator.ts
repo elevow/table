@@ -128,9 +128,14 @@ export class OutsCalculator {
     
     if (cardsToRiver > 1) {
       // Probability of NOT hitting on any of the remaining cards
-      const missNext = (unknownCount - outsCount) / unknownCount;
-      const missAfter = cardsToRiver > 1 ? (unknownCount - outsCount - 1) / (unknownCount - 1) : 1;
-      const missAll = cardsToRiver === 2 ? missNext * missAfter : missNext;
+      // For each subsequent card, calculate probability of missing
+      let missAll = 1;
+      for (let i = 0; i < cardsToRiver; i++) {
+        const remainingCards = unknownCount - i;
+        const remainingOuts = outsCount; // Outs don't decrease since we're checking if ANY out appears
+        const missThisCard = (remainingCards - remainingOuts) / remainingCards;
+        missAll *= missThisCard;
+      }
       oddsByRiver = (1 - missAll) * 100;
     }
 

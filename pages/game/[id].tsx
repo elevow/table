@@ -11,6 +11,8 @@ import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { OutsCalculator } from '../../src/lib/poker/outs-calculator';
 import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
+import { Card } from '../../src/types/poker';
+import { HandInterface } from '../../src/types/poker-engine';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -2995,7 +2997,7 @@ export default function GamePage() {
               const variant = pokerGameState?.variant as string | undefined;
               const board = pokerGameState.communityCards;
               
-              type PlayerEval = { playerId: string; name: string; hand: any; holeCards: any[] };
+              type PlayerEval = { playerId: string; name: string; hand: HandInterface; holeCards: Card[] };
               const evals: PlayerEval[] = activePlayers.map((p: any) => {
                 let hand;
                 if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {

@@ -420,13 +420,19 @@ export class ActionManager {
             const cards = preview?.cards || [];
             console.debug('[auto-runout] preview results', { tableId, street, cards });
             // Keep engine's community in sync so subsequent previews compute correct deltas
+            let projectedCommunity: Card[];
             try {
-              const es = (engine as any).getState();
+              const es: TableState = (engine as any).getState();
               if (Array.isArray(es?.communityCards) && Array.isArray(cards) && cards.length > 0) {
                 es.communityCards.push(...cards);
               }
-            } catch { /* ignore engine sync errors */ }
-            const updated = { ...prev, communityCards: [...prev.communityCards, ...cards] } as TableState;
+              // Use engine's accumulated state after sync
+              projectedCommunity = Array.isArray(es?.communityCards) ? [...es.communityCards] : [...prev.communityCards, ...cards];
+            } catch {
+              // If sync fails, fall back to manual accumulation
+              projectedCommunity = [...prev.communityCards, ...cards];
+            }
+            const updated = { ...prev, communityCards: projectedCommunity } as TableState;
             // Update stage to reflect current street
             updated.stage = street === 'flop' ? 'flop' : street === 'turn' ? 'turn' : 'river';
             // Clear activePlayer to prevent UI from offering actions

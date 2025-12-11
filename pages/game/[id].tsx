@@ -74,6 +74,9 @@ const CombinedTimerStats = dynamic(() => import('../../src/components/CombinedTi
 
 // Rabbit Hunt Preview panel removed per user request
 
+// Constants for card parsing
+const SUIT_MAP: Record<string, string> = { h: 'hearts', d: 'diamonds', c: 'clubs', s: 'spades' };
+
 export default function GamePage() {
   const router = useRouter();
   const { id } = router.query;
@@ -896,7 +899,7 @@ export default function GamePage() {
         ? pokerGameState.communityCards.map((c: any) => {
             const suit = c?.suit;
             const rank = c?.rank;
-            if (!suit || !rank) return '';
+            if (!suit || !rank || suit.length === 0) return '';
             return `${rank}${suit[0]}`;
           }).filter(Boolean) 
         : [];
@@ -3061,8 +3064,7 @@ export default function GamePage() {
                                     // Parse card string like "Ah" or "10s"
                                     const rank = cardStr.slice(0, -1);
                                     const suitLetter = cardStr.slice(-1);
-                                    const suitMap: Record<string, string> = { h: 'hearts', d: 'diamonds', c: 'clubs', s: 'spades' };
-                                    const suit = suitMap[suitLetter] || 'hearts';
+                                    const suit = SUIT_MAP[suitLetter] || 'hearts';
                                     
                                     return (
                                       <div key={`${cardStr}-${i}`} className="bg-white dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 text-xs p-1 w-8 h-12 flex flex-col items-center justify-center font-bold shadow">

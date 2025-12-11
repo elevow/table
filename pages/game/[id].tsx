@@ -11,6 +11,12 @@ import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
+interface RabbitHuntResult {
+  street: 'flop' | 'turn' | 'river';
+  revealedCards: string[];
+  remainingDeck: string[];
+}
+
 type RebuyPromptState = {
   baseChips: number;
   rebuysUsed: number;
@@ -444,7 +450,7 @@ export default function GamePage() {
   // Rabbit Hunt state
   const [rabbitHuntLoading, setRabbitHuntLoading] = useState(false);
   const [rabbitHuntError, setRabbitHuntError] = useState<string | null>(null);
-  const [rabbitHuntResult, setRabbitHuntResult] = useState<{ street: string; revealedCards: string[]; remainingDeck: string[] } | null>(null);
+  const [rabbitHuntResult, setRabbitHuntResult] = useState<RabbitHuntResult | null>(null);
   const [rabbitHuntCooldown, setRabbitHuntCooldown] = useState<string | null>(null);
   // Dealer's Choice: pending choice prompt from server
   const [awaitingDealerChoice, setAwaitingDealerChoice] = useState<null | { dealerId?: string; allowedVariants?: string[]; current?: string }>(null);
@@ -887,7 +893,12 @@ export default function GamePage() {
     try {
       // Get current community cards to pass to the API
       const communityCards = Array.isArray(pokerGameState?.communityCards) 
-        ? pokerGameState.communityCards.map((c: any) => `${c.rank}${c.suit[0]}`) 
+        ? pokerGameState.communityCards.map((c: any) => {
+            const suit = c?.suit;
+            const rank = c?.rank;
+            if (!suit || !rank) return '';
+            return `${rank}${suit[0]}`;
+          }).filter(Boolean) 
         : [];
       
       const queryParams = new URLSearchParams({
@@ -3054,7 +3065,7 @@ export default function GamePage() {
                                     const suit = suitMap[suitLetter] || 'hearts';
                                     
                                     return (
-                                      <div key={`${cardStr}-${i}`} className="bg-white dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center font-bold shadow">
+                                      <div key={`${cardStr}-${i}`} className="bg-white dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 text-xs p-1 w-8 h-12 flex flex-col items-center justify-center font-bold shadow">
                                         <div className={highContrastCards ? suitColorClass(suit) : 'text-black dark:text-gray-100'}>{rank}</div>
                                         <div className={suitColorClass(suit)}>
                                           {suit === 'hearts' ? '♥' : suit === 'diamonds' ? '♦' : suit === 'clubs' ? '♣' : '♠'}

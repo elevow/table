@@ -441,6 +441,11 @@ export default function GamePage() {
   const autoNextHandScheduledRef = useRef<boolean>(false);
   // Visual accessibility options
   const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
+  // Rabbit Hunt state
+  const [rabbitHuntLoading, setRabbitHuntLoading] = useState(false);
+  const [rabbitHuntError, setRabbitHuntError] = useState<string | null>(null);
+  const [rabbitHuntResult, setRabbitHuntResult] = useState<{ street: string; revealedCards: string[]; remainingDeck: string[] } | null>(null);
+  const [rabbitHuntCooldown, setRabbitHuntCooldown] = useState<string | null>(null);
   // Dealer's Choice: pending choice prompt from server
   const [awaitingDealerChoice, setAwaitingDealerChoice] = useState<null | { dealerId?: string; allowedVariants?: string[]; current?: string }>(null);
   const [selectedVariantDC, setSelectedVariantDC] = useState<string>('texas-holdem');
@@ -613,6 +618,16 @@ export default function GamePage() {
       autoNextHandScheduledRef.current = false;
     };
   }, [pokerGameState?.stage, id, playerId]);
+
+  // Reset rabbit hunt state when a new hand starts or when leaving showdown
+  useEffect(() => {
+    const stage = pokerGameState?.stage;
+    if (stage !== 'showdown') {
+      setRabbitHuntResult(null);
+      setRabbitHuntError(null);
+      setRabbitHuntCooldown(null);
+    }
+  }, [pokerGameState?.stage]);
   
   // Periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {
@@ -861,6 +876,53 @@ export default function GamePage() {
 
   const handleFold = useCallback(() => handlePokerAction('fold'), [handlePokerAction]);
   const handleCheck = useCallback(() => handlePokerAction('check'), [handlePokerAction]);
+
+  // Rabbit Hunt: Initiate preview to see cards that would have come
+  const handleRabbitHunt = useCallback(async (street: 'flop' | 'turn' | 'river') => {
+    if (!id || typeof id !== 'string' || !playerId) return;
+    
+    setRabbitHuntLoading(true);
+    setRabbitHuntError(null);
+    
+    try {
+      // Get current community cards to pass to the API
+      const communityCards = Array.isArray(pokerGameState?.communityCards) 
+        ? pokerGameState.communityCards.map((c: any) => `${c.rank}${c.suit[0]}`) 
+        : [];
+      
+      const queryParams = new URLSearchParams({
+        roomId: id,
+        street,
+        userId: playerId,
+        communityCards: communityCards.join(',')
+      });
+      
+      const response = await fetch(`/api/rabbit-hunt/preview?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'x-user-id': playerId
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        if (response.status === 429 || data?.error?.includes('cooldown')) {
+          setRabbitHuntCooldown(data?.error || 'Feature on cooldown');
+        }
+        throw new Error(data?.error || `Request failed (${response.status})`);
+      }
+      
+      setRabbitHuntResult(data);
+      setRabbitHuntCooldown(null);
+    } catch (err: any) {
+      setRabbitHuntError(err?.message || 'Failed to preview cards');
+      console.error('Rabbit hunt error:', err);
+    } finally {
+      setRabbitHuntLoading(false);
+    }
+  }, [id, playerId, pokerGameState?.communityCards]);
   const handleCall = useCallback(() => {
     if (pokerGameState?.currentBet) {
       const playerInGame = pokerGameState.players.find((p: any) => p.id === playerId);
@@ -2916,10 +2978,98 @@ export default function GamePage() {
                 // Win-by-fold: only one active player remains
                 if (remaining.length === 1) {
                   const only = remaining[0];
+                  const currentCommunityCards = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
+                  const communityCount = currentCommunityCards.length;
+                  
+                  // Determine which streets can be revealed
+                  const canShowFlop = communityCount < 3;
+                  const canShowTurn = communityCount < 4;
+                  const canShowRiver = communityCount < 5;
+                  const canRabbitHunt = canShowFlop || canShowTurn || canShowRiver;
+                  
                   return (
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">{only?.name || 'Winner'}</span>
-                      <span>wins the pot</span>
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="font-semibold">{only?.name || 'Winner'}</span>
+                        <span>wins the pot</span>
+                      </div>
+                      
+                      {canRabbitHunt && (
+                        <div className="border-t border-emerald-200 dark:border-emerald-800 pt-3">
+                          <div className="text-sm font-medium mb-2">Rabbit Hunt - See what would have come:</div>
+                          <div className="flex flex-wrap gap-2">
+                            {canShowFlop && (
+                              <button
+                                onClick={() => handleRabbitHunt('flop')}
+                                disabled={rabbitHuntLoading}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {rabbitHuntLoading ? '...' : 'Show Flop'}
+                              </button>
+                            )}
+                            {canShowTurn && (
+                              <button
+                                onClick={() => handleRabbitHunt('turn')}
+                                disabled={rabbitHuntLoading}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {rabbitHuntLoading ? '...' : 'Show Turn'}
+                              </button>
+                            )}
+                            {canShowRiver && (
+                              <button
+                                onClick={() => handleRabbitHunt('river')}
+                                disabled={rabbitHuntLoading}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {rabbitHuntLoading ? '...' : 'Show River'}
+                              </button>
+                            )}
+                          </div>
+                          
+                          {rabbitHuntError && (
+                            <div className="mt-2 text-sm text-red-600 dark:text-red-400">
+                              {rabbitHuntError}
+                            </div>
+                          )}
+                          
+                          {rabbitHuntCooldown && (
+                            <div className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+                              {rabbitHuntCooldown}
+                            </div>
+                          )}
+                          
+                          {rabbitHuntResult && (
+                            <div className="mt-3 bg-white dark:bg-gray-800 border border-emerald-200 dark:border-emerald-700 rounded p-3">
+                              <div className="text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">
+                                Revealed {rabbitHuntResult.street.charAt(0).toUpperCase() + rabbitHuntResult.street.slice(1)} Cards:
+                              </div>
+                              {rabbitHuntResult.revealedCards.length > 0 ? (
+                                <div className="flex gap-2">
+                                  {rabbitHuntResult.revealedCards.map((cardStr: string, i: number) => {
+                                    // Parse card string like "Ah" or "10s"
+                                    const rank = cardStr.slice(0, -1);
+                                    const suitLetter = cardStr.slice(-1);
+                                    const suitMap: Record<string, string> = { h: 'hearts', d: 'diamonds', c: 'clubs', s: 'spades' };
+                                    const suit = suitMap[suitLetter] || 'hearts';
+                                    
+                                    return (
+                                      <div key={`${cardStr}-${i}`} className="bg-white dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center font-bold shadow">
+                                        <div className={highContrastCards ? suitColorClass(suit) : 'text-black dark:text-gray-100'}>{rank}</div>
+                                        <div className={suitColorClass(suit)}>
+                                          {suit === 'hearts' ? '♥' : suit === 'diamonds' ? '♦' : suit === 'clubs' ? '♣' : '♠'}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="text-sm text-gray-600 dark:text-gray-400">No new cards to reveal</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 }

@@ -6,19 +6,13 @@
    - Install Node.js v18+ from [nodejs.org](https://nodejs.org/)
    - This will also install npm (Node Package Manager)
 
-2. Development Tools
-   ```bash
-   # Install TypeScript globally
-   npm install -g typescript
+2. Docker Desktop (for local database)
+   - Install Docker Desktop from [docker.com](https://www.docker.com/products/docker-desktop/)
+   - Required for running PostgreSQL locally via Docker Compose
 
-   # Install development database
-   npm install -g supabase
-   ```
-
-3. Redis (for feature state management)
-   - Windows: Download from [Redis for Windows](https://github.com/microsoftarchive/redis/releases)
-   - Mac: `brew install redis`
-   - Linux: `sudo apt-get install redis-server`
+3. (Optional) Supabase account
+   - Create a free account at [supabase.com](https://supabase.com/) if you want to use hosted Supabase
+   - Or use local PostgreSQL via Docker (recommended for development)
 
 ## Project Setup
 
@@ -33,161 +27,372 @@
    ```
 
 2. Environment Configuration
-   Create a `.env.local` file in the project root:
+   Create a `.env.local` file in the project root. You have two options:
+
+   **Option A: Mock Database (simplest, no Docker required)**
+   ```env
+   # Forces internal DB helpers to use an in-memory mock
+   USE_MOCK_DB=true
+   ```
+
+   **Option B: Local PostgreSQL (recommended for full development)**
+   ```env
+   # PostgreSQL (used by pg.Pool)
+   PGHOST=localhost
+   PGPORT=5432
+   PGDATABASE=table
+   PGUSER=postgres
+   PGPASSWORD=postgres
+   PGSSLMODE=disable
+
+   # Alternative variable names
+   DB_HOST=localhost
+   DB_PORT=5432
+   DB_NAME=table
+   DB_USER=postgres
+   DB_PASSWORD=postgres
+   DB_SSL=false
+
+   # Pool/Direct database URLs
+   POOL_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/table
+   DIRECT_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/table
+   ```
+
+   **Option C: Hosted Supabase**
    ```env
    # Supabase Configuration
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-   # Redis Configuration
-   REDIS_URL=redis://localhost:6379
-
-   # WebSocket Configuration
-   SOCKET_SERVER_URL=http://localhost:3001
+   # Database URLs from Supabase dashboard
+   POOL_DATABASE_URL=your_supabase_pool_url
+   DIRECT_DATABASE_URL=your_supabase_direct_url
    ```
 
-3. Start Development Services
+3. Start Local Database (if using Option B)
    ```bash
-   # Start Redis server
-   redis-server
+   # Start PostgreSQL and pgAdmin via Docker Compose
+   npm run db:up
 
-   # In a new terminal, start the development server
+   # Or manually:
+   docker compose up -d
+
+   # The database will be available at localhost:5432
+   # pgAdmin UI at http://localhost:5050 (admin@local.test / admin)
+   ```
+
+4. Initialize Database Schema (if using Option B or C)
+   ```bash
+   # Apply migrations using the migration script
+   npm run db:migrate
+
+   # Or manually apply SQL files from:
+   # - src/lib/database/schema/full-schema.sql (core tables)
+   # - src/lib/database/schema/user-management.sql (RLS policies)
+   # - src/lib/database/schema/game-access.sql (access control)
+   ```
+
+5. Start Development Server
+   ```bash
    npm run dev
    ```
+
+   The application will be available at http://localhost:3000
 
 ## Core Components Setup
 
 ### 1. Database Setup
+
+The project uses PostgreSQL with Supabase Realtime for game state synchronization. Choose one of these approaches:
+
+**Local PostgreSQL via Docker (recommended for development)**
 ```bash
-# Initialize Supabase project
-supabase init
+# Start the database
+npm run db:up
 
-# Start Supabase local development
-supabase start
+# Apply schema migrations
+npm run db:migrate
 
-# Apply database migrations
-supabase db reset
+# Access pgAdmin at http://localhost:5050
+# - Email: admin@local.test
+# - Password: admin
+# - Connect to server: host=db, port=5432, user=postgres, password=postgres
 ```
 
-### 2. Game Engine Components
-The following npm packages will be installed automatically via package.json:
-```json
-{
-  "dependencies": {
-    "next": "^13.0.0",
-    "socket.io": "^4.0.0",
-    "socket.io-client": "^4.0.0",
-    "@supabase/supabase-js": "^2.0.0",
-    "ioredis": "^5.0.0",
-    "typescript": "^4.9.0",
-    "@types/node": "^18.0.0",
-    "@types/react": "^18.0.0",
-    "pokersolver": "^2.1.4"
-  },
-  "devDependencies": {
-    "jest": "^29.0.0",
-    "@testing-library/react": "^13.0.0",
-    "@types/jest": "^29.0.0",
-    "ts-jest": "^29.0.0"
-  }
-}
+**Hosted Supabase**
+```bash
+# No local database needed - configure Supabase URLs in .env.local
+# Schema can be applied via Supabase SQL Editor:
+# 1. Copy SQL from src/lib/database/schema/full-schema.sql
+# 2. Execute in Supabase SQL Editor
+# 3. Apply RLS policies from user-management.sql and game-access.sql
 ```
 
-## Core Engine Implementation Order
+### 2. Application Dependencies
 
-Follow these user stories in sequence:
+The following npm packages are installed automatically via `npm install`:
 
-1. Basic Game Flow (US-001)
-   - Implement game state management
-   - Set up state transitions
-   - Create basic card dealing logic
+**Core Dependencies:**
+- `next` (^13.0.0) - React framework
+- `react` (^18.2.0) - UI library
+- `typescript` (^4.9.0) - Type safety
+- `@supabase/supabase-js` (^2.0.0) - Supabase client with Realtime support
+- `pokersolver` (^2.1.4) - Poker hand evaluation
+- `tailwindcss` (^3.0.0) - CSS framework
 
-2. Real-time Updates (US-002)
-   - Configure Socket.io
-   - Implement state broadcasting
-   - Set up reconnection handling
+**Database & Backend:**
+- `pg` - PostgreSQL client (dev dependency for migrations)
+- `ioredis` (^5.0.0) - Redis client (optional, for caching)
 
-3. Action Processing (US-003)
-   - Implement action validation
-   - Create pot management
-   - Set up action broadcasting
+**Testing:**
+- `jest` (^29.7.0) - Test framework
+- `@testing-library/react` (^13.0.0) - React testing utilities
+- `ts-jest` (^29.4.1) - TypeScript support for Jest
 
-4. Timer Management (US-004)
-   - Implement countdown system
-   - Set up time bank
-   - Configure auto-actions
+### 3. Real-time Communication
 
-5. Hand Evaluation (US-005)
-   - Implement poker hand evaluation
-   - Set up winner determination
-   - Configure pot distribution
+The application uses **Supabase Realtime** (not Socket.io) for real-time game updates:
+- Game state changes broadcast via Supabase channels
+- Seat management and player actions synchronized in real-time
+- Chat messages delivered through Supabase Realtime
+- No separate WebSocket server required
 
-6. State Recovery (US-006)
-   - Implement state preservation
-   - Set up action replay
-   - Configure reconnection logic
+## Development Workflow
 
-7. Performance Optimization (US-007, US-008)
-   - Set up monitoring
-   - Implement caching
-   - Configure load balancing
+### Feature Implementation
+
+The application is built following modular user stories documented in `docs/user_stories/`. Key implementation areas:
+
+1. **Game Engine** (`src/lib/poker/`)
+   - Game state management
+   - Hand evaluation using pokersolver
+   - Action validation and processing
+   - Pot distribution logic
+
+2. **Real-time Layer** (Supabase Realtime)
+   - State broadcasting via channels
+   - Seat synchronization
+   - Chat messaging
+   - Reconnection handling
+
+3. **Data Layer** (`src/lib/database/`)
+   - PostgreSQL schema and migrations
+   - Hand history and player statistics
+   - User management and authentication
+   - Game rooms and session management
+
+4. **API Routes** (`pages/api/`)
+   - Game actions (bet, fold, call, etc.)
+   - Room management
+   - User profile and avatar management
+   - Chat and social features
 
 ## Testing
 
 ```bash
-# Run unit tests
+# Run all tests
 npm test
 
 # Run tests in watch mode
 npm test -- --watch
 
-# Run with coverage
-npm test -- --coverage
+# Run with coverage report
+npm run test:coverage
+
+# Run specific test pattern
+npm test -- "pattern" --no-coverage
+
+# Examples:
+npm test -- "poker" --no-coverage          # Run poker-related tests
+npm test -- "action-manager" --no-coverage # Run action manager tests
 ```
+
+**Note:** The project enforces global coverage thresholds. Running individual test files may fail coverage checks. Use `--no-coverage` flag when running test subsets.
+
+### Test Structure
+- Tests are located in `src/**/__tests__/` directories
+- Jest configuration in `jest.config.js`
+- Ad-hoc test files in root (test-*.js) are gitignored
+- Uses `@testing-library/react` for component testing
+- Mocks for Supabase and pg modules in test setup
 
 ## Common Issues and Solutions
 
-1. Redis Connection Issues
-   ```bash
-   # Check if Redis is running
-   redis-cli ping
-   # Should return PONG
-   ```
+### 1. Database Connection Issues
 
-2. Supabase Connection Issues
-   ```bash
-   # Check Supabase status
-   supabase status
-   ```
+**PostgreSQL connection refused**
+```bash
+# Check if Docker containers are running
+docker ps
 
-3. WebSocket Issues
-   - Ensure ports 3000 (Next.js) and 3001 (Socket.io) are available
-   - Check firewall settings
+# Start the database if not running
+npm run db:up
+
+# Check database health
+docker exec table-postgres pg_isready -U postgres
+```
+
+**SSL/TLS errors with Supabase or managed PostgreSQL**
+```env
+# For managed providers requiring SSL
+PGSSLMODE=require
+
+# For local development
+PGSSLMODE=disable
+```
+
+### 2. Migration Issues
+
+**Schema not applied**
+```bash
+# Reset database and reapply migrations
+npm run db:reset
+
+# Or manually:
+docker compose down -v
+docker compose up -d
+npm run db:migrate
+```
+
+### 3. Supabase Realtime Issues
+
+**Connection problems**
+- Verify `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`
+- Check Supabase dashboard for Realtime service status
+- Ensure Realtime is enabled for your Supabase project
+- Check browser console for connection errors
+
+### 4. Test Failures
+
+**Coverage threshold errors**
+```bash
+# Run full test suite (required for coverage checks)
+npm test
+
+# Or disable coverage for individual test runs
+npm test -- "your-pattern" --no-coverage
+```
+
+**Mock/import errors**
+- Ensure mocks are defined before imports in test files
+- Check `jest.config.js` for module mocks
+- See repository memories for common mock patterns
+
+### 5. Environment Variables
+
+**Missing or incorrect variables**
+```bash
+# Check which variables are loaded
+node -e "require('dotenv').config({path: '.env.local'}); console.log(process.env)"
+
+# Ensure .env.local exists and is not .gitignored
+ls -la .env.local
+```
 
 ## Development Tools
 
-Recommended VS Code extensions:
-- ESLint
-- Prettier
-- TypeScript + Webpack Problem Matchers
-- Jest Runner
-- Redis
-- REST Client
+### Recommended VS Code Extensions
+- **ESLint** - Code linting
+- **Prettier** - Code formatting
+- **TypeScript and JavaScript Language Features** - Enhanced TS support
+- **Jest Runner** - Run tests from editor
+- **Tailwind CSS IntelliSense** - Tailwind class completion
+- **PostgreSQL** - Database management
+- **Docker** - Container management
+
+### Useful Commands
+
+```bash
+# Database management
+npm run db:up          # Start PostgreSQL and pgAdmin
+npm run db:down        # Stop containers
+npm run db:migrate     # Run migrations
+npm run db:reset       # Reset database and reapply migrations
+
+# Development
+npm run dev            # Start development server
+npm run build          # Build for production
+npm run start          # Start production server
+npm run lint           # Run ESLint
+
+# Testing
+npm test               # Run all tests
+npm run test:watch     # Run tests in watch mode
+npm run test:coverage  # Run with coverage report
+```
+
+### Directory Structure
+
+```
+table/
+├── pages/              # Next.js pages and API routes
+├── src/
+│   ├── components/     # React components
+│   ├── contexts/       # React contexts (Theme, etc.)
+│   ├── hooks/          # Custom React hooks
+│   ├── lib/
+│   │   ├── poker/      # Poker game engine
+│   │   ├── database/   # Database migrations and helpers
+│   │   ├── server/     # Server-side utilities
+│   │   └── utils/      # Shared utilities
+├── public/             # Static assets
+├── styles/             # Global styles and Tailwind
+├── docs/               # Documentation and user stories
+├── docker/             # Docker configuration
+│   └── init/           # Database initialization SQL
+└── scripts/            # Build and migration scripts
+```
 
 ## Debugging
 
-1. Client-side debugging:
-   - Use Chrome DevTools
-   - Enable source maps in tsconfig.json
-   - Use React DevTools for component debugging
+### Client-side Debugging
+- Use Chrome DevTools or browser developer tools
+- React DevTools extension for component inspection
+- Source maps enabled in `tsconfig.json` for TypeScript debugging
+- Console logging in development mode
 
-2. Server-side debugging:
-   - Use VS Code debugger
-   - Configure launch.json for Next.js
-   - Use debug logs
+### Server-side Debugging
+- Use VS Code debugger with Node.js
+- Configure `launch.json` for Next.js debugging
+- Use `console.log` or `debug` package for logging
+- Check server logs in terminal running `npm run dev`
 
-3. WebSocket debugging:
-   - Use Socket.io Admin UI
-   - Monitor Redis pub/sub
-   - Track connection states
+### Database Debugging
+- Use pgAdmin at http://localhost:5050 for query testing
+- Connect with any PostgreSQL client (DBeaver, TablePlus, etc.)
+- Check Docker logs: `docker logs table-postgres`
+- Run SQL directly: `docker exec -it table-postgres psql -U postgres -d table`
+
+### Supabase Realtime Debugging
+- Monitor Realtime connections in Supabase dashboard
+- Check browser console for channel subscription status
+- Enable Supabase debug mode in client configuration
+- Track message flow in Network tab (WebSocket frames)
+
+### Test Debugging
+- Run tests with `--verbose` flag for detailed output
+- Use `console.log` in test files
+- Run single test file: `npm test -- path/to/test.test.ts`
+- Use VS Code Jest Runner for breakpoint debugging
+
+## Additional Resources
+
+- **Project Documentation:** `docs/` directory
+  - `TECHNICAL_ARCHITECTURE.md` - System architecture overview
+  - `API_DOCUMENTATION.md` - API endpoint documentation
+  - `GAME_MECHANICS.md` - Poker game rules and logic
+  - `LOCAL_DB.md` - Local database setup details
+  - `user_stories/` - Feature specifications
+
+- **Database Schema:** `src/lib/database/schema/`
+  - `full-schema.sql` - Complete database schema
+  - `user-management.sql` - User authentication and RLS
+  - `game-access.sql` - Game access control policies
+
+- **External Resources:**
+  - [Next.js Documentation](https://nextjs.org/docs)
+  - [Supabase Documentation](https://supabase.com/docs)
+  - [Supabase Realtime](https://supabase.com/docs/guides/realtime)
+  - [PostgreSQL Documentation](https://www.postgresql.org/docs/)
+  - [Tailwind CSS](https://tailwindcss.com/docs)

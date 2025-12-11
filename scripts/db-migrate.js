@@ -2,7 +2,7 @@
 /*
   Simple migration runner for local Postgres (and compatible with Supabase URLs).
   Applies SQL files in order:
-    1) docker/init/*.sql (sorted)
+    1) Application schema files from src/lib/database/schema/ (with dependency ordering)
     2) migration-manual.sql (if present)
     3) scripts/*.sql (sorted)
 */

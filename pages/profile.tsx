@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useUserAvatar } from '../src/hooks/useUserAvatar';
 import Avatar from '../src/components/Avatar';
+import { useTheme } from '../src/contexts/ThemeContext';
 
 const Profile: NextPage = () => {
   const router = useRouter();
@@ -11,6 +12,7 @@ const Profile: NextPage = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const { theme, toggleTheme } = useTheme();
   
   // User authentication state
   const [userId, setUserId] = useState<string>('');
@@ -308,8 +310,16 @@ const Profile: NextPage = () => {
                     <span className="text-gray-900 dark:text-gray-100">Privacy Settings</span>
                   </button>
                   
-                  <button className="w-full text-left px-4 py-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                    <span className="text-gray-900 dark:text-gray-100">Theme Settings</span>
+                  <button 
+                    onClick={toggleTheme}
+                    className="w-full text-left px-4 py-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-900 dark:text-gray-100">Theme Settings</span>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        {theme === 'dark' ? '🌙 Dark Mode' : '☀️ Light Mode'}
+                      </span>
+                    </div>
                   </button>
                 </div>
               </div>

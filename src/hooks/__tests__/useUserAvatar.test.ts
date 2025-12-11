@@ -163,7 +163,7 @@ describe('useUserAvatar', () => {
         json: async () => mockAvatarData
       });
 
-      const { result } = renderHook(() => useUserAvatar('me'));
+      renderHook(() => useUserAvatar('me'));
       
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -213,7 +213,7 @@ describe('useUserAvatar', () => {
         json: async () => mockAvatarData
       });
 
-      const { result } = renderHook(() => useUserAvatar(mockUserId));
+      renderHook(() => useUserAvatar(mockUserId));
       
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -221,6 +221,29 @@ describe('useUserAvatar', () => {
 
       expect(mockFetch).toHaveBeenCalledWith('/api/avatars/user/user-123', {
         headers: { Authorization: 'Bearer test-token-123' }
+      });
+    });
+
+    it('should include authorization header for alias "me" when auth token is available', async () => {
+      localStorageMock.getItem.mockImplementation((key: string) => {
+        if (key === 'auth_token') return 'test-token-456';
+        return null;
+      });
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => mockAvatarData
+      });
+
+      renderHook(() => useUserAvatar('me'));
+      
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/avatars/user/me', {
+        headers: { Authorization: 'Bearer test-token-456' }
       });
     });
 
@@ -313,7 +336,11 @@ describe('useUserAvatar', () => {
   describe('refreshAvatar', () => {
     it('should clear localStorage and fetch fresh data', async () => {
       // Setup initial state with cached data
-      localStorageMock.getItem.mockReturnValueOnce(JSON.stringify(mockAvatarData));
+      localStorageMock.getItem.mockImplementation((key: string) => {
+        if (key === 'auth_token') return null;
+        if (key === 'user_avatar_data_user-123') return JSON.stringify(mockAvatarData);
+        return null;
+      });
       
       const updatedAvatarData = { ...mockAvatarData, status: 'updated' };
       

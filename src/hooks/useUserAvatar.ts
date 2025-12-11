@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 
 interface AvatarData {
   id: string;
@@ -14,6 +14,11 @@ export function useUserAvatar(userId: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isAlias = userId === 'me' || userId === 'current-user';
+
+  // Memoize auth token retrieval to avoid redundant checks on each render
+  const authToken = useMemo(() => {
+    return typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  }, []);
 
   const loadFromStorage = useCallback(() => {
     if (isAlias) return false; // don't cache alias-based requests
@@ -52,7 +57,6 @@ export function useUserAvatar(userId: string) {
     
     try {
       // Include auth token if available, especially for alias-based requests like 'me'
-      const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
       const headers: HeadersInit = authToken ? { Authorization: `Bearer ${authToken}` } : {};
       
       const response = await fetch(`/api/avatars/user/${userId}`, { headers });
@@ -82,7 +86,7 @@ export function useUserAvatar(userId: string) {
     } finally {
       setLoading(false);
     }
-  }, [userId, loadFromStorage, saveToStorage]);
+  }, [userId, loadFromStorage, saveToStorage, authToken]);
 
   const updateAvatarData = useCallback((data: AvatarData) => {
     setAvatarData(data);

@@ -1080,6 +1080,35 @@ export default function GamePage() {
     return { min: Number(min.toFixed(2)), max: Number(max.toFixed(2)) };
   }, [pokerGameState, getMe]);
 
+  // Helper to render pot odds display
+  const renderPotOdds = useCallback(() => {
+    if (!showPotOdds || !pokerGameState || (pokerGameState.currentBet || 0) === 0) {
+      return null;
+    }
+    
+    const me = getMe();
+    const myCurrentBet = Number(me?.currentBet || 0);
+    const betToCall = Number(pokerGameState.currentBet || 0) - myCurrentBet;
+    const potSize = Number(pokerGameState.pot || 0);
+    
+    if (betToCall <= 0) {
+      return null;
+    }
+    
+    const potOddsDisplay = formatPotOdds(potSize, betToCall);
+    if (!potOddsDisplay) {
+      return null;
+    }
+    
+    return (
+      <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+        <div className="text-sm text-gray-700 dark:text-gray-300">
+          <span className="font-semibold text-gray-900 dark:text-gray-100">Pot Odds:</span> {potOddsDisplay}
+        </div>
+      </div>
+    );
+  }, [showPotOdds, pokerGameState, getMe]);
+
   // Pot-Limit helpers
   const getPotLimitPlayersShape = useCallback(() => {
     const arr = Array.isArray(pokerGameState?.players) ? pokerGameState.players : [];
@@ -2403,26 +2432,7 @@ export default function GamePage() {
                 ) : null;
               })()}
               {/* Pot Odds Display */}
-              {showPotOdds && (pokerGameState.currentBet || 0) > 0 && (() => {
-                const me = getMe();
-                const myCurrentBet = Number(me?.currentBet || 0);
-                const betToCall = Number(pokerGameState.currentBet || 0) - myCurrentBet;
-                const potSize = Number(pokerGameState.pot || 0);
-                
-                if (betToCall > 0) {
-                  const potOddsDisplay = formatPotOdds(potSize, betToCall);
-                  if (potOddsDisplay) {
-                    return (
-                      <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
-                        <div className="text-sm text-gray-700 dark:text-gray-300">
-                          <span className="font-semibold text-gray-900 dark:text-gray-100">Pot Odds:</span> {potOddsDisplay}
-                        </div>
-                      </div>
-                    );
-                  }
-                }
-                return null;
-              })()}
+              {renderPotOdds()}
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={handleFold}

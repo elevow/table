@@ -8,6 +8,8 @@ import { useUserAvatar } from '../../src/hooks/useUserAvatar';
 import Avatar from '../../src/components/Avatar';
 import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
 import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
+import { OutsCalculator } from '../../src/lib/poker/outs-calculator';
+import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
@@ -2979,6 +2981,78 @@ export default function GamePage() {
               })()}
             </div>
           )}
+
+          {/* Outs Display: Show outs and odds when there's an all-in scenario before showdown */}
+          {gameStarted && pokerGameState && anyAllIn() && pokerGameState.stage !== 'showdown' && (() => {
+            try {
+              const activePlayers = getActiveNonFoldedPlayers();
+              // Only show outs when we have 2 or more active players, at least one all-in, and community cards
+              if (activePlayers.length < 2 || !Array.isArray(pokerGameState.communityCards) || pokerGameState.communityCards.length === 0) {
+                return null;
+              }
+
+              // Find the best and worst hands among active players
+              const variant = pokerGameState?.variant as string | undefined;
+              const board = pokerGameState.communityCards;
+              
+              type PlayerEval = { playerId: string; name: string; hand: any; holeCards: any[] };
+              const evals: PlayerEval[] = activePlayers.map((p: any) => {
+                let hand;
+                if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+                  const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
+                  const down = Array.isArray(st?.downCards) ? st.downCards : [];
+                  const up = Array.isArray(st?.upCards) ? st.upCards : [];
+                  hand = HandEvaluator.evaluateHand([...down, ...up], []);
+                } else if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+                  hand = HandEvaluator.evaluateOmahaHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
+                } else {
+                  hand = HandEvaluator.evaluateHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
+                }
+                return { playerId: p.id, name: p.name || p.id, hand: hand.hand, holeCards: p.holeCards || [] };
+              });
+
+              // Sort by hand strength (best first)
+              evals.sort((a, b) => HandEvaluator.compareHands(b.hand, a.hand));
+              
+              // Get best and worst (for outs calculation, compare worst vs best)
+              if (evals.length >= 2) {
+                const best = evals[0];
+                const worst = evals[evals.length - 1];
+                
+                // Only calculate outs if there's actually a difference (worst is losing)
+                const comparison = HandEvaluator.compareHands(worst.hand, best.hand);
+                if (comparison < 0) {
+                  const outsResult = OutsCalculator.calculateOuts(
+                    worst.holeCards,
+                    best.holeCards,
+                    board,
+                    variant as any
+                  );
+
+                  if (outsResult.outs.length > 0) {
+                    return (
+                      <div className="lg:col-span-2">
+                        <OutsDisplay
+                          outs={outsResult.outs}
+                          oddsNextCard={outsResult.oddsNextCard}
+                          oddsByRiver={outsResult.oddsByRiver}
+                          outsByCategory={outsResult.outsByCategory}
+                          losingPlayerName={worst.name}
+                          winningPlayerName={best.name}
+                        />
+                      </div>
+                    );
+                  }
+                }
+              }
+
+              return null;
+            } catch (err) {
+              // Silent fail - outs display is supplementary
+              console.error('Error calculating outs:', err);
+              return null;
+            }
+          })()}
 
           {/* Combined Timer and Statistics */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">

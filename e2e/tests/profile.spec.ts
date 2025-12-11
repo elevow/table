@@ -44,23 +44,27 @@ test.describe('Profile Page Smoke Tests', () => {
   test('should have theme toggle functionality', async ({ page }) => {
     await page.goto('/profile');
     
-    // Look for theme toggle
-    const themeToggle = page.locator('text=/theme|dark mode|light mode/i, button[aria-label*="theme" i]').first();
+    // Look for theme toggle - using separate locators to avoid syntax issues
+    const themeToggleByText = page.locator('text=/theme|dark mode|light mode/i').first();
+    const themeToggleByAria = page.locator('button[aria-label*="theme"]').first();
     
-    if (await themeToggle.isVisible()) {
+    const textVisible = await themeToggleByText.isVisible().catch(() => false);
+    const ariaVisible = await themeToggleByAria.isVisible().catch(() => false);
+    
+    if (textVisible || ariaVisible) {
+      const themeToggle = textVisible ? themeToggleByText : themeToggleByAria;
       await expect(themeToggle).toBeEnabled();
       
       // Try toggling theme
-      const initialBodyClass = await page.locator('body').getAttribute('class');
       await themeToggle.click();
       
       // Wait a bit for theme to apply
       await page.waitForTimeout(500);
       
-      const newBodyClass = await page.locator('body').getAttribute('class');
-      
-      // Classes might have changed (dark/light theme)
       // Just verify the page didn't crash
+      await expect(page.locator('body')).toBeVisible();
+    } else {
+      // No theme toggle found - page should still be functional
       await expect(page.locator('body')).toBeVisible();
     }
   });
@@ -78,11 +82,21 @@ test.describe('Profile Page Smoke Tests', () => {
   test('should have navigation back to dashboard', async ({ page }) => {
     await page.goto('/profile');
     
-    // Look for back/dashboard link
-    const dashboardLink = page.locator('a[href*="dashboard"], button:has-text("Dashboard"), text=/back|home/i').first();
+    // Look for back/dashboard link - try each locator separately
+    const dashboardLinkByHref = page.locator('a[href*="dashboard"]').first();
+    const dashboardLinkByText = page.locator('button:has-text("Dashboard")').first();
+    const backLink = page.locator('text=/back|home/i').first();
     
-    if (await dashboardLink.isVisible()) {
-      await expect(dashboardLink).toBeEnabled();
+    const hrefVisible = await dashboardLinkByHref.isVisible().catch(() => false);
+    const textVisible = await dashboardLinkByText.isVisible().catch(() => false);
+    const backVisible = await backLink.isVisible().catch(() => false);
+    
+    if (hrefVisible || textVisible || backVisible) {
+      const link = hrefVisible ? dashboardLinkByHref : (textVisible ? dashboardLinkByText : backLink);
+      await expect(link).toBeEnabled();
+    } else {
+      // No navigation found - page should still be functional
+      await expect(page.locator('body')).toBeVisible();
     }
   });
 

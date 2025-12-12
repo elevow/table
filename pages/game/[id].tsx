@@ -511,6 +511,9 @@ export default function GamePage() {
         if (typeof saved?.highContrastCards === 'boolean') {
           setHighContrastCards(!!saved.highContrastCards);
         }
+        if (typeof saved?.showPotOdds === 'boolean') {
+          setShowPotOdds(saved.showPotOdds);
+        }
       }
     } catch {}
   }, [id]);

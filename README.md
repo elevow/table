@@ -6,8 +6,8 @@ A Next.js + React + TypeScript poker application with real‑time play via Supab
 
 **Prerequisites**
 - Node.js 18+ and npm
-- (Optional) Docker Desktop for local PostgreSQL
-- (Optional) PostgreSQL 13+ if not using Docker
+- (Optional) PostgreSQL 13+ for local database development
+- (Optional) Supabase account for hosted database
 
 1) Install dependencies
 
@@ -57,19 +57,25 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 ```
 
-4) (Optional) Start local PostgreSQL with Docker Compose
+4) (Optional) Start local PostgreSQL
 
-If using local PostgreSQL, start the database:
+If using local PostgreSQL, install and start it:
 
 ```bash
-# Start PostgreSQL only
-npm run db:up
+# macOS
+brew install postgresql && brew services start postgresql
 
-# Or start all services (PostgreSQL + pgAdmin)
-docker compose up -d
+# Ubuntu
+sudo apt-get install postgresql && sudo systemctl start postgresql
+
+# Windows: Download from https://www.postgresql.org/download/
+
+# Create the database
+createdb table
+
+# Apply migrations
+npm run db:migrate
 ```
-
-The database will be available at localhost:5432. pgAdmin UI at http://localhost:5050 (login: admin@local.test / admin) is available only if you start all services with `docker compose up -d`.
 
 5) Start the app in development
 

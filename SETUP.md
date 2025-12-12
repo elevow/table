@@ -6,13 +6,10 @@
    - Install Node.js v18+ from [nodejs.org](https://nodejs.org/)
    - This will also install npm (Node Package Manager)
 
-2. Docker Desktop (for local database)
-   - Install Docker Desktop from [docker.com](https://www.docker.com/products/docker-desktop/)
-   - Required for running PostgreSQL locally via Docker Compose
-
-3. (Optional) Supabase account
-   - Create a free account at [supabase.com](https://supabase.com/) if you want to use hosted Supabase
-   - Or use local PostgreSQL via Docker (recommended for development)
+2. (Optional) PostgreSQL
+   - For local development, install PostgreSQL 13+ from [postgresql.org](https://www.postgresql.org/download/)
+   - Or use a managed PostgreSQL service (Supabase, AWS RDS, etc.)
+   - Or use mock database mode (no PostgreSQL required)
 
 ## Project Setup
 
@@ -27,15 +24,27 @@
    ```
 
 2. Environment Configuration
-   Create a `.env.local` file in the project root. You have two options:
+   Create a `.env.local` file in the project root. You have three options:
 
-   **Option A: Mock Database (simplest, no Docker required)**
+   **Option A: Mock Database (simplest, no PostgreSQL required)**
    ```env
    # Forces internal DB helpers to use an in-memory mock
    USE_MOCK_DB=true
    ```
 
-   **Option B: Local PostgreSQL (recommended for full development)**
+   **Option B: Local PostgreSQL**
+   
+   First, install and start PostgreSQL on your system:
+   - macOS: `brew install postgresql && brew services start postgresql`
+   - Ubuntu: `sudo apt-get install postgresql && sudo systemctl start postgresql`
+   - Windows: Download and install from [postgresql.org](https://www.postgresql.org/download/)
+   
+   Create a database:
+   ```bash
+   createdb table
+   ```
+   
+   Then configure your environment:
    ```env
    # PostgreSQL (used by pg.Pool)
    PGHOST=localhost
@@ -58,7 +67,9 @@
    DIRECT_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/table
    ```
 
-   **Option C: Hosted Supabase**
+   **Option C: Supabase (recommended for production-like development)**
+   
+   Create a Supabase project at [supabase.com](https://supabase.com/), then configure:
    ```env
    # Supabase Configuration
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
@@ -70,19 +81,7 @@
    DIRECT_DATABASE_URL=your_supabase_direct_url
    ```
 
-3. Start Local Database (if using Option B)
-   ```bash
-   # Start PostgreSQL via Docker Compose
-   npm run db:up
-
-   # Or manually start all services (PostgreSQL + pgAdmin):
-   docker compose up -d
-
-   # The database will be available at localhost:5432
-   # pgAdmin UI at http://localhost:5050 (admin@local.test / admin) - only if started with full docker compose
-   ```
-
-4. Initialize Database Schema (if using Option B or C)
+3. Initialize Database Schema (if using Option B or C)
    ```bash
    # Apply migrations using the migration script
    npm run db:migrate
@@ -93,7 +92,7 @@
    # - src/lib/database/schema/game-access.sql (access control)
    ```
 
-5. Start Development Server
+4. Start Development Server
    ```bash
    npm run dev
    ```
@@ -106,28 +105,32 @@
 
 The project uses PostgreSQL with Supabase Realtime for game state synchronization. Choose one of these approaches:
 
-**Local PostgreSQL via Docker (recommended for development)**
+**Local PostgreSQL**
+
+Install PostgreSQL on your system:
+- macOS: `brew install postgresql && brew services start postgresql`
+- Ubuntu: `sudo apt-get install postgresql && sudo systemctl start postgresql`
+- Windows: Download from [postgresql.org](https://www.postgresql.org/download/)
+
+Create the database and apply migrations:
 ```bash
-# Start the database
-npm run db:up
+# Create the database
+createdb table
 
 # Apply schema migrations
 npm run db:migrate
-
-# Access pgAdmin at http://localhost:5050
-# - Email: admin@local.test
-# - Password: admin
-# - Connect to server: host=db, port=5432, user=postgres, password=postgres
-#   (IMPORTANT: Use "db" as the host—this is the Docker service name. "localhost" or "127.0.0.1" will NOT work from within the pgAdmin container.)
 ```
 
-**Hosted Supabase**
+**Supabase (recommended)**
 ```bash
 # No local database needed - configure Supabase URLs in .env.local
 # Schema can be applied via Supabase SQL Editor:
 # 1. Copy SQL from src/lib/database/schema/full-schema.sql
 # 2. Execute in Supabase SQL Editor
 # 3. Apply RLS policies from user-management.sql and game-access.sql
+
+# Or use the migration script
+npm run db:migrate
 ```
 
 ### 2. Application Dependencies
@@ -226,14 +229,19 @@ npm test -- "action-manager" --no-coverage # Run action manager tests
 
 **PostgreSQL connection refused**
 ```bash
-# Check if Docker containers are running
-docker ps
+# Check if PostgreSQL is running
+# macOS with Homebrew:
+brew services list | grep postgresql
 
-# Start the database if not running
-npm run db:up
+# Ubuntu:
+sudo systemctl status postgresql
 
-# Check database health
-docker exec table-postgres pg_isready -U postgres
+# Start PostgreSQL if not running:
+# macOS: brew services start postgresql
+# Ubuntu: sudo systemctl start postgresql
+
+# Test connection
+psql -U postgres -d table -c "SELECT version();"
 ```
 
 **SSL/TLS errors with Supabase or managed PostgreSQL**
@@ -249,12 +257,12 @@ PGSSLMODE=disable
 
 **Schema not applied**
 ```bash
-# Reset database and reapply migrations
-npm run db:reset
+# Reapply migrations
+npm run db:migrate
 
-# Or manually:
-docker compose down -v
-docker compose up -d
+# Or manually drop and recreate database:
+dropdb table
+createdb table
 npm run db:migrate
 ```
 
@@ -302,16 +310,12 @@ ls -la .env.local
 - **Jest Runner** - Run tests from editor
 - **Tailwind CSS IntelliSense** - Tailwind class completion
 - **PostgreSQL** - Database management
-- **Docker** - Container management
 
 ### Useful Commands
 
 ```bash
 # Database management
-npm run db:up          # Start PostgreSQL (use 'docker compose up -d' for PostgreSQL + pgAdmin)
-npm run db:down        # Stop containers
 npm run db:migrate     # Run migrations
-npm run db:reset       # Reset database and reapply migrations
 
 # Development
 npm run dev            # Start development server
@@ -342,8 +346,6 @@ table/
 ├── public/             # Static assets
 ├── styles/             # Global styles and Tailwind
 ├── docs/               # Documentation and user stories
-├── docker/             # Docker configuration
-│   └── init/           # Database initialization SQL
 └── scripts/            # Build and migration scripts
 ```
 
@@ -362,10 +364,10 @@ table/
 - Check server logs in terminal running `npm run dev`
 
 ### Database Debugging
-- Use pgAdmin at http://localhost:5050 for query testing
-- Connect with any PostgreSQL client (DBeaver, TablePlus, etc.)
-- Check Docker logs: `docker logs table-postgres`
-- Run SQL directly: `docker exec -it table-postgres psql -U postgres -d table`
+- Connect with any PostgreSQL client (psql, DBeaver, TablePlus, pgAdmin, etc.)
+- Run SQL directly: `psql -U postgres -d table`
+- Check PostgreSQL logs for connection errors
+- For Supabase: use SQL Editor in Supabase dashboard
 
 ### Supabase Realtime Debugging
 - Monitor Realtime connections in Supabase dashboard

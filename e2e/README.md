@@ -235,25 +235,76 @@ The tests are configured to run in CI environments. When `CI=true`:
 - Tests run sequentially (1 worker) for stability
 - Test reports and artifacts are generated
 
-### GitHub Actions Example:
+### Automated Testing in CI
+
+The Playwright tests are integrated into the GitHub Actions CI workflow and run automatically on:
+- Every push to any branch
+- Every pull request
+
+**CI Workflow Configuration:**
+The tests run in a separate `e2e-tests` job that:
+1. Runs after the main `build` job succeeds
+2. Installs Playwright browsers with dependencies
+3. Creates `.env.local` with mock database settings
+4. Executes all 49 smoke tests
+5. Uploads test reports and results as artifacts (available for 30 days)
+
+**Viewing Test Results:**
+When tests run in CI, you can:
+- View test results in the Actions tab of the GitHub repository
+- Download the `playwright-report` artifact to see the HTML report
+- Download the `test-results` artifact to see screenshots/videos of failures
+
+### GitHub Actions Configuration
+
+The complete CI workflow is in `.github/workflows/ci.yml`:
+
 ```yaml
-- name: Install dependencies
-  run: npm ci
+e2e-tests:
+  runs-on: ubuntu-latest
+  needs: build
 
-- name: Install Playwright browsers
-  run: npx playwright install --with-deps chromium
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-- name: Run Playwright tests
-  run: npm run test:e2e
-  env:
-    CI: true
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
 
-- name: Upload test results
-  if: always()
-  uses: actions/upload-artifact@v3
-  with:
-    name: playwright-report
-    path: playwright-report/
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium
+
+    - name: Create .env.local for tests
+      run: |
+        echo "USE_MOCK_DB=true" > .env.local
+        echo "NEXT_PUBLIC_SHOW_DB_HEALTH=false" >> .env.local
+
+    - name: Run Playwright tests
+      run: npm run test:e2e
+      env:
+        CI: true
+
+    - name: Upload Playwright report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: test-results/
+        retention-days: 30
 ```
 
 ## Troubleshooting

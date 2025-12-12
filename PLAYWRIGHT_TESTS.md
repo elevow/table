@@ -118,7 +118,7 @@ npx playwright show-report
 
 - **Base URL:** http://localhost:3000
 - **Browser:** Chromium (Desktop Chrome)
-- **Test Timeout:** 60 seconds per test
+- **Test Timeout:** 30 seconds per test
 - **Retries:** 2 on CI, 0 locally
 - **Automatic Dev Server:** Yes (starts before tests)
 

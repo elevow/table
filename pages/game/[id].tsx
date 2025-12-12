@@ -1105,25 +1105,31 @@ export default function GamePage() {
     const betToCall = currentBet - myCurrentBet;
     const potSize = Number(pokerGameState.pot || 0);
     
-    // Debug logging to help diagnose issues
-    console.log('[Pot Odds Debug]', {
-      playerId,
-      currentBet,
-      myCurrentBet,
-      betToCall,
-      potSize,
-      showPotOdds
-    });
+    // Debug logging in development to help diagnose issues
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Pot Odds Debug]', {
+        playerId,
+        currentBet,
+        myCurrentBet,
+        betToCall,
+        potSize,
+        showPotOdds
+      });
+    }
     
     // Double-check betToCall is positive (shouldn't happen given above check, but defensive)
     if (betToCall <= 0) {
-      console.log('[Pot Odds] No bet to call (betToCall <= 0)');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Pot Odds] No bet to call (betToCall <= 0)');
+      }
       return null;
     }
     
     const potOddsDisplay = formatPotOdds(potSize, betToCall);
     if (!potOddsDisplay) {
-      console.log('[Pot Odds] formatPotOdds returned null');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Pot Odds] formatPotOdds returned null');
+      }
       return null;
     }
     

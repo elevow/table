@@ -56,10 +56,13 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
           return merged;
         });
       } else {
-        // No saved settings, notify parent with default settings
-        if (typeof onSettingsChangeRef.current === 'function') {
-          onSettingsChangeRef.current(settings);
-        }
+        // No saved settings, notify parent with current default settings
+        setSettings(prev => {
+          if (typeof onSettingsChangeRef.current === 'function') {
+            onSettingsChangeRef.current(prev);
+          }
+          return prev;
+        });
       }
     } catch {}
   }, [gameId]);

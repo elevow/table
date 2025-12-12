@@ -77,7 +77,7 @@ The test configuration is defined in `playwright.config.ts` at the project root.
 
 - **Base URL**: `http://localhost:3000` (configurable via `PLAYWRIGHT_BASE_URL` env var)
 - **Browser**: Chromium (Desktop Chrome)
-- **Test timeout**: 30 seconds per test
+- **Test timeout**: 60 seconds per test (explicitly set in `playwright.config.ts`)
 - **Retries**: 2 on CI, 0 locally
 - **Screenshots**: Captured on test failure
 - **Videos**: Retained on test failure

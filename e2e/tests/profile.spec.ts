@@ -58,9 +58,6 @@ test.describe('Profile Page Smoke Tests', () => {
       // Try toggling theme
       await themeToggle.click();
       
-      // Wait a bit for theme to apply
-      await page.waitForTimeout(500);
-      
       // Just verify the page didn't crash
       await expect(page.locator('body')).toBeVisible();
     } else {
@@ -71,9 +68,6 @@ test.describe('Profile Page Smoke Tests', () => {
 
   test('should display user information', async ({ page }) => {
     await page.goto('/profile');
-    
-    // Look for user info sections
-    const hasUserInfo = await page.locator('text=/username|email|account/i').first().isVisible().catch(() => false);
     
     // Page should have loaded even if not authenticated
     await expect(page.locator('body')).toBeVisible();
@@ -103,9 +97,6 @@ test.describe('Profile Page Smoke Tests', () => {
   test('should have account settings section', async ({ page }) => {
     await page.goto('/profile');
     
-    // Look for settings
-    const settingsSection = page.locator('text=/settings|preferences|account/i').first();
-    
     // Settings might be on a different page
     // Just verify profile page loaded
     await expect(page.locator('body')).toBeVisible();
@@ -120,7 +111,6 @@ test.describe('Profile Page Smoke Tests', () => {
     if (await avatar.isVisible()) {
       // Click should not crash the page
       await avatar.click();
-      await page.waitForTimeout(500);
       
       // Page should still be functional
       await expect(page.locator('body')).toBeVisible();
@@ -130,9 +120,6 @@ test.describe('Profile Page Smoke Tests', () => {
   test('should display profile page without authentication errors', async ({ page }) => {
     // Test that page handles unauthenticated state gracefully
     await page.goto('/profile');
-    
-    // Should not show uncaught errors
-    const hasError = await page.locator('text=/error.*occurred|something went wrong/i').first().isVisible().catch(() => false);
     
     // Page should load (might redirect or show login prompt)
     await expect(page.locator('body')).toBeVisible();

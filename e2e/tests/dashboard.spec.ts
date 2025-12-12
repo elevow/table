@@ -27,9 +27,6 @@ test.describe('Dashboard Smoke Tests', () => {
   test('should display user avatar if authenticated', async ({ page }) => {
     await page.goto('/dashboard');
     
-    // Look for avatar or user profile element
-    const avatar = page.locator('[data-testid="avatar"], img[alt*="avatar" i], img[alt*="profile" i]').first();
-    
     // Avatar might not be visible if not authenticated, so we just check if the page loaded
     // This is optional based on authentication state
     const pageTitle = await page.textContent('body');
@@ -56,7 +53,7 @@ test.describe('Dashboard Smoke Tests', () => {
         // Try clicking and check for validation message
         await submitButton.click();
         const hasError = await page.locator('text=/enter.*code|required|invalid/i').first().isVisible().catch(() => false);
-        expect(hasError || true).toBeTruthy();
+        expect(hasError).toBe(true);
       }
     }
   });
@@ -64,11 +61,8 @@ test.describe('Dashboard Smoke Tests', () => {
   test('should have navigation elements', async ({ page }) => {
     await page.goto('/dashboard');
     
-    // Look for common navigation elements
-    const hasNavigation = await page.locator('nav, header, [role="navigation"]').first().isVisible().catch(() => false);
-    
     // Should have some form of navigation or header
-    expect(hasNavigation || true).toBeTruthy();
+    await expect(page.locator('body')).toBeVisible();
   });
 
   test('should have link to profile page', async ({ page }) => {
@@ -85,9 +79,6 @@ test.describe('Dashboard Smoke Tests', () => {
   test('should have admin panel if user has admin role', async ({ page }) => {
     await page.goto('/dashboard');
     
-    // Admin panel might not be visible for all users
-    const adminPanel = page.locator('text=/admin|manage rooms/i').first();
-    
     // This is optional - only visible for admins
     // Just verify page doesn't crash
     const bodyVisible = await page.locator('body').isVisible();
@@ -96,9 +87,6 @@ test.describe('Dashboard Smoke Tests', () => {
 
   test('should display player stats component', async ({ page }) => {
     await page.goto('/dashboard');
-    
-    // Look for stats display
-    const statsComponent = page.locator('text=/stats|statistics|games played|win rate/i').first();
     
     // Stats might not be visible if user hasn't played
     // Just verify the dashboard loaded
@@ -137,9 +125,6 @@ test.describe('Dashboard Smoke Tests', () => {
       
       const submitButton = page.locator('button[type="submit"]').first();
       await submitButton.click();
-      
-      // Should show error message, not crash
-      await page.waitForTimeout(1000);
       
       // Page should still be functional
       await expect(page.locator('body')).toBeVisible();

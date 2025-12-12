@@ -27,11 +27,8 @@ test.describe('Game Creation Smoke Tests', () => {
   test('should have game configuration options', async ({ page }) => {
     await page.goto('/game/create');
     
-    // Look for common poker game settings
-    const hasSettings = await page.locator('text=/blind|buy-in|stack|seats|players/i').first().isVisible().catch(() => false);
-    
     // Should have some configuration options
-    expect(hasSettings || true).toBeTruthy();
+    await expect(page.locator('body')).toBeVisible();
   });
 
   test('should have input fields for game settings', async ({ page }) => {
@@ -51,11 +48,6 @@ test.describe('Game Creation Smoke Tests', () => {
     // Look for submit button - may be disabled initially
     const createButton = page.locator('button[type="submit"], button:has-text("Create"), button:has-text("Start")').first();
     await expect(createButton).toBeVisible({ timeout: 10000 });
-    
-    // Button might be disabled if required fields are empty - this is okay
-    const isDisabled = await createButton.isDisabled();
-    // Just verify the button exists
-    expect(isDisabled !== undefined).toBe(true);
   });
 
   test('should validate required fields', async ({ page }) => {
@@ -75,7 +67,6 @@ test.describe('Game Creation Smoke Tests', () => {
       } else {
         // Try clicking and verify page stays functional
         await submitButton.click();
-        await page.waitForTimeout(1000);
         await expect(page.locator('body')).toBeVisible();
       }
     } else {
@@ -107,9 +98,6 @@ test.describe('Game Creation Smoke Tests', () => {
 
   test('should display game variant options if available', async ({ page }) => {
     await page.goto('/game/create');
-    
-    // Look for game variant selection
-    const variantSelector = page.locator('text=/variant|hold.*em|omaha|tournament/i').first();
     
     // Variant options might be present
     // Just verify the page loaded correctly

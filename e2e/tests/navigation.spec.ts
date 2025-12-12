@@ -28,7 +28,7 @@ test.describe('Application Navigation Smoke Tests', () => {
   });
 
   test('should handle 404 page gracefully', async ({ page }) => {
-    const response = await page.goto('/this-page-does-not-exist-12345');
+    await page.goto('/this-page-does-not-exist-12345');
     
     // Should show 404 or redirect
     // Either way, shouldn't crash
@@ -43,7 +43,7 @@ test.describe('Application Navigation Smoke Tests', () => {
     });
     
     await page.goto('/');
-    await page.waitForTimeout(2000);
+    await expect(page.locator('body')).toBeVisible();
     
     // Should have no JavaScript errors on page load
     expect(errors.length).toBe(0);
@@ -123,10 +123,10 @@ test.describe('Application Navigation Smoke Tests', () => {
     
     // Visit main pages
     await page.goto('/');
-    await page.waitForTimeout(1000);
+    await expect(page.locator('body')).toBeVisible();
     
     await page.goto('/dashboard');
-    await page.waitForTimeout(1000);
+    await expect(page.locator('body')).toBeVisible();
     
     // Some console errors might be expected (auth, network)
     // But page should still function

@@ -4,9 +4,10 @@ A Next.js + React + TypeScript poker application with real‑time play via Supab
 
 ## Quick start
 
-Prerequisites
+**Prerequisites**
 - Node.js 18+ and npm
-- (Optional for local dev) PostgreSQL 13+ if you want to hit DB‑backed API routes
+- (Optional) PostgreSQL 13+ for local database development
+- (Optional) Supabase account for hosted database
 
 1) Install dependencies
 
@@ -29,28 +30,62 @@ Real PostgreSQL (used by API routes that call pg.Pool directly):
 # Standard pg variables (preferred by pg.Pool)
 PGHOST=localhost
 PGPORT=5432
-PGDATABASE=app
+PGDATABASE=table
 PGUSER=postgres
-PGPASSWORD=your_password
+PGPASSWORD=postgres
 # Use "require" for managed providers that require SSL
 PGSSLMODE=disable
 
 # Optional alternative variable names used by some internal helpers
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=app
+DB_NAME=table
 DB_USER=postgres
-DB_PASSWORD=your_password
+DB_PASSWORD=postgres
 DB_SSL=false
+
+# Pool/Direct database URLs
+POOL_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/table
+DIRECT_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/table
 ```
 
-3) Start the app in development
+Supabase (for Realtime features):
+```
+# Get these from your Supabase project dashboard
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+```
+
+4) (Optional) Start local PostgreSQL
+
+If using local PostgreSQL, install and start it:
+
+```bash
+# macOS
+brew install postgresql && brew services start postgresql
+
+# Ubuntu
+sudo apt-get install postgresql && sudo systemctl start postgresql
+
+# Windows: Download from https://www.postgresql.org/download/
+
+# Create the database
+createdb table
+
+# Apply migrations
+npm run db:migrate
+```
+
+5) Start the app in development
 
 ```bash
 npm run dev
 ```
 
 Open http://localhost:3000 in your browser.
+
+**For detailed setup instructions, see [SETUP.md](./SETUP.md)**
 
 ## Running tests
 

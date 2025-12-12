@@ -2,7 +2,7 @@
 /*
   Simple migration runner for local Postgres (and compatible with Supabase URLs).
   Applies SQL files in order:
-    1) docker/init/*.sql (sorted)
+    1) Application schema files from src/lib/database/schema/ (with dependency ordering)
     2) migration-manual.sql (if present)
     3) scripts/*.sql (sorted)
 */
@@ -54,7 +54,6 @@ function collectSqlFiles() {
         .forEach(f => files.push(path.join(abs, f)));
     } catch { /* ignore */ }
   };
-  addFrom('docker/init');
   // Include application schema files with dependency-aware ordering
   try {
     const schemaDir = path.join(process.cwd(), 'src/lib/database/schema');
@@ -92,7 +91,7 @@ async function run() {
   try {
     const files = collectSqlFiles();
     if (files.length === 0) {
-      console.log('[migrate] No SQL files found in docker/init, migration-manual.sql, or scripts/*.sql');
+      console.log('[migrate] No SQL files found in src/lib/database/schema/, migration-manual.sql, or scripts/*.sql');
       return;
     }
     console.log(`[migrate] Applying ${files.length} SQL file(s):`);

@@ -4,3 +4,7 @@ node_modules
 .next
 coverage
 tsconfig.tsbuildinfo
+
+# Ignore ad-hoc test files in root directory
+test-*.js
+test-*.ts

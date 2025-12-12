@@ -91,7 +91,7 @@ async function run() {
   try {
     const files = collectSqlFiles();
     if (files.length === 0) {
-      console.log('[migrate] No SQL files found in migration-manual.sql or scripts/*.sql');
+      console.log('[migrate] No SQL files found in src/lib/database/schema/, migration-manual.sql, or scripts/*.sql');
       return;
     }
     console.log(`[migrate] Applying ${files.length} SQL file(s):`);

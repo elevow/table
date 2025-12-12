@@ -4,19 +4,13 @@
 
 ### Development Environment
 1. Local Setup
-   ```yaml
-   # docker-compose.dev.yml
-   services:
-     app:
-       build: 
-         context: .
-         target: development
-       volumes:
-         - .:/app
-       environment:
-         NODE_ENV: development
-         DATABASE_URL: postgres://user:pass@db:5432/poker
-         REDIS_URL: redis://cache:6379
+   ```bash
+   # .env.local
+   NODE_ENV=development
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
+   POOL_DATABASE_URL=your_database_url
+   SOCKET_SERVER_URL=ws://localhost:3001
    ```
 
 2. Development Tools

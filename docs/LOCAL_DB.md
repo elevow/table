@@ -1,36 +1,69 @@
-Local Postgres + pgAdmin
-=========================
+Local Database Development
+===========================
 
-This project can run with a local Postgres (via Docker) instead of Supabase for development.
+This project uses Supabase as the primary database solution for both development and production.
 
-1) Start services
+## Development Setup
 
-   - Requires Docker Desktop
+### Using Supabase (Recommended)
 
-   - From the repo root:
+1) Set up your Supabase project at https://supabase.com
 
-     - docker compose up -d
+2) Configure your environment variables in `.env.local`:
 
-   Services:
-   - Postgres 15 on localhost:5432 (db: table, user: postgres, pass: postgres)
-   - pgAdmin at http://localhost:5050 (email: admin@local.test, password: admin)
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+   POOL_DATABASE_URL=your_supabase_connection_string
+   DIRECT_DATABASE_URL=your_supabase_direct_connection_string
+   ```
 
-2) Environment
+3) Apply database migrations:
 
-   .env.local is already wired for local:
+   ```bash
+   npm run db:migrate
+   ```
 
-   - POOL_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/table
-   - DIRECT_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/table
+### Using Local PostgreSQL (Alternative)
 
-   The pool builder disables SSL in non-production so no extra flags are needed.
+If you prefer to run a local PostgreSQL instance without Supabase:
 
-3) Initialize schema
+1) Install PostgreSQL on your system
+   - macOS: `brew install postgresql`
+   - Ubuntu: `sudo apt-get install postgresql`
+   - Windows: Download from https://www.postgresql.org/download/
 
-   - Place SQL files under docker/init/*.sql to auto-run at first container start.
-   - Or run migrations manually using your preferred tool.
+2) Create a database:
 
-4) pgAdmin
+   ```bash
+   createdb table
+   ```
 
-   - Login at http://localhost:5050
-   - Add a new server: Host name: db, Port: 5432, Username: postgres, Password: postgres
-   - You can also connect to localhost from your SQL client.
+3) Configure your environment variables in `.env.local`:
+
+   ```
+   LOCAL_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/table
+   POOL_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/table
+   DIRECT_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/table
+   ```
+
+4) Apply database migrations:
+
+   ```bash
+   npm run db:migrate
+   ```
+
+## Database Migrations
+
+The `db:migrate` script will automatically apply:
+- Application schema files from `src/lib/database/schema/`
+- Manual migrations from `migration-manual.sql` (if present)
+- Additional SQL files from `scripts/*.sql`
+
+## Connection Management
+
+The application uses connection pooling in production and can run with or without SSL:
+- Production: SSL is enabled by default
+- Development: SSL is disabled by default for easier local development
+- Override: Set `DB_FORCE_SSL=true` to force SSL in any environment

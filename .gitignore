@@ -9,3 +9,6 @@ tsconfig.tsbuildinfo
 test-results/
 playwright-report/
 playwright/.cache/
+# Ignore ad-hoc test files in root directory
+test-*.js
+test-*.ts

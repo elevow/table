@@ -1091,22 +1091,39 @@ export default function GamePage() {
     }
     
     // Early return if no current bet - player can check/bet rather than call
-    if ((pokerGameState.currentBet || 0) === 0) {
+    const currentBet = pokerGameState.currentBet || 0;
+    if (currentBet === 0) {
       return null;
     }
     
     const me = getMe();
+    if (!me) {
+      return null;
+    }
+    
     const myCurrentBet = Number(me?.currentBet || 0);
-    const betToCall = Number(pokerGameState.currentBet || 0) - myCurrentBet;
+    const betToCall = currentBet - myCurrentBet;
     const potSize = Number(pokerGameState.pot || 0);
+    
+    // Debug logging to help diagnose issues
+    console.log('[Pot Odds Debug]', {
+      playerId,
+      currentBet,
+      myCurrentBet,
+      betToCall,
+      potSize,
+      showPotOdds
+    });
     
     // Double-check betToCall is positive (shouldn't happen given above check, but defensive)
     if (betToCall <= 0) {
+      console.log('[Pot Odds] No bet to call (betToCall <= 0)');
       return null;
     }
     
     const potOddsDisplay = formatPotOdds(potSize, betToCall);
     if (!potOddsDisplay) {
+      console.log('[Pot Odds] formatPotOdds returned null');
       return null;
     }
     
@@ -1117,7 +1134,7 @@ export default function GamePage() {
         </div>
       </div>
     );
-  }, [showPotOdds, pokerGameState, getMe]);
+  }, [showPotOdds, pokerGameState, getMe, playerId]);
 
   // Pot-Limit helpers
   const getPotLimitPlayersShape = useCallback(() => {

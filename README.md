@@ -62,14 +62,14 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 If using local PostgreSQL, start the database:
 
 ```bash
-# Start PostgreSQL and pgAdmin
+# Start PostgreSQL only
 npm run db:up
 
-# Or manually
+# Or start all services (PostgreSQL + pgAdmin)
 docker compose up -d
 ```
 
-The database will be available at localhost:5432, and pgAdmin UI at http://localhost:5050 (login: admin@local.test / admin).
+The database will be available at localhost:5432. pgAdmin UI at http://localhost:5050 (login: admin@local.test / admin) is available only if you start all services with `docker compose up -d`.
 
 5) Start the app in development
 

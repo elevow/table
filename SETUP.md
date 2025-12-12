@@ -72,14 +72,14 @@
 
 3. Start Local Database (if using Option B)
    ```bash
-   # Start PostgreSQL and pgAdmin via Docker Compose
+   # Start PostgreSQL via Docker Compose
    npm run db:up
 
-   # Or manually:
+   # Or manually start all services (PostgreSQL + pgAdmin):
    docker compose up -d
 
    # The database will be available at localhost:5432
-   # pgAdmin UI at http://localhost:5050 (admin@local.test / admin)
+   # pgAdmin UI at http://localhost:5050 (admin@local.test / admin) - only if started with full docker compose
    ```
 
 4. Initialize Database Schema (if using Option B or C)
@@ -118,6 +118,7 @@ npm run db:migrate
 # - Email: admin@local.test
 # - Password: admin
 # - Connect to server: host=db, port=5432, user=postgres, password=postgres
+#   (IMPORTANT: Use "db" as the host—this is the Docker service name. "localhost" or "127.0.0.1" will NOT work from within the pgAdmin container.)
 ```
 
 **Hosted Supabase**
@@ -143,7 +144,7 @@ The following npm packages are installed automatically via `npm install`:
 
 **Database & Backend:**
 - `pg` - PostgreSQL client (dev dependency for migrations)
-- `ioredis` (^5.0.0) - Redis client (optional, for caching)
+- `ioredis` (^5.0.0) - Redis client (legacy dependency; currently used in cache-manager utility for optional caching)
 
 **Testing:**
 - `jest` (^29.7.0) - Test framework
@@ -152,11 +153,13 @@ The following npm packages are installed automatically via `npm install`:
 
 ### 3. Real-time Communication
 
-The application uses **Supabase Realtime** (not Socket.io) for real-time game updates:
+The application uses **Supabase Realtime** for real-time game updates:
 - Game state changes broadcast via Supabase channels
 - Seat management and player actions synchronized in real-time
 - Chat messages delivered through Supabase Realtime
 - No separate WebSocket server required
+
+**Note:** Some legacy Socket.io patterns and references remain in the codebase (e.g., in test files and state management modules) for compatibility and transitional purposes. Developers may encounter Socket.io-related code, which is being phased out as the migration to Supabase Realtime completes.
 
 ## Development Workflow
 
@@ -305,7 +308,7 @@ ls -la .env.local
 
 ```bash
 # Database management
-npm run db:up          # Start PostgreSQL and pgAdmin
+npm run db:up          # Start PostgreSQL (use 'docker compose up -d' for PostgreSQL + pgAdmin)
 npm run db:down        # Stop containers
 npm run db:migrate     # Run migrations
 npm run db:reset       # Reset database and reapply migrations

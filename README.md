@@ -184,40 +184,7 @@ npx pm2 save
 6) Put a reverse proxy (Nginx/Apache) in front and forward HTTP(S) traffic to the Node process
 
 
-### Option B: Docker (example workflow)
-
-A simple approach if you create a Dockerfile:
-
-```dockerfile
-# Example only – create this file if you want containerized deploys
-FROM node:18-alpine AS deps
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-
-FROM node:18-alpine AS build
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN npm run build
-
-FROM node:18-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=build /app .
-EXPOSE 3000
-CMD ["npm", "run", "start"]
-```
-
-Run the container (set envs for Postgres and Supabase):
-```bash
-docker build -t table:latest .
-docker run -p 3000:3000 --env-file .env.production table:latest
-```
-
-Ensure your `.env.production` contains the Postgres and Supabase variables and any other secrets.
-
-### Option C: Vercel / Serverless
+### Option B: Vercel / Serverless
 
 - Import the repo into Vercel
 - Set environment variables in Project Settings

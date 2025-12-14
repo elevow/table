@@ -4,13 +4,24 @@
  */
 import { useEffect, useState, useRef, memo } from 'react';
 
+export interface GameSettings {
+  soundEnabled: boolean;
+  chatEnabled: boolean;
+  notificationsEnabled: boolean;
+  autoFoldEnabled: boolean;
+  rabbitHuntEnabled: boolean;
+  timeBank: number;
+  highContrastCards: boolean;
+  showPotOdds: boolean;
+}
+
 interface GameSettingsProps {
   gameId: string;
-  onSettingsChange?: (settings: any) => void;
+  onSettingsChange?: (settings: GameSettings) => void;
 }
 
 function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<GameSettings>({
     soundEnabled: true,
     chatEnabled: true,
     notificationsEnabled: true,
@@ -18,6 +29,7 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
     rabbitHuntEnabled: false,
     timeBank: 30,
     highContrastCards: false,
+    showPotOdds: true,
   });
 
   // Use a ref to store the callback to avoid re-triggering effects
@@ -43,8 +55,16 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
           }
           return merged;
         });
+      } else {
+        // No saved settings, notify parent with current default settings
+        // We intentionally use the initial settings value here, not a dependency
+        if (typeof onSettingsChangeRef.current === 'function') {
+          onSettingsChangeRef.current(settings);
+        }
       }
     } catch {}
+    // settings is intentionally not in dependencies - we want the initial value
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId]);
 
   // Persist settings when they change
@@ -127,6 +147,19 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
           </label>
           <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
             When enabled: Hearts = Red, Diamonds = Yellow, Spades = Black, Clubs = Blue.
+          </div>
+        </div>
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.showPotOdds}
+              onChange={(e) => handleSettingChange('showPotOdds', e.target.checked)}
+            />
+            Show Pot Odds
+          </label>
+          <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+            Display the ratio between the pot size and the bet you are facing.
           </div>
         </div>
         <div className="setting-item">

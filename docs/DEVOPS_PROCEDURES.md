@@ -7,7 +7,6 @@
    - Node.js (v22+)
    - Git
    - VS Code
-   - Docker (optional)
    - pnpm/npm
 
 2. Repository Setup

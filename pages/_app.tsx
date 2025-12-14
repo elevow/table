@@ -9,25 +9,16 @@ import Script from 'next/script';
 import { dynamicImport } from '../src/utils/code-splitting';
 // Service worker registration
 import { registerServiceWorker, isOffline } from '../src/utils/service-worker-registration';
+// Theme context
+import { ThemeProvider } from '../src/contexts/ThemeContext';
 
 function MyApp({ Component, pageProps }: AppProps) {
   const router = useRouter();
   const [isRouteChanging, setIsRouteChanging] = useState(false);
   const [loadingKey, setLoadingKey] = useState(0);
   const [offline, setOffline] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => 'dark');
   
   useEffect(() => {
-    // Theme bootstrap: prefer stored value; otherwise default to dark
-    try {
-      const stored = typeof window !== 'undefined' ? localStorage.getItem('theme') as 'light' | 'dark' | null : null;
-      const initial = stored ?? 'dark';
-      setTheme(initial);
-      if (typeof document !== 'undefined') {
-        document.documentElement.classList.toggle('dark', initial === 'dark');
-      }
-    } catch {}
-
     // Register service worker for caching and offline support
     registerServiceWorker();
     
@@ -96,18 +87,9 @@ function MyApp({ Component, pageProps }: AppProps) {
       clearTimeout(prefetchTimer);
     };
   }, [router]);
-
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    try { localStorage.setItem('theme', next); } catch {}
-    if (typeof document !== 'undefined') {
-      document.documentElement.classList.toggle('dark', next === 'dark');
-    }
-  };
   
   return (
-    <>
+    <ThemeProvider>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="description" content="Online poker game platform" />
@@ -125,17 +107,6 @@ function MyApp({ Component, pageProps }: AppProps) {
         strategy="lazyOnload"
   onLoad={() => { /* Analytics script loaded */ }}
       />
-      
-      {/* Theme toggle (simple) */}
-      <div className="fixed bottom-4 right-4 z-50">
-        <button
-          onClick={toggleTheme}
-          className="rounded px-3 py-2 text-sm bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600 shadow"
-          aria-label="Toggle theme"
-        >
-          {theme === 'dark' ? 'Dark' : 'Light'} mode
-        </button>
-      </div>
 
       {/* Offline indicator */}
       {offline && (
@@ -152,7 +123,7 @@ function MyApp({ Component, pageProps }: AppProps) {
       )}
       
       <Component {...pageProps} />
-    </>
+    </ThemeProvider>
   );
 }
 

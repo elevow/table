@@ -6,7 +6,7 @@ This guide deploys `server/socket-server.js` as a persistent service on Koyeb an
 - A Koyeb account and the GitHub repo connected (or ability to deploy from a public repo).
 - Repo: this project (`elevow/table`) contains the standalone server at `server/socket-server.js`.
 
-## Option A: Deploy using Koyeb Buildpacks (no Dockerfile)
+## Deploy using Koyeb Buildpacks
 1. In Koyeb, create a new App → Add Service.
 2. Source: GitHub → select this repository and the `main` branch.
 3. Build mode: Buildpacks (auto-detected Node.js).
@@ -23,14 +23,6 @@ This guide deploys `server/socket-server.js` as a persistent service on Koyeb an
 If Koyeb shows a Buildpacks error mentioning `heroku-postbuild` or `node socket-server.js` at repo root, ensure:
 - Your repository contains a `Procfile` with: `web: node server/socket-server.js` (already added).
 - Your `package.json` has no breaking `heroku-postbuild` step; this repo ships a no-op one to avoid this.
-
-## Option B: Deploy with Dockerfile (optional)
-If you prefer Docker:
-1. Create a new Service → Dockerfile build.
-2. Use this repo as source and point to the root Dockerfile (if you add one) or specify path.
-3. Ensure the image runs `node server/socket-server.js` and listens on `$PORT`.
-
-> Note: Buildpacks (Option A) are simpler and work well here; a Dockerfile is not required.
 
 ## Verify the service
 - Open `https://<your-service>.koyeb.app/health` → should return `{ ok: true }`.

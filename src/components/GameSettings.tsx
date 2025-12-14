@@ -18,9 +18,10 @@ export interface GameSettings {
 interface GameSettingsProps {
   gameId: string;
   onSettingsChange?: (settings: GameSettings) => void;
+  isAdmin?: boolean;
 }
 
-function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
+function GameSettings({ gameId, onSettingsChange, isAdmin = false }: GameSettingsProps) {
   const [settings, setSettings] = useState<GameSettings>({
     soundEnabled: true,
     chatEnabled: true,

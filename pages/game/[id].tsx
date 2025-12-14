@@ -1140,7 +1140,9 @@ export default function GamePage() {
         </div>
       </div>
     );
-  }, [showPotOdds, pokerGameState, getMe, playerId]);
+    // playerId is only used in development console.log, intentionally not in dependencies
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPotOdds, pokerGameState, getMe]);
 
   // Pot-Limit helpers
   const getPotLimitPlayersShape = useCallback(() => {

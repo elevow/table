@@ -57,14 +57,14 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
         });
       } else {
         // No saved settings, notify parent with current default settings
-        setSettings(prev => {
-          if (typeof onSettingsChangeRef.current === 'function') {
-            onSettingsChangeRef.current(prev);
-          }
-          return prev;
-        });
+        // We intentionally use the initial settings value here, not a dependency
+        if (typeof onSettingsChangeRef.current === 'function') {
+          onSettingsChangeRef.current(settings);
+        }
       }
     } catch {}
+    // settings is intentionally not in dependencies - we want the initial value
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId]);
 
   // Persist settings when they change

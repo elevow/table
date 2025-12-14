@@ -27,6 +27,11 @@ describe('Pot Odds Calculator', () => {
       expect(calculatePotOdds(100, 100)).toBe('1.0:1');
     });
 
+    it('should handle pot size of 0', () => {
+      // A pot size of 0 is allowed (e.g., first action preflop)
+      expect(calculatePotOdds(0, 50)).toBe('0.0:1');
+    });
+
     it('should return null for invalid inputs', () => {
       expect(calculatePotOdds(100, 0)).toBeNull();
       expect(calculatePotOdds(100, -10)).toBeNull();
@@ -53,6 +58,12 @@ describe('Pot Odds Calculator', () => {
       
       // 10 to call into 90 pot = 10/(90+10) = 10%
       expect(calculatePotOddsPercentage(90, 10)).toBe(10);
+    });
+
+    it('should handle pot size of 0', () => {
+      // 0 pot means you need 100% equity to break even
+      // 50 to call into 0 pot = 50/(0+50) = 100%
+      expect(calculatePotOddsPercentage(0, 50)).toBe(100);
     });
 
     it('should return null for invalid inputs', () => {

@@ -3057,7 +3057,8 @@ export default function GamePage() {
             try {
               const activePlayers = getActiveNonFoldedPlayers();
               // Only show outs when we have 2 or more active players, at least one all-in, and community cards
-              if (activePlayers.length < 2 || !Array.isArray(pokerGameState.communityCards) || pokerGameState.communityCards.length === 0) {
+              // Don't show outs at the river (5 cards) since the hand is over
+              if (activePlayers.length < 2 || !Array.isArray(pokerGameState.communityCards) || pokerGameState.communityCards.length === 0 || pokerGameState.communityCards.length >= 5) {
                 return null;
               }
 

@@ -3066,15 +3066,15 @@ export default function GamePage() {
               const variant = pokerGameState?.variant;
               const board = pokerGameState.communityCards;
               
+              // Early return: Don't show outs for stud variants, as outs calculation is not supported
+              if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+                return null;
+              }
+              
               type PlayerEval = { playerId: string; name: string; hand: HandInterface; holeCards: Card[] };
               const evals: PlayerEval[] = activePlayers.map((p: Player) => {
                 let hand;
-                if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
-                  const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
-                  const down = Array.isArray(st?.downCards) ? st.downCards : [];
-                  const up = Array.isArray(st?.upCards) ? st.upCards : [];
-                  hand = HandEvaluator.evaluateHand([...down, ...up], []);
-                } else if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+                if (variant === 'omaha' || variant === 'omaha-hi-lo') {
                   hand = HandEvaluator.evaluateOmahaHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
                 } else {
                   hand = HandEvaluator.evaluateHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
@@ -3086,6 +3086,8 @@ export default function GamePage() {
               evals.sort((a, b) => HandEvaluator.compareHands(b.hand, a.hand));
               
               // Get best and worst (for outs calculation, compare worst vs best)
+              // Note: In multi-way pots, outs are calculated against the current best hand only.
+              // An out might beat the best hand but still lose to a middle hand's potential improvement.
               if (evals.length >= 2) {
                 const best = evals[0];
                 const worst = evals[evals.length - 1];

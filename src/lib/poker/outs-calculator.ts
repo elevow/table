@@ -76,13 +76,6 @@ export class OutsCalculator {
     const allCards = this.getAllPossibleCards();
     const unknownCards = allCards.filter(card => !this.cardInList(card, knownCards));
 
-    // Evaluate the current winning hand
-    const evaluateWinningHand = isOmaha
-      ? () => HandEvaluator.evaluateOmahaHand(winningHoleCards, communityCards)
-      : () => HandEvaluator.evaluateHand(winningHoleCards, communityCards);
-    
-    const winningEval = evaluateWinningHand();
-
     // Test each unknown card to see if it improves the losing hand enough to win
     const outs: Card[] = [];
     const outsByCategory = new Map<string, Card[]>();

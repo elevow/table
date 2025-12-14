@@ -42,6 +42,26 @@ export const OutsDisplay: React.FC<OutsDisplayProps> = ({
     }
   };
 
+  // Helper to get suit name for aria-label
+  const getSuitName = (suit: Card['suit']) => {
+    switch (suit) {
+      case 'hearts': return 'Hearts';
+      case 'diamonds': return 'Diamonds';
+      case 'clubs': return 'Clubs';
+      case 'spades': return 'Spades';
+    }
+  };
+
+  // Helper to format card for aria-label
+  const getCardLabel = (card: Card) => {
+    const rankName = card.rank === 'A' ? 'Ace' :
+                     card.rank === 'K' ? 'King' :
+                     card.rank === 'Q' ? 'Queen' :
+                     card.rank === 'J' ? 'Jack' :
+                     card.rank;
+    return `${rankName} of ${getSuitName(card.suit)}`;
+  };
+
   if (outs.length === 0) {
     return null;
   }
@@ -101,6 +121,7 @@ export const OutsDisplay: React.FC<OutsDisplayProps> = ({
                   <div
                     key={cardIdx}
                     className="bg-white dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 text-xs p-1 w-8 h-11 flex flex-col items-center justify-center font-bold shadow-sm"
+                    aria-label={getCardLabel(card)}
                   >
                     <div className="text-gray-800 dark:text-gray-100">{card.rank}</div>
                     <div className={getSuitColorClass(card.suit)}>
@@ -125,6 +146,7 @@ export const OutsDisplay: React.FC<OutsDisplayProps> = ({
               <div
                 key={idx}
                 className="bg-white dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 text-xs p-1 w-8 h-11 flex flex-col items-center justify-center font-bold shadow-sm"
+                aria-label={getCardLabel(card)}
               >
                 <div className="text-gray-800 dark:text-gray-100">{card.rank}</div>
                 <div className={getSuitColorClass(card.suit)}>

@@ -13,6 +13,8 @@ import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 import { Card, Player, GameVariant } from '../../src/types/poker';
 import { HandInterface } from '../../src/types/poker-engine';
+import { formatPotOdds } from '../../src/lib/poker/pot-odds';
+import type { GameSettings as GameSettingsType } from '../../src/components/GameSettings';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -445,6 +447,7 @@ export default function GamePage() {
   const autoNextHandScheduledRef = useRef<boolean>(false);
   // Visual accessibility options
   const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
+  const [showPotOdds, setShowPotOdds] = useState<boolean>(true);
   // Dealer's Choice: pending choice prompt from server
   const [awaitingDealerChoice, setAwaitingDealerChoice] = useState<null | { dealerId?: string; allowedVariants?: string[]; current?: string }>(null);
   const [selectedVariantDC, setSelectedVariantDC] = useState<string>('texas-holdem');
@@ -511,6 +514,9 @@ export default function GamePage() {
         const saved = JSON.parse(raw);
         if (typeof saved?.highContrastCards === 'boolean') {
           setHighContrastCards(!!saved.highContrastCards);
+        }
+        if (typeof saved?.showPotOdds === 'boolean') {
+          setShowPotOdds(saved.showPotOdds);
         }
       }
     } catch {}
@@ -1081,6 +1087,66 @@ export default function GamePage() {
     const max = maxTotal;
     return { min: Number(min.toFixed(2)), max: Number(max.toFixed(2)) };
   }, [pokerGameState, getMe]);
+
+  // Helper to render pot odds display
+  const renderPotOdds = useCallback(() => {
+    if (!showPotOdds || !pokerGameState) {
+      return null;
+    }
+    
+    // Early return if no current bet - player can check/bet rather than call
+    const currentBet = pokerGameState.currentBet || 0;
+    if (currentBet === 0) {
+      return null;
+    }
+    
+    const me = getMe();
+    if (!me) {
+      return null;
+    }
+    
+    const myCurrentBet = Number(me?.currentBet || 0);
+    const betToCall = currentBet - myCurrentBet;
+    const potSize = Number(pokerGameState.pot || 0);
+    
+    // Debug logging in development to help diagnose issues
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Pot Odds Debug]', {
+        playerId,
+        currentBet,
+        myCurrentBet,
+        betToCall,
+        potSize,
+        showPotOdds
+      });
+    }
+    
+    // Double-check betToCall is positive (shouldn't happen given above check, but defensive)
+    if (betToCall <= 0) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Pot Odds] No bet to call (betToCall <= 0)');
+      }
+      return null;
+    }
+    
+    const potOddsDisplay = formatPotOdds(potSize, betToCall);
+    if (!potOddsDisplay) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Pot Odds] formatPotOdds returned null');
+      }
+      return null;
+    }
+    
+    return (
+      <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+        <div className="text-sm text-gray-700 dark:text-gray-300">
+          <span className="font-semibold text-gray-900 dark:text-gray-100">Pot Odds:</span> {potOddsDisplay}
+        </div>
+      </div>
+    );
+    // playerId is only used in development console.log, intentionally not in dependencies
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPotOdds, pokerGameState, getMe]);
 
   // Pot-Limit helpers
   const getPotLimitPlayersShape = useCallback(() => {
@@ -2404,6 +2470,8 @@ export default function GamePage() {
                   <div className="mb-3 text-sm text-gray-700 dark:text-gray-200">Your Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{summary.primary}</span></div>
                 ) : null;
               })()}
+              {/* Pot Odds Display */}
+              {renderPotOdds()}
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={handleFold}
@@ -3069,7 +3137,10 @@ export default function GamePage() {
             )}
             {showSettings && (
               <div className="mt-4">
-                <GameSettings gameId={String(id)} onSettingsChange={(s: any) => setHighContrastCards(!!s?.highContrastCards)} />
+                <GameSettings gameId={String(id)} onSettingsChange={(s: GameSettingsType) => {
+                  setHighContrastCards(!!s?.highContrastCards);
+                  setShowPotOdds(s?.showPotOdds ?? true);
+                }} />
               </div>
             )}
           </div>

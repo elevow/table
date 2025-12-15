@@ -8,7 +8,11 @@ import { useUserAvatar } from '../../src/hooks/useUserAvatar';
 import Avatar from '../../src/components/Avatar';
 import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
 import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
+import { OutsCalculator } from '../../src/lib/poker/outs-calculator';
+import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
+import { Card, Player, GameVariant } from '../../src/types/poker';
+import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import type { GameSettings as GameSettingsType } from '../../src/components/GameSettings';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
@@ -3210,6 +3214,81 @@ export default function GamePage() {
               })()}
             </div>
           )}
+
+          {/* Outs Display: Show outs and odds when there's an all-in scenario before showdown */}
+          {gameStarted && pokerGameState && anyAllIn() && pokerGameState.stage !== 'showdown' && (() => {
+            try {
+              const activePlayers = getActiveNonFoldedPlayers();
+              // Only show outs when we have 2 or more active players, at least one all-in, and community cards
+              // Don't show outs at the river (5 cards) since the hand is over
+              if (activePlayers.length < 2 || !Array.isArray(pokerGameState.communityCards) || pokerGameState.communityCards.length === 0 || pokerGameState.communityCards.length >= 5) {
+                return null;
+              }
+
+              // Find the best and worst hands among active players
+              const variant = pokerGameState?.variant;
+              const board = pokerGameState.communityCards;
+              
+              // Early return: Don't show outs for stud variants, as outs calculation is not supported
+              if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+                return null;
+              }
+              
+              type PlayerEval = { playerId: string; name: string; hand: HandInterface; holeCards: Card[] };
+              const evals: PlayerEval[] = activePlayers.map((p: Player) => {
+                let hand;
+                if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+                  hand = HandEvaluator.evaluateOmahaHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
+                } else {
+                  hand = HandEvaluator.evaluateHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
+                }
+                return { playerId: p.id, name: p.name || p.id, hand: hand.hand, holeCards: p.holeCards || [] };
+              });
+
+              // Sort by hand strength (best first)
+              evals.sort((a, b) => HandEvaluator.compareHands(b.hand, a.hand));
+              
+              // Get best and worst (for outs calculation, compare worst vs best)
+              // Note: In multi-way pots, outs are calculated against the current best hand only.
+              // An out might beat the best hand but still lose to a middle hand's potential improvement.
+              if (evals.length >= 2) {
+                const best = evals[0];
+                const worst = evals[evals.length - 1];
+                
+                // Only calculate outs if there's actually a difference (worst is losing)
+                const comparison = HandEvaluator.compareHands(worst.hand, best.hand);
+                if (comparison < 0) {
+                  const outsResult = OutsCalculator.calculateOuts(
+                    worst.holeCards,
+                    best.holeCards,
+                    board,
+                    variant as GameVariant | undefined
+                  );
+
+                  if (outsResult.outs.length > 0) {
+                    return (
+                      <div className="lg:col-span-2">
+                        <OutsDisplay
+                          outs={outsResult.outs}
+                          oddsNextCard={outsResult.oddsNextCard}
+                          oddsByRiver={outsResult.oddsByRiver}
+                          outsByCategory={outsResult.outsByCategory}
+                          losingPlayerName={worst.name}
+                          winningPlayerName={best.name}
+                        />
+                      </div>
+                    );
+                  }
+                }
+              }
+
+              return null;
+            } catch (err) {
+              // Silent fail - outs display is supplementary
+              console.error('Error calculating outs:', err);
+              return null;
+            }
+          })()}
 
           {/* Combined Timer and Statistics */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">

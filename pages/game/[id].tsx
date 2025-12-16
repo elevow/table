@@ -1968,10 +1968,10 @@ export default function GamePage() {
             // If server has no seats but localStorage does, prefer localStorage
             // This handles the case where server state was lost (e.g., serverless cold start)
             // Realtime broadcasts will keep things in sync going forward
-            if (!serverHasSeats && localHasSeats) {
+            if (!serverHasSeats && localHasSeats && localSeats) {
               console.log('Server returned empty seats but localStorage has data, using localStorage');
+              setSeatAssignments(localSeats);
               setSeatStateReady(true);
-              // Don't overwrite - let localStorage loading effect handle it
               return;
             }
             
@@ -1991,7 +1991,30 @@ export default function GamePage() {
               setCurrentPlayerSeat(null);
               persistSeatNumber(lastSeatStorageKey, null);
               setPlayerChips(0);
-              try { if (id) localStorage.removeItem(`chips_${playerId}_${id}`); } catch {}
+              try { 
+                if (id) {
+                  localStorage.removeItem(`chips_${playerId}_${id}`);
+                  if (lastSeatStorageKey) {
+                    localStorage.removeItem(lastSeatStorageKey);
+                  }
+                  // Remove player from seats_${id} if present
+                  const seatsKey = `seats_${id}`;
+                  const seatsRaw = localStorage.getItem(seatsKey);
+                  if (seatsRaw) {
+                    let seatsObj;
+                    try { seatsObj = JSON.parse(seatsRaw); } catch {}
+                    if (seatsObj && typeof seatsObj === 'object') {
+                      // Remove any seat assigned to this player
+                      for (const seat in seatsObj) {
+                        if (seatsObj[seat]?.playerId === playerId) {
+                          seatsObj[seat] = null;
+                        }
+                      }
+                      localStorage.setItem(seatsKey, JSON.stringify(seatsObj));
+                    }
+                  }
+                }
+              } catch {}
             }
           }
         }
@@ -2193,11 +2216,14 @@ export default function GamePage() {
         
         // Wait for server notification so other players see the seat vacated
         try {
-          await fetch('/api/games/seats/stand', {
+          const response = await fetch('/api/games/seats/stand', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tableId: id, seatNumber: seatToVacate, playerId })
           });
+          if (!response.ok) {
+            console.warn(`Failed to notify server of seat vacation: ${response.status} ${response.statusText}`);
+          }
         } catch (fetchErr) {
           console.warn('Failed to notify server of seat vacation:', fetchErr);
         }

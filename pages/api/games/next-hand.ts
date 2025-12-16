@@ -136,9 +136,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const currentState = typeof engine.getState === 'function' ? engine.getState() : undefined;
       const awaitingDealerChoiceStage = currentState?.stage === 'awaiting-dealer-choice';
       const showdownStage = currentState?.stage === 'showdown';
-      if (!currentState || (!awaitingDealerChoiceStage && !showdownStage)) {
+      
+      // Check if this is a freshly started hand (auto-started by rebuy-decision)
+      // If so, treat it as success rather than an error
+      const isFreshHand = currentState?.stage === 'preflop' && 
+                         Array.isArray(currentState.players) &&
+                         currentState.players.length >= 2 &&
+                         currentState.players.every((p: any) => !p.hasActed);
+      
+      if (!currentState || (!awaitingDealerChoiceStage && !showdownStage && !isFreshHand)) {
         return res.status(409).json({ error: 'Hand still in progress', gameState: currentState });
       }
+      
+      // If this is a fresh hand that was just started, return success without starting again
+      if (isFreshHand) {
+        console.log(`[next-hand] Hand already started at preflop for table ${tableId}, returning success`);
+        const enrichedState = enrichStateWithRunIt(tableId, currentState);
+        const sanitizedState = sanitizeStateForPlayer(enrichedState, playerId);
+        return res.status(200).json({ success: true, gameState: sanitizedState, alreadyStarted: true });
+      }
+      
       const playerCount = Array.isArray(currentState.players) ? currentState.players.length : 0;
       if (playerCount < 2) {
         return res.status(409).json({ error: 'Need at least two players to start the next hand', gameState: currentState });

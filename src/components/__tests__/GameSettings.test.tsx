@@ -1,12 +1,17 @@
 /**
  * GameSettings Component Tests
  *
- * Tests for the game settings component, focusing on pot odds toggle functionality
+ * Tests for the game settings component including admin-only
+ * time between rounds setting functionality.
  */
 
+// Mock fetch globally
+global.fetch = jest.fn();
+
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
+
 import GameSettings from '../GameSettings';
 
 describe('GameSettings', () => {
@@ -15,90 +20,213 @@ describe('GameSettings', () => {
   };
 
   beforeEach(() => {
+    jest.clearAllMocks();
     localStorage.clear();
+    (global.fetch as jest.Mock).mockReset();
   });
 
-  afterEach(() => {
-    localStorage.clear();
-  });
-
-  it('should render game settings', () => {
+  it('should render basic settings for non-admin users', () => {
     render(<GameSettings {...defaultProps} />);
+
     expect(screen.getByText('Game Settings')).toBeInTheDocument();
+    expect(screen.getByText('Audio Settings')).toBeInTheDocument();
+    expect(screen.getByText('Chat Settings')).toBeInTheDocument();
+    expect(screen.getByText('Gameplay Settings')).toBeInTheDocument();
+    
+    // Should NOT show admin settings
+    expect(screen.queryByText('Admin Settings')).not.toBeInTheDocument();
+    expect(screen.queryByText('Time between rounds (seconds):')).not.toBeInTheDocument();
   });
 
-  it('should show pot odds toggle', () => {
-    render(<GameSettings {...defaultProps} />);
-    expect(screen.getByText('Show Pot Odds')).toBeInTheDocument();
-  });
+  it('should render admin settings when isAdmin is true', async () => {
+    // Mock the room config fetch
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        configuration: {
+          timeBetweenRounds: 10,
+        },
+      }),
+    });
 
-  it('should have pot odds enabled by default', () => {
-    render(<GameSettings {...defaultProps} />);
-    const checkbox = screen.getByLabelText(/Show Pot Odds/i) as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
-  });
+    render(<GameSettings {...defaultProps} isAdmin={true} />);
 
-  it('should toggle pot odds setting when checkbox is clicked', () => {
-    render(<GameSettings {...defaultProps} />);
-    const checkbox = screen.getByLabelText(/Show Pot Odds/i) as HTMLInputElement;
-    
-    expect(checkbox.checked).toBe(true);
-    
-    fireEvent.click(checkbox);
-    expect(checkbox.checked).toBe(false);
-    
-    fireEvent.click(checkbox);
-    expect(checkbox.checked).toBe(true);
-  });
-
-  it('should persist pot odds setting to localStorage', async () => {
-    render(<GameSettings {...defaultProps} />);
-    const checkbox = screen.getByLabelText(/Show Pot Odds/i) as HTMLInputElement;
-    
-    fireEvent.click(checkbox);
-    
+    // Wait for admin settings to appear
     await waitFor(() => {
-      const saved = localStorage.getItem(`game_settings_${defaultProps.gameId}`);
-      expect(saved).toBeTruthy();
-      const parsed = JSON.parse(saved!);
-      expect(parsed.showPotOdds).toBe(false);
+      expect(screen.getByText('Admin Settings')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Time between rounds (seconds):')).toBeInTheDocument();
+    expect(screen.getByText('Save Admin Setting')).toBeInTheDocument();
+  });
+
+  it('should fetch and display configured timeBetweenRounds for admin', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        configuration: {
+          timeBetweenRounds: 15,
+        },
+      }),
+    });
+
+    render(<GameSettings {...defaultProps} isAdmin={true} />);
+
+    await waitFor(() => {
+      // The slider should show the value 15
+      expect(screen.getByText('15')).toBeInTheDocument();
     });
   });
 
-  it('should load pot odds setting from localStorage', () => {
-    const savedSettings = {
-      showPotOdds: false,
-      soundEnabled: true,
-      chatEnabled: true,
-    };
-    localStorage.setItem(
-      `game_settings_${defaultProps.gameId}`,
-      JSON.stringify(savedSettings)
+  it('should update timeBetweenRounds when slider is changed', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        configuration: {
+          timeBetweenRounds: 5,
+        },
+      }),
+    });
+
+    render(<GameSettings {...defaultProps} isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Admin Settings')).toBeInTheDocument();
+    });
+
+    const slider = screen.getAllByRole('slider').find(el => 
+      el.getAttribute('min') === '1' && el.getAttribute('max') === '60'
     );
     
-    render(<GameSettings {...defaultProps} />);
-    const checkbox = screen.getByLabelText(/Show Pot Odds/i) as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
-  });
-
-  it('should call onSettingsChange callback with pot odds setting', async () => {
-    const mockCallback = jest.fn();
-    render(<GameSettings {...defaultProps} onSettingsChange={mockCallback} />);
+    expect(slider).toBeInTheDocument();
     
-    const checkbox = screen.getByLabelText(/Show Pot Odds/i) as HTMLInputElement;
-    fireEvent.click(checkbox);
+    fireEvent.change(slider!, { target: { value: '20' } });
     
     await waitFor(() => {
-      expect(mockCallback).toHaveBeenCalled();
-      const lastCall = mockCallback.mock.calls[mockCallback.mock.calls.length - 1][0];
-      expect(lastCall.showPotOdds).toBe(false);
+      expect(screen.getByText('20')).toBeInTheDocument();
     });
   });
 
-  it('should display pot odds description', () => {
+  it('should call API to save timeBetweenRounds when save button is clicked', async () => {
+    // Mock initial fetch for room config
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        configuration: {
+          timeBetweenRounds: 5,
+        },
+      }),
+    });
+
+    render(<GameSettings {...defaultProps} isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Admin Settings')).toBeInTheDocument();
+    });
+
+    // Mock the update call
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        success: true,
+        configuration: { timeBetweenRounds: 5 },
+      }),
+    });
+
+    const saveButton = screen.getByText('Save Admin Setting');
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/games/rooms/update-config',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({
+            roomId: 'test-game-123',
+            timeBetweenRounds: 5,
+          }),
+        })
+      );
+    });
+  });
+
+  it('should show success message after saving', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ configuration: { timeBetweenRounds: 5 } }),
+    });
+
+    render(<GameSettings {...defaultProps} isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Save Admin Setting')).toBeInTheDocument();
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+
+    fireEvent.click(screen.getByText('Save Admin Setting'));
+
+    await waitFor(() => {
+      expect(screen.getByText('✓ Saved successfully')).toBeInTheDocument();
+    });
+  });
+
+  it('should show error message when save fails', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ configuration: { timeBetweenRounds: 5 } }),
+    });
+
+    render(<GameSettings {...defaultProps} isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Save Admin Setting')).toBeInTheDocument();
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ error: 'Unauthorized' }),
+    });
+
+    fireEvent.click(screen.getByText('Save Admin Setting'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Unauthorized')).toBeInTheDocument();
+    });
+  });
+
+  it('should not show admin settings for regular players', () => {
+    render(<GameSettings {...defaultProps} isAdmin={false} />);
+
+    expect(screen.queryByText('Admin Settings')).not.toBeInTheDocument();
+    expect(screen.queryByText('Time between rounds (seconds):')).not.toBeInTheDocument();
+  });
+
+  it('should call onSettingsChange when settings change', () => {
+    const onSettingsChange = jest.fn();
+    render(<GameSettings {...defaultProps} onSettingsChange={onSettingsChange} />);
+
+    // Change a setting
+    const soundCheckbox = screen.getByLabelText(/Enable Sound Effects/i);
+    fireEvent.click(soundCheckbox);
+
+    expect(onSettingsChange).toHaveBeenCalled();
+  });
+
+  it('should persist settings to localStorage', async () => {
     render(<GameSettings {...defaultProps} />);
-    expect(
-      screen.getByText(/Display the ratio between the pot size and the bet you are facing/i)
-    ).toBeInTheDocument();
+
+    const soundCheckbox = screen.getByLabelText(/Enable Sound Effects/i);
+    fireEvent.click(soundCheckbox);
+
+    await waitFor(() => {
+      const saved = localStorage.getItem('game_settings_test-game-123');
+      expect(saved).toBeTruthy();
+      const parsed = JSON.parse(saved!);
+      expect(parsed.soundEnabled).toBe(false);
+    });
   });
 });

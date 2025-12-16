@@ -228,6 +228,13 @@ export class HandEvaluator {
   }
 
   static compareHands(hand1: HandInterface, hand2: HandInterface): number {
+    // If hand ranks differ, compare directly to avoid filler card corruption in partial hands.
+    // Higher rank value means stronger hand (pair=2 > high card=1).
+    // Type guards are defensive in case HandInterface is used with incomplete data.
+    if (hand1.rank !== hand2.rank) {
+      return hand1.rank > hand2.rank ? 1 : -1;
+    }
+
     // Convert string cards back to Card objects for solving
     const convertToCards = (hand: HandInterface): Card[] => {
       return hand.cards.map(card => ({

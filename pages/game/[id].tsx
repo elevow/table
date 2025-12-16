@@ -3147,7 +3147,7 @@ export default function GamePage() {
             )}
             {showSettings && (
               <div className="mt-4">
-                <GameSettings gameId={String(id)} onSettingsChange={(s: GameSettingsType) => {
+                <GameSettings gameId={String(id)} isAdmin={userRole === 'admin'} onSettingsChange={(s: GameSettingsType) => {
                   setHighContrastCards(!!s?.highContrastCards);
                   setShowPotOdds(s?.showPotOdds ?? true);
                 }} />

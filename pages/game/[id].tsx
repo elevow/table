@@ -1815,12 +1815,17 @@ export default function GamePage() {
           setMaxPlayers(roomMaxPlayers);
           console.log(`Room ${id} supports ${roomMaxPlayers} players`);
           
-          // Re-initialize seat assignments with correct number of seats
-          const seats: Record<number, { playerId: string; playerName: string; chips: number } | null> = {};
-          for (let i = 1; i <= roomMaxPlayers; i++) {
-            seats[i] = null;
-          }
-          setSeatAssignments(seats);
+          // Only extend seat assignments if needed, don't reset existing data
+          // Seat data comes from initSeatState and realtime updates
+          setSeatAssignments(prev => {
+            const updated = { ...prev };
+            for (let i = 1; i <= roomMaxPlayers; i++) {
+              if (!(i in updated)) {
+                updated[i] = null;
+              }
+            }
+            return updated;
+          });
         } else {
           console.warn('Failed to fetch room info, using default 6 seats');
         }
@@ -2023,6 +2028,29 @@ export default function GamePage() {
         if (resp.ok) {
           const data = await resp.json();
           if (data?.seats) {
+            // Check if server has actual seat data (not all nulls)
+            const serverHasSeats = Object.values(data.seats).some((s: any) => s !== null);
+            
+            // Get existing localStorage data
+            let localSeats: Record<string, any> | null = null;
+            try {
+              const savedSeats = localStorage.getItem(`seats_${id}`);
+              if (savedSeats) {
+                localSeats = JSON.parse(savedSeats);
+              }
+            } catch {}
+            const localHasSeats = localSeats && Object.values(localSeats).some((s: any) => s !== null);
+            
+            // If server has no seats but localStorage does, prefer localStorage
+            // This handles the case where server state was lost (e.g., serverless cold start)
+            // Realtime broadcasts will keep things in sync going forward
+            if (!serverHasSeats && localHasSeats && localSeats) {
+              console.log('Server returned empty seats but localStorage has data, using localStorage');
+              setSeatAssignments(localSeats);
+              setSeatStateReady(true);
+              return;
+            }
+            
             setSeatAssignments(data.seats);
             setSeatStateReady(true);
             try { if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats)); } catch {}
@@ -2033,6 +2061,36 @@ export default function GamePage() {
               persistSeatNumber(lastSeatStorageKey, parseInt(seatNumber));
               setPlayerChips(assignment?.chips || 0);
               try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
+            } else {
+              // Player is not in any seat according to server - clear local seat state
+              // This handles the case where the player left the game but localStorage had stale data
+              setCurrentPlayerSeat(null);
+              persistSeatNumber(lastSeatStorageKey, null);
+              setPlayerChips(0);
+              try { 
+                if (id) {
+                  localStorage.removeItem(`chips_${playerId}_${id}`);
+                  if (lastSeatStorageKey) {
+                    localStorage.removeItem(lastSeatStorageKey);
+                  }
+                  // Remove player from seats_${id} if present
+                  const seatsKey = `seats_${id}`;
+                  const seatsRaw = localStorage.getItem(seatsKey);
+                  if (seatsRaw) {
+                    let seatsObj;
+                    try { seatsObj = JSON.parse(seatsRaw); } catch {}
+                    if (seatsObj && typeof seatsObj === 'object') {
+                      // Remove any seat assigned to this player
+                      for (const seat in seatsObj) {
+                        if (seatsObj[seat]?.playerId === playerId) {
+                          seatsObj[seat] = null;
+                        }
+                      }
+                      localStorage.setItem(seatsKey, JSON.stringify(seatsObj));
+                    }
+                  }
+                }
+              } catch {}
             }
           }
         }
@@ -2213,18 +2271,38 @@ export default function GamePage() {
     console.log('Current router state:', router.asPath, router.pathname);
     
     try {
-      // Notify server that player is leaving via HTTP
-      if (playerId && currentPlayerSeat) {
-        fetch('/api/games/seats/stand', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tableId: id, playerId })
-        }).catch(() => {});
-      }
-      
-      // Clear any game-specific data
+      // If seated, stand up and WAIT for server to process so other players are notified
+      // before we navigate away. This ensures the seat_vacated broadcast is sent.
       if (currentPlayerSeat) {
+        const seatToVacate = currentPlayerSeat;
+        
+        // Clear local state immediately for responsive UI
+        const newAssignments = {
+          ...seatAssignments,
+          [currentPlayerSeat]: null
+        };
+        setSeatAssignments(newAssignments);
+        setCurrentPlayerSeat(null);
+        persistSeatNumber(lastSeatStorageKey, null);
+        setPlayerChips(0);
+        
+        // Clear localStorage
+        localStorage.setItem(`seats_${id}`, JSON.stringify(newAssignments));
         localStorage.removeItem(`chips_${playerId}_${id}`);
+        
+        // Wait for server notification so other players see the seat vacated
+        try {
+          const response = await fetch('/api/games/seats/stand', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tableId: id, seatNumber: seatToVacate, playerId })
+          });
+          if (!response.ok) {
+            console.warn(`Failed to notify server of seat vacation: ${response.status} ${response.statusText}`);
+          }
+        } catch (fetchErr) {
+          console.warn('Failed to notify server of seat vacation:', fetchErr);
+        }
       }
       
       // Use direct navigation for reliability

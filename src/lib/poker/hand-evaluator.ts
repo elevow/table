@@ -239,14 +239,17 @@ export class HandEvaluator {
     // compare the actual cards directly to avoid pokersolver corruption.
     // Filler cards typically start with '2' from normalizeHandForComparison padding.
     const hasFillerCards = (hand: HandInterface): boolean => {
-      const cardStrs = hand.cards.map(c => `${c.value}${c.suit}`);
-      const uniqueCards = new Set(cardStrs);
-      // If we have duplicate cards or cards were likely padded (more than 2 cards with same rank)
-      if (cardStrs.length !== uniqueCards.size) return true;
+      const cardStrs: string[] = [];
       const rankCounts: Record<string, number> = {};
-      hand.cards.forEach(c => {
-        rankCounts[c.value] = (rankCounts[c.value] || 0) + 1;
-      });
+      
+      // Single iteration to check for duplicates and count ranks
+      for (const card of hand.cards) {
+        const key = `${card.value}${card.suit}`;
+        if (cardStrs.includes(key)) return true; // Duplicate card found
+        cardStrs.push(key);
+        rankCounts[card.value] = (rankCounts[card.value] || 0) + 1;
+      }
+      
       // Check if there are 3+ cards of the same rank (likely filler padding)
       return Object.values(rankCounts).some(count => count >= 3);
     };
@@ -266,7 +269,13 @@ export class HandEvaluator {
           const key = `${card.value}${card.suit}`;
           if (!seen.has(key)) {
             seen.add(key);
-            values.push(weight[card.value] || 0);
+            const cardWeight = weight[card.value];
+            if (cardWeight === undefined) {
+              // This should never happen with valid cards; log and skip
+              console.warn(`Unknown card value in hand comparison: ${card.value}`);
+            } else {
+              values.push(cardWeight);
+            }
           }
         });
         return values.sort((a, b) => b - a);

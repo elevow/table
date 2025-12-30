@@ -2292,36 +2292,44 @@ export default function GamePage() {
                   renderSeat(seatData.seatNumber, seatData.position, seatData.style)
                 )}
                 
-                {/* Community Cards */}
+                {/* Community Cards - Run It Twice aware */}
                 {pokerGameState?.communityCards && pokerGameState.communityCards.length > 0 && (
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-8 flex gap-1">
-                    {pokerGameState.communityCards.map((card: any, index: number) => (
-                      <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold">
-                        <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
-                        <div className={suitColorClass(card.suit)}>
-                          {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {supabaseSecondRunBoard && supabaseSecondRunBoard.length > 0 && (
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-2 flex flex-col items-center gap-1">
-                    <span className="text-[10px] uppercase tracking-wide text-amber-200 font-semibold drop-shadow">
-                      Run 2
-                    </span>
-                    <div className="flex gap-1">
-                      {supabaseSecondRunBoard.map((card: any, index: number) => (
-                        <div key={`rit-second-${index}`} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold">
-                          <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
-                          <div className={suitColorClass(card.suit)}>
-                            {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                  <>
+                    {/* If RIT is enabled and we have multiple boards, show them stacked vertically */}
+                    {runItTwiceBoards.length > 1 ? (
+                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col gap-3">
+                        {runItTwiceBoards.map((board: any[], runIndex: number) => (
+                          <div key={`run-${runIndex}`} className="flex flex-col items-center gap-1">
+                            <span className="text-[10px] uppercase tracking-wide text-amber-200 font-semibold drop-shadow">
+                              Run {runIndex + 1}
+                            </span>
+                            <div className="flex gap-1">
+                              {board.map((card: any, cardIndex: number) => (
+                                <div key={`run${runIndex}-card${cardIndex}`} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-md">
+                                  <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
+                                  <div className={suitColorClass(card.suit)}>
+                                    {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                        ))}
+                      </div>
+                    ) : (
+                      /* Single board (no RIT or single run) */
+                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-8 flex gap-1">
+                        {pokerGameState.communityCards.map((card: any, index: number) => (
+                          <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-md">
+                            <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
+                            <div className={suitColorClass(card.suit)}>
+                              {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Pot area - positioned below the community cards */}

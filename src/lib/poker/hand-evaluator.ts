@@ -239,14 +239,14 @@ export class HandEvaluator {
     // compare the actual cards directly to avoid pokersolver corruption.
     // Filler cards typically start with '2' from normalizeHandForComparison padding.
     const hasFillerCards = (hand: HandInterface): boolean => {
-      const cardStrs: string[] = [];
+      const cardStrs = new Set<string>();
       const rankCounts: Record<string, number> = {};
       
       // Single iteration to check for duplicates and count ranks
       for (const card of hand.cards) {
         const key = `${card.value}${card.suit}`;
-        if (cardStrs.includes(key)) return true; // Duplicate card found
-        cardStrs.push(key);
+        if (cardStrs.has(key)) return true; // Duplicate card found
+        cardStrs.add(key);
         rankCounts[card.value] = (rankCounts[card.value] || 0) + 1;
       }
       

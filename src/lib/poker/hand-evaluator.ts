@@ -235,6 +235,58 @@ export class HandEvaluator {
       return hand1.rank > hand2.rank ? 1 : -1;
     }
 
+    // If ranks are equal and both hands contain filler cards (indicated by duplicate low cards),
+    // compare the actual cards directly to avoid pokersolver corruption.
+    // Filler cards typically start with '2' from normalizeHandForComparison padding.
+    const hasFillerCards = (hand: HandInterface): boolean => {
+      const cardStrs = hand.cards.map(c => `${c.value}${c.suit}`);
+      const uniqueCards = new Set(cardStrs);
+      // If we have duplicate cards or cards were likely padded (more than 2 cards with same rank)
+      if (cardStrs.length !== uniqueCards.size) return true;
+      const rankCounts: Record<string, number> = {};
+      hand.cards.forEach(c => {
+        rankCounts[c.value] = (rankCounts[c.value] || 0) + 1;
+      });
+      // Check if there are 3+ cards of the same rank (likely filler padding)
+      return Object.values(rankCounts).some(count => count >= 3);
+    };
+
+    if (hasFillerCards(hand1) || hasFillerCards(hand2)) {
+      // Compare actual card values directly for partial hands
+      const weight: Record<string, number> = {
+        '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+        'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14
+      };
+      
+      // Get unique cards sorted by value (highest first)
+      const getUniqueCardValues = (hand: HandInterface): number[] => {
+        const seen = new Set<string>();
+        const values: number[] = [];
+        hand.cards.forEach(card => {
+          const key = `${card.value}${card.suit}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            values.push(weight[card.value] || 0);
+          }
+        });
+        return values.sort((a, b) => b - a);
+      };
+      
+      const values1 = getUniqueCardValues(hand1);
+      const values2 = getUniqueCardValues(hand2);
+      
+      // Compare card by card
+      const len = Math.max(values1.length, values2.length);
+      for (let i = 0; i < len; i++) {
+        const v1 = values1[i] || 0;
+        const v2 = values2[i] || 0;
+        if (v1 !== v2) {
+          return v1 > v2 ? 1 : -1;
+        }
+      }
+      return 0; // Tie
+    }
+
     // Convert string cards back to Card objects for solving
     const convertToCards = (hand: HandInterface): Card[] => {
       return hand.cards.map(card => ({

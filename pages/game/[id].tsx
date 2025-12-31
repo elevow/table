@@ -272,7 +272,35 @@ export default function GamePage() {
               })
               .then(data => {
                 if (data.gameState) {
-                  setPokerGameState(data.gameState);
+                  // Merge the fetched state with current state to preserve other information
+                  setPokerGameState((prevState: any) => {
+                    if (!prevState) return data.gameState;
+                    
+                    // Merge players, preserving hole cards for all players
+                    const mergedPlayers = Array.isArray(data.gameState.players)
+                      ? data.gameState.players.map((p: any) => {
+                          // For the fetched player (us), use the new data with hole cards
+                          if (p.id === effectivePlayerId) {
+                            return p;
+                          }
+                          // For other players, preserve their data from previous state
+                          const prevPlayer = prevState.players?.find((prev: any) => prev.id === p.id);
+                          if (prevPlayer) {
+                            // Preserve hole cards if they exist
+                            if (prevPlayer.holeCards && (!p.holeCards || p.holeCards.length === 0)) {
+                              return { ...p, holeCards: prevPlayer.holeCards };
+                            }
+                            return p;
+                          }
+                          return p;
+                        })
+                      : data.gameState.players;
+                    
+                    return {
+                      ...data.gameState,
+                      players: mergedPlayers,
+                    };
+                  });
                   console.log('🎴 Player-specific state fetched with hole cards');
                 }
               })

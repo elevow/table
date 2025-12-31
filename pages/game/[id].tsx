@@ -855,7 +855,31 @@ export default function GamePage() {
         // The API returns a sanitized state that includes the current player's hole cards
         const data = await response.json();
         if (data.gameState) {
-          setPokerGameState(data.gameState);
+          // Use the state updater callback to preserve other players' hole cards
+          setPokerGameState((prevState: any) => {
+            if (!prevState) return data.gameState;
+            
+            // Merge the action response with previous state to preserve other players' cards
+            const mergedPlayers = Array.isArray(data.gameState.players)
+              ? data.gameState.players.map((p: any) => {
+                  // For the acting player (us), use the new data from action response
+                  if (p.id === playerId) {
+                    return p;
+                  }
+                  // For other players, preserve their hole cards from previous state if they had them
+                  const prevPlayer = prevState.players?.find((prev: any) => prev.id === p.id);
+                  if (prevPlayer?.holeCards && (!p.holeCards || p.holeCards.length === 0)) {
+                    return { ...p, holeCards: prevPlayer.holeCards };
+                  }
+                  return p;
+                })
+              : data.gameState.players;
+            
+            return {
+              ...data.gameState,
+              players: mergedPlayers,
+            };
+          });
           console.log('🎴 Game state updated with player cards from action API');
         }
       }

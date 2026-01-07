@@ -87,7 +87,7 @@ describe('/api/games/seats/stand', () => {
     expect(jsonMock).toHaveBeenCalledWith({ error: 'Player not seated' });
   });
 
-  test('returns 403 when trying to vacate another player\'s seat', async () => {
+  test("returns 403 when trying to vacate another player's seat", async () => {
     const tableId = 'table1';
     GameSeats.initializeRoomSeats(tableId);
     GameSeats.claimSeat(tableId, 3, { playerId: 'player1', playerName: 'Alice', chips: 100 });

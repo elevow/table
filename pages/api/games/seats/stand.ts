@@ -34,22 +34,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       sNum = Number(entry[0]);
     }
 
+    // At this point sNum is guaranteed to be a valid number
     // Check if seat is already empty (idempotent operation)
-    if (seats[sNum!] === null) {
+    if (seats[sNum] === null) {
       // Player is already not seated, return success
       return res.status(200).json({ ok: true, seatNumber: sNum, playerId, alreadyVacated: true });
     }
 
     // Verify ownership
-    if (seats[sNum!]?.playerId !== playerId) {
+    if (seats[sNum]?.playerId !== playerId) {
       return res.status(403).json({ error: 'Not your seat' });
     }
 
     // Vacate
-    seats[sNum!] = null;
+    seats[sNum] = null;
     GameSeats.setRoomSeats(String(tableId), seats);
 
-    const seatPayload = { seatNumber: sNum!, playerId };
+    const seatPayload = { seatNumber: sNum, playerId };
 
     // Broadcast via Supabase for realtime clients
     try {

@@ -35,9 +35,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // At this point sNum is guaranteed to be a valid number
-    // Check if seat is already empty (idempotent operation)
+    // Verify ownership or check for idempotency
     if (seats[sNum] === null) {
-      // Player is already not seated, return success
+      // Seat is empty - check if player is seated elsewhere
+      const playerSeatedElsewhere = Object.entries(seats).find(
+        ([seatNum, assignment]) => seatNum !== String(sNum) && assignment?.playerId === playerId
+      );
+      
+      if (playerSeatedElsewhere) {
+        // Player is seated in a different seat - this is not their seat
+        return res.status(403).json({ error: 'Not your seat' });
+      }
+      
+      // Player is not seated anywhere and target seat is empty - idempotent success
       return res.status(200).json({ ok: true, seatNumber: sNum, playerId, alreadyVacated: true });
     }
 

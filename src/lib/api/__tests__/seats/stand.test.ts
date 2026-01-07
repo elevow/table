@@ -197,4 +197,26 @@ describe('/api/games/seats/stand', () => {
     expect(statusMock).toHaveBeenCalledWith(200);
     expect(jsonMock).toHaveBeenCalledWith({ ok: true, seatNumber, playerId, alreadyVacated: true });
   });
+
+  test('returns 403 when trying to vacate empty seat while player is seated elsewhere', async () => {
+    const tableId = 'table1';
+    const playerId = 'player1';
+    
+    GameSeats.initializeRoomSeats(tableId);
+    // Player is seated at seat 5
+    GameSeats.claimSeat(tableId, 5, { playerId, playerName: 'Alice', chips: 100 });
+    
+    // Try to vacate seat 3 which is empty
+    req.body = { tableId, seatNumber: 3, playerId };
+    
+    await handler(req as NextApiRequest, res as NextApiResponse);
+    
+    expect(statusMock).toHaveBeenCalledWith(403);
+    expect(jsonMock).toHaveBeenCalledWith({ error: 'Not your seat' });
+    
+    // Verify player is still seated at seat 5
+    const seats = GameSeats.getRoomSeats(tableId);
+    expect(seats[5]).toEqual({ playerId, playerName: 'Alice', chips: 100 });
+    expect(seats[3]).toBeNull();
+  });
 });

@@ -34,6 +34,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       sNum = Number(entry[0]);
     }
 
+    // Check if seat is already empty (idempotent operation)
+    if (seats[sNum!] === null) {
+      // Player is already not seated, return success
+      return res.status(200).json({ ok: true, seatNumber: sNum, playerId, alreadyVacated: true });
+    }
+
     // Verify ownership
     if (seats[sNum!]?.playerId !== playerId) {
       return res.status(403).json({ error: 'Not your seat' });

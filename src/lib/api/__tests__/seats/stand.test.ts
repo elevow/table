@@ -1,7 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import handler from '../../../../../pages/api/games/seats/stand';
 import * as GameSeats from '../../../shared/game-seats';
-import * as publisher from '../../../realtime/publisher';
 
 // Mock the publisher module
 jest.mock('../../../realtime/publisher', () => ({
@@ -30,9 +29,9 @@ describe('/api/games/seats/stand', () => {
     };
     
     res = {
-      status: statusMock,
-      setHeader: jest.fn(),
-    } as any;
+      status: statusMock as unknown as NextApiResponse['status'],
+      setHeader: jest.fn() as unknown as NextApiResponse['setHeader'],
+    };
     
     // Clear mocks
     jest.clearAllMocks();

@@ -34,16 +34,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       sNum = Number(entry[0]);
     }
 
+    // At this point sNum is guaranteed to be a valid number
+    // Verify ownership or check for idempotency
+    if (seats[sNum] === null) {
+      // Seat is empty - check if player is seated elsewhere
+      const playerSeatedElsewhere = Object.entries(seats).find(
+        ([seatNum, assignment]) => seatNum !== String(sNum) && assignment?.playerId === playerId
+      );
+      
+      if (playerSeatedElsewhere) {
+        // Player is seated in a different seat - this is not their seat
+        return res.status(403).json({ error: 'Not your seat' });
+      }
+      
+      // Player is not seated anywhere and target seat is empty - idempotent success
+      return res.status(200).json({ ok: true, seatNumber: sNum, playerId, alreadyVacated: true });
+    }
+
     // Verify ownership
-    if (seats[sNum!]?.playerId !== playerId) {
+    if (seats[sNum]?.playerId !== playerId) {
       return res.status(403).json({ error: 'Not your seat' });
     }
 
     // Vacate
-    seats[sNum!] = null;
+    seats[sNum] = null;
     GameSeats.setRoomSeats(String(tableId), seats);
 
-    const seatPayload = { seatNumber: sNum!, playerId };
+    const seatPayload = { seatNumber: sNum, playerId };
 
     // Broadcast via Supabase for realtime clients
     try {

@@ -5,6 +5,7 @@ export type RebuyLimit = number | 'unlimited';
 
 const LIMIT_CACHE_TTL_MS = 60 * 1000;
 const limitCache: Map<string, { limit: RebuyLimit; fetchedAt: number }> = new Map();
+const amountCache: Map<string, { amount: number; fetchedAt: number }> = new Map();
 
 let cachedService: GameService | null = null;
 let lastServiceInitFailedAt: number | null = null;
@@ -45,6 +46,7 @@ export function primeRoomRebuyLimit(roomId: string, limit: RebuyLimit): void {
 
 export function clearRoomRebuyLimit(roomId: string): void {
   limitCache.delete(roomId);
+  amountCache.delete(roomId);
 }
 
 export async function fetchRoomRebuyLimit(roomId: string): Promise<RebuyLimit> {
@@ -68,4 +70,33 @@ export async function fetchRoomRebuyLimit(roomId: string): Promise<RebuyLimit> {
 
   limitCache.set(roomId, { limit, fetchedAt: Date.now() });
   return limit;
+}
+
+export async function fetchRoomRebuyAmount(roomId: string): Promise<number> {
+  const cached = amountCache.get(roomId);
+  if (cached && Date.now() - cached.fetchedAt < LIMIT_CACHE_TTL_MS) {
+    return cached.amount;
+  }
+
+  let amount = 20; // Default amount
+  const DEFAULT_BUYIN = Number(process.env.NEXT_PUBLIC_DEFAULT_BUYIN);
+  if (Number.isFinite(DEFAULT_BUYIN) && DEFAULT_BUYIN > 0) {
+    amount = DEFAULT_BUYIN;
+  }
+
+  const service = getGameService();
+  if (service) {
+    try {
+      const room = await service.getRoomById(roomId);
+      const configAmount = (room?.configuration as any)?.rebuyAmount;
+      if (typeof configAmount === 'number' && configAmount > 0) {
+        amount = configAmount;
+      }
+    } catch (err) {
+      console.warn(`[rebuy-limit] Failed to fetch room ${roomId} rebuy amount:`, (err as any)?.message || err);
+    }
+  }
+
+  amountCache.set(roomId, { amount, fetchedAt: Date.now() });
+  return amount;
 }

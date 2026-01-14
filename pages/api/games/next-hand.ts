@@ -3,7 +3,7 @@ import { publishGameStateUpdate, publishAwaitingDealerChoice, publishRebuyPrompt
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
-import { fetchRoomRebuyLimit } from '../../../src/lib/shared/rebuy-limit';
+import { fetchRoomRebuyLimit, fetchRoomRebuyAmount } from '../../../src/lib/shared/rebuy-limit';
 import { getPlayerRebuyInfo } from '../../../src/lib/shared/rebuy-tracker';
 import {
   BASE_REBUY_CHIPS,
@@ -163,6 +163,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return pendingRebuyCount(tableId) === 0;
         }
         const rebuyLimit = await fetchRoomRebuyLimit(tableId);
+        const rebuyChips = await fetchRoomRebuyAmount(tableId);
         let promptsIssued = 0;
         for (const player of busted) {
           if (!player?.id) continue;
@@ -186,7 +187,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             playerName: player.name,
             rebuysUsed,
             rebuyLimit,
-            baseChips: BASE_REBUY_CHIPS,
+            baseChips: rebuyChips,
             remaining: rebuyLimit === 'unlimited' ? 'unlimited' : Math.max((rebuyLimit as number) - rebuysUsed, 0),
           };
           await publishRebuyPrompt(tableId, payload);

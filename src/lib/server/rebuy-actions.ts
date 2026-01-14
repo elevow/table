@@ -2,6 +2,7 @@ import type { Broadcaster } from '../broadcaster';
 import { publishSeatState, publishSeatVacated } from '../realtime/publisher';
 import * as GameSeats from '../shared/game-seats';
 import { recordBuyin } from '../shared/rebuy-tracker';
+import { fetchRoomRebuyAmount } from '../shared/rebuy-limit';
 import { BASE_REBUY_CHIPS } from './rebuy-state';
 import type { TableState } from '../../types/poker';
 
@@ -35,7 +36,7 @@ export async function applyRebuy(
   emitGameStateUpdate: (io: Broadcaster, tableId: string, state: TableState | any, lastAction: any) => void,
   tableId: string,
   playerId: string,
-  chips: number = BASE_REBUY_CHIPS
+  chipsOverride?: number
 ) {
   const engine = (global as any).activeGames?.get?.(tableId);
   if (!engine || typeof engine.getState !== 'function') {
@@ -49,6 +50,9 @@ export async function applyRebuy(
   if (!player) {
     throw new Error('Player not seated in the active game');
   }
+
+  // Use override chips if provided, otherwise fetch from room configuration
+  const chips = chipsOverride ?? await fetchRoomRebuyAmount(tableId);
 
   const trackerRecord = recordBuyin(tableId, playerId);
 

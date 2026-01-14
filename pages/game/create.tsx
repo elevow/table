@@ -17,6 +17,7 @@ export default function CreateGameRoomPage() {
   const [variant, setVariant] = useState<Variant>('texas-holdem');
   const [bettingMode, setBettingMode] = useState<BettingMode>('no-limit');
   const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unlimited');
+  const [rebuyAmount, setRebuyAmount] = useState(20);
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
@@ -73,6 +74,7 @@ export default function CreateGameRoomPage() {
             variant,
             bettingMode,
             numberOfRebuys: numberOfRebuys === 'unlimited' ? 'unlimited' : Number(numberOfRebuys),
+            rebuyAmount: numberOfRebuys !== 'unlimited' && numberOfRebuys > 0 ? rebuyAmount : undefined,
             tournament: enableTournament ? { preset: presetKey, config: selectedTournamentConfig } : undefined,
           },
         }),
@@ -273,6 +275,20 @@ export default function CreateGameRoomPage() {
             </select>
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Set 0-10 or leave as Unlimited for cash-style games.</p>
           </div>
+          {numberOfRebuys !== 'unlimited' && numberOfRebuys > 0 && (
+            <div>
+              <label className="block text-sm font-medium">Rebuy Amount (chips)</label>
+              <input
+                type="number"
+                className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                min={1}
+                step={1}
+                value={rebuyAmount}
+                onChange={e => setRebuyAmount(parseInt(e.target.value || '20', 10))}
+              />
+              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Amount of chips a player receives when rebuying.</p>
+            </div>
+          )}
           {/* Removed Require unanimous RIT consent checkbox per request */}
         </div>
         <div className="border-t pt-4 space-y-3">

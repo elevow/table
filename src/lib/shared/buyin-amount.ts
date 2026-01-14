@@ -43,6 +43,12 @@ export function clearRoomBuyIn(roomId: string): void {
   buyinCache.delete(roomId);
 }
 
+// For testing purposes
+export function resetServiceCache(): void {
+  cachedService = null;
+  lastServiceInitFailedAt = null;
+}
+
 export async function fetchRoomBuyIn(roomId: string): Promise<number> {
   const cached = buyinCache.get(roomId);
   if (cached && Date.now() - cached.fetchedAt < BUYIN_CACHE_TTL_MS) {

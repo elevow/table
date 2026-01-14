@@ -285,7 +285,7 @@ export default function CreateGameRoomPage() {
             min={1}
             step={1}
             value={buyIn}
-            onChange={e => setBuyIn(parseInt(e.target.value || '1000', 10))}
+            onChange={e => setBuyIn(Number(e.target.value) || 1000)}
           />
           <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Amount of chips a player will start with when sitting down for the first time.</p>
         </div>

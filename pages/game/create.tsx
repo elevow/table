@@ -9,7 +9,6 @@ type BettingMode = 'no-limit' | 'pot-limit';
 
 export default function CreateGameRoomPage() {
   const router = useRouter();
-  const [name, setName] = useState('New Table');
   const [maxPlayers, setMaxPlayers] = useState(6);
   const [smallBlind, setSmallBlind] = useState(1);
   const [bigBlind, setBigBlind] = useState(2);
@@ -65,7 +64,7 @@ export default function CreateGameRoomPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
-          name,
+          name: 'New Table',
           gameType: 'poker',
           maxPlayers,
           blindLevels: { sb: smallBlind, bb: bigBlind },
@@ -164,14 +163,6 @@ export default function CreateGameRoomPage() {
       </Head>
       <h1 className="text-2xl font-semibold mb-4">Create Game Room</h1>
       <form className="space-y-4" onSubmit={onSubmit}>
-        <div>
-          <label className="block text-sm font-medium">Table name</label>
-          <input
-            className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            value={name}
-            onChange={e => setName(e.target.value)}
-          />
-        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium">Max players</label>

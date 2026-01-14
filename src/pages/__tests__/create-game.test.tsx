@@ -29,6 +29,28 @@ jest.mock('../../../src/lib/tournament/tournament-utils', () => ({
 // Import the component after mocks
 import CreateGameRoomPage from '../../../pages/game/create';
 
+describe('CreateGameRoomPage', () => {
+  beforeEach(() => {
+    // Mock localStorage
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: jest.fn(() => 'test-token'),
+        setItem: jest.fn(),
+        removeItem: jest.fn(),
+      },
+      writable: true,
+    });
+  });
+
+  it('should not display Table name field', () => {
+    render(<CreateGameRoomPage />);
+    
+    // Verify that "Table name" label does not exist in the document
+    const tableNameLabel = screen.queryByText('Table name');
+    expect(tableNameLabel).toBeNull();
+  });
+});
+
 describe('CreateGameRoomPage - Big Blind auto-update', () => {
   beforeEach(() => {
     // Mock localStorage

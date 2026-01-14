@@ -387,8 +387,7 @@ describe('ThemeContext', () => {
     it('should handle missing window object during initialization', () => {
       // Mock window as undefined (SSR scenario)
       const originalWindow = global.window;
-      // @ts-ignore
-      delete global.window;
+      (global as any).window = undefined;
 
       // Should not throw
       expect(() => {

@@ -1,5 +1,6 @@
 import { getPool } from '../database/pool';
 import { GameService } from '../services/game-service';
+import { BASE_REBUY_CHIPS } from '../server/rebuy-state';
 
 export type RebuyLimit = number | 'unlimited';
 
@@ -78,17 +79,13 @@ export async function fetchRoomRebuyAmount(roomId: string): Promise<number> {
     return cached.amount;
   }
 
-  let amount = 20; // Default amount
-  const DEFAULT_BUYIN = Number(process.env.NEXT_PUBLIC_DEFAULT_BUYIN);
-  if (Number.isFinite(DEFAULT_BUYIN) && DEFAULT_BUYIN > 0) {
-    amount = DEFAULT_BUYIN;
-  }
+  let amount = BASE_REBUY_CHIPS; // Use shared default
 
   const service = getGameService();
   if (service) {
     try {
       const room = await service.getRoomById(roomId);
-      const configAmount = (room?.configuration as any)?.rebuyAmount;
+      const configAmount = room?.configuration?.rebuyAmount;
       if (typeof configAmount === 'number' && configAmount > 0) {
         amount = configAmount;
       }

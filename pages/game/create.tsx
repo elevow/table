@@ -284,7 +284,11 @@ export default function CreateGameRoomPage() {
                 min={1}
                 step={1}
                 value={rebuyAmount}
-                onChange={e => setRebuyAmount(parseInt(e.target.value || '20', 10))}
+                onChange={e => {
+                  const value = e.target.value;
+                  const parsed = parseInt(value, 10);
+                  setRebuyAmount(Number.isFinite(parsed) && parsed > 0 ? parsed : 20);
+                }}
               />
               <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Amount of chips a player receives when rebuying.</p>
             </div>

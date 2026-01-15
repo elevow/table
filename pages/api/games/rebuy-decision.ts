@@ -101,7 +101,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (engine && typeof engine.getState === 'function') {
         const state = engine.getState();
         if (state && Array.isArray(state.players)) {
-          const player = state.players.find((p: any) => p.id === playerId);
+          const player = state.players.find((p: { id: string }) => p.id === playerId);
           if (player) {
             player.stack = rebuyChips;
             player.currentBet = 0;

@@ -62,10 +62,10 @@ export async function fetchRoomRebuyLimit(roomId: string): Promise<RebuyLimit> {
   if (service) {
     try {
       const room = await service.getRoomById(roomId);
-      const rawLimit = (room?.configuration as any)?.numberOfRebuys;
+      const rawLimit = room?.configuration?.numberOfRebuys;
       limit = normalizeRebuyLimit(rawLimit);
     } catch (err) {
-      console.warn(`[rebuy-limit] Failed to fetch room ${roomId} configuration:`, (err as any)?.message || err);
+      console.warn(`[rebuy-limit] Failed to fetch room ${roomId} configuration:`, err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -90,7 +90,7 @@ export async function fetchRoomRebuyAmount(roomId: string): Promise<number> {
         amount = configAmount;
       }
     } catch (err) {
-      console.warn(`[rebuy-limit] Failed to fetch room ${roomId} rebuy amount:`, (err as any)?.message || err);
+      console.warn(`[rebuy-limit] Failed to fetch room ${roomId} rebuy amount:`, err instanceof Error ? err.message : String(err));
     }
   }
 

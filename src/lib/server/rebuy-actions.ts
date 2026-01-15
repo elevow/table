@@ -32,12 +32,12 @@ export async function autoStandPlayer(
 
 export async function applyRebuy(
   io: Broadcaster | null,
-  emitGameStateUpdate: (io: Broadcaster, tableId: string, state: TableState | any, lastAction: any) => void,
+  emitGameStateUpdate: (io: Broadcaster, tableId: string, state: TableState, lastAction: Record<string, unknown>) => void,
   tableId: string,
   playerId: string,
   chipsOverride?: number
 ) {
-  const engine = (global as any).activeGames?.get?.(tableId);
+  const engine = (global as Record<string, unknown>).activeGames?.get?.(tableId);
   if (!engine || typeof engine.getState !== 'function') {
     throw new Error('No active game available for this table');
   }

@@ -74,7 +74,7 @@ export default function CreateGameRoomPage() {
             variant,
             bettingMode,
             numberOfRebuys: numberOfRebuys === 'unlimited' ? 'unlimited' : Number(numberOfRebuys),
-            rebuyAmount: numberOfRebuys !== 'unlimited' && numberOfRebuys > 0 ? rebuyAmount : undefined,
+            rebuyAmount: numberOfRebuys !== 0 ? rebuyAmount : undefined,
             buyIn,
             tournament: enableTournament ? { preset: presetKey, config: selectedTournamentConfig } : undefined,
           },
@@ -268,7 +268,7 @@ export default function CreateGameRoomPage() {
             </select>
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Set 0-10 or leave as Unlimited for cash-style games.</p>
           </div>
-          {numberOfRebuys !== 'unlimited' && numberOfRebuys > 0 && (
+          {numberOfRebuys !== 0 && (
             <div>
               <label className="block text-sm font-medium">Rebuy Amount (chips)</label>
               <input

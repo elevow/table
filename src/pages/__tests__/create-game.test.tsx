@@ -193,11 +193,12 @@ describe('CreateGameRoomPage - Rebuy Amount Field', () => {
     }
   };
 
-  it('should not show rebuy amount field when numberOfRebuys is unlimited', () => {
+  it('should show rebuy amount field when numberOfRebuys is unlimited', () => {
     render(<CreateGameRoomPage />);
     
     const rebuyAmountInput = getRebuyAmountInput();
-    expect(rebuyAmountInput).toBeNull();
+    expect(rebuyAmountInput).not.toBeNull();
+    expect(rebuyAmountInput?.value).toBe('20');
   });
 
   it('should not show rebuy amount field when numberOfRebuys is 0', () => {
@@ -221,7 +222,7 @@ describe('CreateGameRoomPage - Rebuy Amount Field', () => {
     expect(rebuyAmountInput?.value).toBe('20');
   });
 
-  it('should hide rebuy amount field when changing from numeric to unlimited', () => {
+  it('should keep rebuy amount field visible when changing from numeric to unlimited', () => {
     render(<CreateGameRoomPage />);
     
     const numberOfRebuysSelect = getNumberOfRebuysSelect();
@@ -231,10 +232,10 @@ describe('CreateGameRoomPage - Rebuy Amount Field', () => {
     let rebuyAmountInput = getRebuyAmountInput();
     expect(rebuyAmountInput).not.toBeNull();
     
-    // Then change to unlimited
+    // Then change to unlimited - field should still be visible
     fireEvent.change(numberOfRebuysSelect, { target: { value: 'unlimited' } });
     rebuyAmountInput = getRebuyAmountInput();
-    expect(rebuyAmountInput).toBeNull();
+    expect(rebuyAmountInput).not.toBeNull();
   });
 
   it('should allow changing rebuy amount value', () => {

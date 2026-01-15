@@ -190,6 +190,7 @@ export default function GamePage() {
     sb?: number;
     bb?: number;
     numberOfRebuys?: number | 'unlimited';
+    buyIn?: number;
   } | null>(null);
   
   // Seat management state - initialize dynamically based on maxPlayers
@@ -552,7 +553,8 @@ export default function GamePage() {
         const numberOfRebuys = typeof cfg?.numberOfRebuys === 'number'
           ? cfg.numberOfRebuys
           : 'unlimited';
-        setRoomConfig({ variant, bettingMode, sb, bb, numberOfRebuys });
+        const buyIn = typeof cfg?.buyIn === 'number' && cfg.buyIn > 0 ? cfg.buyIn : 1000;
+        setRoomConfig({ variant, bettingMode, sb, bb, numberOfRebuys, buyIn });
       } catch {}
     };
     fetchRoom();
@@ -688,7 +690,7 @@ export default function GamePage() {
       const playerNumber = playerId.replace(/\D/g, '').slice(-2) || Math.floor(Math.random() * 99).toString().padStart(2, '0');
       return `Player ${playerNumber}`;
     })();
-    const startingChips = 20; // Initial chips client-side
+    const startingChips = roomConfig?.buyIn || 1000; // Use room's buy-in or default to 1000
 
     setClaimingSeat(seatNumber);
 

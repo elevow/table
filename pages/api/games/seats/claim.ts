@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
 import { publishSeatClaimed, publishSeatState } from '../../../../src/lib/realtime/publisher';
 import { fetchRoomRebuyLimit } from '../../../../src/lib/shared/rebuy-limit';
+import { fetchRoomBuyIn } from '../../../../src/lib/shared/buyin-amount';
 import { getPlayerRebuyInfo, recordBuyin } from '../../../../src/lib/shared/rebuy-tracker';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -39,6 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const rebuyLimit = await fetchRoomRebuyLimit(roomId);
+    const buyInAmount = await fetchRoomBuyIn(roomId);
     const previous = getPlayerRebuyInfo(roomId, playerId);
     const isInitial = !previous;
     const rebuysUsed = previous?.rebuys ?? 0;
@@ -51,11 +53,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(403).json({ error: message, rebuyLimit, rebuysUsed });
     }
 
+    // Use chips from request if provided, otherwise use room's buyIn
+    const chipAmount = Number(chips) || buyInAmount;
+
     // Claim seat
-    seats[seatNumber] = { playerId, playerName, chips: Number(chips) || 20 };
+    seats[seatNumber] = { playerId, playerName, chips: chipAmount };
     GameSeats.setRoomSeats(String(tableId), seats);
 
-    const seatPayload = { seatNumber, playerId, playerName, chips: Number(chips) || 20 };
+    const seatPayload = { seatNumber, playerId, playerName, chips: chipAmount };
 
     // Fan out to Supabase realtime
     try {

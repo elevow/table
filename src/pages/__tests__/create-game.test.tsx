@@ -134,4 +134,32 @@ describe('CreateGameRoomPage - Big Blind auto-update', () => {
     fireEvent.change(smallBlindInput, { target: { value: '0.5' } });
     expect(bigBlindInput.value).toBe('1');
   });
+
+  it('should have a buy-in field with default value of 1000', () => {
+    render(<CreateGameRoomPage />);
+    
+    // Find the Buy-In input by looking for the label text and then finding the input in the same container
+    const buyInLabel = screen.getByText('Buy-In');
+    const buyInContainer = buyInLabel.parentElement;
+    const buyInInput = buyInContainer?.querySelector('input[type="number"]') as HTMLInputElement;
+    
+    expect(buyInInput).toBeTruthy();
+    expect(buyInInput.value).toBe('1000');
+  });
+
+  it('should allow changing the buy-in value', () => {
+    render(<CreateGameRoomPage />);
+    
+    const buyInLabel = screen.getByText('Buy-In');
+    const buyInContainer = buyInLabel.parentElement;
+    const buyInInput = buyInContainer?.querySelector('input[type="number"]') as HTMLInputElement;
+    
+    // Change buy-in to 2000
+    fireEvent.change(buyInInput, { target: { value: '2000' } });
+    expect(buyInInput.value).toBe('2000');
+    
+    // Change buy-in to 500
+    fireEvent.change(buyInInput, { target: { value: '500' } });
+    expect(buyInInput.value).toBe('500');
+  });
 });

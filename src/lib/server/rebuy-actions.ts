@@ -3,7 +3,6 @@ import { publishSeatState, publishSeatVacated } from '../realtime/publisher';
 import * as GameSeats from '../shared/game-seats';
 import { recordBuyin } from '../shared/rebuy-tracker';
 import { fetchRoomRebuyAmount } from '../shared/rebuy-limit';
-import { BASE_REBUY_CHIPS } from './rebuy-state';
 import type { TableState } from '../../types/poker';
 
 export async function autoStandPlayer(

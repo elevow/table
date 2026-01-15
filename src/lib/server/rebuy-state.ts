@@ -23,10 +23,6 @@ const pendingRebuys = globalObj[globalKey]!;
 const DEFAULT_BUYIN = Number(process.env.NEXT_PUBLIC_DEFAULT_BUYIN);
 export const BASE_REBUY_CHIPS = Number.isFinite(DEFAULT_BUYIN) && DEFAULT_BUYIN > 0 ? DEFAULT_BUYIN : 20;
 
-function getDefaultRebuyAmount(): number {
-  return BASE_REBUY_CHIPS;
-}
-
 export function getPendingRebuys(tableId: string): Map<string, PendingRebuyEntry> | undefined {
   return pendingRebuys.get(tableId);
 }

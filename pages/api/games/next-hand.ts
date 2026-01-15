@@ -6,7 +6,6 @@ import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/
 import { fetchRoomRebuyLimit, fetchRoomRebuyAmount } from '../../../src/lib/shared/rebuy-limit';
 import { getPlayerRebuyInfo } from '../../../src/lib/shared/rebuy-tracker';
 import {
-  BASE_REBUY_CHIPS,
   clearPendingRebuy,
   hasPendingRebuy,
   pendingRebuyCount,

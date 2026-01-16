@@ -37,7 +37,12 @@ export async function applyRebuy(
   playerId: string,
   chipsOverride?: number
 ) {
-  const engine = (global as Record<string, unknown>).activeGames?.get?.(tableId);
+  interface GameEngine {
+    getState: () => TableState;
+  }
+  
+  const globalWithGames = global as typeof globalThis & { activeGames?: Map<string, GameEngine> };
+  const engine = globalWithGames.activeGames?.get(tableId);
   if (!engine || typeof engine.getState !== 'function') {
     throw new Error('No active game available for this table');
   }

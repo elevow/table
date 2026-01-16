@@ -82,15 +82,26 @@ export async function fetchRoomRebuyAmount(roomId: string): Promise<number> {
   let amount = BASE_REBUY_CHIPS; // Use shared default
 
   const service = getGameService();
-  if (service) {
+  if (!service) {
+    console.warn(`[rebuy-limit] GameService not available for room ${roomId}, using default rebuy amount: ${BASE_REBUY_CHIPS}`);
+  } else {
     try {
       const room = await service.getRoomById(roomId);
-      const configAmount = room?.configuration?.rebuyAmount;
-      if (typeof configAmount === 'number' && configAmount > 0) {
-        amount = configAmount;
+      if (!room) {
+        console.warn(`[rebuy-limit] Room ${roomId} not found, using default rebuy amount: ${BASE_REBUY_CHIPS}`);
+      } else if (!room.configuration) {
+        console.warn(`[rebuy-limit] Room ${roomId} has no configuration, using default rebuy amount: ${BASE_REBUY_CHIPS}`);
+      } else {
+        const configAmount = room.configuration.rebuyAmount;
+        if (typeof configAmount === 'number' && configAmount > 0) {
+          amount = configAmount;
+          console.log(`[rebuy-limit] Using configured rebuy amount for room ${roomId}: ${amount}`);
+        } else {
+          console.warn(`[rebuy-limit] Room ${roomId} has invalid rebuyAmount in configuration (${configAmount}), using default: ${BASE_REBUY_CHIPS}`);
+        }
       }
     } catch (err) {
-      console.warn(`[rebuy-limit] Failed to fetch room ${roomId} rebuy amount:`, err instanceof Error ? err.message : String(err));
+      console.error(`[rebuy-limit] Failed to fetch room ${roomId} rebuy amount:`, err instanceof Error ? err.message : String(err));
     }
   }
 

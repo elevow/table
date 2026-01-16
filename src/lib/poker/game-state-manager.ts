@@ -132,6 +132,19 @@ export class GameStateManager {
     }
 
     if (!activePlayer) throw new Error('Could not find active player');
+    
+    // Check if the initially selected player can actually act (not folded, not all-in)
+    // If they can't, find the next eligible player
+    if (activePlayer.isFolded || activePlayer.isAllIn) {
+      const eligiblePlayer = this.findNextActivePlayer(activePlayer.position);
+      if (eligiblePlayer) {
+        activePlayer = eligiblePlayer;
+      } else {
+        // No eligible players found - should not happen as we checked activeCount > 1 earlier
+        throw new Error('Could not find eligible active player');
+      }
+    }
+    
     if (process.env.DEBUG_POKER === 'true') {
       const n = this.state.players.length;
       const mode = n === 2 ? 'HU' : 'RING';

@@ -58,6 +58,31 @@ describe('GameStateManager', () => {
       expect(() => gameStateManager.startBettingRound('preflop'))
         .toThrow('Could not find active player');
     });
+
+    it('should skip folded player when starting new betting round', () => {
+      // Simulate scenario where player 2 (normally first to act post-flop) has folded
+      player2.isFolded = true;
+      gameStateManager.startBettingRound('flop');
+      // Should skip player 2 and set player 3 as active
+      expect(state.activePlayer).toBe('p3');
+    });
+
+    it('should skip all-in player when starting new betting round', () => {
+      // Simulate scenario where player 2 (normally first to act post-flop) is all-in
+      player2.isAllIn = true;
+      gameStateManager.startBettingRound('flop');
+      // Should skip player 2 and set player 3 as active
+      expect(state.activePlayer).toBe('p3');
+    });
+
+    it('should handle multiple folded/all-in players when starting round', () => {
+      // Player 2 and 3 are out, only player 1 can act
+      player2.isFolded = true;
+      player3.isAllIn = true;
+      gameStateManager.startBettingRound('flop');
+      // Should wrap around and set player 1 as active
+      expect(state.activePlayer).toBe('p1');
+    });
   });
 
   describe('moveToNextStage', () => {

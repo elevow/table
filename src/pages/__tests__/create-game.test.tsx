@@ -163,3 +163,93 @@ describe('CreateGameRoomPage - Big Blind auto-update', () => {
     expect(buyInInput.value).toBe('500');
   });
 });
+
+describe('CreateGameRoomPage - Rebuy Amount Field', () => {
+  beforeEach(() => {
+    // Mock localStorage
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: jest.fn(() => 'test-token'),
+        setItem: jest.fn(),
+        removeItem: jest.fn(),
+      },
+      writable: true,
+    });
+  });
+
+  const getNumberOfRebuysSelect = () => {
+    const labels = screen.getAllByText('Number of Rebuys');
+    const label = labels[0];
+    return label.parentElement?.querySelector('select') as HTMLSelectElement;
+  };
+
+  const getRebuyAmountInput = () => {
+    try {
+      const labels = screen.getAllByText('Rebuy Amount (chips)');
+      const label = labels[0];
+      return label.parentElement?.querySelector('input') as HTMLInputElement;
+    } catch (err) {
+      return null;
+    }
+  };
+
+  it('should show rebuy amount field when numberOfRebuys is unlimited', () => {
+    render(<CreateGameRoomPage />);
+    
+    const rebuyAmountInput = getRebuyAmountInput();
+    expect(rebuyAmountInput).not.toBeNull();
+    expect(rebuyAmountInput?.value).toBe('20');
+  });
+
+  it('should not show rebuy amount field when numberOfRebuys is 0', () => {
+    render(<CreateGameRoomPage />);
+    
+    const numberOfRebuysSelect = getNumberOfRebuysSelect();
+    fireEvent.change(numberOfRebuysSelect, { target: { value: '0' } });
+    
+    const rebuyAmountInput = getRebuyAmountInput();
+    expect(rebuyAmountInput).toBeNull();
+  });
+
+  it('should show rebuy amount field when numberOfRebuys is greater than 0', () => {
+    render(<CreateGameRoomPage />);
+    
+    const numberOfRebuysSelect = getNumberOfRebuysSelect();
+    fireEvent.change(numberOfRebuysSelect, { target: { value: '3' } });
+    
+    const rebuyAmountInput = getRebuyAmountInput();
+    expect(rebuyAmountInput).not.toBeNull();
+    expect(rebuyAmountInput?.value).toBe('20');
+  });
+
+  it('should keep rebuy amount field visible when changing from numeric to unlimited', () => {
+    render(<CreateGameRoomPage />);
+    
+    const numberOfRebuysSelect = getNumberOfRebuysSelect();
+    
+    // First set to a numeric value
+    fireEvent.change(numberOfRebuysSelect, { target: { value: '5' } });
+    let rebuyAmountInput = getRebuyAmountInput();
+    expect(rebuyAmountInput).not.toBeNull();
+    
+    // Then change to unlimited - field should still be visible
+    fireEvent.change(numberOfRebuysSelect, { target: { value: 'unlimited' } });
+    rebuyAmountInput = getRebuyAmountInput();
+    expect(rebuyAmountInput).not.toBeNull();
+  });
+
+  it('should allow changing rebuy amount value', () => {
+    render(<CreateGameRoomPage />);
+    
+    const numberOfRebuysSelect = getNumberOfRebuysSelect();
+    fireEvent.change(numberOfRebuysSelect, { target: { value: '2' } });
+    
+    const rebuyAmountInput = getRebuyAmountInput();
+    expect(rebuyAmountInput).not.toBeNull();
+    
+    if (rebuyAmountInput) {
+      fireEvent.change(rebuyAmountInput, { target: { value: '50' } });
+      expect(rebuyAmountInput.value).toBe('50');
+    }
+  });
+});

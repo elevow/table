@@ -241,13 +241,16 @@ export class ActionManager {
     
     while (nextIndex !== activePlayerIndex) {
       const player = state.players[nextIndex];
-      if (!player.isFolded && !player.isAllIn && player.stack > 0) {
+      // Player can act if: not folded, not all-in, has stack, and either hasn't acted or needs to match current bet
+      if (!player.isFolded && !player.isAllIn && player.stack > 0 && 
+          (!player.hasActed || player.currentBet < state.currentBet)) {
         return player.id;
       }
       nextIndex = (nextIndex + 1) % state.players.length;
     }
     
-    return state.activePlayer; // If no other eligible player found
+    // No other eligible player found - return empty string to indicate betting round should end
+    return '';
   }
 
   private isBettingRoundComplete(state: TableState): boolean {

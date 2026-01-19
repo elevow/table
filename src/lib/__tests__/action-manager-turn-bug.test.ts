@@ -1,9 +1,9 @@
 /**
  * Test for the action-manager findNextActivePlayer bug fix.
  * 
- * This test verifies that when a player Calls or Bets during a betting round,
+ * This test verifies that when a player calls or bets during a betting round,
  * the next player is correctly identified only if they need to act
- * (haven't acted yet OR need to call/raise).
+ * (haven't acted yet or need to call/raise).
  */
 
 import { ActionManager } from '../action-manager';
@@ -45,8 +45,8 @@ describe('ActionManager - findNextActivePlayer bug fix', () => {
     jest.useRealTimers();
   });
 
-  it('should not set next player to someone who has already acted and matched the bet', async () => {
-    // Scenario: 3 players, player 2 has folded, player 1 calls, player 3 has already acted and matched bet
+  it('should not set next player to player who has already acted and matched the bet', async () => {
+    // Scenario: 3 players, player 2 has folded, player 3 has already acted and matched bet, player 1 calls
     const initialState: TableState = {
       tableId: 'table-1',
       pot: 50,

@@ -241,7 +241,7 @@ export class ActionManager {
     
     while (nextIndex !== activePlayerIndex) {
       const player = state.players[nextIndex];
-      // Player can act if: not folded, not all-in, has stack, and either hasn't acted or needs to match current bet
+      // Player can act if: not folded, not all-in, has chips, and either hasn't acted or needs to match current bet
       if (!player.isFolded && !player.isAllIn && player.stack > 0 && 
           (!player.hasActed || player.currentBet < state.currentBet)) {
         return player.id;

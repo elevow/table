@@ -218,24 +218,30 @@ export class ActionManager {
     if (this.isBettingRoundComplete(newState)) {
       newState.stage = this.getNextStage(newState.stage);
       this.resetBettingRound(newState);
-      // After resetting, find the first player to act in the new betting round
-      // Since all players now have hasActed=false and currentBet=0, 
-      // findNextActivePlayer should find the first eligible player
-      const nextPlayer = this.findNextActivePlayer(newState);
-      if (nextPlayer) {
-        newState.activePlayer = nextPlayer;
+      
+      // If we advanced to showdown, clear activePlayer as no more betting
+      if (newState.stage === 'showdown') {
+        newState.activePlayer = '';
       } else {
-        // This should not happen if there are eligible players
-        // Log error and keep activePlayer to avoid breaking the game
-        console.error('[action-manager] No eligible player found after betting round completion', {
-          stage: newState.stage,
-          players: newState.players.map(p => ({
-            id: p.id,
-            isFolded: p.isFolded,
-            isAllIn: p.isAllIn,
-            stack: p.stack
-          }))
-        });
+        // After resetting, find the first player to act in the new betting round
+        // Since all players now have hasActed=false and currentBet=0, 
+        // findNextActivePlayer should find the first eligible player
+        const nextPlayer = this.findNextActivePlayer(newState);
+        if (nextPlayer) {
+          newState.activePlayer = nextPlayer;
+        } else {
+          // This should not happen if there are eligible players
+          // Log error and keep activePlayer to avoid breaking the game
+          console.error('[action-manager] No eligible player found after betting round completion', {
+            stage: newState.stage,
+            players: newState.players.map(p => ({
+              id: p.id,
+              isFolded: p.isFolded,
+              isAllIn: p.isAllIn,
+              stack: p.stack
+            }))
+          });
+        }
       }
     } else {
       // Move to next active player only if betting round continues

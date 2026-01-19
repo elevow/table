@@ -214,13 +214,27 @@ export class ActionManager {
     newState.currentBet = effects.newCurrentBet;
     newState.minRaise = effects.newMinRaise;
 
-    // Move to next active player
-    newState.activePlayer = this.findNextActivePlayer(newState);
-
-    // Check if betting round is complete
+    // Check if betting round is complete before finding next player
     if (this.isBettingRoundComplete(newState)) {
       newState.stage = this.getNextStage(newState.stage);
       this.resetBettingRound(newState);
+      // After resetting, find the first player to act in the new betting round
+      // Since all players now have hasActed=false and currentBet=0, 
+      // findNextActivePlayer should find the first eligible player
+      const nextPlayer = this.findNextActivePlayer(newState);
+      if (nextPlayer) {
+        newState.activePlayer = nextPlayer;
+      }
+      // If no player found after reset, keep the activePlayer as is
+      // This might happen in edge cases, but state should be corrected externally
+    } else {
+      // Move to next active player only if betting round continues
+      const nextPlayer = this.findNextActivePlayer(newState);
+      if (nextPlayer) {
+        newState.activePlayer = nextPlayer;
+      }
+      // If no next player found but round not complete, keep current activePlayer
+      // This shouldn't happen in normal flow
     }
 
     // If all active players are all-in and community runout remains, lock the hand (no active player)

@@ -224,17 +224,39 @@ export class ActionManager {
       const nextPlayer = this.findNextActivePlayer(newState);
       if (nextPlayer) {
         newState.activePlayer = nextPlayer;
+      } else {
+        // This should not happen if there are eligible players
+        // Log error and keep activePlayer to avoid breaking the game
+        console.error('[action-manager] No eligible player found after betting round completion', {
+          stage: newState.stage,
+          players: newState.players.map(p => ({
+            id: p.id,
+            isFolded: p.isFolded,
+            isAllIn: p.isAllIn,
+            stack: p.stack
+          }))
+        });
       }
-      // If no player found after reset, keep the activePlayer as is
-      // This might happen in edge cases, but state should be corrected externally
     } else {
       // Move to next active player only if betting round continues
       const nextPlayer = this.findNextActivePlayer(newState);
       if (nextPlayer) {
         newState.activePlayer = nextPlayer;
+      } else {
+        // No eligible next player found but round not complete
+        // This suggests a logic error - log for debugging
+        console.error('[action-manager] No next player found but betting round not complete', {
+          stage: newState.stage,
+          currentBet: newState.currentBet,
+          players: newState.players.map(p => ({
+            id: p.id,
+            hasActed: p.hasActed,
+            currentBet: p.currentBet,
+            isFolded: p.isFolded,
+            isAllIn: p.isAllIn
+          }))
+        });
       }
-      // If no next player found but round not complete, keep current activePlayer
-      // This shouldn't happen in normal flow
     }
 
     // If all active players are all-in and community runout remains, lock the hand (no active player)

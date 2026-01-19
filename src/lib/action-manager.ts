@@ -219,13 +219,12 @@ export class ActionManager {
       newState.stage = this.getNextStage(newState.stage);
       this.resetBettingRound(newState);
       
-      // If we advanced to showdown, clear activePlayer as no more betting
+      // If we advanced to showdown, clear activePlayer since no betting occurs
+      // and stale state can interfere with starting the next hand
       if (newState.stage === 'showdown') {
         newState.activePlayer = '';
       } else {
-        // After resetting, find the first player to act in the new betting round
-        // Since all players now have hasActed=false and currentBet=0, 
-        // findNextActivePlayer should find the first eligible player
+        // Find the first eligible player for the new betting round
         const nextPlayer = this.findNextActivePlayer(newState);
         if (nextPlayer) {
           newState.activePlayer = nextPlayer;

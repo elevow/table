@@ -52,7 +52,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Log current game state for debugging
     const currentState = engine.getState();
     console.log('[action] Current activePlayer:', currentState.activePlayer, 'Action from:', playerId, 'Action:', action);
-
+    console.log('[action] State:', {
+      stage: currentState.stage,
+      dealerPosition: currentState.dealerPosition,
+      currentBet: currentState.currentBet,
+      players: currentState.players.map(p => ({
+        id: p.id,
+        position: p.position,
+        hasActed: p.hasActed,
+        currentBet: p.currentBet,
+        isFolded: p.isFolded,
+        isAllIn: p.isAllIn
+      }))
+    });
     // Snapshot community cards/stage before applying the action so we can detect premature board reveals
     const preActionCommunity: Card[] = Array.isArray(currentState?.communityCards)
       ? currentState.communityCards.map((card: Card) => ({ ...card }))

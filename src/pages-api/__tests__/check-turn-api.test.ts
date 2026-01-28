@@ -1,8 +1,13 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import handler from '../../../../pages/api/games/check-turn';
-import * as enginePersistence from '../../../lib/poker/engine-persistence';
+// Mock pg module to avoid TextEncoder issues in jsdom
+jest.mock('pg', () => ({
+  Pool: jest.fn(),
+}));
 
-jest.mock('../../../lib/poker/engine-persistence');
+import { NextApiRequest, NextApiResponse } from 'next';
+import handler from '../../../pages/api/games/check-turn';
+import * as enginePersistence from '../../../src/lib/poker/engine-persistence';
+
+jest.mock('../../../src/lib/poker/engine-persistence');
 
 describe('/api/games/check-turn', () => {
   let req: Partial<NextApiRequest>;

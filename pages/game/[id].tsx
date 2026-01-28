@@ -423,6 +423,24 @@ export default function GamePage() {
     }
   );
   
+  // Helper functions for game state
+  const getSeatedPlayersCount = () => {
+    return Object.values(seatAssignments).filter(assignment => assignment !== null).length;
+  };
+  
+  const canStartGame = () => {
+    const seatedCount = getSeatedPlayersCount();
+    return seatedCount >= 2 && currentPlayerSeat !== null; // Need 2+ players and current player must be seated
+  };
+  
+  // Game state
+  const [gameStarted, setGameStarted] = useState(false);
+  const [pokerGameState, setPokerGameState] = useState<any>(null);
+  const pokerStageRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    pokerStageRef.current = pokerGameState?.stage;
+  }, [pokerGameState?.stage]);
+  
   // Poll for turn status every 10 seconds when waiting
   // This complements Supabase Realtime notifications to ensure players are notified even if broadcasts are missed
   const isWaitingForTurn = gameStarted && pokerGameState && pokerGameState.activePlayer !== playerId && currentPlayerSeat !== null;
@@ -451,23 +469,6 @@ export default function GamePage() {
     }
   );
   
-  // Helper functions for game state
-  const getSeatedPlayersCount = () => {
-    return Object.values(seatAssignments).filter(assignment => assignment !== null).length;
-  };
-  
-  const canStartGame = () => {
-    const seatedCount = getSeatedPlayersCount();
-    return seatedCount >= 2 && currentPlayerSeat !== null; // Need 2+ players and current player must be seated
-  };
-  
-  // Game state
-  const [gameStarted, setGameStarted] = useState(false);
-  const [pokerGameState, setPokerGameState] = useState<any>(null);
-  const pokerStageRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    pokerStageRef.current = pokerGameState?.stage;
-  }, [pokerGameState?.stage]);
   // Track last received sequence number to prevent out-of-order updates
   const lastSeqRef = useRef<number>(0);
   // Prevent duplicate action submissions

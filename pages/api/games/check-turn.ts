@@ -38,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       isMyTurn: gameState.activePlayer === playerId,
       activePlayer: gameState.activePlayer,
       tableState: gameState.stage || 'waiting',
-      handNumber: gameState.handNumber || 0
+      handNumber: (gameState as any).handNumber || 0
     });
   } catch (e: unknown) {
     console.error('Error checking turn status:', e);

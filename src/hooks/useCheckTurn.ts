@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
 interface TurnStatus {
   isMyTurn: boolean;
@@ -45,7 +45,7 @@ export function useCheckTurn(
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isCheckingRef = useRef(false);
 
-  const checkTurn = async () => {
+  const checkTurn = useCallback(async () => {
     // Prevent concurrent checks
     if (isCheckingRef.current) return;
     if (!tableId || !playerId) return;
@@ -96,7 +96,7 @@ export function useCheckTurn(
       setIsLoading(false);
       isCheckingRef.current = false;
     }
-  };
+  }, [tableId, playerId, onTurnChange]);
 
   useEffect(() => {
     // Don't poll if disabled or missing required params
@@ -130,7 +130,7 @@ export function useCheckTurn(
         timeoutRef.current = null;
       }
     };
-  }, [tableId, playerId, enabled, interval]);
+  }, [tableId, playerId, enabled, interval, checkTurn]);
 
   return {
     turnStatus,

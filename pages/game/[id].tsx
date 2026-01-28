@@ -11,6 +11,7 @@ import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { OutsCalculator } from '../../src/lib/poker/outs-calculator';
 import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
+import { useCheckTurn } from '../../src/hooks/useCheckTurn';
 import { Card, Player, GameVariant } from '../../src/types/poker';
 import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
@@ -417,6 +418,34 @@ export default function GamePage() {
         } else if (payload.status === 'declined') {
           setRebuyPrompt(null);
           // Seat is vacated via seat_vacated broadcast
+        }
+      }
+    }
+  );
+  
+  // Poll for turn status every 10 seconds when waiting
+  // This complements Supabase Realtime notifications to ensure players are notified even if broadcasts are missed
+  const isWaitingForTurn = gameStarted && pokerGameState && pokerGameState.activePlayer !== playerId && currentPlayerSeat !== null;
+  const { turnStatus } = useCheckTurn(
+    tableId,
+    playerId,
+    {
+      enabled: isWaitingForTurn,
+      interval: 10000, // Poll every 10 seconds
+      onTurnChange: (status) => {
+        console.log('🔔 Turn status changed via polling:', status);
+        // If polling detected it's now our turn but state hasn't updated yet, fetch full state
+        if (status.isMyTurn && pokerGameState?.activePlayer !== playerId) {
+          console.log('🔔 Polling detected our turn, fetching latest game state...');
+          fetch(`/api/games/state?tableId=${tableId}&playerId=${playerId}`)
+            .then(resp => resp.ok ? resp.json() : Promise.reject(new Error(`HTTP ${resp.status}`)))
+            .then(data => {
+              if (data.gameState) {
+                setPokerGameState(data.gameState);
+                console.log('🔔 Game state updated via polling');
+              }
+            })
+            .catch(err => console.warn('Failed to fetch state after turn change:', err));
         }
       }
     }

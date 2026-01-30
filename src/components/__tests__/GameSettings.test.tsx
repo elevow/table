@@ -159,7 +159,7 @@ describe('GameSettings', () => {
   it('should display stack in BB description', () => {
     render(<GameSettings {...defaultProps} />);
     expect(
-      screen.getByText(/Display your stack in Big Blinds \(BB\) instead of chips/i)
+      screen.getByText(/Display chip stacks in Big Blinds \(BB\) instead of raw chip counts/i)
     ).toBeInTheDocument();
   });
 });

@@ -174,7 +174,7 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
             Show Stack in Big Blinds
           </label>
           <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
-            Display your stack in Big Blinds (BB) instead of chips.
+            Display chip stacks in Big Blinds (BB) instead of raw chip counts.
           </div>
         </div>
         <div className="setting-item">

@@ -2827,10 +2827,12 @@ export default function GamePage() {
                   }
                 </p>
                 <p>
-                  Your Stack: {showStackInBB 
-                    ? formatChips(pokerGameState.players.find((p: any) => p.id === playerId)?.stack || 0, pokerGameState?.bigBlind || null, true)
-                    : `$${pokerGameState.players.find((p: any) => p.id === playerId)?.stack || 0}`
-                  }
+                  Your Stack: {(() => {
+                    const myStack = pokerGameState.players.find((p: any) => p.id === playerId)?.stack || 0;
+                    return showStackInBB 
+                      ? formatChips(myStack, pokerGameState?.bigBlind || null, true)
+                      : `$${myStack}`;
+                  })()}
                 </p>
               </div>
             </div>

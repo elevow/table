@@ -13,6 +13,7 @@ export interface GameSettings {
   timeBank: number;
   highContrastCards: boolean;
   showPotOdds: boolean;
+  showStackInBB: boolean;
 }
 
 interface GameSettingsProps {
@@ -30,6 +31,7 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
     timeBank: 30,
     highContrastCards: false,
     showPotOdds: true,
+    showStackInBB: false,
   });
 
   // Use a ref to store the callback to avoid re-triggering effects
@@ -160,6 +162,19 @@ function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
           </label>
           <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
             Display the ratio between the pot size and the bet you are facing.
+          </div>
+        </div>
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.showStackInBB}
+              onChange={(e) => handleSettingChange('showStackInBB', e.target.checked)}
+            />
+            Show Stack in Big Blinds
+          </label>
+          <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+            Display chip stacks in Big Blinds (BB) instead of raw chip counts.
           </div>
         </div>
         <div className="setting-item">

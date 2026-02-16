@@ -101,4 +101,65 @@ describe('GameSettings', () => {
       screen.getByText(/Display the ratio between the pot size and the bet you are facing/i)
     ).toBeInTheDocument();
   });
+
+  it('should show stack in BB toggle', () => {
+    render(<GameSettings {...defaultProps} />);
+    expect(screen.getByText('Show Stack in Big Blinds')).toBeInTheDocument();
+  });
+
+  it('should have stack in BB disabled by default', () => {
+    render(<GameSettings {...defaultProps} />);
+    const checkbox = screen.getByLabelText(/Show Stack in Big Blinds/i) as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+  });
+
+  it('should toggle stack in BB setting when checkbox is clicked', () => {
+    render(<GameSettings {...defaultProps} />);
+    const checkbox = screen.getByLabelText(/Show Stack in Big Blinds/i) as HTMLInputElement;
+    
+    expect(checkbox.checked).toBe(false);
+    
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+    
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+  });
+
+  it('should persist stack in BB setting to localStorage', async () => {
+    render(<GameSettings {...defaultProps} />);
+    const checkbox = screen.getByLabelText(/Show Stack in Big Blinds/i) as HTMLInputElement;
+    
+    fireEvent.click(checkbox);
+    
+    await waitFor(() => {
+      const saved = localStorage.getItem(`game_settings_${defaultProps.gameId}`);
+      expect(saved).toBeTruthy();
+      const parsed = JSON.parse(saved!);
+      expect(parsed.showStackInBB).toBe(true);
+    });
+  });
+
+  it('should load stack in BB setting from localStorage', () => {
+    const savedSettings = {
+      showStackInBB: true,
+      soundEnabled: true,
+      chatEnabled: true,
+    };
+    localStorage.setItem(
+      `game_settings_${defaultProps.gameId}`,
+      JSON.stringify(savedSettings)
+    );
+    
+    render(<GameSettings {...defaultProps} />);
+    const checkbox = screen.getByLabelText(/Show Stack in Big Blinds/i) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+  });
+
+  it('should display stack in BB description', () => {
+    render(<GameSettings {...defaultProps} />);
+    expect(
+      screen.getByText(/Display chip stacks in Big Blinds \(BB\) instead of raw chip counts/i)
+    ).toBeInTheDocument();
+  });
 });

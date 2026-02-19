@@ -2588,7 +2588,7 @@ export default function GamePage() {
                     onClick={handleCall}
                     className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors"
                   >
-                    Call ${pokerGameState.currentBet}
+                    Call {showStackInBB ? formatChips(pokerGameState.currentBet, pokerGameState?.bigBlind || null, true) : `$${pokerGameState.currentBet}`}
                   </button>
                 )}
                 
@@ -2611,6 +2611,9 @@ export default function GamePage() {
                               value={clamp(betInput, min, max)}
                               onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                             />
+                            {showStackInBB && bb > 0 && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(betInput, min, max), bb, true)}</div>
+                            )}
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
@@ -2636,7 +2639,8 @@ export default function GamePage() {
                                 const isAllIn = Math.abs(sel - max) < 0.005;
                                 const add = Math.max(0, sel - prev);
                                 const onClick = () => handleBet(Number(sel.toFixed(2)));
-                                const label = isAllIn ? `All-in $${stack.toFixed(2)}` : `Bet $${add.toFixed(2)}`;
+                                const bbVal = pokerGameState?.bigBlind || null;
+                                const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
                                   <button onClick={onClick} className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
@@ -2666,6 +2670,9 @@ export default function GamePage() {
                               value={clamp(raiseInput, min, max)}
                               onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                             />
+                            {showStackInBB && bb > 0 && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(raiseInput, min, max), bb, true)}</div>
+                            )}
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
@@ -2691,7 +2698,8 @@ export default function GamePage() {
                                 const isAllIn = Math.abs(sel - max) < 0.005;
                                 const add = Math.max(0, sel - prev);
                                 const onClick = () => handleRaise(Number(sel.toFixed(2)));
-                                const label = isAllIn ? `All-in $${stack.toFixed(2)}` : `Raise to $${sel.toFixed(2)} (+$${add.toFixed(2)})`;
+                                const bbVal = pokerGameState?.bigBlind || null;
+                                const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
                                   <button onClick={onClick} className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
@@ -2725,6 +2733,9 @@ export default function GamePage() {
                               value={clamp(betInput, min, max)}
                               onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                             />
+                            {showStackInBB && bb > 0 && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(betInput, min, max), bb, true)}</div>
+                            )}
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
@@ -2747,7 +2758,7 @@ export default function GamePage() {
                                 const sel = clamp(betInput, min, max);
                                 const add = Math.max(0, sel - prev);
                                 const onClick = () => handleBet(Number(sel.toFixed(2)));
-                                const label = `Bet $${add.toFixed(2)}`;
+                                const label = `Bet ${showStackInBB ? formatChips(add, pokerGameState?.bigBlind || null, true) : `$${add.toFixed(2)}`}`;
                                 return (
                                   <button onClick={onClick} className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
@@ -2777,6 +2788,9 @@ export default function GamePage() {
                               value={clamp(raiseInput, min, max)}
                               onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                             />
+                            {showStackInBB && bb > 0 && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(raiseInput, min, max), bb, true)}</div>
+                            )}
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
@@ -2799,7 +2813,8 @@ export default function GamePage() {
                                 const sel = clamp(raiseInput, min, max);
                                 const add = Math.max(0, sel - prev);
                                 const onClick = () => handleRaise(Number(sel.toFixed(2)));
-                                const label = `Raise to $${sel.toFixed(2)} (+$${add.toFixed(2)})`;
+                                const bbVal = pokerGameState?.bigBlind || null;
+                                const label = `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
                                   <button onClick={onClick} className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}

@@ -6,6 +6,7 @@ import {
   getRebuyAvailability,
   pendingRebuyCount,
 } from '../../../src/lib/server/rebuy-state';
+import { fetchRoomRebuyAmount } from '../../../src/lib/shared/rebuy-limit';
 import { recordBuyin } from '../../../src/lib/shared/rebuy-tracker';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
@@ -89,6 +90,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(403).json({ error: 'Rebuy limit reached', ...availability });
       }
 
+      // Fetch the rebuy amount for this room
+      const rebuyChips = await fetchRoomRebuyAmount(tableId);
+
       // Record the rebuy
       const trackerRecord = recordBuyin(tableId, playerId);
       clearPendingRebuy(tableId, playerId);
@@ -97,9 +101,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (engine && typeof engine.getState === 'function') {
         const state = engine.getState();
         if (state && Array.isArray(state.players)) {
-          const player = state.players.find((p: any) => p.id === playerId);
+          const player = state.players.find((p: { id: string }) => p.id === playerId);
           if (player) {
-            player.stack = BASE_REBUY_CHIPS;
+            player.stack = rebuyChips;
             player.currentBet = 0;
             player.isAllIn = false;
             player.isFolded = false;
@@ -118,7 +122,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           seats[seatNumber] = {
             playerId: assignment.playerId,
             playerName: assignment.playerName,
-            chips: BASE_REBUY_CHIPS,
+            chips: rebuyChips,
           };
           GameSeats.setRoomSeats(tableId, seats);
           await publishSeatState(tableId, { seats });
@@ -131,7 +135,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         playerId,
         status: 'accepted',
         rebuysUsed: trackerRecord.rebuys,
-        stack: BASE_REBUY_CHIPS,
+        stack: rebuyChips,
       });
 
       // Check if we can start the next hand now
@@ -141,7 +145,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         success: true,
         status: 'accepted',
         rebuysUsed: trackerRecord.rebuys,
-        stack: BASE_REBUY_CHIPS,
+        stack: rebuyChips,
         nextHandStarted: handStarted,
       });
     } else {

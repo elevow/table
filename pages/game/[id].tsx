@@ -2758,7 +2758,8 @@ export default function GamePage() {
                                 const sel = clamp(betInput, min, max);
                                 const add = Math.max(0, sel - prev);
                                 const onClick = () => handleBet(Number(sel.toFixed(2)));
-                                const label = `Bet ${showStackInBB ? formatChips(add, pokerGameState?.bigBlind || null, true) : `$${add.toFixed(2)}`}`;
+                                const bbVal = pokerGameState?.bigBlind || null;
+                                const label = `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
                                   <button onClick={onClick} className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}

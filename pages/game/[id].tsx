@@ -274,21 +274,9 @@ export default function GamePage() {
                 return resp.json();
               })
               .then(data => {
-                if (data.gameState && data.gameState.players) {
-                  // Extract only the hole cards for the current player, don't overwrite entire state
-                  const playerWithCards = data.gameState.players.find((p: any) => p.id === effectivePlayerId);
-                  if (playerWithCards?.holeCards) {
-                    setPokerGameState((prevState: any) => {
-                      if (!prevState || !prevState.players) return prevState;
-                      return {
-                        ...prevState,
-                        players: prevState.players.map((p: any) =>
-                          p.id === effectivePlayerId ? { ...p, holeCards: playerWithCards.holeCards } : p
-                        )
-                      };
-                    });
-                    console.log('🎴 Player hole cards merged from API');
-                  }
+                if (data.gameState) {
+                  setPokerGameState(data.gameState);
+                  console.log('🎴 Player-specific state fetched with hole cards');
                 }
               })
               .catch(err => console.warn('Failed to fetch player-specific state:', err));
@@ -841,17 +829,12 @@ export default function GamePage() {
         const err = await response.json();
         console.error('Start game failed:', err);
       } else {
-        // Game started successfully - Realtime will deliver the initial state
-        // We just extract and set the hole cards for the current player
+        // Use the API response to set initial game state
+        // The API returns a sanitized state that includes the current player's hole cards
         const data = await response.json();
         if (data.gameState) {
-          const playerWithCards = data.gameState.players?.find((p: any) => p.id === playerId);
-          if (playerWithCards?.holeCards && data.gameState.players) {
-            // Set initial state with hole cards
-            setPokerGameState(data.gameState);
-            console.log('🎴 Initial game state set with player cards from API');
-          }
-          // If no hole cards yet, wait for Realtime broadcast
+          setPokerGameState(data.gameState);
+          console.log('🎴 Initial game state set with player cards from API');
         }
       }
     } catch (error) {
@@ -897,25 +880,13 @@ export default function GamePage() {
         const err = await response.json();
         console.error('Poker action failed:', err);
       } else {
-        // Extract hole cards from API response and merge into current state
-        // Don't overwrite entire state to avoid race conditions with Realtime updates
+        // Use the API response to update game state
+        // The API returns a sanitized state that includes the current player's hole cards
         const data = await response.json();
-        if (data.gameState && data.gameState.players) {
-          const playerWithCards = data.gameState.players.find((p: any) => p.id === playerId);
-          if (playerWithCards?.holeCards) {
-            setPokerGameState((prevState: any) => {
-              if (!prevState || !prevState.players) return prevState;
-              return {
-                ...prevState,
-                players: prevState.players.map((p: any) =>
-                  p.id === playerId ? { ...p, holeCards: playerWithCards.holeCards } : p
-                )
-              };
-            });
-            console.log('🎴 Player hole cards merged after action');
-          }
+        if (data.gameState) {
+          setPokerGameState(data.gameState);
+          console.log('🎴 Game state updated with player cards from action API');
         }
-        // The actual state update will come via Supabase Realtime
       }
     } catch (error) {
       console.error('Error performing poker action:', error);

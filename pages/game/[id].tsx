@@ -445,7 +445,20 @@ export default function GamePage() {
   // Poll for turn status every 10 seconds when waiting
   // This complements Supabase Realtime notifications to ensure players are notified even if broadcasts are missed
   // Can be disabled via localStorage for debugging: localStorage.setItem('disablePolling', 'true')
-  const pollingDisabled = typeof window !== 'undefined' && localStorage.getItem('disablePolling') === 'true';
+  const [pollingDisabled, setPollingDisabled] = useState(false);
+  
+  useEffect(() => {
+    // Check localStorage for polling disabled flag
+    const disabled = localStorage.getItem('disablePolling') === 'true';
+    setPollingDisabled(disabled);
+    
+    if (disabled) {
+      console.log('⚠️ Turn polling is DISABLED via localStorage');
+    } else {
+      console.log('✓ Turn polling is ENABLED');
+    }
+  }, []);
+  
   const isWaitingForTurn = gameStarted && pokerGameState && pokerGameState.activePlayer !== playerId && currentPlayerSeat !== null;
   const { turnStatus } = useCheckTurn(
     tableId,
@@ -463,15 +476,6 @@ export default function GamePage() {
       }
     }
   );
-  
-  // Log polling status on mount
-  useEffect(() => {
-    if (pollingDisabled) {
-      console.log('⚠️ Turn polling is DISABLED via localStorage');
-    } else {
-      console.log('✓ Turn polling is ENABLED');
-    }
-  }, [pollingDisabled]);
   
   // Track last received sequence number to prevent out-of-order updates
   const lastSeqRef = useRef<number>(0);

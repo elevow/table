@@ -21,7 +21,7 @@ The turn polling system provides a redundant mechanism for notifying players whe
 
 3. **Integration**: Game page (`pages/game/[id].tsx`)
    - Polls only when player is seated and waiting for their turn
-   - Fetches full game state when polling detects it's now the player's turn
+   - Notifies via callback when polling detects turn changes (state updates come via Supabase Realtime)
    - Stops polling when it becomes the player's turn or when not seated
 
 ## Usage
@@ -115,7 +115,7 @@ Player joins game → Sits at table → Game starts
   ↓
 Poll detects turn change
   ↓
-Fetch full game state (includes hole cards)
+Notify via callback (state updates come via Realtime)
   ↓
 Update UI, stop polling
 ```
@@ -150,7 +150,7 @@ npm test -- src/hooks/__tests__/useCheckTurn.test.ts
 
 The hook logs important events:
 - `🔔 Turn status changed via polling:` - Turn detected via polling
-- `🔔 Polling detected our turn, fetching latest game state...` - Full state fetch triggered
+- `🔔 Polling detected it's now your turn - waiting for Realtime state update` - Notifying that turn changed
 - `[useCheckTurn] Error:` - Polling errors
 
 ### API Endpoint Logs

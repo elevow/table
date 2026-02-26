@@ -73,8 +73,8 @@ const { turnStatus } = useCheckTurn(tableId, playerId, {
   interval: 10000,
   onTurnChange: (status) => {
     if (status.isMyTurn) {
-      // Fetch full game state including hole cards
-      fetchGameState();
+      // Polling detected turn change - actual state update comes via Realtime
+      console.log('Turn detected via polling');
     }
   }
 });
@@ -83,7 +83,7 @@ const { turnStatus } = useCheckTurn(tableId, playerId, {
 **Polling Behavior:**
 - ✅ Polls when: Player is seated and waiting for their turn
 - ❌ Stops when: It becomes player's turn, player is not seated, or game hasn't started
-- 🔄 Fetches full state when turn is detected via polling
+- 🔔 Detects and notifies when a turn change occurs via polling; full game state updates come from Supabase Realtime
 
 ## Technical Details
 

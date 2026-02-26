@@ -445,11 +445,16 @@ export default function GamePage() {
   // Poll for turn status every 10 seconds when waiting
   // This complements Supabase Realtime notifications to ensure players are notified even if broadcasts are missed
   // Can be disabled via localStorage for debugging: localStorage.setItem('disablePolling', 'true')
-  const [pollingDisabled, setPollingDisabled] = useState(false);
+  const [pollingDisabled, setPollingDisabled] = useState<boolean | null>(null);
   
   useEffect(() => {
-    // Check localStorage for polling disabled flag
-    const disabled = localStorage.getItem('disablePolling') === 'true';
+    // Check localStorage for polling disabled flag (with try-catch for privacy modes)
+    let disabled = false;
+    try {
+      disabled = localStorage.getItem('disablePolling') === 'true';
+    } catch (error) {
+      console.warn('Unable to access localStorage for disablePolling flag', error);
+    }
     setPollingDisabled(disabled);
     
     if (disabled) {
@@ -460,11 +465,11 @@ export default function GamePage() {
   }, []);
   
   const isWaitingForTurn = gameStarted && pokerGameState && pokerGameState.activePlayer !== playerId && currentPlayerSeat !== null;
-  const { turnStatus } = useCheckTurn(
+  useCheckTurn(
     tableId,
     playerId,
     {
-      enabled: isWaitingForTurn && !pollingDisabled,
+      enabled: isWaitingForTurn && pollingDisabled === false,
       interval: 10000, // Poll every 10 seconds
       onTurnChange: (status) => {
         console.log('🔔 Turn status changed via polling:', status);

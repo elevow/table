@@ -22,8 +22,9 @@ interface UseCheckTurnOptions {
  * This provides a fallback mechanism alongside Supabase Realtime notifications,
  * ensuring players are notified of their turn even if websocket messages are missed.
  * 
- * Polling automatically stops when it becomes the player's turn (to reduce load),
- * and resumes when the turn changes to someone else.
+ * Polling continues as long as `enabled` is true. Callers can stop polling when it
+ * becomes the player's turn (to reduce load) and resume when the turn changes by
+ * toggling the `enabled` option.
  * 
  * @param tableId - The table/room ID
  * @param playerId - The current player's ID
@@ -44,6 +45,7 @@ export function useCheckTurn(
   const previousTurnStatusRef = useRef<TurnStatus | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isCheckingRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   const checkTurn = useCallback(async () => {
     // Prevent concurrent checks
@@ -54,9 +56,12 @@ export function useCheckTurn(
     setIsLoading(true);
     setError(null);
 
+    const abortController = new AbortController();
+
     try {
       const response = await fetch(
-        `/api/games/check-turn?tableId=${encodeURIComponent(tableId)}&playerId=${encodeURIComponent(playerId)}`
+        `/api/games/check-turn?tableId=${encodeURIComponent(tableId)}&playerId=${encodeURIComponent(playerId)}`,
+        { signal: abortController.signal }
       );
 
       if (!response.ok) {
@@ -65,6 +70,9 @@ export function useCheckTurn(
       }
 
       const data = await response.json();
+      
+      // Only update state if component is still mounted
+      if (!isMountedRef.current) return;
       
       if (data.success) {
         const newStatus: TurnStatus = {
@@ -89,16 +97,27 @@ export function useCheckTurn(
         previousTurnStatusRef.current = newStatus;
       }
     } catch (err) {
+      // Ignore abort errors
+      if (err instanceof Error && err.name === 'AbortError') return;
+      
+      // Only update error state if component is still mounted
+      if (!isMountedRef.current) return;
+      
       const errorMsg = err instanceof Error ? err.message : 'Failed to check turn status';
       setError(errorMsg);
       console.error('[useCheckTurn] Error:', errorMsg);
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
       isCheckingRef.current = false;
     }
   }, [tableId, playerId, onTurnChange]);
 
   useEffect(() => {
+    // Set mounted flag
+    isMountedRef.current = true;
+    
     // Don't poll if disabled or missing required params
     if (!enabled || !tableId || !playerId) {
       return;
@@ -125,6 +144,7 @@ export function useCheckTurn(
 
     // Cleanup
     return () => {
+      isMountedRef.current = false;
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;

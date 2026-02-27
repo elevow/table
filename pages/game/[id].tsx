@@ -2002,12 +2002,14 @@ export default function GamePage() {
   // Initialize seat state on mount via HTTP
   useEffect(() => {
     if (!playerId || !id) return;
+    let alive = true;
 
     const initSeatState = async () => {
       try {
         const resp = await fetch(`/api/games/seats/state?tableId=${id}`);
         if (resp.ok) {
           const data = await resp.json();
+          if (!alive) return;
           if (data?.seats) {
             // Check if server has actual seat data (not all nulls)
             const serverHasSeats = Object.values(data.seats).some((s: any) => s !== null);
@@ -2029,58 +2031,99 @@ export default function GamePage() {
               console.log('Server returned empty seats but localStorage has data, using localStorage');
               setSeatAssignments(localSeats);
               setSeatStateReady(true);
-              return;
-            }
-            
-            setSeatAssignments(data.seats);
-            setSeatStateReady(true);
-            try { if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats)); } catch {}
-            const playerSeat = Object.entries(data.seats).find(([_, assignment]: any) => assignment?.playerId === playerId);
-            if (playerSeat) {
-              const [seatNumber, assignment] = playerSeat as any;
-              setCurrentPlayerSeat(parseInt(seatNumber));
-              persistSeatNumber(lastSeatStorageKey, parseInt(seatNumber));
-              setPlayerChips(assignment?.chips || 0);
-              try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
             } else {
-              // Player is not in any seat according to server - clear local seat state
-              // This handles the case where the player left the game but localStorage had stale data
-              setCurrentPlayerSeat(null);
-              persistSeatNumber(lastSeatStorageKey, null);
-              setPlayerChips(0);
-              try { 
-                if (id) {
-                  localStorage.removeItem(`chips_${playerId}_${id}`);
-                  if (lastSeatStorageKey) {
-                    localStorage.removeItem(lastSeatStorageKey);
-                  }
-                  // Remove player from seats_${id} if present
-                  const seatsKey = `seats_${id}`;
-                  const seatsRaw = localStorage.getItem(seatsKey);
-                  if (seatsRaw) {
-                    let seatsObj;
-                    try { seatsObj = JSON.parse(seatsRaw); } catch {}
-                    if (seatsObj && typeof seatsObj === 'object') {
-                      // Remove any seat assigned to this player
-                      for (const seat in seatsObj) {
-                        if (seatsObj[seat]?.playerId === playerId) {
-                          seatsObj[seat] = null;
+              setSeatAssignments(data.seats);
+              setSeatStateReady(true);
+              try { if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats)); } catch {}
+              const playerSeat = Object.entries(data.seats).find(([_, assignment]: any) => assignment?.playerId === playerId);
+              if (playerSeat) {
+                const [seatNumber, assignment] = playerSeat as any;
+                setCurrentPlayerSeat(parseInt(seatNumber));
+                persistSeatNumber(lastSeatStorageKey, parseInt(seatNumber));
+                setPlayerChips(assignment?.chips || 0);
+                try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
+              } else {
+                // Player is not in any seat according to server - clear local seat state
+                // This handles the case where the player left the game but localStorage had stale data
+                setCurrentPlayerSeat(null);
+                persistSeatNumber(lastSeatStorageKey, null);
+                setPlayerChips(0);
+                try { 
+                  if (id) {
+                    localStorage.removeItem(`chips_${playerId}_${id}`);
+                    if (lastSeatStorageKey) {
+                      localStorage.removeItem(lastSeatStorageKey);
+                    }
+                    // Remove player from seats_${id} if present
+                    const seatsKey = `seats_${id}`;
+                    const seatsRaw = localStorage.getItem(seatsKey);
+                    if (seatsRaw) {
+                      let seatsObj;
+                      try { seatsObj = JSON.parse(seatsRaw); } catch {}
+                      if (seatsObj && typeof seatsObj === 'object') {
+                        // Remove any seat assigned to this player
+                        for (const seat in seatsObj) {
+                          if (seatsObj[seat]?.playerId === playerId) {
+                            seatsObj[seat] = null;
+                          }
                         }
+                        localStorage.setItem(seatsKey, JSON.stringify(seatsObj));
                       }
-                      localStorage.setItem(seatsKey, JSON.stringify(seatsObj));
                     }
                   }
-                }
-              } catch {}
+                } catch {}
+              }
             }
           }
         }
       } catch (e) {
         console.warn('Failed to fetch seat state:', e);
       }
+
+      // Restore active game state on reload so players are returned to their seat mid-hand
+      if (!alive) return;
+      try {
+        const gsResp = await fetch(`/api/games/state?tableId=${id}&playerId=${playerId}`);
+        if (gsResp.ok) {
+          const gsData = await gsResp.json();
+          if (!alive) return;
+          const gs = gsData?.gameState;
+          if (gs) {
+            setPokerGameState(gs);
+            setGameStarted(true);
+            console.log('🔄 Restored active game state on reload:', gs.stage, 'activePlayer:', gs.activePlayer);
+            // Update seat assignments from game state players
+            if (Array.isArray(gs.players)) {
+              setSeatAssignments(prev => {
+                const updated = { ...prev };
+                gs.players.forEach((player: any) => {
+                  if (player.position !== undefined && player.position >= 1 && player.position <= 9) {
+                    updated[player.position] = {
+                      playerId: player.id,
+                      playerName: player.name || `Player ${player.position}`,
+                      chips: player.stack || 0,
+                    };
+                  }
+                });
+                return updated;
+              });
+              // Set current player's seat from game state
+              const me = gs.players.find((p: any) => p.id === playerId);
+              if (me?.position) {
+                setCurrentPlayerSeat(me.position);
+                persistSeatNumber(lastSeatStorageKey, me.position);
+                setPlayerChips(me.stack || 0);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[reload] Failed to fetch game state:', e);
+      }
     };
 
     initSeatState();
+    return () => { alive = false; };
   }, [playerId, id, lastSeatStorageKey]); // Only depend on playerId, id, and storage key used for seat persistence
 
   // Load seat assignments - separate useEffect to prevent infinite loops

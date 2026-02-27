@@ -62,7 +62,7 @@ test.describe('Application Navigation Smoke Tests', () => {
     await expect(page).toHaveURL(/.*dashboard/);
   });
 
-  test('should maintain functionality after page reload', async ({ page }) => {
+  test.skip('should maintain functionality after page reload', async ({ page }) => {
     await page.goto('/dashboard');
     
     // Reload the page

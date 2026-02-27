@@ -11,6 +11,7 @@ import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { OutsCalculator } from '../../src/lib/poker/outs-calculator';
 import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
+import { useCheckTurn } from '../../src/hooks/useCheckTurn';
 import { Card, Player, GameVariant } from '../../src/types/poker';
 import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
@@ -440,6 +441,47 @@ export default function GamePage() {
   useEffect(() => {
     pokerStageRef.current = pokerGameState?.stage;
   }, [pokerGameState?.stage]);
+  
+  // Poll for turn status every 10 seconds when waiting
+  // This complements Supabase Realtime notifications to ensure players are notified even if broadcasts are missed
+  // Can be disabled via localStorage for debugging: localStorage.setItem('disablePolling', 'true')
+  const [pollingDisabled, setPollingDisabled] = useState<boolean | null>(null);
+  
+  useEffect(() => {
+    // Check localStorage for polling disabled flag (with try-catch for privacy modes)
+    let disabled = false;
+    try {
+      disabled = localStorage.getItem('disablePolling') === 'true';
+    } catch (error) {
+      console.warn('Unable to access localStorage for disablePolling flag', error);
+    }
+    setPollingDisabled(disabled);
+    
+    if (disabled) {
+      console.log('⚠️ Turn polling is DISABLED via localStorage');
+    } else {
+      console.log('✓ Turn polling is ENABLED');
+    }
+  }, []);
+  
+  const isWaitingForTurn = gameStarted && pokerGameState && pokerGameState.activePlayer !== playerId && currentPlayerSeat !== null;
+  useCheckTurn(
+    tableId,
+    playerId,
+    {
+      enabled: isWaitingForTurn && pollingDisabled === false,
+      interval: 10000, // Poll every 10 seconds
+      onTurnChange: (status) => {
+        console.log('🔔 Turn status changed via polling:', status);
+        // Polling only detects turn changes - the actual state update comes via Supabase Realtime
+        // This avoids race conditions and ensures sequence validation is maintained
+        if (status.isMyTurn) {
+          console.log('🔔 Polling detected it\'s now your turn - waiting for Realtime state update');
+        }
+      }
+    }
+  );
+  
   // Track last received sequence number to prevent out-of-order updates
   const lastSeqRef = useRef<number>(0);
   // Prevent duplicate action submissions

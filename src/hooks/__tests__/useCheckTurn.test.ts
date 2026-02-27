@@ -47,7 +47,8 @@ describe('useCheckTurn', () => {
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
-        '/api/games/check-turn?tableId=table1&playerId=player1'
+        '/api/games/check-turn?tableId=table1&playerId=player1',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
       );
     });
 
@@ -89,7 +90,8 @@ describe('useCheckTurn', () => {
 
     // Verify that polling continues (we don't need to check exact count)
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/games/check-turn?tableId=table1&playerId=player1'
+      '/api/games/check-turn?tableId=table1&playerId=player1',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
     );
   });
 

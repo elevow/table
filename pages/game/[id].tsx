@@ -2097,7 +2097,7 @@ export default function GamePage() {
               setSeatAssignments(prev => {
                 const updated = { ...prev };
                 gs.players.forEach((player: any) => {
-                  if (player.position !== undefined && player.position >= 1 && player.position <= 9) {
+                  if (player.position !== undefined && player.position >= 1 && player.position <= maxPlayers) {
                     updated[player.position] = {
                       playerId: player.id,
                       playerName: player.name || `Player ${player.position}`,

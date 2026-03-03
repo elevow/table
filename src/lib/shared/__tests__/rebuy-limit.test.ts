@@ -17,6 +17,7 @@ import {
   primeRoomRebuyLimit,
   clearRoomRebuyLimit,
   fetchRoomRebuyLimit,
+  fetchRoomRebuyAmount,
 } from '../rebuy-limit';
 
 describe('rebuy-limit helpers', () => {
@@ -251,6 +252,72 @@ describe('rebuy-limit helpers', () => {
       
       // Should return unlimited as fallback
       expect(result).toBe('unlimited');
+    });
+  });
+
+  describe('fetchRoomRebuyAmount', () => {
+    it('returns default amount when room has no configuration', async () => {
+      mockGetRoomById.mockResolvedValueOnce({});
+      
+      const result = await fetchRoomRebuyAmount('room-no-config');
+      
+      expect(result).toBe(20);
+    });
+
+    it('returns configured rebuy amount when available', async () => {
+      mockGetRoomById.mockResolvedValueOnce({
+        configuration: { rebuyAmount: 50 },
+      });
+
+      const result = await fetchRoomRebuyAmount('room-with-amount');
+
+      expect(mockGetRoomById).toHaveBeenCalledWith('room-with-amount');
+      expect(result).toBe(50);
+    });
+
+    it('returns default amount when rebuyAmount is not set', async () => {
+      mockGetRoomById.mockResolvedValueOnce({
+        configuration: { numberOfRebuys: 3 },
+      });
+
+      const result = await fetchRoomRebuyAmount('room-no-amount');
+
+      expect(result).toBe(20);
+    });
+
+    it('returns default amount when rebuyAmount is invalid', async () => {
+      mockGetRoomById.mockResolvedValueOnce({
+        configuration: { rebuyAmount: -5 },
+      });
+
+      const result = await fetchRoomRebuyAmount('room-invalid-amount');
+
+      expect(result).toBe(20);
+    });
+
+    it('caches fetched amount for subsequent calls', async () => {
+      mockGetRoomById.mockResolvedValueOnce({
+        configuration: { rebuyAmount: 100 },
+      });
+
+      // First call - fetches from service
+      const result1 = await fetchRoomRebuyAmount('room-cache-amount');
+      expect(result1).toBe(100);
+      expect(mockGetRoomById).toHaveBeenCalledTimes(1);
+
+      // Second call - uses cache
+      mockGetRoomById.mockClear();
+      const result2 = await fetchRoomRebuyAmount('room-cache-amount');
+      expect(result2).toBe(100);
+      expect(mockGetRoomById).not.toHaveBeenCalled();
+    });
+
+    it('handles service errors gracefully and returns default', async () => {
+      mockGetRoomById.mockRejectedValueOnce(new Error('Database error'));
+
+      const result = await fetchRoomRebuyAmount('room-error-amount');
+
+      expect(result).toBe(20);
     });
   });
 });

@@ -11,10 +11,12 @@ import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { OutsCalculator } from '../../src/lib/poker/outs-calculator';
 import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
+import { useCheckTurn } from '../../src/hooks/useCheckTurn';
 import { Card, Player, GameVariant } from '../../src/types/poker';
 import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import type { GameSettings as GameSettingsType } from '../../src/components/GameSettings';
+import { formatChips } from '../../src/utils/chip-display';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -439,6 +441,47 @@ export default function GamePage() {
   useEffect(() => {
     pokerStageRef.current = pokerGameState?.stage;
   }, [pokerGameState?.stage]);
+  
+  // Poll for turn status every 10 seconds when waiting
+  // This complements Supabase Realtime notifications to ensure players are notified even if broadcasts are missed
+  // Can be disabled via localStorage for debugging: localStorage.setItem('disablePolling', 'true')
+  const [pollingDisabled, setPollingDisabled] = useState<boolean | null>(null);
+  
+  useEffect(() => {
+    // Check localStorage for polling disabled flag (with try-catch for privacy modes)
+    let disabled = false;
+    try {
+      disabled = localStorage.getItem('disablePolling') === 'true';
+    } catch (error) {
+      console.warn('Unable to access localStorage for disablePolling flag', error);
+    }
+    setPollingDisabled(disabled);
+    
+    if (disabled) {
+      console.log('⚠️ Turn polling is DISABLED via localStorage');
+    } else {
+      console.log('✓ Turn polling is ENABLED');
+    }
+  }, []);
+  
+  const isWaitingForTurn = gameStarted && pokerGameState && pokerGameState.activePlayer !== playerId && currentPlayerSeat !== null;
+  useCheckTurn(
+    tableId,
+    playerId,
+    {
+      enabled: isWaitingForTurn && pollingDisabled === false,
+      interval: 10000, // Poll every 10 seconds
+      onTurnChange: (status) => {
+        console.log('🔔 Turn status changed via polling:', status);
+        // Polling only detects turn changes - the actual state update comes via Supabase Realtime
+        // This avoids race conditions and ensures sequence validation is maintained
+        if (status.isMyTurn) {
+          console.log('🔔 Polling detected it\'s now your turn - waiting for Realtime state update');
+        }
+      }
+    }
+  );
+  
   // Track last received sequence number to prevent out-of-order updates
   const lastSeqRef = useRef<number>(0);
   // Prevent duplicate action submissions
@@ -449,6 +492,7 @@ export default function GamePage() {
   // Visual accessibility options
   const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
   const [showPotOdds, setShowPotOdds] = useState<boolean>(true);
+  const [showStackInBB, setShowStackInBB] = useState<boolean>(false);
   // Dealer's Choice: pending choice prompt from server
   const [awaitingDealerChoice, setAwaitingDealerChoice] = useState<null | { dealerId?: string; allowedVariants?: string[]; current?: string }>(null);
   const [selectedVariantDC, setSelectedVariantDC] = useState<string>('texas-holdem');
@@ -518,6 +562,9 @@ export default function GamePage() {
         }
         if (typeof saved?.showPotOdds === 'boolean') {
           setShowPotOdds(saved.showPotOdds);
+        }
+        if (typeof saved?.showStackInBB === 'boolean') {
+          setShowStackInBB(saved.showStackInBB);
         }
       }
     } catch {}
@@ -1534,7 +1581,10 @@ export default function GamePage() {
                 {assignment.playerName || `Player ${seatNumber}`}
               </div>
               <div className="text-green-600 dark:text-green-400 font-bold">
-                ${assignment.chips || 20}
+                {showStackInBB 
+                  ? formatChips(assignment.chips || 20, pokerGameState?.bigBlind || null, true)
+                  : `$${assignment.chips || 20}`
+                }
               </div>
               {/* Show additional game state info if player is in active game */}
               {pokerGameState && (() => {
@@ -1544,7 +1594,12 @@ export default function GamePage() {
                     {gamePlayer.folded && <span className="text-red-500">Folded</span>}
                     {gamePlayer.isAllIn && <span className="text-yellow-500">All-in</span>}
                     {gamePlayer.currentBet > 0 && !gamePlayer.folded && (
-                      <span className="text-blue-500">Bet: ${gamePlayer.currentBet}</span>
+                      <span className="text-blue-500">
+                        Bet: {showStackInBB 
+                          ? formatChips(gamePlayer.currentBet, pokerGameState?.bigBlind || null, true)
+                          : `$${gamePlayer.currentBet}`
+                        }
+                      </span>
                     )}
                   </div>
                 );
@@ -1947,12 +2002,14 @@ export default function GamePage() {
   // Initialize seat state on mount via HTTP
   useEffect(() => {
     if (!playerId || !id) return;
+    let alive = true;
 
     const initSeatState = async () => {
       try {
         const resp = await fetch(`/api/games/seats/state?tableId=${id}`);
         if (resp.ok) {
           const data = await resp.json();
+          if (!alive) return;
           if (data?.seats) {
             // Check if server has actual seat data (not all nulls)
             const serverHasSeats = Object.values(data.seats).some((s: any) => s !== null);
@@ -1974,58 +2031,99 @@ export default function GamePage() {
               console.log('Server returned empty seats but localStorage has data, using localStorage');
               setSeatAssignments(localSeats);
               setSeatStateReady(true);
-              return;
-            }
-            
-            setSeatAssignments(data.seats);
-            setSeatStateReady(true);
-            try { if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats)); } catch {}
-            const playerSeat = Object.entries(data.seats).find(([_, assignment]: any) => assignment?.playerId === playerId);
-            if (playerSeat) {
-              const [seatNumber, assignment] = playerSeat as any;
-              setCurrentPlayerSeat(parseInt(seatNumber));
-              persistSeatNumber(lastSeatStorageKey, parseInt(seatNumber));
-              setPlayerChips(assignment?.chips || 0);
-              try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
             } else {
-              // Player is not in any seat according to server - clear local seat state
-              // This handles the case where the player left the game but localStorage had stale data
-              setCurrentPlayerSeat(null);
-              persistSeatNumber(lastSeatStorageKey, null);
-              setPlayerChips(0);
-              try { 
-                if (id) {
-                  localStorage.removeItem(`chips_${playerId}_${id}`);
-                  if (lastSeatStorageKey) {
-                    localStorage.removeItem(lastSeatStorageKey);
-                  }
-                  // Remove player from seats_${id} if present
-                  const seatsKey = `seats_${id}`;
-                  const seatsRaw = localStorage.getItem(seatsKey);
-                  if (seatsRaw) {
-                    let seatsObj;
-                    try { seatsObj = JSON.parse(seatsRaw); } catch {}
-                    if (seatsObj && typeof seatsObj === 'object') {
-                      // Remove any seat assigned to this player
-                      for (const seat in seatsObj) {
-                        if (seatsObj[seat]?.playerId === playerId) {
-                          seatsObj[seat] = null;
+              setSeatAssignments(data.seats);
+              setSeatStateReady(true);
+              try { if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats)); } catch {}
+              const playerSeat = Object.entries(data.seats).find(([_, assignment]: any) => assignment?.playerId === playerId);
+              if (playerSeat) {
+                const [seatNumber, assignment] = playerSeat as any;
+                setCurrentPlayerSeat(parseInt(seatNumber));
+                persistSeatNumber(lastSeatStorageKey, parseInt(seatNumber));
+                setPlayerChips(assignment?.chips || 0);
+                try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
+              } else {
+                // Player is not in any seat according to server - clear local seat state
+                // This handles the case where the player left the game but localStorage had stale data
+                setCurrentPlayerSeat(null);
+                persistSeatNumber(lastSeatStorageKey, null);
+                setPlayerChips(0);
+                try { 
+                  if (id) {
+                    localStorage.removeItem(`chips_${playerId}_${id}`);
+                    if (lastSeatStorageKey) {
+                      localStorage.removeItem(lastSeatStorageKey);
+                    }
+                    // Remove player from seats_${id} if present
+                    const seatsKey = `seats_${id}`;
+                    const seatsRaw = localStorage.getItem(seatsKey);
+                    if (seatsRaw) {
+                      let seatsObj;
+                      try { seatsObj = JSON.parse(seatsRaw); } catch {}
+                      if (seatsObj && typeof seatsObj === 'object') {
+                        // Remove any seat assigned to this player
+                        for (const seat in seatsObj) {
+                          if (seatsObj[seat]?.playerId === playerId) {
+                            seatsObj[seat] = null;
+                          }
                         }
+                        localStorage.setItem(seatsKey, JSON.stringify(seatsObj));
                       }
-                      localStorage.setItem(seatsKey, JSON.stringify(seatsObj));
                     }
                   }
-                }
-              } catch {}
+                } catch {}
+              }
             }
           }
         }
       } catch (e) {
         console.warn('Failed to fetch seat state:', e);
       }
+
+      // Restore active game state on reload so players are returned to their seat mid-hand
+      if (!alive) return;
+      try {
+        const gsResp = await fetch(`/api/games/state?tableId=${id}&playerId=${playerId}`);
+        if (gsResp.ok) {
+          const gsData = await gsResp.json();
+          if (!alive) return;
+          const gs = gsData?.gameState;
+          if (gs) {
+            setPokerGameState(gs);
+            setGameStarted(true);
+            console.log('🔄 Restored active game state on reload:', gs.stage, 'activePlayer:', gs.activePlayer);
+            // Update seat assignments from game state players
+            if (Array.isArray(gs.players)) {
+              setSeatAssignments(prev => {
+                const updated = { ...prev };
+                gs.players.forEach((player: any) => {
+                  if (player.position !== undefined && player.position >= 1 && player.position <= maxPlayers) {
+                    updated[player.position] = {
+                      playerId: player.id,
+                      playerName: player.name || `Player ${player.position}`,
+                      chips: player.stack || 0,
+                    };
+                  }
+                });
+                return updated;
+              });
+              // Set current player's seat from game state
+              const me = gs.players.find((p: any) => p.id === playerId);
+              if (me?.position) {
+                setCurrentPlayerSeat(me.position);
+                persistSeatNumber(lastSeatStorageKey, me.position);
+                setPlayerChips(me.stack || 0);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[reload] Failed to fetch game state:', e);
+      }
     };
 
     initSeatState();
+    return () => { alive = false; };
   }, [playerId, id, lastSeatStorageKey]); // Only depend on playerId, id, and storage key used for seat persistence
 
   // Load seat assignments - separate useEffect to prevent infinite loops
@@ -2477,7 +2575,10 @@ export default function GamePage() {
                 {/* Pot area - positioned below the community cards */}
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-8 text-white text-center">
                   <div className="bg-gray-800 bg-opacity-70 px-3 py-1 rounded text-sm font-semibold">
-                    Pot: ${pokerGameState?.pot || 0}
+                    Pot: {showStackInBB 
+                      ? formatChips(pokerGameState?.pot || 0, pokerGameState?.bigBlind || null, true)
+                      : `$${pokerGameState?.pot || 0}`
+                    }
                   </div>
                 </div>
 
@@ -2572,7 +2673,7 @@ export default function GamePage() {
                     onClick={handleCall}
                     className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors"
                   >
-                    Call ${pokerGameState.currentBet}
+                    Call {showStackInBB ? formatChips(pokerGameState.currentBet, pokerGameState?.bigBlind || null, true) : `$${pokerGameState.currentBet}`}
                   </button>
                 )}
                 
@@ -2595,6 +2696,9 @@ export default function GamePage() {
                               value={clamp(betInput, min, max)}
                               onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                             />
+                            {showStackInBB && bb > 0 && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(betInput, min, max), bb, true)}</div>
+                            )}
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
@@ -2620,7 +2724,8 @@ export default function GamePage() {
                                 const isAllIn = Math.abs(sel - max) < 0.005;
                                 const add = Math.max(0, sel - prev);
                                 const onClick = () => handleBet(Number(sel.toFixed(2)));
-                                const label = isAllIn ? `All-in $${stack.toFixed(2)}` : `Bet $${add.toFixed(2)}`;
+                                const bbVal = pokerGameState?.bigBlind || null;
+                                const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
                                   <button onClick={onClick} className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
@@ -2650,6 +2755,9 @@ export default function GamePage() {
                               value={clamp(raiseInput, min, max)}
                               onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                             />
+                            {showStackInBB && bb > 0 && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(raiseInput, min, max), bb, true)}</div>
+                            )}
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
@@ -2675,7 +2783,8 @@ export default function GamePage() {
                                 const isAllIn = Math.abs(sel - max) < 0.005;
                                 const add = Math.max(0, sel - prev);
                                 const onClick = () => handleRaise(Number(sel.toFixed(2)));
-                                const label = isAllIn ? `All-in $${stack.toFixed(2)}` : `Raise to $${sel.toFixed(2)} (+$${add.toFixed(2)})`;
+                                const bbVal = pokerGameState?.bigBlind || null;
+                                const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
                                   <button onClick={onClick} className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
@@ -2709,6 +2818,9 @@ export default function GamePage() {
                               value={clamp(betInput, min, max)}
                               onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                             />
+                            {showStackInBB && bb > 0 && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(betInput, min, max), bb, true)}</div>
+                            )}
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
@@ -2731,7 +2843,8 @@ export default function GamePage() {
                                 const sel = clamp(betInput, min, max);
                                 const add = Math.max(0, sel - prev);
                                 const onClick = () => handleBet(Number(sel.toFixed(2)));
-                                const label = `Bet $${add.toFixed(2)}`;
+                                const bbVal = pokerGameState?.bigBlind || null;
+                                const label = `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
                                   <button onClick={onClick} className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
@@ -2761,6 +2874,9 @@ export default function GamePage() {
                               value={clamp(raiseInput, min, max)}
                               onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                             />
+                            {showStackInBB && bb > 0 && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(raiseInput, min, max), bb, true)}</div>
+                            )}
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
@@ -2783,7 +2899,8 @@ export default function GamePage() {
                                 const sel = clamp(raiseInput, min, max);
                                 const add = Math.max(0, sel - prev);
                                 const onClick = () => handleRaise(Number(sel.toFixed(2)));
-                                const label = `Raise to $${sel.toFixed(2)} (+$${add.toFixed(2)})`;
+                                const bbVal = pokerGameState?.bigBlind || null;
+                                const label = `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
                                   <button onClick={onClick} className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
@@ -2801,8 +2918,23 @@ export default function GamePage() {
               </div>
               
               <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-                <p>Current Bet: ${pokerGameState.currentBet || 0} | Pot: ${pokerGameState.pot || 0}</p>
-                <p>Your Stack: ${pokerGameState.players.find((p: any) => p.id === playerId)?.stack || 0}</p>
+                <p>
+                  Current Bet: {showStackInBB 
+                    ? formatChips(pokerGameState.currentBet || 0, pokerGameState?.bigBlind || null, true)
+                    : `$${pokerGameState.currentBet || 0}`
+                  } | Pot: {showStackInBB 
+                    ? formatChips(pokerGameState.pot || 0, pokerGameState?.bigBlind || null, true)
+                    : `$${pokerGameState.pot || 0}`
+                  }
+                </p>
+                <p>
+                  Your Stack: {(() => {
+                    const myStack = pokerGameState.players.find((p: any) => p.id === playerId)?.stack || 0;
+                    return showStackInBB 
+                      ? formatChips(myStack, pokerGameState?.bigBlind || null, true)
+                      : `$${myStack}`;
+                  })()}
+                </p>
               </div>
             </div>
           )}
@@ -2929,7 +3061,13 @@ export default function GamePage() {
               </div>
               <div className="text-sm text-gray-600 dark:text-gray-300">
                 <p>Waiting for {pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'} to act...</p>
-                <p>Current Bet: ${pokerGameState.currentBet || 0} | Pot: ${pokerGameState.pot || 0}</p>
+                <p>Current Bet: {showStackInBB 
+                  ? formatChips(pokerGameState.currentBet || 0, pokerGameState?.bigBlind || null, true)
+                  : `$${pokerGameState.currentBet || 0}`
+                } | Pot: {showStackInBB 
+                  ? formatChips(pokerGameState.pot || 0, pokerGameState?.bigBlind || null, true)
+                  : `$${pokerGameState.pot || 0}`
+                }</p>
                 {(() => {
                   const summary = getMyHandSummary();
                   const isHiLo = pokerGameState?.variant === 'omaha-hi-lo' || pokerGameState?.variant === 'seven-card-stud-hi-lo';
@@ -2983,7 +3121,12 @@ export default function GamePage() {
                         return (
                           <div key={w.playerId} className="text-xs flex items-center justify-between bg-purple-100 dark:bg-purple-800/40 px-2 py-1 rounded">
                             <span className="font-medium">{player?.name || w.playerId.slice(0,6)}</span>
-                            <span className="text-purple-700 dark:text-purple-300 font-semibold">+${w.potShare}</span>
+                            <span className="text-purple-700 dark:text-purple-300 font-semibold">
+                              +{showStackInBB 
+                                ? formatChips(w.potShare, pokerGameState?.bigBlind || null, true)
+                                : `$${w.potShare}`
+                              }
+                            </span>
                           </div>
                         );
                       })}
@@ -2997,7 +3140,10 @@ export default function GamePage() {
                   const player = pokerGameState.players.find((p: any) => p.id === pd.playerId);
                   return (
                     <div key={pd.playerId} className="text-xs px-2 py-1 rounded bg-purple-200 dark:bg-purple-800/60 text-purple-900 dark:text-purple-100 font-semibold">
-                      {player?.name || pd.playerId.slice(0,6)}: ${pd.amount}
+                      {player?.name || pd.playerId.slice(0,6)}: {showStackInBB 
+                        ? formatChips(pd.amount, pokerGameState?.bigBlind || null, true)
+                        : `$${pd.amount}`
+                      }
                     </div>
                   );
                 })}
@@ -3223,6 +3369,7 @@ export default function GamePage() {
                 <GameSettings gameId={String(id)} onSettingsChange={(s: GameSettingsType) => {
                   setHighContrastCards(!!s?.highContrastCards);
                   setShowPotOdds(s?.showPotOdds ?? true);
+                  setShowStackInBB(s?.showStackInBB ?? false);
                 }} />
               </div>
             )}

@@ -5,6 +5,7 @@ import {
   clearPendingRebuy,
   getRebuyAvailability,
   pendingRebuyCount,
+  isRebuyExpired,
 } from '../../../src/lib/server/rebuy-state';
 import { fetchRoomRebuyAmount } from '../../../src/lib/shared/rebuy-limit';
 import { recordBuyin } from '../../../src/lib/shared/rebuy-tracker';
@@ -83,6 +84,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const engine = await getOrRestoreEngine(tableId);
+
+    // Check if rebuy has expired (for >2 player games)
+    if (engine && typeof engine.getState === 'function') {
+      const state = engine.getState();
+      const playerCount = Array.isArray(state?.players) ? state.players.length : 0;
+
+      if (isRebuyExpired(tableId, playerId, playerCount)) {
+        console.log(`[rebuy-decision] Rebuy expired for player ${playerId} in table ${tableId}`);
+        clearPendingRebuy(tableId, playerId);
+        return res.status(410).json({
+          error: 'Rebuy decision window expired',
+          expired: true
+        });
+      }
+    }
 
     if (decision === 'yes') {
       const availability = await getRebuyAvailability(tableId, playerId);

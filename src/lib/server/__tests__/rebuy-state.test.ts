@@ -9,6 +9,7 @@ jest.mock('../../shared/rebuy-tracker', () => ({
 
 import {
   BASE_REBUY_CHIPS,
+  REBUY_TIMEOUT_MS,
   getPendingRebuys,
   setPendingRebuy,
   clearPendingRebuy,
@@ -16,6 +17,8 @@ import {
   pendingRebuyCount,
   getRebuyAvailability,
   resetPendingRebuys,
+  isRebuyExpired,
+  getExpiredRebuys,
   PendingRebuyEntry,
 } from '../rebuy-state';
 import { fetchRoomRebuyLimit } from '../../shared/rebuy-limit';
@@ -314,6 +317,219 @@ describe('rebuy-state', () => {
 
     it('should be safe to call when no pending rebuys exist', () => {
       expect(() => resetPendingRebuys()).not.toThrow();
+    });
+  });
+
+  describe('REBUY_TIMEOUT_MS', () => {
+    it('should be a positive number', () => {
+      expect(typeof REBUY_TIMEOUT_MS).toBe('number');
+      expect(REBUY_TIMEOUT_MS).toBeGreaterThan(0);
+    });
+
+    it('should default to 20000ms (20 seconds) when env var is not set', () => {
+      expect(REBUY_TIMEOUT_MS).toBe(20000);
+    });
+  });
+
+  describe('isRebuyExpired', () => {
+    it('should return false for 2-player games regardless of time elapsed', () => {
+      const tableId = 'table-2p';
+      const playerId = 'player-1';
+      const entry: PendingRebuyEntry = {
+        issuedAt: Date.now() - REBUY_TIMEOUT_MS - 10000, // Way past timeout
+        rebuysUsed: 0,
+        rebuyLimit: 3,
+      };
+
+      setPendingRebuy(tableId, playerId, entry);
+
+      // For 2 players, rebuy never expires
+      expect(isRebuyExpired(tableId, playerId, 2)).toBe(false);
+    });
+
+    it('should return false for 1-player games', () => {
+      const tableId = 'table-1p';
+      const playerId = 'player-1';
+      const entry: PendingRebuyEntry = {
+        issuedAt: Date.now() - REBUY_TIMEOUT_MS - 10000,
+        rebuysUsed: 0,
+        rebuyLimit: 3,
+      };
+
+      setPendingRebuy(tableId, playerId, entry);
+
+      expect(isRebuyExpired(tableId, playerId, 1)).toBe(false);
+    });
+
+    it('should return false for 3+ player games when time has not elapsed', () => {
+      const tableId = 'table-3p-not-expired';
+      const playerId = 'player-1';
+      const entry: PendingRebuyEntry = {
+        issuedAt: Date.now() - 1000, // Only 1 second ago
+        rebuysUsed: 0,
+        rebuyLimit: 3,
+      };
+
+      setPendingRebuy(tableId, playerId, entry);
+
+      expect(isRebuyExpired(tableId, playerId, 3)).toBe(false);
+    });
+
+    it('should return true for 3+ player games when timeout has elapsed', () => {
+      const tableId = 'table-3p-expired';
+      const playerId = 'player-1';
+      const entry: PendingRebuyEntry = {
+        issuedAt: Date.now() - REBUY_TIMEOUT_MS - 1000, // 1 second past timeout
+        rebuysUsed: 0,
+        rebuyLimit: 3,
+      };
+
+      setPendingRebuy(tableId, playerId, entry);
+
+      expect(isRebuyExpired(tableId, playerId, 3)).toBe(true);
+    });
+
+    it('should return true for 4+ player games when timeout has elapsed', () => {
+      const tableId = 'table-4p';
+      const playerId = 'player-1';
+      const entry: PendingRebuyEntry = {
+        issuedAt: Date.now() - REBUY_TIMEOUT_MS - 5000,
+        rebuysUsed: 1,
+        rebuyLimit: 'unlimited',
+      };
+
+      setPendingRebuy(tableId, playerId, entry);
+
+      expect(isRebuyExpired(tableId, playerId, 4)).toBe(true);
+      expect(isRebuyExpired(tableId, playerId, 5)).toBe(true);
+      expect(isRebuyExpired(tableId, playerId, 10)).toBe(true);
+    });
+
+    it('should return false when player has no pending rebuy', () => {
+      expect(isRebuyExpired('no-table', 'no-player', 3)).toBe(false);
+    });
+
+    it('should handle exact timeout boundary', () => {
+      const tableId = 'table-boundary';
+      const playerId = 'player-1';
+      const entry: PendingRebuyEntry = {
+        issuedAt: Date.now() - REBUY_TIMEOUT_MS, // Exactly at timeout
+        rebuysUsed: 0,
+        rebuyLimit: 3,
+      };
+
+      setPendingRebuy(tableId, playerId, entry);
+
+      // Should be considered expired at exactly the timeout
+      expect(isRebuyExpired(tableId, playerId, 3)).toBe(true);
+    });
+  });
+
+  describe('getExpiredRebuys', () => {
+    it('should return empty array for 2-player games', () => {
+      const tableId = 'table-2p-expired';
+      const entry: PendingRebuyEntry = {
+        issuedAt: Date.now() - REBUY_TIMEOUT_MS - 10000,
+        rebuysUsed: 0,
+        rebuyLimit: 3,
+      };
+
+      setPendingRebuy(tableId, 'player-1', entry);
+      setPendingRebuy(tableId, 'player-2', entry);
+
+      expect(getExpiredRebuys(tableId, 2)).toEqual([]);
+    });
+
+    it('should return empty array for 1-player games', () => {
+      const tableId = 'table-1p';
+      const entry: PendingRebuyEntry = {
+        issuedAt: Date.now() - REBUY_TIMEOUT_MS - 10000,
+        rebuysUsed: 0,
+        rebuyLimit: 3,
+      };
+
+      setPendingRebuy(tableId, 'player-1', entry);
+
+      expect(getExpiredRebuys(tableId, 1)).toEqual([]);
+    });
+
+    it('should return empty array when no rebuys are pending', () => {
+      expect(getExpiredRebuys('no-table', 3)).toEqual([]);
+    });
+
+    it('should return empty array when no rebuys have expired', () => {
+      const tableId = 'table-not-expired';
+      const entry: PendingRebuyEntry = {
+        issuedAt: Date.now() - 1000, // Only 1 second ago
+        rebuysUsed: 0,
+        rebuyLimit: 3,
+      };
+
+      setPendingRebuy(tableId, 'player-1', entry);
+      setPendingRebuy(tableId, 'player-2', entry);
+
+      expect(getExpiredRebuys(tableId, 3)).toEqual([]);
+    });
+
+    it('should return player IDs of all expired rebuys for 3+ player games', () => {
+      const tableId = 'table-mixed';
+      const expiredEntry: PendingRebuyEntry = {
+        issuedAt: Date.now() - REBUY_TIMEOUT_MS - 1000,
+        rebuysUsed: 0,
+        rebuyLimit: 3,
+      };
+      const notExpiredEntry: PendingRebuyEntry = {
+        issuedAt: Date.now() - 1000,
+        rebuysUsed: 0,
+        rebuyLimit: 3,
+      };
+
+      setPendingRebuy(tableId, 'player-expired-1', expiredEntry);
+      setPendingRebuy(tableId, 'player-not-expired', notExpiredEntry);
+      setPendingRebuy(tableId, 'player-expired-2', expiredEntry);
+
+      const expired = getExpiredRebuys(tableId, 3);
+
+      expect(expired).toHaveLength(2);
+      expect(expired).toContain('player-expired-1');
+      expect(expired).toContain('player-expired-2');
+      expect(expired).not.toContain('player-not-expired');
+    });
+
+    it('should return all players when all have expired', () => {
+      const tableId = 'table-all-expired';
+      const entry: PendingRebuyEntry = {
+        issuedAt: Date.now() - REBUY_TIMEOUT_MS - 5000,
+        rebuysUsed: 0,
+        rebuyLimit: 3,
+      };
+
+      setPendingRebuy(tableId, 'player-1', entry);
+      setPendingRebuy(tableId, 'player-2', entry);
+      setPendingRebuy(tableId, 'player-3', entry);
+
+      const expired = getExpiredRebuys(tableId, 4);
+
+      expect(expired).toHaveLength(3);
+      expect(expired).toContain('player-1');
+      expect(expired).toContain('player-2');
+      expect(expired).toContain('player-3');
+    });
+
+    it('should handle games with many players', () => {
+      const tableId = 'table-many';
+      const expiredEntry: PendingRebuyEntry = {
+        issuedAt: Date.now() - REBUY_TIMEOUT_MS - 2000,
+        rebuysUsed: 0,
+        rebuyLimit: 'unlimited',
+      };
+
+      setPendingRebuy(tableId, 'player-1', expiredEntry);
+      setPendingRebuy(tableId, 'player-2', expiredEntry);
+
+      const expired = getExpiredRebuys(tableId, 8); // 8 player game
+
+      expect(expired).toHaveLength(2);
     });
   });
 });

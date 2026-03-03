@@ -23,6 +23,12 @@ const pendingRebuys = globalObj[globalKey]!;
 const DEFAULT_BUYIN = Number(process.env.NEXT_PUBLIC_DEFAULT_BUYIN);
 export const BASE_REBUY_CHIPS = Number.isFinite(DEFAULT_BUYIN) && DEFAULT_BUYIN > 0 ? DEFAULT_BUYIN : 20;
 
+// Rebuy timeout in seconds for games with more than 2 players
+const DEFAULT_REBUY_TIMEOUT = Number(process.env.NEXT_PUBLIC_REBUY_TIMEOUT_SECONDS);
+export const REBUY_TIMEOUT_MS = Number.isFinite(DEFAULT_REBUY_TIMEOUT) && DEFAULT_REBUY_TIMEOUT > 0
+  ? DEFAULT_REBUY_TIMEOUT * 1000
+  : 20000; // Default: 20 seconds
+
 export function getPendingRebuys(tableId: string): Map<string, PendingRebuyEntry> | undefined {
   return pendingRebuys.get(tableId);
 }
@@ -65,4 +71,50 @@ export async function getRebuyAvailability(tableId: string, playerId: string, li
 
 export function resetPendingRebuys(): void {
   pendingRebuys.clear();
+}
+
+/**
+ * Check if a pending rebuy has expired based on player count
+ * For 2-player games: never expires (returns false)
+ * For >2 player games: expires after REBUY_TIMEOUT_MS
+ */
+export function isRebuyExpired(tableId: string, playerId: string, playerCount: number): boolean {
+  // For 2-player games, wait indefinitely
+  if (playerCount <= 2) {
+    return false;
+  }
+
+  const entry = pendingRebuys.get(tableId)?.get(playerId);
+  if (!entry) {
+    return false;
+  }
+
+  const elapsed = Date.now() - entry.issuedAt;
+  return elapsed >= REBUY_TIMEOUT_MS;
+}
+
+/**
+ * Get all expired pending rebuys for a table (only for >2 player games)
+ */
+export function getExpiredRebuys(tableId: string, playerCount: number): string[] {
+  if (playerCount <= 2) {
+    return [];
+  }
+
+  const tableMap = pendingRebuys.get(tableId);
+  if (!tableMap) {
+    return [];
+  }
+
+  const now = Date.now();
+  const expired: string[] = [];
+
+  for (const [playerId, entry] of tableMap.entries()) {
+    const elapsed = now - entry.issuedAt;
+    if (elapsed >= REBUY_TIMEOUT_MS) {
+      expired.push(playerId);
+    }
+  }
+
+  return expired;
 }

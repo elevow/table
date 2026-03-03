@@ -10,6 +10,7 @@ import {
   hasPendingRebuy,
   pendingRebuyCount,
   setPendingRebuy,
+  getExpiredRebuys,
 } from '../../../src/lib/server/rebuy-state';
 import { autoStandPlayer } from '../../../src/lib/server/rebuy-actions';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
@@ -158,6 +159,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const handleBustedPlayers = async (): Promise<boolean> => {
         const players = Array.isArray(currentState.players) ? currentState.players : [];
         const busted = players.filter((p: any) => (Number(p.stack) || 0) <= 0);
+
+        // Check for expired rebuys (only for >2 player games)
+        const expiredPlayerIds = getExpiredRebuys(tableId, playerCount);
+        if (expiredPlayerIds.length > 0) {
+          console.log(`[next-hand] Handling ${expiredPlayerIds.length} expired rebuy(s) for table ${tableId}`);
+          for (const playerId of expiredPlayerIds) {
+            await autoStandPlayer(null, tableId, playerId, 'rebuy_timeout');
+            clearPendingRebuy(tableId, playerId);
+          }
+        }
+
         if (!busted.length) {
           return pendingRebuyCount(tableId) === 0;
         }

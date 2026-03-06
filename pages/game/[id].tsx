@@ -441,6 +441,33 @@ export default function GamePage() {
   useEffect(() => {
     pokerStageRef.current = pokerGameState?.stage;
   }, [pokerGameState?.stage]);
+  const pollingStateSyncRef = useRef<boolean>(false);
+
+  const syncGameStateFromPolling = useCallback(async (reason: 'turn_change' | 'stage_change') => {
+    if (!id || pollingStateSyncRef.current) return;
+
+    pollingStateSyncRef.current = true;
+    try {
+      const query = playerId
+        ? `/api/games/state?tableId=${encodeURIComponent(String(id))}&playerId=${encodeURIComponent(playerId)}`
+        : `/api/games/state?tableId=${encodeURIComponent(String(id))}`;
+      const response = await fetch(query);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data?.gameState) {
+        setPokerGameState(data.gameState);
+        setGameStarted(true);
+        console.log(`🔄 Polling fallback synced game state (${reason}):`, data.gameState.stage, 'activePlayer:', data.gameState.activePlayer);
+      }
+    } catch (error) {
+      console.warn('Polling fallback failed to sync game state:', error);
+    } finally {
+      pollingStateSyncRef.current = false;
+    }
+  }, [id, playerId]);
   
   // Poll for turn status every 10 seconds when waiting
   // This complements Supabase Realtime notifications to ensure players are notified even if broadcasts are missed
@@ -473,10 +500,17 @@ export default function GamePage() {
       interval: 10000, // Poll every 10 seconds
       onTurnChange: (status) => {
         console.log('🔔 Turn status changed via polling:', status);
-        // Polling only detects turn changes - the actual state update comes via Supabase Realtime
-        // This avoids race conditions and ensures sequence validation is maintained
+        const stageChanged = !!status.tableState && status.tableState !== pokerStageRef.current;
+
+        // Sync full state as a safety net if realtime update was missed.
         if (status.isMyTurn) {
-          console.log('🔔 Polling detected it\'s now your turn - waiting for Realtime state update');
+          void syncGameStateFromPolling('turn_change');
+        } else if (stageChanged) {
+          void syncGameStateFromPolling('stage_change');
+        }
+
+        if (status.isMyTurn) {
+          console.log('🔔 Polling detected it\'s now your turn - syncing state fallback while Realtime catches up');
         }
       }
     }

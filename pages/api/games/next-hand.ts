@@ -175,6 +175,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             }
             if (typeof engine.removePlayer === 'function') {
               engine.removePlayer(expiredId);
+            }
+          }
         }
 
         if (!busted.length) {

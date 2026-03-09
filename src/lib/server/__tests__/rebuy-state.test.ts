@@ -327,6 +327,12 @@ describe('rebuy-state', () => {
     });
 
     it('should default to 20000ms (20 seconds) when env var is not set', () => {
+      if (process.env.NEXT_PUBLIC_REBUY_TIMEOUT_SECONDS !== undefined) {
+        // When the env var is set, REBUY_TIMEOUT_MS is derived from it and may
+        // legitimately differ from the default. In that case we do not assert
+        // a specific default value here.
+        return;
+      }
       expect(REBUY_TIMEOUT_MS).toBe(20000);
     });
   });

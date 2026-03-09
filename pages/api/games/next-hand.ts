@@ -162,12 +162,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         // Check for expired rebuys (only for >2 player games)
         const expiredPlayerIds = getExpiredRebuys(tableId, playerCount);
+        const expiredSet = new Set<string>(expiredPlayerIds);
         if (expiredPlayerIds.length > 0) {
           console.log(`[next-hand] Handling ${expiredPlayerIds.length} expired rebuy(s) for table ${tableId}`);
-          for (const playerId of expiredPlayerIds) {
-            await autoStandPlayer(null, tableId, playerId, 'rebuy_timeout');
-            clearPendingRebuy(tableId, playerId);
-          }
+          for (const expiredId of expiredPlayerIds) {
+            await autoStandPlayer(null, tableId, expiredId, 'rebuy_timeout');
+            clearPendingRebuy(tableId, expiredId);
+            // Remove from engine state so they are not re-evaluated as busted
+            const expiredIdx = currentState.players.findIndex((p: any) => p.id === expiredId);
+            if (expiredIdx !== -1) {
+              currentState.players.splice(expiredIdx, 1);
+            }
+            if (typeof engine.removePlayer === 'function') {
+              engine.removePlayer(expiredId);
         }
 
         if (!busted.length) {

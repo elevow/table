@@ -92,7 +92,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (isRebuyExpired(tableId, playerId, playerCount)) {
         console.log(`[rebuy-decision] Rebuy expired for player ${playerId} in table ${tableId}`);
-        clearPendingRebuy(tableId, playerId);
+        // Leave the pending entry intact so next-hand can detect and handle
+        // the expiry via getExpiredRebuys rather than re-issuing a fresh prompt.
         return res.status(410).json({
           error: 'Rebuy decision window expired',
           expired: true

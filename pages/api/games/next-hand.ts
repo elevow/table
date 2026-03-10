@@ -179,13 +179,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
         }
 
-        if (!busted.length) {
+        const activeBusted = busted.filter((p: any) => p?.id && !expiredSet.has(String(p.id)));
+        if (!activeBusted.length) {
           return pendingRebuyCount(tableId) === 0;
         }
         const rebuyLimit = await fetchRoomRebuyLimit(tableId);
         const rebuyChips = await fetchRoomRebuyAmount(tableId);
         let promptsIssued = 0;
-        for (const player of busted) {
+        for (const player of activeBusted) {
           if (!player?.id) continue;
           if (hasPendingRebuy(tableId, player.id)) continue;
           const record = getPlayerRebuyInfo(tableId, player.id);

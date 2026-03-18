@@ -32,11 +32,13 @@ export async function persistEngineState(tableId: string, engine: PokerEngine): 
     const serialized = engine.serialize();
     const stateJson = JSON.stringify(serialized);
 
-    // Try to update an existing row first
+    // Try to update the most-recent existing row to avoid updating duplicate rows
     const result = await pool.query(
       `UPDATE active_games 
        SET state = $1, last_action_at = NOW() 
-       WHERE room_id = $2`,
+       WHERE id = (
+         SELECT id FROM active_games WHERE room_id = $2 ORDER BY last_action_at DESC LIMIT 1
+       )`,
       [stateJson, tableId]
     );
 

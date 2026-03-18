@@ -20,6 +20,21 @@ function isValidVariant(v: unknown): v is GameVariant {
   return typeof v === 'string' && ALLOWED_VARIANTS.includes(v as GameVariant);
 }
 
+// Socket.io server type (simplified to avoid external dependency)
+type SocketIOServer = {
+  to: (room: string) => { emit: (event: string, data: unknown) => void };
+};
+
+function getIo(res: NextApiResponse): SocketIOServer | null {
+  try {
+    // @ts-ignore
+    const io = (res as any)?.socket?.server?.io;
+    return io || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * POST /api/games/choose-variant
  *
@@ -90,15 +105,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const gameState = engine.getState();
     const enrichedState = enrichStateWithRunIt(tableId, gameState);
     const broadcastSafeState = sanitizeStateForBroadcast(enrichedState);
+    const lastAction = { action: 'variant_chosen', playerId, variant: chosenVariant };
     const seq = nextSeq(tableId);
 
-    // Broadcast new game state to all players
-    await publishGameStateUpdate(tableId, {
-      gameState: broadcastSafeState,
-      lastAction: { action: 'variant_chosen', playerId, variant: chosenVariant },
-      timestamp: new Date().toISOString(),
-      seq,
-    });
+    // Broadcast new game state via Supabase Realtime (swallow errors like other handlers)
+    try {
+      await publishGameStateUpdate(tableId, {
+        gameState: broadcastSafeState,
+        lastAction,
+        timestamp: new Date().toISOString(),
+        seq,
+      });
+    } catch (e) {
+      console.warn('[choose-variant] Failed to publish game state to Supabase:', e);
+    }
+
+    // Also emit over socket.io for non-Supabase clients
+    try {
+      const io = getIo(res);
+      if (io) {
+        io.to(`table_${tableId}`).emit('game_state_update', {
+          gameState: broadcastSafeState,
+          lastAction,
+          timestamp: new Date().toISOString(),
+          seq,
+        });
+      }
+    } catch (e) {
+      console.warn('[choose-variant] Failed to emit via socket:', e);
+    }
 
     const sanitizedState = sanitizeStateForPlayer(enrichedState, playerId);
     return res.status(200).json({ success: true, gameState: sanitizedState });

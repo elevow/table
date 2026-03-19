@@ -402,14 +402,20 @@ export class PokerEngine {
           case 'fourth':
           case 'fifth':
             this.dealStudUpCards(1);
-            break;
+            // Start betting round immediately after dealing to ensure activePlayer is set atomically
+            this.gameStateManager.startBettingRound(nextStage);
+            return;
           case 'sixth':
             // Five-card stud also deals an up card on sixth (sequence: 1 down + 1 up initially, then up on 4th/5th/6th)
             this.dealStudUpCards(1);
-            break;
+            // Start betting round immediately after dealing to ensure activePlayer is set atomically
+            this.gameStateManager.startBettingRound(nextStage);
+            return;
           case 'seventh':
             if (this.state.variant !== 'five-card-stud') this.dealStudDownCards(1);
-            break;
+            // Start betting round immediately after dealing to ensure activePlayer is set atomically
+            this.gameStateManager.startBettingRound(nextStage);
+            return;
           case 'showdown':
             // Defensive: ensure all active stud players have enough cards; otherwise, correct the flow by dealing the missing street
             try {

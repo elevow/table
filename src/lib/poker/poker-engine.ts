@@ -462,12 +462,14 @@ export class PokerEngine {
             this.determineWinner();
             return;
         }
-      }
-
-      // Final safety: if only one player remains before starting the next round, settle now
-      const actives = this.getActivePlayers();
-      if (actives.length <= 1) {
-        this.determineWinner();
+        // Final safety: if only one player remains before starting the next round, settle now
+        const actives = this.getActivePlayers();
+        if (actives.length <= 1) {
+          this.determineWinner();
+          return;
+        }
+        // Start betting round immediately after dealing to ensure activePlayer is set atomically
+        this.gameStateManager.startBettingRound(nextStage);
         return;
       }
       this.gameStateManager.startBettingRound(nextStage);

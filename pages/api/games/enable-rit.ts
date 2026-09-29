@@ -63,22 +63,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const meta = getRunItState(tableId);
-    
-    // Validate that this player has an active prompt
-    if (!meta.prompt || meta.prompt.playerId !== playerId) {
-      return res.status(400).json({ error: 'No active Run-It-Twice prompt for this player' });
-    }
-
     // Get the active game engine from memory or restore from database
     const engine = await getOrRestoreEngine(tableId);
     if (!engine) {
       return res.status(404).json({ error: 'No active game found for this table' });
     }
-    clearSupabaseAutoRunout(tableId);
 
     const autoRunoutDebug = !!process.env.AUTO_RUNOUT_DEBUG;
     const gameState = engine.getState();
+    const hasPersistedPrompt = Object.prototype.hasOwnProperty.call(gameState, 'runItTwicePrompt');
+    const prompt = hasPersistedPrompt ? gameState.runItTwicePrompt : getRunItState(tableId).prompt;
+    if (!prompt || prompt.playerId !== playerId) {
+      return res.status(400).json({ error: 'No active Run-It-Twice prompt for this player' });
+    }
+    clearSupabaseAutoRunout(tableId);
 
     const broadcastState = async (state: TableState, lastAction: unknown) => {
       const enrichedState = enrichStateWithRunIt(tableId, state);
@@ -132,6 +130,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.log(`[enable-rit.ts] Player ${playerId} declined Run-It-Twice for table ${tableId}`);
       }
       disableRunItPrompt(tableId, true);
+      engine.setRunItTwicePrompt(null, true);
       const baseState: TableState = {
         ...gameState,
         runItTwicePrompt: null,
@@ -148,6 +147,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         engine.enableRunItTwice(runs);
       }
       disableRunItPrompt(tableId, true);
+      engine.setRunItTwicePrompt(null, true);
       const baseState: TableState = {
         ...engine.getState(),
         runItTwicePrompt: null,

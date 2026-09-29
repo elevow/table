@@ -1,4 +1,4 @@
-import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking, GameVariant } from '../../types/poker';
+import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking, GameVariant, RunItTwicePrompt } from '../../types/poker';
 import { RunItTwiceOutcomeInput } from '../../types/game-history';
 import { HandEvaluator } from './hand-evaluator';
 import { PotCalculator } from './pot-calculator';
@@ -173,6 +173,16 @@ export class PokerEngine {
         verification: rngSec.verification,
       } : undefined,
     };
+  }
+
+  public setRunItTwicePrompt(prompt: RunItTwicePrompt | null, disabled = false): void {
+    this.state.runItTwicePrompt = prompt;
+    this.state.runItTwicePromptDisabled = disabled;
+    if (prompt) {
+      this.state.activePlayer = prompt.playerId;
+    } else if (disabled) {
+      this.state.activePlayer = '';
+    }
   }
 
   public startNewHand(): void {

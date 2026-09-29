@@ -60,19 +60,26 @@ const deriveStageFromCommunityCount = (count: number, fallback?: GameStage): Gam
  */
 export const enrichStateWithRunIt = (tableId: string, state: TableState | any) => {
   const meta = getRunItState(tableId);
-  const prompt = meta.prompt;
+  const hasPersistedPrompt = Object.prototype.hasOwnProperty.call(state || {}, 'runItTwicePrompt');
+  const prompt = hasPersistedPrompt ? state.runItTwicePrompt : meta.prompt;
+  const disabled = typeof state?.runItTwicePromptDisabled === 'boolean'
+    ? state.runItTwicePromptDisabled
+    : meta.disabled;
   if (!prompt) {
     return {
       ...state,
       runItTwicePrompt: null,
-      runItTwicePromptDisabled: meta.disabled,
+      runItTwicePromptDisabled: disabled,
     };
   }
 
   const maskedState: TableState = { ...(state || {}) } as TableState;
   const community = Array.isArray(state?.communityCards) ? state.communityCards : [];
-  if (typeof meta.lockedCommunityCount === 'number') {
-    const limit = Math.max(0, Math.min(meta.lockedCommunityCount, community.length));
+  const lockedCommunityCount = typeof meta.lockedCommunityCount === 'number'
+    ? meta.lockedCommunityCount
+    : prompt.boardCardsCount;
+  if (typeof lockedCommunityCount === 'number') {
+    const limit = Math.max(0, Math.min(lockedCommunityCount, community.length));
     maskedState.communityCards = community.slice(0, limit);
     maskedState.stage = meta.lockedStage || deriveStageFromCommunityCount(limit, state?.stage);
   } else if (meta.lockedStage) {
@@ -85,7 +92,7 @@ export const enrichStateWithRunIt = (tableId: string, state: TableState | any) =
   return {
     ...maskedState,
     runItTwicePrompt: prompt,
-    runItTwicePromptDisabled: meta.disabled,
+    runItTwicePromptDisabled: disabled,
   };
 };
 
@@ -124,8 +131,13 @@ export const maybeCreateRunItPrompt = (
   options?: PromptOptions
 ): RunItTwicePrompt | null => {
   const meta = getRunItState(tableId);
-  if (!state || meta.prompt || meta.disabled || state.runItTwice?.enabled) {
-    return meta.prompt || null;
+  const hasPersistedPrompt = Object.prototype.hasOwnProperty.call(state || {}, 'runItTwicePrompt');
+  const existingPrompt = hasPersistedPrompt ? state.runItTwicePrompt : meta.prompt;
+  const disabled = typeof state?.runItTwicePromptDisabled === 'boolean'
+    ? state.runItTwicePromptDisabled
+    : meta.disabled;
+  if (!state || existingPrompt || disabled || state.runItTwice?.enabled) {
+    return existingPrompt || null;
   }
   const boardOverride = Array.isArray(options?.communityOverride) ? options!.communityOverride : undefined;
   const prompt = determineRunItTwicePrompt(state, boardOverride);

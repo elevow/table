@@ -288,4 +288,22 @@ describe('PokerEngine', () => {
       expect(state.players.reduce((sum, p) => sum + p.stack, 0)).toBe(initialStack * players.length); // Total chips should remain constant
     });
   });
+
+  describe('Run-It-Twice prompt persistence', () => {
+    it('should preserve the active prompt through engine serialization', () => {
+      const engine = new PokerEngine('table1', [createPlayer('p1', 0), createPlayer('p2', 1)], 5, 10);
+      const prompt = {
+        playerId: 'p1',
+        reason: 'lowest-hand' as const,
+        createdAt: Date.now(),
+        boardCardsCount: 0,
+      };
+
+      engine.setRunItTwicePrompt(prompt);
+      const restored = PokerEngine.fromSerialized(engine.serialize());
+
+      expect(restored.getState().runItTwicePrompt).toEqual(prompt);
+      expect(restored.getState().activePlayer).toBe('p1');
+    });
+  });
 });

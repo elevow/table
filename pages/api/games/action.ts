@@ -148,7 +148,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (issuedPrompt) {
-      gameState = { ...gameState, activePlayer: issuedPrompt.playerId };
+      engine.setRunItTwicePrompt(issuedPrompt);
+      gameState = engine.getState();
+      await persistEngineState(tableId, engine);
     }
 
     const enrichedState = await broadcastState(gameState, { action, playerId, amount });

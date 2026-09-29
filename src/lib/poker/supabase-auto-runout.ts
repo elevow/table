@@ -13,6 +13,7 @@ type EngineLike = {
 };
 
 type TimerMap = Map<string, NodeJS.Timeout[]>;
+export const AUTO_RUNOUT_DELAY_MS = 2000;
 
 const getTimerMap = (): TimerMap => {
   const globalObj = global as any;
@@ -107,7 +108,7 @@ const revealStreet = async (
     if (street === 'river') {
       const finalizeTimer = setTimeout(() => {
         finalizeRunout(tableId, engine, broadcast).catch(() => clearSupabaseAutoRunout(tableId));
-      }, 5000);
+      }, AUTO_RUNOUT_DELAY_MS);
       timers.push(finalizeTimer);
     }
   } catch {
@@ -123,7 +124,7 @@ export const runSupabaseAutoRunoutSync = async (
   tableId: string,
   engine: EngineLike,
   broadcast: BroadcastFn,
-  delayMs = 5000,
+  delayMs = AUTO_RUNOUT_DELAY_MS,
 ): Promise<boolean> => {
   try {
     const state = engine?.getState?.();
@@ -157,7 +158,7 @@ export const runSupabaseAutoRunoutSync = async (
 
     // Run reveals sequentially with delays
     for (const street of steps) {
-      // Wait 5 seconds before each reveal
+      // Preserve a short pause between each revealed street.
       if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
       
       // Reveal the street
@@ -197,7 +198,7 @@ export const runSupabaseAutoRunoutSync = async (
       await broadcast(staged, { action: `auto_runout_${street}` });
     }
 
-    // Wait 5 seconds then finalize to showdown
+    // Pause before revealing the showdown result.
     if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
     await finalizeRunout(tableId, engine, broadcast);
     
@@ -242,13 +243,13 @@ export const scheduleSupabaseAutoRunout = (
     const timers: NodeJS.Timeout[] = [];
     getTimerMap().set(tableId, timers);
 
-    let delay = 5000;
+    let delay = AUTO_RUNOUT_DELAY_MS;
     steps.forEach((street) => {
       const timer = setTimeout(() => {
         revealStreet(tableId, street, engine, broadcast, timers).catch(() => clearSupabaseAutoRunout(tableId));
       }, delay);
       timers.push(timer);
-      delay += 5000;
+      delay += AUTO_RUNOUT_DELAY_MS;
     });
     return true;
   } catch {

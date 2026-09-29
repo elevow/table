@@ -186,7 +186,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.warn('Failed to post hand result to chat (auto-runout):', chatError);
           }
         }
-      }, 0);
+      });
     }
 
     // Sanitize the response for the requesting player - hide other players' hole cards

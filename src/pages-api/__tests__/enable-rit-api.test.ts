@@ -79,4 +79,38 @@ describe('/api/games/enable-rit', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, runs: 1 }));
   });
+
+  it('rejects multi-run requests while Run-It-Twice decisions are disabled', async () => {
+    const state: any = {
+      tableId: 'table-1',
+      stage: 'preflop',
+      players: [
+        { id: 'player-1', isFolded: false },
+        { id: 'player-2', isFolded: false },
+      ],
+      runItTwicePrompt: { playerId: 'player-1' },
+    };
+    const engine = {
+      getState: jest.fn(() => state),
+      setRunItTwicePrompt: jest.fn(),
+      enableRunItTwice: jest.fn(),
+    };
+    (getOrRestoreEngine as jest.Mock).mockResolvedValue(engine);
+    (global as any).runItTwiceState = new Map([['table-1', { prompt: null, disabled: false }]]);
+
+    const req = {
+      method: 'POST',
+      body: { tableId: 'table-1', playerId: 'player-1', runs: 2 },
+    } as Partial<NextApiRequest>;
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as Partial<NextApiResponse>;
+
+    await handler(req as NextApiRequest, res as NextApiResponse);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Run-It-Twice is temporarily disabled' });
+    expect(engine.enableRunItTwice).not.toHaveBeenCalled();
+  });
 });

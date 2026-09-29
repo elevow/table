@@ -10,6 +10,7 @@ import {
 import { clearSupabaseAutoRunout, runSupabaseAutoRunoutSync } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../../src/lib/shared/feature-flags';
 import type { TableState } from '../../../src/types/poker';
 import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
 
@@ -75,6 +76,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const prompt = hasPersistedPrompt ? gameState.runItTwicePrompt : getRunItState(tableId).prompt;
     if (!prompt || prompt.playerId !== playerId) {
       return res.status(400).json({ error: 'No active Run-It-Twice prompt for this player' });
+    }
+    if (!RUN_IT_TWICE_DECISIONS_ENABLED && runs > 1) {
+      return res.status(403).json({ error: 'Run-It-Twice is temporarily disabled' });
     }
     clearSupabaseAutoRunout(tableId);
 

@@ -17,6 +17,7 @@ import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import type { GameSettings as GameSettingsType } from '../../src/components/GameSettings';
 import { formatChips } from '../../src/utils/chip-display';
+import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../src/lib/shared/feature-flags';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -2983,7 +2984,7 @@ export default function GamePage() {
                   onClick={() => enableRunItTwice(1)}
                   className="px-3 py-1.5 rounded text-xs font-semibold bg-gray-200 hover:bg-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-400"
                 >Keep single run</button>
-                {(() => {
+                {RUN_IT_TWICE_DECISIONS_ENABLED && (() => {
                   const activeCount = getActiveNonFoldedPlayers().length;
                   const maxRuns = Math.max(2, Math.max(1, activeCount));
                   return Array.from({ length: Math.max(0, maxRuns - 1) }, (_, i) => i + 2).map(r => (

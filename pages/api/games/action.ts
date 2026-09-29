@@ -9,6 +9,7 @@ import {
 import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../../src/lib/shared/feature-flags';
 import type { Card, GameStage, TableState } from '../../../src/types/poker';
 import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
 
@@ -130,7 +131,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const autoRunoutDebug = !!process.env.AUTO_RUNOUT_DEBUG;
     const autoEligible = isAutoRunoutEligible(gameState);
     let issuedPrompt = null;
-    if (autoEligible) {
+    if (autoEligible && RUN_IT_TWICE_DECISIONS_ENABLED) {
       const postCommunityCount = Array.isArray(gameState.communityCards) ? gameState.communityCards.length : 0;
       const preCommunityCount = preActionCommunity.length;
       const boardAdvanced = postCommunityCount > preCommunityCount;

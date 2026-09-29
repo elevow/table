@@ -49,6 +49,14 @@ describe('CreateGameRoomPage', () => {
     const tableNameLabel = screen.queryByText('Table name');
     expect(tableNameLabel).toBeNull();
   });
+
+  it('should keep tournament structure disabled on the Create page', () => {
+    render(<CreateGameRoomPage />);
+
+    const option = screen.getByLabelText('Enable tournament structure') as HTMLInputElement;
+    expect(option.disabled).toBe(true);
+    expect(option.checked).toBe(false);
+  });
 });
 
 describe('CreateGameRoomPage - Big Blind auto-update', () => {

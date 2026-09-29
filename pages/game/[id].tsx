@@ -473,7 +473,7 @@ export default function GamePage() {
       interval: 10000, // Poll every 10 seconds
       onTurnChange: (status) => {
         console.log('🔔 Turn status changed via polling:', status);
-        if (status.tableState !== pokerGameState?.stage && id && playerId) {
+        if (status.tableState !== pokerGameState?.stage && typeof id === 'string' && playerId) {
           fetch(`/api/games/state?tableId=${encodeURIComponent(id)}&playerId=${encodeURIComponent(playerId)}`)
             .then(response => {
               if (!response.ok) throw new Error(`HTTP ${response.status}`);

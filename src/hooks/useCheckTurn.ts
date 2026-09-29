@@ -89,6 +89,7 @@ export function useCheckTurn(
         if (prev && (
           prev.isMyTurn !== newStatus.isMyTurn ||
           prev.activePlayer !== newStatus.activePlayer ||
+          prev.tableState !== newStatus.tableState ||
           prev.handNumber !== newStatus.handNumber
         )) {
           onTurnChange?.(newStatus);

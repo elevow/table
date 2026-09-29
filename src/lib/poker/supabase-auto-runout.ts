@@ -7,10 +7,13 @@ type EngineLike = {
   previewRabbitHunt?: (street: 'flop' | 'turn' | 'river') => { cards?: any[] } | void;
   runItTwiceNow?: () => void;
   finalizeToShowdown?: () => void;
+  runStudAllInToShowdown?: () => void;
   prepareRabbitPreview?: (opts?: { community?: Card[]; known?: Card[] }) => void;
+  setAutoRunoutProgress?: (stage: TableState['stage'], communityCards: Card[]) => void;
 };
 
 type TimerMap = Map<string, NodeJS.Timeout[]>;
+export const AUTO_RUNOUT_DELAY_MS = 2000;
 
 const getTimerMap = (): TimerMap => {
   const globalObj = global as any;
@@ -100,11 +103,12 @@ const revealStreet = async (
       stage: street === 'flop' ? 'flop' : street === 'turn' ? 'turn' : 'river',
       activePlayer: '' as any,
     };
+    engine.setAutoRunoutProgress?.(staged.stage, staged.communityCards);
     await broadcast(staged, { action: `auto_runout_${street}` });
     if (street === 'river') {
       const finalizeTimer = setTimeout(() => {
         finalizeRunout(tableId, engine, broadcast).catch(() => clearSupabaseAutoRunout(tableId));
-      }, 5000);
+      }, AUTO_RUNOUT_DELAY_MS);
       timers.push(finalizeTimer);
     }
   } catch {
@@ -120,6 +124,7 @@ export const runSupabaseAutoRunoutSync = async (
   tableId: string,
   engine: EngineLike,
   broadcast: BroadcastFn,
+  delayMs = AUTO_RUNOUT_DELAY_MS,
 ): Promise<boolean> => {
   try {
     const state = engine?.getState?.();
@@ -128,7 +133,11 @@ export const runSupabaseAutoRunoutSync = async (
     if (state.runItTwicePrompt) return false;
     const variant = state.variant;
     if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
-      return false;
+      if (typeof engine.runStudAllInToShowdown !== 'function') return false;
+      engine.runStudAllInToShowdown();
+      const finalState = engine.getState();
+      await broadcast({ ...finalState, activePlayer: '' }, { action: 'auto_runout_showdown' });
+      return true;
     }
     const communityLen = Array.isArray(state.communityCards) ? state.communityCards.length : 0;
     const steps: Array<'flop' | 'turn' | 'river'> = [];
@@ -149,8 +158,8 @@ export const runSupabaseAutoRunoutSync = async (
 
     // Run reveals sequentially with delays
     for (const street of steps) {
-      // Wait 5 seconds before each reveal
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Preserve a short pause between each revealed street.
+      if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
       
       // Reveal the street
       const current = engine.getState();
@@ -185,11 +194,12 @@ export const runSupabaseAutoRunoutSync = async (
         stage: street === 'flop' ? 'flop' : street === 'turn' ? 'turn' : 'river',
         activePlayer: '' as any,
       };
+      engine.setAutoRunoutProgress?.(staged.stage, staged.communityCards);
       await broadcast(staged, { action: `auto_runout_${street}` });
     }
 
-    // Wait 5 seconds then finalize to showdown
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Pause before revealing the showdown result.
+    if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
     await finalizeRunout(tableId, engine, broadcast);
     
     return true;
@@ -233,13 +243,13 @@ export const scheduleSupabaseAutoRunout = (
     const timers: NodeJS.Timeout[] = [];
     getTimerMap().set(tableId, timers);
 
-    let delay = 5000;
+    let delay = AUTO_RUNOUT_DELAY_MS;
     steps.forEach((street) => {
       const timer = setTimeout(() => {
         revealStreet(tableId, street, engine, broadcast, timers).catch(() => clearSupabaseAutoRunout(tableId));
       }, delay);
       timers.push(timer);
-      delay += 5000;
+      delay += AUTO_RUNOUT_DELAY_MS;
     });
     return true;
   } catch {

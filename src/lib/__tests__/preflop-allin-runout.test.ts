@@ -1,5 +1,5 @@
 import { TableState, Player, Card } from '../../types/poker';
-import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../poker/supabase-auto-runout';
+import { scheduleSupabaseAutoRunout, runSupabaseAutoRunoutSync, clearSupabaseAutoRunout } from '../poker/supabase-auto-runout';
 
 describe('Preflop all-in auto-runout', () => {
   const tableId = 'preflop-allin-test';
@@ -87,8 +87,8 @@ describe('Preflop all-in auto-runout', () => {
     // Verify that prepareRabbitPreview was called
     expect(engine.prepareRabbitPreview).toHaveBeenCalledTimes(1);
 
-    // Advance 5 seconds - flop should be revealed
-    await jest.advanceTimersByTimeAsync(5000);
+    // Advance 2 seconds - flop should be revealed
+    await jest.advanceTimersByTimeAsync(2000);
     expect(broadcast).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ 
@@ -102,8 +102,8 @@ describe('Preflop all-in auto-runout', () => {
       { action: 'auto_runout_flop' },
     );
 
-    // Advance another 5 seconds - turn should be revealed
-    await jest.advanceTimersByTimeAsync(5000);
+    // Advance another 2 seconds - turn should be revealed
+    await jest.advanceTimersByTimeAsync(2000);
     expect(broadcast).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ 
@@ -118,8 +118,8 @@ describe('Preflop all-in auto-runout', () => {
       { action: 'auto_runout_turn' },
     );
 
-    // Advance another 5 seconds - river should be revealed
-    await jest.advanceTimersByTimeAsync(5000);
+    // Advance another 2 seconds - river should be revealed
+    await jest.advanceTimersByTimeAsync(2000);
     expect(broadcast).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({ 
@@ -135,8 +135,8 @@ describe('Preflop all-in auto-runout', () => {
       { action: 'auto_runout_river' },
     );
 
-    // Advance another 5 seconds - showdown should happen
-    await jest.advanceTimersByTimeAsync(5000);
+    // Advance another 2 seconds - showdown should happen
+    await jest.advanceTimersByTimeAsync(2000);
     expect(broadcast).toHaveBeenNthCalledWith(
       4,
       expect.objectContaining({ stage: 'showdown' }),
@@ -144,19 +144,19 @@ describe('Preflop all-in auto-runout', () => {
     );
   });
 
-  it('ensures turn happens exactly 5 seconds after flop, not immediately', async () => {
+  it('ensures turn happens exactly 2 seconds after flop, not immediately', async () => {
     const state = makePreflopState();
     const engine = makeEngine(state);
     const broadcast = jest.fn().mockResolvedValue(undefined);
 
     scheduleSupabaseAutoRunout(tableId, engine as any, broadcast);
 
-    // After flop reveal at 5s, turn should NOT have happened yet
-    await jest.advanceTimersByTimeAsync(5000);
+    // After flop reveal at 2s, turn should NOT have happened yet
+    await jest.advanceTimersByTimeAsync(2000);
     expect(broadcast).toHaveBeenCalledTimes(1); // Only flop
 
-    // Advance by 4.9 more seconds - turn still should not have happened
-    await jest.advanceTimersByTimeAsync(4900);
+    // Advance by 1.9 more seconds - turn still should not have happened
+    await jest.advanceTimersByTimeAsync(1900);
     expect(broadcast).toHaveBeenCalledTimes(1); // Still only flop
 
     // Advance final 0.1 seconds - now turn should happen
@@ -166,6 +166,22 @@ describe('Preflop all-in auto-runout', () => {
       2,
       expect.objectContaining({ stage: 'turn' }),
       { action: 'auto_runout_turn' },
+    );
+  });
+
+  it('runs the remaining board immediately without assigning another turn', async () => {
+    const state = makePreflopState();
+    const engine = makeEngine(state);
+    const broadcast = jest.fn().mockResolvedValue(undefined);
+
+    const completed = await runSupabaseAutoRunoutSync(tableId, engine as any, broadcast, 0);
+
+    expect(completed).toBe(true);
+    expect(broadcast).toHaveBeenCalledTimes(4);
+    expect(broadcast.mock.calls.map(([state]) => state.activePlayer)).toEqual(['', '', '', '']);
+    expect(broadcast).toHaveBeenLastCalledWith(
+      expect.objectContaining({ stage: 'showdown', activePlayer: '' }),
+      { action: 'auto_runout_showdown' },
     );
   });
 });

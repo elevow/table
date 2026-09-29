@@ -118,6 +118,32 @@ describe('run-it-twice-manager', () => {
     expect(enriched.stage).toBe(state.stage);
   });
 
+  it('enriches a prompt restored from persisted game state', () => {
+    const state = makeState();
+    state.runItTwicePrompt = {
+      playerId: 'weak',
+      reason: 'lowest-hand',
+      createdAt: Date.now(),
+      boardCardsCount: flop.length,
+    };
+
+    const enriched = enrichStateWithRunIt(tableId, state);
+
+    expect(enriched.runItTwicePrompt).toEqual(state.runItTwicePrompt);
+    expect(enriched.communityCards).toEqual(flop);
+    expect(enriched.stage).toBe('flop');
+    expect(enriched.activePlayer).toBe('weak');
+  });
+
+  it('does not recreate a prompt disabled in persisted game state', () => {
+    const state = makeState();
+    state.runItTwicePrompt = null;
+    state.runItTwicePromptDisabled = true;
+
+    expect(maybeCreateRunItPrompt(tableId, state)).toBeNull();
+    expect(getRunItState(tableId).prompt).toBeNull();
+  });
+
   it('normalizes short hand evaluations by padding cards', () => {
     const normalized = normalizeHandForComparison({
       hand: { rank: 2, description: 'Pair', cards: [{ value: 'A', suit: 'h' }] } as any,

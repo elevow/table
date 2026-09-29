@@ -15,6 +15,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+
   const tableId = String(req.query.tableId || '');
   const playerId = String(req.query.playerId || '');
 

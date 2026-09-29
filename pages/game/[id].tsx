@@ -17,6 +17,7 @@ import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import type { GameSettings as GameSettingsType } from '../../src/components/GameSettings';
 import { formatChips } from '../../src/utils/chip-display';
+import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../src/lib/shared/feature-flags';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -473,8 +474,23 @@ export default function GamePage() {
       interval: 10000, // Poll every 10 seconds
       onTurnChange: (status) => {
         console.log('🔔 Turn status changed via polling:', status);
-        // Polling only detects turn changes - the actual state update comes via Supabase Realtime
-        // This avoids race conditions and ensures sequence validation is maintained
+        if (
+          (status.activePlayer !== pokerGameState?.activePlayer || status.tableState !== pokerGameState?.stage) &&
+          typeof id === 'string' &&
+          playerId
+        ) {
+          fetch(`/api/games/state?tableId=${encodeURIComponent(id)}&playerId=${encodeURIComponent(playerId)}`)
+            .then(response => {
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              return response.json();
+            })
+            .then(data => {
+              if (data.gameState?.stage === status.tableState) {
+                setPokerGameState(data.gameState);
+              }
+            })
+            .catch(error => console.warn('Failed to refresh game state after poll:', error));
+        }
         if (status.isMyTurn) {
           console.log('🔔 Polling detected it\'s now your turn - waiting for Realtime state update');
         }
@@ -2968,7 +2984,7 @@ export default function GamePage() {
                   onClick={() => enableRunItTwice(1)}
                   className="px-3 py-1.5 rounded text-xs font-semibold bg-gray-200 hover:bg-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-400"
                 >Keep single run</button>
-                {(() => {
+                {RUN_IT_TWICE_DECISIONS_ENABLED && (() => {
                   const activeCount = getActiveNonFoldedPlayers().length;
                   const maxRuns = Math.max(2, Math.max(1, activeCount));
                   return Array.from({ length: Math.max(0, maxRuns - 1) }, (_, i) => i + 2).map(r => (

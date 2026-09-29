@@ -1,0 +1,2 @@
+export const RUN_IT_TWICE_DECISIONS_ENABLED = false;
+export const TOURNAMENT_STRUCTURE_CREATION_ENABLED = false;

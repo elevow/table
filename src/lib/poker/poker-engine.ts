@@ -1,4 +1,4 @@
-import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking, GameVariant } from '../../types/poker';
+import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking, GameVariant, RunItTwicePrompt } from '../../types/poker';
 import { RunItTwiceOutcomeInput } from '../../types/game-history';
 import { HandEvaluator } from './hand-evaluator';
 import { PotCalculator } from './pot-calculator';
@@ -173,6 +173,43 @@ export class PokerEngine {
         verification: rngSec.verification,
       } : undefined,
     };
+  }
+
+  public setRunItTwicePrompt(prompt: RunItTwicePrompt | null, disabled = false): void {
+    this.state.runItTwicePrompt = prompt;
+    this.state.runItTwicePromptDisabled = disabled;
+    if (prompt) {
+      this.state.activePlayer = prompt.playerId;
+    } else if (disabled) {
+      this.state.activePlayer = '';
+    }
+  }
+
+  public setAutoRunoutProgress(stage: GameStage, communityCards: Card[]): void {
+    this.state.stage = stage;
+    this.state.communityCards = [...communityCards];
+    this.state.activePlayer = '';
+  }
+
+  public runStudAllInToShowdown(): void {
+    const studVariant = this.state.variant === 'seven-card-stud'
+      || this.state.variant === 'seven-card-stud-hi-lo'
+      || this.state.variant === 'five-card-stud';
+    if (!studVariant) throw new Error('Stud runout requires a stud variant');
+
+    while (this.state.stage !== 'showdown') {
+      const nextStage = this.gameStateManager.moveToNextStage();
+      if (nextStage === 'showdown') {
+        this.determineWinner();
+        return;
+      }
+      if (nextStage === 'seventh') {
+        this.dealStudDownCards(1);
+      } else {
+        this.dealStudUpCards(1);
+      }
+      this.state.activePlayer = '';
+    }
   }
 
   public startNewHand(): void {

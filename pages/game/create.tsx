@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { tournamentPresets } from '../../src/lib/tournament/tournament-utils';
+import { TOURNAMENT_STRUCTURE_CREATION_ENABLED } from '../../src/lib/shared/feature-flags';
 import type { TournamentConfig } from '../../src/types/tournament';
 
 type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'dealers-choice';
@@ -26,7 +27,10 @@ export default function CreateGameRoomPage() {
   const [enableTournament, setEnableTournament] = useState(false);
   const [presetKey, setPresetKey] = useState<string>('freezeout_default');
   const presetOptions = useMemo(() => Object.entries(tournamentPresets), []);
-  const selectedTournamentConfig: TournamentConfig | null = useMemo(() => enableTournament ? tournamentPresets[presetKey]?.build() : null, [enableTournament, presetKey]);
+  const selectedTournamentConfig: TournamentConfig | null = useMemo(
+    () => TOURNAMENT_STRUCTURE_CREATION_ENABLED && enableTournament ? tournamentPresets[presetKey]?.build() : null,
+    [enableTournament, presetKey]
+  );
 
   // On mount, determine if user is authenticated (token present)
   useEffect(() => {
@@ -76,7 +80,9 @@ export default function CreateGameRoomPage() {
             numberOfRebuys: numberOfRebuys === 'unlimited' ? 'unlimited' : Number(numberOfRebuys),
             rebuyAmount: numberOfRebuys !== 0 ? rebuyAmount : undefined,
             buyIn,
-            tournament: enableTournament ? { preset: presetKey, config: selectedTournamentConfig } : undefined,
+            tournament: TOURNAMENT_STRUCTURE_CREATION_ENABLED && enableTournament
+              ? { preset: presetKey, config: selectedTournamentConfig }
+              : undefined,
           },
         }),
       });
@@ -307,12 +313,14 @@ export default function CreateGameRoomPage() {
             <input
               type="checkbox"
               className="w-4 h-4 accent-blue-600 dark:accent-blue-500"
-              checked={enableTournament}
+              checked={TOURNAMENT_STRUCTURE_CREATION_ENABLED && enableTournament}
+              disabled={!TOURNAMENT_STRUCTURE_CREATION_ENABLED}
+              title={TOURNAMENT_STRUCTURE_CREATION_ENABLED ? undefined : 'Tournament structure is temporarily disabled'}
               onChange={e => setEnableTournament(e.target.checked)}
             />
-            <span className="text-sm font-medium">Enable tournament structure</span>
+            <span className={`text-sm font-medium ${TOURNAMENT_STRUCTURE_CREATION_ENABLED ? '' : 'text-gray-500'}`}>Enable tournament structure</span>
           </label>
-          {enableTournament && (
+          {TOURNAMENT_STRUCTURE_CREATION_ENABLED && enableTournament && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium">Preset</label>

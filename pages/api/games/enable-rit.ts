@@ -10,6 +10,7 @@ import {
 import { clearSupabaseAutoRunout, runSupabaseAutoRunoutSync } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../../src/lib/shared/feature-flags';
 import type { TableState } from '../../../src/types/poker';
 import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
 
@@ -63,22 +64,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const meta = getRunItState(tableId);
-    
-    // Validate that this player has an active prompt
-    if (!meta.prompt || meta.prompt.playerId !== playerId) {
-      return res.status(400).json({ error: 'No active Run-It-Twice prompt for this player' });
-    }
-
     // Get the active game engine from memory or restore from database
     const engine = await getOrRestoreEngine(tableId);
     if (!engine) {
       return res.status(404).json({ error: 'No active game found for this table' });
     }
-    clearSupabaseAutoRunout(tableId);
 
     const autoRunoutDebug = !!process.env.AUTO_RUNOUT_DEBUG;
     const gameState = engine.getState();
+    const hasPersistedPrompt = Object.prototype.hasOwnProperty.call(gameState, 'runItTwicePrompt');
+    const prompt = hasPersistedPrompt ? gameState.runItTwicePrompt : getRunItState(tableId).prompt;
+    if (!prompt || prompt.playerId !== playerId) {
+      return res.status(400).json({ error: 'No active Run-It-Twice prompt for this player' });
+    }
+    if (!RUN_IT_TWICE_DECISIONS_ENABLED && runs > 1) {
+      return res.status(403).json({ error: 'Run-It-Twice is temporarily disabled' });
+    }
+    clearSupabaseAutoRunout(tableId);
 
     const broadcastState = async (state: TableState, lastAction: unknown) => {
       const enrichedState = enrichStateWithRunIt(tableId, state);
@@ -132,6 +134,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.log(`[enable-rit.ts] Player ${playerId} declined Run-It-Twice for table ${tableId}`);
       }
       disableRunItPrompt(tableId, true);
+      engine.setRunItTwicePrompt(null, true);
       const baseState: TableState = {
         ...gameState,
         runItTwicePrompt: null,
@@ -148,6 +151,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         engine.enableRunItTwice(runs);
       }
       disableRunItPrompt(tableId, true);
+      engine.setRunItTwicePrompt(null, true);
       const baseState: TableState = {
         ...engine.getState(),
         runItTwicePrompt: null,
@@ -169,6 +173,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let handResultPosted = false;
       // Use synchronous runout that awaits delays - this keeps the serverless function alive
       await runSupabaseAutoRunoutSync(tableId, engine, async (state, meta) => {
+        await persistEngineState(tableId, engine);
         await broadcastState(state, meta);
         // Post hand result to chat when auto-runout reaches showdown
         if (state.stage === 'showdown' && !handResultPosted) {

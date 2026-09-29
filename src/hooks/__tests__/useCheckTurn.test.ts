@@ -143,6 +143,48 @@ describe('useCheckTurn', () => {
     });
   });
 
+  it('should call onTurnChange when the table stage changes', async () => {
+    const onTurnChange = jest.fn();
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          isMyTurn: false,
+          activePlayer: 'player2',
+          tableState: 'preflop',
+          handNumber: 0
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          isMyTurn: false,
+          activePlayer: '',
+          tableState: 'showdown',
+          handNumber: 0
+        })
+      });
+
+    renderHook(() => useCheckTurn('table1', 'player1', { onTurnChange }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    jest.advanceTimersByTime(10000);
+
+    await waitFor(() => {
+      expect(onTurnChange).toHaveBeenCalledWith({
+        isMyTurn: false,
+        activePlayer: '',
+        tableState: 'showdown',
+        handNumber: 0
+      });
+    });
+  });
+
   it('should handle fetch errors gracefully', async () => {
     (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
 

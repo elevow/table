@@ -30,14 +30,37 @@ export async function persistEngineState(tableId: string, engine: PokerEngine): 
   try {
     const pool = getPool();
     const serialized = engine.serialize();
-    
-    // Update the active_games table with the full engine state
-    await pool.query(
+    const stateJson = JSON.stringify(serialized);
+
+    // Try to update the most-recent existing row to avoid updating duplicate rows
+    const result = await pool.query(
       `UPDATE active_games 
        SET state = $1, last_action_at = NOW() 
-       WHERE room_id = $2`,
-      [JSON.stringify(serialized), tableId]
+       WHERE id = (
+         SELECT id FROM active_games WHERE room_id = $2 ORDER BY last_action_at DESC LIMIT 1
+       )`,
+      [stateJson, tableId]
     );
+
+    // If no existing row was updated (e.g. service.startGame() never ran or failed),
+    // insert a new one so the engine can be restored in serverless environments.
+    if ((result.rowCount ?? 0) === 0) {
+      const ts = serialized.tableState;
+      const activePlr = ts.players.find(p => p.id === ts.activePlayer);
+      const currentPlayerPosition = activePlr?.position ?? 0;
+
+      await pool.query(
+        `INSERT INTO active_games (room_id, dealer_position, current_player_position, pot, state)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          tableId,
+          Number(ts.dealerPosition) || 0,
+          Number(currentPlayerPosition) || 0,
+          Number(ts.pot) || 0,
+          stateJson,
+        ]
+      );
+    }
   } catch (error) {
     // Log but don't throw - we don't want persistence failures to break gameplay
     // when running locally without a database
@@ -54,7 +77,7 @@ export async function restoreEngineFromDb(tableId: string): Promise<PokerEngine 
     const pool = getPool();
     
     const result = await pool.query(
-      `SELECT state FROM active_games WHERE room_id = $1 LIMIT 1`,
+      `SELECT state FROM active_games WHERE room_id = $1 ORDER BY last_action_at DESC LIMIT 1`,
       [tableId]
     );
     

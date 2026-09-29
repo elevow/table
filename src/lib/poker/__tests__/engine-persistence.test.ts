@@ -78,6 +78,69 @@ describe('engine-persistence', () => {
       );
     });
 
+    it('should INSERT a new row when no existing active_games row is found', async () => {
+      const mockSerializedState: SerializedEngineState = {
+        tableState: {
+          tableId: 'table-1',
+          players: [
+            {
+              id: 'player-1',
+              name: 'Alice',
+              stack: 1000,
+              currentBet: 0,
+              hasActed: false,
+              isFolded: false,
+              isAllIn: false,
+              position: 2,
+              holeCards: [],
+            },
+          ],
+          smallBlind: 5,
+          bigBlind: 10,
+          pot: 0,
+          currentBet: 0,
+          minRaise: 10,
+          stage: 'awaiting-dealer-choice',
+          activePlayer: 'player-1',
+          communityCards: [],
+          dealerPosition: 1,
+          variant: 'dealers-choice',
+          bettingMode: 'no-limit',
+        },
+        deck: [],
+        removedPlayers: [],
+        rabbitPreviewed: 0,
+        requireRitUnanimous: false,
+        ritConsents: [],
+      };
+
+      const mockEngine = {
+        serialize: jest.fn().mockReturnValue(mockSerializedState),
+      } as unknown as PokerEngine;
+
+      // First call (UPDATE) returns 0 rows affected; second call (INSERT) succeeds
+      mockQuery
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+
+      await persistEngineState('table-1', mockEngine);
+
+      expect(mockEngine.serialize).toHaveBeenCalled();
+      expect(mockQuery).toHaveBeenCalledTimes(2);
+      // First call is the UPDATE
+      expect(mockQuery).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('UPDATE active_games'),
+        [JSON.stringify(mockSerializedState), 'table-1']
+      );
+      // Second call is the INSERT fallback
+      expect(mockQuery).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('INSERT INTO active_games'),
+        expect.arrayContaining(['table-1', JSON.stringify(mockSerializedState)])
+      );
+    });
+
     it('should handle database errors gracefully', async () => {
       const mockEngine = {
         serialize: jest.fn().mockReturnValue({}),
@@ -160,6 +223,7 @@ describe('engine-persistence', () => {
         expect.stringContaining('SELECT state FROM active_games'),
         ['table-1']
       );
+      expect(mockQuery.mock.calls[0][0]).toMatch(/ORDER BY last_action_at DESC/);
       expect(PokerEngine.fromSerialized).toHaveBeenCalledWith(mockSerializedState);
     });
 

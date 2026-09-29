@@ -110,13 +110,13 @@ function isValidSerializedState(data: unknown): data is SerializedEngineState {
 export async function getOrRestoreEngine(tableId: string): Promise<PokerEngine | null> {
   const g: any = global as any;
   
-  // First check in-memory cache
+  // Keep the cached engine as a fallback when persistence is unavailable.
   const cachedEngine = g?.activeGames?.get(tableId);
-  if (cachedEngine && typeof cachedEngine.getState === 'function') {
-    return cachedEngine;
-  }
+  const validCachedEngine = cachedEngine && typeof cachedEngine.getState === 'function'
+    ? cachedEngine
+    : null;
   
-  // Try to restore from database
+  // Serverless instances can retain stale engines after another instance updates the table.
   const restoredEngine = await restoreEngineFromDb(tableId);
   if (restoredEngine) {
     // Update in-memory cache for this instance
@@ -128,5 +128,5 @@ export async function getOrRestoreEngine(tableId: string): Promise<PokerEngine |
     return restoredEngine;
   }
   
-  return null;
+  return validCachedEngine;
 }

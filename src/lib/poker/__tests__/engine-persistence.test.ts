@@ -350,17 +350,47 @@ describe('engine-persistence', () => {
   });
 
   describe('getOrRestoreEngine', () => {
-    it('should return cached engine if available', async () => {
-      const mockEngine = {
+    it('should refresh a cached engine from the database when available', async () => {
+      const cachedEngine = {
         getState: jest.fn().mockReturnValue({}),
       } as unknown as PokerEngine;
+      const restoredEngine = {
+        getState: jest.fn(),
+      } as unknown as PokerEngine;
 
-      (global as any).activeGames = new Map([['table-1', mockEngine]]);
+      (global as any).activeGames = new Map([['table-1', cachedEngine]]);
+      mockQuery.mockResolvedValue({
+        rows: [{ state: {
+          tableState: {
+            tableId: 'table-1',
+            players: [],
+            smallBlind: 5,
+            bigBlind: 10,
+          },
+          deck: [],
+        } }],
+        rowCount: 1,
+      });
+      (PokerEngine.fromSerialized as jest.Mock).mockReturnValue(restoredEngine);
 
       const result = await getOrRestoreEngine('table-1');
 
-      expect(result).toBe(mockEngine);
-      expect(mockQuery).not.toHaveBeenCalled();
+      expect(result).toBe(restoredEngine);
+      expect(mockQuery).toHaveBeenCalled();
+      expect((global as any).activeGames.get('table-1')).toBe(restoredEngine);
+    });
+
+    it('should fall back to a cached engine when no database state is available', async () => {
+      const cachedEngine = {
+        getState: jest.fn().mockReturnValue({}),
+      } as unknown as PokerEngine;
+      (global as any).activeGames = new Map([['table-1', cachedEngine]]);
+      mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
+
+      const result = await getOrRestoreEngine('table-1');
+
+      expect(result).toBe(cachedEngine);
+      expect(mockQuery).toHaveBeenCalled();
     });
 
     it('should restore from database if not in cache', async () => {

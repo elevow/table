@@ -473,8 +473,19 @@ export default function GamePage() {
       interval: 10000, // Poll every 10 seconds
       onTurnChange: (status) => {
         console.log('🔔 Turn status changed via polling:', status);
-        // Polling only detects turn changes - the actual state update comes via Supabase Realtime
-        // This avoids race conditions and ensures sequence validation is maintained
+        if (status.tableState !== pokerGameState?.stage && id && playerId) {
+          fetch(`/api/games/state?tableId=${encodeURIComponent(id)}&playerId=${encodeURIComponent(playerId)}`)
+            .then(response => {
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              return response.json();
+            })
+            .then(data => {
+              if (data.gameState?.stage === status.tableState) {
+                setPokerGameState(data.gameState);
+              }
+            })
+            .catch(error => console.warn('Failed to refresh game state after poll:', error));
+        }
         if (status.isMyTurn) {
           console.log('🔔 Polling detected it\'s now your turn - waiting for Realtime state update');
         }

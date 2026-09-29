@@ -306,4 +306,38 @@ describe('PokerEngine', () => {
       expect(restored.getState().activePlayer).toBe('p1');
     });
   });
+
+  it('clears the active player during automatic all-in runout', () => {
+    const engine = new PokerEngine('table1', [createPlayer('p1', 0), createPlayer('p2', 1)], 5, 10);
+    const communityCards = [createCard('2', 'hearts'), createCard('3', 'clubs'), createCard('4', 'spades')];
+
+    engine.setAutoRunoutProgress('flop', communityCards);
+
+    expect(engine.getState()).toEqual(expect.objectContaining({
+      stage: 'flop',
+      communityCards,
+      activePlayer: '',
+    }));
+  });
+
+  it('runs out the remaining streets automatically in seven-card stud', () => {
+    const engine = new PokerEngine(
+      'table1',
+      [createPlayer('p1', 0), createPlayer('p2', 1)],
+      5,
+      10,
+      { variant: 'seven-card-stud' },
+    );
+    engine.startNewHand();
+
+    engine.runStudAllInToShowdown();
+
+    const state = engine.getState();
+    expect(state.stage).toBe('showdown');
+    expect(state.activePlayer).toBe('');
+    state.players.forEach(player => {
+      const cards = state.studState?.playerCards[player.id];
+      expect((cards?.downCards.length || 0) + (cards?.upCards.length || 0)).toBe(7);
+    });
+  });
 });

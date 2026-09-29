@@ -6,7 +6,7 @@ import {
   maybeCreateRunItPrompt,
   isAutoRunoutEligible,
 } from '../../../src/lib/poker/run-it-twice-manager';
-import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
+import { runSupabaseAutoRunoutSync, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../../src/lib/shared/feature-flags';
@@ -152,6 +152,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       engine.setRunItTwicePrompt(issuedPrompt);
       gameState = engine.getState();
       await persistEngineState(tableId, engine);
+    } else if (autoEligible) {
+      engine.setAutoRunoutProgress(gameState.stage, gameState.communityCards);
+      gameState = engine.getState();
+      await persistEngineState(tableId, engine);
     }
 
     const enrichedState = await broadcastState(gameState, { action, playerId, amount });
@@ -170,7 +174,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (shouldScheduleAutoRunout) {
       // Track whether we've already posted the hand result for auto-runout
       let handResultPosted = false;
-      scheduleSupabaseAutoRunout(tableId, engine, async (state, meta) => {
+      await runSupabaseAutoRunoutSync(tableId, engine, async (state, meta) => {
+        await persistEngineState(tableId, engine);
         await broadcastState(state, meta);
         // Post hand result to chat when auto-runout reaches showdown
         if (state.stage === 'showdown' && !handResultPosted) {
@@ -181,7 +186,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.warn('Failed to post hand result to chat (auto-runout):', chatError);
           }
         }
-      });
+      }, 0);
     }
 
     // Sanitize the response for the requesting player - hide other players' hole cards

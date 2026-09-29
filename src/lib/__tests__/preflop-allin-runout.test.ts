@@ -1,5 +1,5 @@
 import { TableState, Player, Card } from '../../types/poker';
-import { scheduleSupabaseAutoRunout, clearSupabaseAutoRunout } from '../poker/supabase-auto-runout';
+import { scheduleSupabaseAutoRunout, runSupabaseAutoRunoutSync, clearSupabaseAutoRunout } from '../poker/supabase-auto-runout';
 
 describe('Preflop all-in auto-runout', () => {
   const tableId = 'preflop-allin-test';
@@ -166,6 +166,22 @@ describe('Preflop all-in auto-runout', () => {
       2,
       expect.objectContaining({ stage: 'turn' }),
       { action: 'auto_runout_turn' },
+    );
+  });
+
+  it('runs the remaining board immediately without assigning another turn', async () => {
+    const state = makePreflopState();
+    const engine = makeEngine(state);
+    const broadcast = jest.fn().mockResolvedValue(undefined);
+
+    const completed = await runSupabaseAutoRunoutSync(tableId, engine as any, broadcast, 0);
+
+    expect(completed).toBe(true);
+    expect(broadcast).toHaveBeenCalledTimes(4);
+    expect(broadcast.mock.calls.map(([state]) => state.activePlayer)).toEqual(['', '', '', '']);
+    expect(broadcast).toHaveBeenLastCalledWith(
+      expect.objectContaining({ stage: 'showdown', activePlayer: '' }),
+      { action: 'auto_runout_showdown' },
     );
   });
 });

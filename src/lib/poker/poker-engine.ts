@@ -185,6 +185,33 @@ export class PokerEngine {
     }
   }
 
+  public setAutoRunoutProgress(stage: GameStage, communityCards: Card[]): void {
+    this.state.stage = stage;
+    this.state.communityCards = [...communityCards];
+    this.state.activePlayer = '';
+  }
+
+  public runStudAllInToShowdown(): void {
+    const studVariant = this.state.variant === 'seven-card-stud'
+      || this.state.variant === 'seven-card-stud-hi-lo'
+      || this.state.variant === 'five-card-stud';
+    if (!studVariant) throw new Error('Stud runout requires a stud variant');
+
+    while (this.state.stage !== 'showdown') {
+      const nextStage = this.gameStateManager.moveToNextStage();
+      if (nextStage === 'showdown') {
+        this.determineWinner();
+        return;
+      }
+      if (nextStage === 'seventh') {
+        this.dealStudDownCards(1);
+      } else {
+        this.dealStudUpCards(1);
+      }
+      this.state.activePlayer = '';
+    }
+  }
+
   public startNewHand(): void {
     // Before starting, drop any players flagged for removal and re-index positions
     if (this.removedPlayers.size > 0) {

@@ -173,6 +173,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let handResultPosted = false;
       // Use synchronous runout that awaits delays - this keeps the serverless function alive
       await runSupabaseAutoRunoutSync(tableId, engine, async (state, meta) => {
+        await persistEngineState(tableId, engine);
         await broadcastState(state, meta);
         // Post hand result to chat when auto-runout reaches showdown
         if (state.stage === 'showdown' && !handResultPosted) {

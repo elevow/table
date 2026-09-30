@@ -360,19 +360,20 @@ export default function GamePage() {
 
           // Update seat assignments from game state players
           if (Array.isArray(gameState.players)) {
-            const updatedSeats: Record<number, { playerId: string; playerName: string; chips: number } | null> = { ...seatAssignments };
-            
-            gameState.players.forEach((player: any) => {
-              if (player.position !== undefined && player.position >= 1 && player.position <= maxPlayers) {
-                updatedSeats[player.position] = {
-                  playerId: player.id,
-                  playerName: player.name || `Player ${player.position}`,
-                  chips: player.stack || 0
-                };
-              }
+            setSeatAssignments(prev => {
+              const updatedSeats = { ...prev };
+              gameState.players.forEach((player: any) => {
+                const seat = updatedSeats[player.position];
+                if (seat && seat.playerId === player.id) {
+                  updatedSeats[player.position] = {
+                    playerId: seat.playerId,
+                    playerName: seat.playerName,
+                    chips: player.stack || 0,
+                  };
+                }
+              });
+              return updatedSeats;
             });
-            
-            setSeatAssignments(updatedSeats);
           }
         }
       },
@@ -444,12 +445,11 @@ export default function GamePage() {
   }, [pokerGameState?.stage]);
   
   // Poll for turn status every 10 seconds when waiting
-  // This complements Supabase Realtime notifications to ensure players are notified even if broadcasts are missed
+  // This complements Supabase Realtime notifications to ensure players are notified of their turn even if broadcasts are missed
   // Can be disabled via localStorage for debugging: localStorage.setItem('disablePolling', 'true')
   const [pollingDisabled, setPollingDisabled] = useState<boolean | null>(null);
   
   useEffect(() => {
-    // Check localStorage for polling disabled flag (with try-catch for privacy modes)
     let disabled = false;
     try {
       disabled = localStorage.getItem('disablePolling') === 'true';
@@ -457,7 +457,6 @@ export default function GamePage() {
       console.warn('Unable to access localStorage for disablePolling flag', error);
     }
     setPollingDisabled(disabled);
-    
     if (disabled) {
       console.log('⚠️ Turn polling is DISABLED via localStorage');
     } else {
@@ -471,7 +470,7 @@ export default function GamePage() {
     playerId,
     {
       enabled: isWaitingForTurn && pollingDisabled === false,
-      interval: 10000, // Poll every 10 seconds
+      interval: 10000,
       onTurnChange: (status) => {
         console.log('🔔 Turn status changed via polling:', status);
         if (
@@ -2027,68 +2026,26 @@ export default function GamePage() {
           const data = await resp.json();
           if (!alive) return;
           if (data?.seats) {
-            // Check if server has actual seat data (not all nulls)
-            const serverHasSeats = Object.values(data.seats).some((s: any) => s !== null);
-            
-            // Get existing localStorage data
-            let localSeats: Record<string, any> | null = null;
-            try {
-              const savedSeats = localStorage.getItem(`seats_${id}`);
-              if (savedSeats) {
-                localSeats = JSON.parse(savedSeats);
-              }
-            } catch {}
-            const localHasSeats = localSeats && Object.values(localSeats).some((s: any) => s !== null);
-            
-            // If server has no seats but localStorage does, prefer localStorage
-            // This handles the case where server state was lost (e.g., serverless cold start)
-            // Realtime broadcasts will keep things in sync going forward
-            if (!serverHasSeats && localHasSeats && localSeats) {
-              console.log('Server returned empty seats but localStorage has data, using localStorage');
-              setSeatAssignments(localSeats);
-              setSeatStateReady(true);
+            setSeatAssignments(data.seats);
+            setSeatStateReady(true);
+            try { if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats)); } catch {}
+            const playerSeat = Object.entries(data.seats).find(([_, assignment]: any) => assignment?.playerId === playerId);
+            if (playerSeat) {
+              const [seatNumber, assignment] = playerSeat as any;
+              setCurrentPlayerSeat(parseInt(seatNumber));
+              persistSeatNumber(lastSeatStorageKey, parseInt(seatNumber));
+              setPlayerChips(assignment?.chips || 0);
+              try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
             } else {
-              setSeatAssignments(data.seats);
-              setSeatStateReady(true);
-              try { if (id) localStorage.setItem(`seats_${id}`, JSON.stringify(data.seats)); } catch {}
-              const playerSeat = Object.entries(data.seats).find(([_, assignment]: any) => assignment?.playerId === playerId);
-              if (playerSeat) {
-                const [seatNumber, assignment] = playerSeat as any;
-                setCurrentPlayerSeat(parseInt(seatNumber));
-                persistSeatNumber(lastSeatStorageKey, parseInt(seatNumber));
-                setPlayerChips(assignment?.chips || 0);
-                try { if (id) localStorage.setItem(`chips_${playerId}_${id}`, String(assignment?.chips || 0)); } catch {}
-              } else {
-                // Player is not in any seat according to server - clear local seat state
-                // This handles the case where the player left the game but localStorage had stale data
-                setCurrentPlayerSeat(null);
-                persistSeatNumber(lastSeatStorageKey, null);
-                setPlayerChips(0);
-                try { 
-                  if (id) {
-                    localStorage.removeItem(`chips_${playerId}_${id}`);
-                    if (lastSeatStorageKey) {
-                      localStorage.removeItem(lastSeatStorageKey);
-                    }
-                    // Remove player from seats_${id} if present
-                    const seatsKey = `seats_${id}`;
-                    const seatsRaw = localStorage.getItem(seatsKey);
-                    if (seatsRaw) {
-                      let seatsObj;
-                      try { seatsObj = JSON.parse(seatsRaw); } catch {}
-                      if (seatsObj && typeof seatsObj === 'object') {
-                        // Remove any seat assigned to this player
-                        for (const seat in seatsObj) {
-                          if (seatsObj[seat]?.playerId === playerId) {
-                            seatsObj[seat] = null;
-                          }
-                        }
-                        localStorage.setItem(seatsKey, JSON.stringify(seatsObj));
-                      }
-                    }
-                  }
-                } catch {}
-              }
+              setCurrentPlayerSeat(null);
+              persistSeatNumber(lastSeatStorageKey, null);
+              setPlayerChips(0);
+              try {
+                if (id) {
+                  localStorage.removeItem(`chips_${playerId}_${id}`);
+                  if (lastSeatStorageKey) localStorage.removeItem(lastSeatStorageKey);
+                }
+              } catch {}
             }
           }
         }
@@ -2108,28 +2065,22 @@ export default function GamePage() {
             setPokerGameState(gs);
             setGameStarted(true);
             console.log('🔄 Restored active game state on reload:', gs.stage, 'activePlayer:', gs.activePlayer);
-            // Update seat assignments from game state players
+            // Keep chips synchronized only for players who still own a seat.
             if (Array.isArray(gs.players)) {
               setSeatAssignments(prev => {
                 const updated = { ...prev };
                 gs.players.forEach((player: any) => {
-                  if (player.position !== undefined && player.position >= 1 && player.position <= maxPlayers) {
+                  const seat = updated[player.position];
+                  if (seat && seat.playerId === player.id) {
                     updated[player.position] = {
-                      playerId: player.id,
-                      playerName: player.name || `Player ${player.position}`,
+                      playerId: seat.playerId,
+                      playerName: seat.playerName,
                       chips: player.stack || 0,
                     };
                   }
                 });
                 return updated;
               });
-              // Set current player's seat from game state
-              const me = gs.players.find((p: any) => p.id === playerId);
-              if (me?.position) {
-                setCurrentPlayerSeat(me.position);
-                persistSeatNumber(lastSeatStorageKey, me.position);
-                setPlayerChips(me.stack || 0);
-              }
             }
           }
         }
@@ -2144,7 +2095,7 @@ export default function GamePage() {
 
   // Load seat assignments - separate useEffect to prevent infinite loops
   useEffect(() => {
-    if (!id || !playerId) return; // Wait for both id and playerId to be available
+    if (!id || !playerId || seatStateReady) return;
     
     const savedSeats = localStorage.getItem(`seats_${id}`);
     if (savedSeats) {
@@ -2205,7 +2156,7 @@ export default function GamePage() {
         setSeatAssignments(emptySeats);
       }
     }
-  }, [id, playerId, maxPlayers, lastSeatStorageKey]); // Include maxPlayers in dependencies
+  }, [id, playerId, maxPlayers, lastSeatStorageKey, seatStateReady]);
 
   // Sync playerId with canonical seat assignment to avoid mismatched prompts/actions
   useEffect(() => {

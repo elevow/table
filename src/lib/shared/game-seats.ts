@@ -35,6 +35,58 @@ export function initializeRoomSeats(roomId: string): GameSeats {
   return gameSeats.get(roomId)!;
 }
 
+const normalizeRoomSeats = (value: unknown): GameSeats => {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const seats: GameSeats = {};
+  for (let seatNumber = 1; seatNumber <= 9; seatNumber++) {
+    const assignment = source[String(seatNumber)];
+    seats[seatNumber] = assignment && typeof assignment === 'object'
+      ? assignment as SeatAssignment
+      : null;
+  }
+  return seats;
+};
+
+export async function loadPersistedRoomSeats(roomId: string): Promise<GameSeats | null> {
+  try {
+    const { getPool } = await import('../database/pool');
+    const result = await getPool().query(
+      'SELECT configuration FROM game_rooms WHERE id = $1 LIMIT 1',
+      [roomId],
+    );
+    const row = result.rows?.[0];
+    if (!row) return null;
+
+    const configuration = row.configuration && typeof row.configuration === 'object'
+      ? row.configuration as Record<string, unknown>
+      : {};
+    if (!configuration.seats || typeof configuration.seats !== 'object') return null;
+
+    const seats = normalizeRoomSeats(configuration.seats);
+    setRoomSeats(roomId, seats);
+    return seats;
+  } catch (error) {
+    console.warn('[game-seats] Failed to load persisted seats:', error);
+    return null;
+  }
+}
+
+export async function persistRoomSeats(roomId: string, seats: GameSeats): Promise<boolean> {
+  try {
+    const { getPool } = await import('../database/pool');
+    const result = await getPool().query(
+      `UPDATE game_rooms
+       SET configuration = jsonb_set(COALESCE(configuration, '{}'::jsonb), '{seats}', $2::jsonb, true)
+       WHERE id = $1`,
+      [roomId, JSON.stringify(normalizeRoomSeats(seats))],
+    );
+    return (result.rowCount || 0) > 0;
+  } catch (error) {
+    console.warn('[game-seats] Failed to persist seats:', error);
+    return false;
+  }
+}
+
 export function claimSeat(roomId: string, seatNumber: number, assignment: { playerId: string; playerName: string; chips: number }): boolean {
   const seats = initializeRoomSeats(roomId);
   

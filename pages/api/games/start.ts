@@ -43,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Try to get seats from in-memory store first (socket mode), then fallback to client-provided seats (Supabase/HTTP mode)
     let seatedPlayers: Array<{ seatNumber: number; playerId: string; playerName: string; chips: number }>;
     
-    const seats = GameSeats.getRoomSeats(tableId);
+    const seats = await GameSeats.loadPersistedRoomSeats(tableId) || GameSeats.getRoomSeats(tableId);
     const serverSeatedPlayers = Object.entries(seats)
       .filter(([_, a]) => !!a)
       .map(([seatNumber, a]) => ({
@@ -69,6 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         };
       });
       GameSeats.setRoomSeats(tableId, newSeats);
+      await GameSeats.persistRoomSeats(tableId, newSeats);
     } else {
       return res.status(400).json({ error: 'Need at least two seated players to start a game' });
     }

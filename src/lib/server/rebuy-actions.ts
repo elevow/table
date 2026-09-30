@@ -12,13 +12,14 @@ export async function autoStandPlayer(
   reason: string = 'auto_stand'
 ): Promise<void> {
   try {
-    const seats = GameSeats.getRoomSeats(tableId);
+    const seats = await GameSeats.loadPersistedRoomSeats?.(tableId) || GameSeats.getRoomSeats(tableId);
     const entry = Object.entries(seats).find(([, assignment]) => assignment?.playerId === playerId);
     if (!entry) return;
     const [seatStr] = entry;
     const seatNumber = parseInt(seatStr, 10);
     seats[seatNumber] = null;
     GameSeats.setRoomSeats(tableId, seats);
+    await GameSeats.persistRoomSeats?.(tableId, seats);
     const payload = { seatNumber, playerId, reason };
     io?.to(`table_${tableId}`).emit('seat_vacated', payload);
     await Promise.all([
@@ -66,12 +67,13 @@ export async function applyRebuy(
   player.isFolded = false;
   player.hasActed = false;
 
-  const seats = GameSeats.getRoomSeats(tableId);
+  const seats = await GameSeats.loadPersistedRoomSeats?.(tableId) || GameSeats.getRoomSeats(tableId);
   for (const [seatStr, assignment] of Object.entries(seats)) {
     if (assignment?.playerId === playerId) {
       const seatNumber = parseInt(seatStr, 10);
       seats[seatNumber] = { ...assignment, chips };
       GameSeats.setRoomSeats(tableId, seats);
+      await GameSeats.persistRoomSeats?.(tableId, seats);
       const seatPayload = { seatNumber, playerId, playerName: assignment.playerName, chips };
       io?.to(`table_${tableId}`).emit('seat_stack_updated', seatPayload);
       try {

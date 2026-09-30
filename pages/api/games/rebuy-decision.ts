@@ -115,7 +115,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Update seat assignment
-      const seats = GameSeats.getRoomSeats(tableId);
+      const seats = await GameSeats.loadPersistedRoomSeats(tableId) || GameSeats.getRoomSeats(tableId);
       for (const [seatStr, assignment] of Object.entries(seats)) {
         if (assignment && assignment.playerId === playerId) {
           const seatNumber = parseInt(seatStr, 10);
@@ -125,6 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             chips: rebuyChips,
           };
           GameSeats.setRoomSeats(tableId, seats);
+          await GameSeats.persistRoomSeats(tableId, seats);
           await publishSeatState(tableId, { seats });
           break;
         }
@@ -172,12 +173,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Vacate seat
-      const seats = GameSeats.getRoomSeats(tableId);
+      const seats = await GameSeats.loadPersistedRoomSeats(tableId) || GameSeats.getRoomSeats(tableId);
       for (const [seatStr, assignment] of Object.entries(seats)) {
         if (assignment?.playerId === playerId) {
           const seatNumber = parseInt(seatStr, 10);
           seats[seatNumber] = null;
           GameSeats.setRoomSeats(tableId, seats);
+          await GameSeats.persistRoomSeats(tableId, seats);
           await publishSeatVacated(tableId, { seatNumber, playerId, reason: 'rebuy_declined' });
           await publishSeatState(tableId, { seats });
           break;

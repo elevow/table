@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const seats = GameSeats.getRoomSeats(String(tableId));
+    const seats = await GameSeats.loadPersistedRoomSeats(String(tableId)) || GameSeats.getRoomSeats(String(tableId));
     if (!seats || Object.keys(seats).length === 0) {
       return res.status(404).json({ error: 'Table not found' });
     }
@@ -59,6 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Vacate
     seats[sNum] = null;
     GameSeats.setRoomSeats(String(tableId), seats);
+    await GameSeats.persistRoomSeats(String(tableId), seats);
 
     const seatPayload = { seatNumber: sNum, playerId };
 

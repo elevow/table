@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Script from 'next/script';
+import { Analytics } from '@vercel/analytics/react';
 
 // Code splitting and optimization imports
 import { dynamicImport } from '../src/utils/code-splitting';
@@ -123,6 +124,7 @@ function MyApp({ Component, pageProps }: AppProps) {
       )}
       
       <Component {...pageProps} />
+      <Analytics />
     </ThemeProvider>
   );
 }

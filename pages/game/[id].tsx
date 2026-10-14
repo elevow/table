@@ -754,7 +754,6 @@ export default function GamePage() {
       const playerNumber = playerId.replace(/\D/g, '').slice(-2) || Math.floor(Math.random() * 99).toString().padStart(2, '0');
       return `Player ${playerNumber}`;
     })();
-    const startingChips = roomConfig?.buyIn || 1000; // Use room's buy-in or default to 1000
 
     setClaimingSeat(seatNumber);
 
@@ -762,7 +761,7 @@ export default function GamePage() {
       const resp = await fetch('/api/games/seats/claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ tableId: id, seatNumber, playerId, playerName, chips: startingChips })
+        body: JSON.stringify({ tableId: id, seatNumber, playerId, playerName })
       });
       if (!resp.ok) {
         const e = await resp.json().catch(() => ({}));
@@ -771,6 +770,8 @@ export default function GamePage() {
         return;
       }
       const data = await resp.json();
+      // The server sets the stack from the room's buy-in
+      const startingChips = Number(data?.chips) || roomConfig?.buyIn || 1000;
       // Update local state and storage
       setSeatAssignments(prev => ({
         ...prev,

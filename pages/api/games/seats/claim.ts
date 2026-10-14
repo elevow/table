@@ -13,12 +13,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    const { tableId, seatNumber, playerId: claimedPlayerId, playerName, chips } = (req.body || {}) as {
+    const { tableId, seatNumber, playerId: claimedPlayerId, playerName } = (req.body || {}) as {
       tableId?: string;
       seatNumber?: number;
       playerId?: string;
       playerName?: string;
-      chips?: number;
     };
 
     const playerId = await requirePlayer(req, res, claimedPlayerId);
@@ -57,8 +56,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(403).json({ error: message, rebuyLimit, rebuysUsed });
     }
 
-    // Use chips from request if provided, otherwise use room's buyIn
-    const chipAmount = Number(chips) || buyInAmount;
+    // Stack size always comes from the room's buy-in; a client-sent chip count is ignored
+    const chipAmount = buyInAmount;
 
     // Claim seat
     seats[seatNumber] = { playerId, playerName, chips: chipAmount };

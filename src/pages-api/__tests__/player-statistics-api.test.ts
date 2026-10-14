@@ -1,8 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import getHandler from '../../../pages/api/stats/get';
-import updateHandler from '../../../pages/api/stats/update';
-import recordHandler from '../../../pages/api/stats/achievements/record';
 import listHandler from '../../../pages/api/stats/achievements/list';
 import leaderboardHandler from '../../../pages/api/stats/leaderboard';
 
@@ -11,8 +9,6 @@ jest.mock('../../../src/lib/api/rate-limit', () => ({ rateLimit: jest.fn().mockR
 
 const mockService: any = {
   getOrCreate: jest.fn(),
-  update: jest.fn(),
-  recordAchievement: jest.fn(),
   listAchievements: jest.fn(),
   leaderboard: jest.fn(),
 };
@@ -43,24 +39,6 @@ describe('Player Statistics API (US-022)', () => {
     await getHandler(req as any, res as any);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ id: 's1', userId: 'u1' });
-  });
-
-  it('POST /api/stats/update returns updated stats', async () => {
-    mockService.update.mockResolvedValue({ id: 's1', userId: 'u1', handsPlayed: 10 });
-    const req = reqHelper('POST', { userId: 'u1', delta: { handsPlayed: 5 } });
-    const res = resHelper();
-    await updateHandler(req as any, res as any);
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ id: 's1', userId: 'u1', handsPlayed: 10 });
-  });
-
-  it('POST /api/stats/achievements/record returns created achievement', async () => {
-    mockService.recordAchievement.mockResolvedValue({ id: 'a1', userId: 'u1', achievementType: 'first_win' });
-    const req = reqHelper('POST', { userId: 'u1', achievementType: 'first_win', metadata: { handId: 'h1' } });
-    const res = resHelper();
-    await recordHandler(req as any, res as any);
-    expect(res.status).toHaveBeenCalledWith(201);
-    expect(res.json).toHaveBeenCalledWith({ id: 'a1', userId: 'u1', achievementType: 'first_win' });
   });
 
   it('GET /api/stats/achievements/list returns items array', async () => {

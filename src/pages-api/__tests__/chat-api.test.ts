@@ -22,6 +22,11 @@ jest.mock('../../../src/lib/api/admin-auth', () => ({
   isUserAdminBySession: jest.fn().mockResolvedValue(false),
 }));
 
+const mockRequireAdminSession = jest.fn(async () => 'admin-1');
+jest.mock('../../../src/lib/auth/auth-utils', () => ({
+  requireAdminSession: (...args: any[]) => mockRequireAdminSession(...args),
+}));
+
 interface MockChatService {
   send: jest.Mock;
   listRoom: jest.Mock;
@@ -103,13 +108,26 @@ describe('Chat API (US-023)', () => {
     expect(res.json).toHaveBeenCalledWith({ items: [{ id: 'm2' }] });
   });
 
-  it('POST /api/chat/moderate returns updated message', async () => {
+  it('POST /api/chat/moderate returns updated message, attributed to the signed-in admin', async () => {
     mockService.moderate.mockResolvedValue({ id: 'm3', isModerated: true });
     const req = reqHelper('POST', { messageId: 'm3', moderatorId: 'mod1', hide: true });
     const res = resHelper();
     await moderateHandler(req as NextApiRequest, res as NextApiResponse);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ id: 'm3', isModerated: true });
+    expect(mockService.moderate).toHaveBeenCalledWith('m3', 'admin-1', true);
+  });
+
+  it('POST /api/chat/moderate rejects non-admins', async () => {
+    mockRequireAdminSession.mockImplementationOnce(async (_req: any, res: any) => {
+      res.status(403).json({ error: 'Admin access required' });
+      return null;
+    });
+    const req = reqHelper('POST', { messageId: 'm3', hide: true });
+    const res = resHelper();
+    await moderateHandler(req as NextApiRequest, res as NextApiResponse);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(mockService.moderate).not.toHaveBeenCalled();
   });
 
   it('POST /api/chat/delete returns success when user deletes own message', async () => {

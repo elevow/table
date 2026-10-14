@@ -15,6 +15,14 @@ import addOnHandler from '../../../pages/api/tournaments/add-on';
 
 import { createDefaultFreezeoutConfig } from '../../../src/lib/tournament/tournament-utils';
 
+// Signed-in admin for organizer actions; players act as the userId they send
+const mockRequireAdminSession = jest.fn(async () => 'admin-1');
+const mockRequirePlayer = jest.fn(async (_req: any, _res: any, claimed?: unknown) => (claimed ? String(claimed) : 'u1'));
+jest.mock('../../../src/lib/auth/auth-utils', () => ({
+  requireAdminSession: (...args: any[]) => mockRequireAdminSession(...args),
+  requirePlayer: (...args: any[]) => mockRequirePlayer(...args),
+}));
+
 // Mock rate limiter
 jest.mock('../../../src/lib/api/rate-limit', () => ({
   rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 })
@@ -144,5 +152,34 @@ describe('Tournaments API routes (US-058)', () => {
   expect(res12.status).toHaveBeenCalledWith(200);
   const report = res12.json.mock.calls[0][0];
   expect(report.registration.total).toBeGreaterThanOrEqual(2);
+  });
+
+  test('organizer actions are rejected for non-admins', async () => {
+    mockRequireAdminSession.mockImplementationOnce(async (_req: any, res: any) => {
+      res.status(403).json({ error: 'Admin access required' });
+      return null;
+    });
+    const res = createRes();
+    await createHandler(createReq('POST', { name: 'Sneaky', config: createDefaultFreezeoutConfig() }) as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.status).not.toHaveBeenCalledWith(201);
+  });
+
+  test('players cannot register someone else', async () => {
+    const created = createRes();
+    await createHandler(createReq('POST', { name: 'Solo', config: createDefaultFreezeoutConfig() }) as any, created as any);
+    const tournament = created.json.mock.calls[0][0];
+
+    mockRequirePlayer.mockImplementationOnce(async (_req: any, res: any) => {
+      res.status(403).json({ error: 'playerId does not match the authenticated user' });
+      return null;
+    });
+    const res = createRes();
+    await registerHandler(createReq('POST', { tournamentId: tournament.id, userId: 'someone-else' }) as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(403);
+
+    const fetched = createRes();
+    await getHandler(createReq('GET', undefined, { tournamentId: tournament.id }) as any, fetched as any);
+    expect(JSON.stringify(fetched.json.mock.calls[0][0])).not.toContain('someone-else');
   });
 });

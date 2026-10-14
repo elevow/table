@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../database/pool';
+import { isUserAdminBySession } from '../api/admin-auth';
 
 /**
  * Extract session token from request headers or cookies
@@ -85,6 +86,29 @@ export async function requirePlayer(
 
   if (claimedPlayerId != null && claimedPlayerId !== '' && String(claimedPlayerId) !== userId) {
     res.status(403).json({ error: 'playerId does not match the authenticated user' });
+    return null;
+  }
+
+  return userId;
+}
+
+/**
+ * Require an authenticated admin session (email listed in ADMIN_EMAILS).
+ * Returns the admin's user ID, or sends 401/403 and returns null.
+ */
+export async function requireAdminSession(
+  req: NextApiRequest,
+  res: NextApiResponse
+): Promise<string | null> {
+  const userId = await getAuthenticatedUserId(req);
+
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return null;
+  }
+
+  if (!(await isUserAdminBySession(req, getPool))) {
+    res.status(403).json({ error: 'Admin access required' });
     return null;
   }
 

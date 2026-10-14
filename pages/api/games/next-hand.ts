@@ -3,6 +3,7 @@ import { publishGameStateUpdate, publishAwaitingDealerChoice, publishRebuyPrompt
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { fetchRoomRebuyLimit, fetchRoomRebuyAmount } from '../../../src/lib/shared/rebuy-limit';
 import { getPlayerRebuyInfo } from '../../../src/lib/shared/rebuy-tracker';
 import {
@@ -62,15 +63,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { tableId, playerId, variant: rawVariant } = req.body;
+    const { tableId, playerId: claimedPlayerId, variant: rawVariant } = req.body;
+
+    const playerId = await requirePlayer(req, res, claimedPlayerId);
+    if (!playerId) return;
     
     // Validate variant if provided
     const isValidVariant = (v: unknown): v is GameVariant => 
       typeof v === 'string' && DEFAULT_DEALERS_CHOICE_VARIANTS.includes(v as GameVariant);
     const variant: GameVariant | undefined = isValidVariant(rawVariant) ? rawVariant : undefined;
 
-    if (!tableId || !playerId) {
-      return res.status(400).json({ error: 'Missing tableId or playerId' });
+    if (!tableId) {
+      return res.status(400).json({ error: 'Missing tableId' });
     }
 
     // Get the active game engine from memory or restore from database

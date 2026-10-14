@@ -1,5 +1,6 @@
 import type { NextApiRequest } from 'next';
-import { getAuthToken, getAuthenticatedUserId, requireAuth } from '../auth-utils';
+import type { NextApiResponse } from 'next';
+import { getAuthToken, getAuthenticatedUserId, requireAuth, requirePlayer } from '../auth-utils';
 
 // Mock shared getPool used by auth-utils
 const mockClient: any = { query: jest.fn(), release: jest.fn() };
@@ -290,6 +291,49 @@ describe('auth-utils', () => {
       await expect(requireAuth(mockRequest as NextApiRequest))
         .rejects
         .toThrow('Authentication required');
+    });
+  });
+
+  describe('requirePlayer', () => {
+    const createRes = () => {
+      const res: any = { status: jest.fn().mockReturnThis(), json: jest.fn().mockReturnThis() };
+      return res as NextApiResponse & { status: jest.Mock; json: jest.Mock };
+    };
+
+    beforeEach(() => {
+      mockRequest.headers = { authorization: 'Bearer session-token' };
+    });
+
+    it('returns the session user when no playerId is claimed', async () => {
+      mockClient.query.mockResolvedValue({ rows: [{ user_id: 'user-1' }] });
+      const res = createRes();
+
+      await expect(requirePlayer(mockRequest as NextApiRequest, res)).resolves.toBe('user-1');
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    it('returns the session user when the claimed playerId matches', async () => {
+      mockClient.query.mockResolvedValue({ rows: [{ user_id: 'user-1' }] });
+      const res = createRes();
+
+      await expect(requirePlayer(mockRequest as NextApiRequest, res, 'user-1')).resolves.toBe('user-1');
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    it('responds 401 when there is no valid session', async () => {
+      mockClient.query.mockResolvedValue({ rows: [] });
+      const res = createRes();
+
+      await expect(requirePlayer(mockRequest as NextApiRequest, res, 'user-1')).resolves.toBeNull();
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    it('responds 403 when the claimed playerId belongs to someone else', async () => {
+      mockClient.query.mockResolvedValue({ rows: [{ user_id: 'user-1' }] });
+      const res = createRes();
+
+      await expect(requirePlayer(mockRequest as NextApiRequest, res, 'user-2')).resolves.toBeNull();
+      expect(res.status).toHaveBeenCalledWith(403);
     });
   });
 

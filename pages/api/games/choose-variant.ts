@@ -6,6 +6,7 @@ import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import type { GameVariant } from '../../../src/types/poker';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 const ALLOWED_VARIANTS: GameVariant[] = [
   'texas-holdem',
@@ -49,10 +50,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { tableId, playerId, variant: rawVariant } = req.body ?? {};
+  const { tableId, playerId: claimedPlayerId, variant: rawVariant } = req.body ?? {};
 
-  if (!tableId || !playerId) {
-    return res.status(400).json({ error: 'Missing tableId or playerId' });
+  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  if (!playerId) return;
+
+  if (!tableId) {
+    return res.status(400).json({ error: 'Missing tableId' });
   }
 
   if (!isValidVariant(rawVariant)) {

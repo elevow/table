@@ -12,6 +12,7 @@ import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 /**
  * After a rebuy decision, check if we can start the next hand.
@@ -76,9 +77,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { tableId, playerId, decision } = req.body;
+    const { tableId, playerId: claimedPlayerId, decision } = req.body;
 
-    if (!tableId || !playerId || (decision !== 'yes' && decision !== 'no')) {
+    const playerId = await requirePlayer(req, res, claimedPlayerId);
+    if (!playerId) return;
+
+    if (!tableId || (decision !== 'yes' && decision !== 'no')) {
       return res.status(400).json({ error: 'Missing or invalid parameters' });
     }
 

@@ -13,6 +13,7 @@ import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/e
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../../src/lib/shared/feature-flags';
 import type { TableState } from '../../../src/types/poker';
 import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -53,14 +54,17 @@ const revealAllHoleCards = (engine: any, state: TableState): TableState => {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { tableId, playerId, runs } = (req.body || {}) as {
+  const { tableId, playerId: claimedPlayerId, runs } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
     runs?: number;
   };
 
-  if (!tableId || !playerId || typeof runs !== 'number') {
-    return res.status(400).json({ error: 'Missing tableId, playerId, or runs' });
+  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  if (!playerId) return;
+
+  if (!tableId || typeof runs !== 'number') {
+    return res.status(400).json({ error: 'Missing tableId or runs' });
   }
 
   try {

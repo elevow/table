@@ -1,4 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+// Simulate a signed-in caller whose session matches the playerId they send
+const mockRequirePlayer = jest.fn(async (_req: any, _res: any, claimed?: unknown) => (claimed ? String(claimed) : 'player1'));
+jest.mock('../../../auth/auth-utils', () => ({
+  requirePlayer: (...args: any[]) => mockRequirePlayer(...args),
+}));
+
 import handler from '../../../../../pages/api/games/seats/stand';
 import * as GameSeats from '../../../shared/game-seats';
 
@@ -56,13 +62,19 @@ describe('/api/games/seats/stand', () => {
     expect(jsonMock).toHaveBeenCalledWith({ error: 'Missing required fields' });
   });
 
-  test('returns 400 when playerId is missing', async () => {
-    req.body = { tableId: 'table1' };
-    
+  test('does not vacate a seat when the caller is not that player', async () => {
+    const tableId = 'table1';
+    GameSeats.claimSeat(tableId, 3, { playerId: 'player1', playerName: 'Alice', chips: 100 });
+    mockRequirePlayer.mockImplementationOnce(async (_req: any, response: any) => {
+      response.status(403).json({ error: 'playerId does not match the authenticated user' });
+      return null;
+    });
+    req.body = { tableId, seatNumber: 3, playerId: 'player1' };
+
     await handler(req as NextApiRequest, res as NextApiResponse);
-    
-    expect(statusMock).toHaveBeenCalledWith(400);
-    expect(jsonMock).toHaveBeenCalledWith({ error: 'Missing required fields' });
+
+    expect(statusMock).toHaveBeenCalledWith(403);
+    expect(GameSeats.getRoomSeats(tableId)[3]?.playerId).toBe('player1');
   });
 
   test('returns 404 when table not found', async () => {

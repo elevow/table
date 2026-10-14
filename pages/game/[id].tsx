@@ -18,6 +18,7 @@ import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import type { GameSettings as GameSettingsType } from '../../src/components/GameSettings';
 import { formatChips } from '../../src/utils/chip-display';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../src/lib/shared/feature-flags';
+import { authHeaders } from '../../src/utils/auth-headers';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -267,7 +268,7 @@ export default function GamePage() {
           // fetch our player-specific state from the API
           if (isNewHand && missingMyCards && isParticipant && shouldShowCards && effectivePlayerId && id) {
             console.log('🎴 New hand detected without cards, fetching player-specific state...');
-            fetch(`/api/games/state?tableId=${id}&playerId=${effectivePlayerId}`)
+            fetch(`/api/games/state?tableId=${id}&playerId=${effectivePlayerId}`, { headers: authHeaders() })
               .then(resp => {
                 if (!resp.ok) {
                   throw new Error(`HTTP ${resp.status}`);
@@ -479,7 +480,7 @@ export default function GamePage() {
           typeof id === 'string' &&
           playerId
         ) {
-          fetch(`/api/games/state?tableId=${encodeURIComponent(id)}&playerId=${encodeURIComponent(playerId)}`)
+          fetch(`/api/games/state?tableId=${encodeURIComponent(id)}&playerId=${encodeURIComponent(playerId)}`, { headers: authHeaders() })
             .then(response => {
               if (!response.ok) throw new Error(`HTTP ${response.status}`);
               return response.json();
@@ -662,7 +663,7 @@ export default function GamePage() {
           console.log('[client auto] Requesting next hand after 5s');
           const response = await fetch('/api/games/next-hand', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
             body: JSON.stringify({ tableId: id, playerId }),
           });
           if (!response.ok) {
@@ -760,7 +761,7 @@ export default function GamePage() {
     try {
       const resp = await fetch('/api/games/seats/claim', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ tableId: id, seatNumber, playerId, playerName, chips: startingChips })
       });
       if (!resp.ok) {
@@ -811,7 +812,7 @@ export default function GamePage() {
     try {
       fetch('/api/games/seats/stand', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ tableId: id, seatNumber: seatToVacate, playerId })
       }).catch(() => {});
     } catch {}
@@ -845,7 +846,7 @@ export default function GamePage() {
     try {
       const response = await fetch(`/api/games/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           tableId: id,
           playerId,
@@ -903,7 +904,7 @@ export default function GamePage() {
     try {
       const response = await fetch('/api/games/action', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           tableId: id,
           playerId,
@@ -1292,7 +1293,7 @@ export default function GamePage() {
     try {
       const response = await fetch('/api/games/enable-rit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ tableId: id, playerId, runs }),
       });
       
@@ -2099,7 +2100,7 @@ export default function GamePage() {
       // Restore active game state on reload so players are returned to their seat mid-hand
       if (!alive) return;
       try {
-        const gsResp = await fetch(`/api/games/state?tableId=${id}&playerId=${playerId}`);
+        const gsResp = await fetch(`/api/games/state?tableId=${id}&playerId=${playerId}`, { headers: authHeaders() });
         if (gsResp.ok) {
           const gsData = await gsResp.json();
           if (!alive) return;
@@ -2281,7 +2282,7 @@ export default function GamePage() {
     try {
       const response = await fetch('/api/games/rebuy-decision', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ tableId: id, playerId, decision }),
       });
       const data = await response.json();
@@ -2334,7 +2335,7 @@ export default function GamePage() {
         try {
           const response = await fetch('/api/games/seats/stand', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
             body: JSON.stringify({ tableId: id, seatNumber: seatToVacate, playerId })
           });
           if (!response.ok) {
@@ -2490,7 +2491,7 @@ export default function GamePage() {
                               if (!id || !playerId) return;
                               const response = await fetch('/api/games/next-hand', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: { 'Content-Type': 'application/json', ...authHeaders() },
                                 body: JSON.stringify({ tableId: id, playerId, variant: selectedVariantDC }),
                               });
                               if (!response.ok) {

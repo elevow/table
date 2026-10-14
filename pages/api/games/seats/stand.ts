@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
 import { publishSeatState, publishSeatVacated, publishGameStateUpdate } from '../../../../src/lib/realtime/publisher';
+import { requirePlayer } from '../../../../src/lib/auth/auth-utils';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -9,13 +10,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    const { tableId, seatNumber, playerId } = (req.body || {}) as {
+    const { tableId, seatNumber, playerId: claimedPlayerId } = (req.body || {}) as {
       tableId?: string;
       seatNumber?: number;
       playerId?: string;
     };
 
-    if (!tableId || !playerId) {
+    const playerId = await requirePlayer(req, res, claimedPlayerId);
+    if (!playerId) return;
+
+    if (!tableId) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 

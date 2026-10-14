@@ -12,6 +12,7 @@ import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/e
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../../src/lib/shared/feature-flags';
 import type { Card, GameStage, TableState } from '../../../src/types/poker';
 import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -31,15 +32,18 @@ function getIo(res: NextApiResponse): SocketIOServer | null {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { tableId, playerId, action, amount } = (req.body || {}) as {
+  const { tableId, playerId: claimedPlayerId, action, amount } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
     action?: string;
     amount?: number;
   };
 
-  if (!tableId || !playerId || !action) {
-    return res.status(400).json({ error: 'Missing tableId, playerId, or action' });
+  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  if (!playerId) return;
+
+  if (!tableId || !action) {
+    return res.status(400).json({ error: 'Missing tableId or action' });
   }
 
   try {

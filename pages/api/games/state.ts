@@ -1,12 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
-import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
+import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
+import { getAuthenticatedUserId } from '../../../src/lib/auth/auth-utils';
 
 /**
- * GET /api/games/state?tableId=xxx&playerId=yyy
+ * GET /api/games/state?tableId=xxx
  * 
- * Returns the current game state for a specific player.
+ * Returns the current game state for the authenticated player, or a spectator view.
  * The state is sanitized to only show the requesting player's hole cards
  * (unless it's showdown or an all-in situation).
  */
@@ -16,11 +17,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const tableId = String(req.query.tableId || '');
-  const playerId = String(req.query.playerId || '');
 
-  if (!tableId || !playerId) {
-    return res.status(400).json({ error: 'Missing tableId or playerId' });
+  if (!tableId) {
+    return res.status(400).json({ error: 'Missing tableId' });
   }
+
+  // Hole cards are only revealed to the authenticated session's own player;
+  // a playerId query param is ignored so callers cannot view another player's cards.
+  const playerId = await getAuthenticatedUserId(req);
 
   try {
     // Get the active game engine from memory or restore from database
@@ -35,7 +39,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     // Sanitize the state for the requesting player - they see their own cards
     // but other players' cards are hidden unless showdown/all-in
-    const sanitizedState = sanitizeStateForPlayer(enrichedState, playerId);
+    const sanitizedState = playerId
+      ? sanitizeStateForPlayer(enrichedState, playerId)
+      : sanitizeStateForBroadcast(enrichedState);
 
     return res.status(200).json({ success: true, gameState: sanitizedState });
   } catch (e: unknown) {

@@ -9,6 +9,7 @@ import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -28,7 +29,7 @@ function getIo(res: NextApiResponse): SocketIOServer | null {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { tableId, playerId, variant, bettingMode, sb, bb, seatedPlayers: clientSeatedPlayers } = (req.body || {}) as {
+  const { tableId, playerId: claimedPlayerId, variant, bettingMode, sb, bb, seatedPlayers: clientSeatedPlayers } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
     variant?: string;
@@ -37,7 +38,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     bb?: number;
     seatedPlayers?: Array<{ seatNumber: number; playerId: string; playerName: string; chips: number }>;
   };
-  if (!tableId || !playerId) return res.status(400).json({ error: 'Missing tableId or playerId' });
+  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  if (!playerId) return;
+  if (!tableId) return res.status(400).json({ error: 'Missing tableId' });
 
   try {
     // Try to get seats from in-memory store first (socket mode), then fallback to client-provided seats (Supabase/HTTP mode)
@@ -58,6 +61,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (serverSeatedPlayers.length >= 2) {
       seatedPlayers = serverSeatedPlayers;
     } else if (clientSeatedPlayers && clientSeatedPlayers.length >= 2) {
+      // Reject before trusting client seats so a non-seated caller cannot overwrite the seat map
+      if (!clientSeatedPlayers.some(p => p.playerId === playerId)) {
+        return res.status(403).json({ error: 'Only a seated player can start the game' });
+      }
       seatedPlayers = clientSeatedPlayers;
       // Update the in-memory store with client seats for consistency
       const newSeats: any = {};
@@ -75,6 +82,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (seatedPlayers.length < 2) {
       return res.status(400).json({ error: 'Need at least two seated players to start a game' });
+    }
+
+    if (!seatedPlayers.some(p => p.playerId === playerId)) {
+      return res.status(403).json({ error: 'Only a seated player can start the game' });
     }
 
   // Determine blinds and variant/mode (centralized mapping)

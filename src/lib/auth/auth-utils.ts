@@ -1,4 +1,4 @@
-import type { NextApiRequest } from 'next';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../database/pool';
 
 /**
@@ -63,5 +63,30 @@ export async function requireAuth(req: NextApiRequest): Promise<string> {
     throw new Error('Authentication required');
   }
   
+  return userId;
+}
+
+/**
+ * Authenticate the caller of a game route and confirm they are acting as themselves.
+ * Returns the authenticated user ID, or sends 401/403 and returns null.
+ * A claimedPlayerId from the request is optional; when present it must match the session.
+ */
+export async function requirePlayer(
+  req: NextApiRequest,
+  res: NextApiResponse,
+  claimedPlayerId?: unknown
+): Promise<string | null> {
+  const userId = await getAuthenticatedUserId(req);
+
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return null;
+  }
+
+  if (claimedPlayerId != null && claimedPlayerId !== '' && String(claimedPlayerId) !== userId) {
+    res.status(403).json({ error: 'playerId does not match the authenticated user' });
+    return null;
+  }
+
   return userId;
 }

@@ -39,7 +39,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await safeLog('00000000-0000-0000-0000-000000000000', 'games', 'read', Boolean(game), { ...meta, roomId, as: 'spectator', reason: game ? 'spectator' : 'unauthorized' });
     }
 
-    return res.status(200).json(game);
+    if (!game) return res.status(200).json(null);
+    // The saved engine state holds every player's hole cards and the undealt deck; never return it
+    const { state: _engineState, ...publicGame } = game;
+    return res.status(200).json(publicGame);
   } catch (err: any) {
     const callerUserId = getCallerUserId(req) || '00000000-0000-0000-0000-000000000000';
     await safeLog(callerUserId, 'games', 'read', false, { ...meta, reason: err?.message || 'error' });

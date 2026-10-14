@@ -53,6 +53,12 @@ function createReq(method: string, body?: any, query?: any): Partial<NextApiRequ
   } as any;
 }
 
+// Saved engine state as stored in active_games; it must never reach an API response
+const ENGINE_STATE = {
+  tableState: { players: [{ id: 'p1', holeCards: [{ rank: 'A', suit: 'spades' }, { rank: 'K', suit: 'spades' }] }] },
+  deck: [{ rank: '2', suit: 'hearts' }],
+};
+
 describe('Games API routes (US-020)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -79,23 +85,23 @@ describe('Games API routes (US-020)', () => {
   });
 
   test('POST /api/games/active/start', async () => {
-    const game = { id: 'g1', roomId: 'r1' } as any;
+    const game = { id: 'g1', roomId: 'r1', state: ENGINE_STATE } as any;
     mockService.startGame.mockResolvedValue(game);
     const req = createReq('POST', { roomId: 'r1', dealerPosition: 0, currentPlayerPosition: 1 });
     const res = createRes();
     await startHandler(req as any, res as any);
     expect(res.status).toHaveBeenCalledWith(201);
-    expect(res.json).toHaveBeenCalledWith(game);
+    expect(res.json).toHaveBeenCalledWith({ id: 'g1', roomId: 'r1' });
   });
 
   test('POST /api/games/active/update', async () => {
-    const updated = { id: 'g1', currentHandId: 'h1' } as any;
+    const updated = { id: 'g1', currentHandId: 'h1', state: ENGINE_STATE } as any;
     mockService.updateActiveGame.mockResolvedValue(updated);
     const req = createReq('POST', { id: 'g1', currentHandId: 'h1' });
     const res = createRes();
     await updateHandler(req as any, res as any);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(updated);
+    expect(res.json).toHaveBeenCalledWith({ id: 'g1', currentHandId: 'h1' });
   });
 
   test('POST /api/games/active/end', async () => {
@@ -108,12 +114,21 @@ describe('Games API routes (US-020)', () => {
   });
 
   test('GET /api/games/active/by-room', async () => {
-    const game = { id: 'g1', roomId: 'r1' } as any;
+    const game = { id: 'g1', roomId: 'r1', state: ENGINE_STATE } as any;
     mockService.getActiveGameByRoom.mockResolvedValue(game);
     const req = createReq('GET', undefined, { roomId: 'r1' });
     const res = createRes();
     await byRoomHandler(req as any, res as any);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(game);
+    expect(res.json).toHaveBeenCalledWith({ id: 'g1', roomId: 'r1' });
+  });
+
+  test('GET /api/games/active/by-room returns null when no game exists', async () => {
+    mockService.getActiveGameByRoom.mockResolvedValue(null);
+    const req = createReq('GET', undefined, { roomId: 'r1' });
+    const res = createRes();
+    await byRoomHandler(req as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(null);
   });
 });

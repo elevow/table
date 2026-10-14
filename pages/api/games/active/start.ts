@@ -14,7 +14,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const service = new GameService(pool);
     const game = await service.startGame(req.body);
-    return res.status(201).json(game);
+    // The saved engine state holds every player's hole cards and the undealt deck; never return it
+    const { state: _engineState, ...publicGame } = game;
+    return res.status(201).json(publicGame);
   } catch (err: any) {
     await safeLog(
       '00000000-0000-0000-0000-000000000000',

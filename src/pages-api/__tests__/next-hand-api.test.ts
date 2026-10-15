@@ -41,8 +41,9 @@ jest.mock('../../../src/lib/server/rebuy-actions', () => ({
 }));
 
 jest.mock('../../../src/lib/poker/engine-persistence', () => ({
+  ...jest.requireActual('../../../src/lib/poker/engine-persistence'),
   getOrRestoreEngine: jest.fn(),
-  persistEngineState: jest.fn().mockResolvedValue(undefined),
+  persistEngineState: jest.fn().mockResolvedValue('saved'),
 }));
 
 jest.mock('../../../src/lib/database/pool', () => ({
@@ -67,6 +68,7 @@ import * as publisher from '../../../src/lib/realtime/publisher';
 const mockGetOrRestoreEngine = enginePersistence.getOrRestoreEngine as jest.Mock;
 const mockPersistEngineState = enginePersistence.persistEngineState as jest.Mock;
 const mockPublishAwaitingDealerChoice = publisher.publishAwaitingDealerChoice as jest.Mock;
+const mockPublishGameStateUpdate = publisher.publishGameStateUpdate as jest.Mock;
 
 function createReq(body: any): NextApiRequest {
   return { method: 'POST', body, headers: {}, query: {} } as any;
@@ -132,6 +134,17 @@ describe('/api/games/next-hand', () => {
     await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(engine.startNewHand).toHaveBeenCalled();
+  });
+
+  it('returns 409 without broadcasting when the new hand cannot be saved', async () => {
+    const engine = createEngine('showdown');
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    mockPersistEngineState.mockResolvedValueOnce('conflict');
+    setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockPublishGameStateUpdate).not.toHaveBeenCalled();
   });
 
   it("rejects a dealer's-choice variant from a player who is not the chooser", async () => {

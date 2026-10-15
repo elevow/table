@@ -3,7 +3,7 @@ import { publishGameStateUpdate } from '../../../src/lib/realtime/publisher';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
-import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import type { GameVariant } from '../../../src/types/poker';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
@@ -100,7 +100,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     engine.startNewHand();
 
     // Persist updated engine state for serverless recovery
-    await persistEngineState(tableId, engine);
+    if ((await persistEngineState(tableId, engine)) === 'conflict') {
+      return res.status(409).json(STALE_STATE_RESPONSE);
+    }
 
     // Store chosen variant in room config for future hands
     const g: any = global as any;

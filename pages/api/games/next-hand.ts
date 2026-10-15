@@ -13,7 +13,7 @@ import {
   setPendingRebuy,
 } from '../../../src/lib/server/rebuy-state';
 import { autoStandPlayer } from '../../../src/lib/server/rebuy-actions';
-import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import { getDealerChoiceChooserId } from '../../../src/lib/poker/dealer-choice';
 import { getPool } from '../../../src/lib/database/pool';
 import { GameService } from '../../../src/lib/services/game-service';
@@ -244,7 +244,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         engine.startNewHand();
 
         // Persist engine state for serverless recovery
-        await persistEngineState(tableId, engine);
+        if ((await persistEngineState(tableId, engine)) === 'conflict') {
+          return res.status(409).json(STALE_STATE_RESPONSE);
+        }
 
         const gameState = engine.getState();
         const enrichedState = enrichStateWithRunIt(tableId, gameState);
@@ -277,7 +279,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             state.minRaise = state.bigBlind;
           }
           // Persist the pause so a restored engine still accepts the dealer's choice
-          await persistEngineState(tableId, engine);
+          if ((await persistEngineState(tableId, engine)) === 'conflict') {
+            return res.status(409).json(STALE_STATE_RESPONSE);
+          }
         }
         const dealerId = getDealerChoiceChooserId(state);
 

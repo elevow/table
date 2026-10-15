@@ -8,7 +8,12 @@ import {
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { runSupabaseAutoRunoutSync, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
-import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import {
+  getOrRestoreEngine,
+  persistEngineState,
+  StaleGameStateError,
+  STALE_STATE_RESPONSE,
+} from '../../../src/lib/poker/engine-persistence';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../../src/lib/shared/feature-flags';
 import type { Card, GameStage, TableState } from '../../../src/types/poker';
 import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
@@ -125,8 +130,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: e?.message || 'Action failed' });
     }
 
-    // Persist the updated engine state to database for serverless recovery
-    await persistEngineState(tableId, engine);
+    // Persist the updated engine state to database for serverless recovery. A conflict means
+    // another request (e.g. a duplicate submit) changed the game first, so this action is dropped.
+    if ((await persistEngineState(tableId, engine)) === 'conflict') {
+      return res.status(409).json(STALE_STATE_RESPONSE);
+    }
 
     // Get updated game state
     let gameState = engine.getState();
@@ -155,11 +163,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (issuedPrompt) {
       engine.setRunItTwicePrompt(issuedPrompt);
       gameState = engine.getState();
-      await persistEngineState(tableId, engine);
+      if ((await persistEngineState(tableId, engine)) === 'conflict') {
+        return res.status(409).json(STALE_STATE_RESPONSE);
+      }
     } else if (autoEligible) {
       engine.setAutoRunoutProgress(gameState.stage, gameState.communityCards);
       gameState = engine.getState();
-      await persistEngineState(tableId, engine);
+      if ((await persistEngineState(tableId, engine)) === 'conflict') {
+        return res.status(409).json(STALE_STATE_RESPONSE);
+      }
     }
 
     const enrichedState = await broadcastState(gameState, { action, playerId, amount });
@@ -179,7 +191,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Track whether we've already posted the hand result for auto-runout
       let handResultPosted = false;
       await runSupabaseAutoRunoutSync(tableId, engine, async (state, meta) => {
-        await persistEngineState(tableId, engine);
+        // Stop the runout rather than broadcast a state another request has replaced
+        if ((await persistEngineState(tableId, engine)) === 'conflict') throw new StaleGameStateError(tableId);
         await broadcastState(state, meta);
         // Post hand result to chat when auto-runout reaches showdown
         if (state.stage === 'showdown' && !handResultPosted) {

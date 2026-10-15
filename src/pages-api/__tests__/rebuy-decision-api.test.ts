@@ -37,8 +37,9 @@ jest.mock('../../../src/lib/poker/run-it-twice-manager', () => ({
 }));
 
 jest.mock('../../../src/lib/poker/engine-persistence', () => ({
+  ...jest.requireActual('../../../src/lib/poker/engine-persistence'),
   getOrRestoreEngine: jest.fn(),
-  persistEngineState: jest.fn().mockResolvedValue(undefined),
+  persistEngineState: jest.fn().mockResolvedValue('saved'),
 }));
 
 // Simulate a signed-in caller whose session matches the playerId they send
@@ -53,6 +54,7 @@ import * as enginePersistence from '../../../src/lib/poker/engine-persistence';
 import * as rebuyTracker from '../../../src/lib/shared/rebuy-tracker';
 
 const mockGetOrRestoreEngine = enginePersistence.getOrRestoreEngine as jest.Mock;
+const mockPersistEngineState = enginePersistence.persistEngineState as jest.Mock;
 const mockRecordBuyin = rebuyTracker.recordBuyin as jest.Mock;
 
 function createReq(body: any): NextApiRequest {
@@ -86,6 +88,15 @@ describe('/api/games/rebuy-decision', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(stackOf(engine, 'a')).toBe(100);
     expect(mockRecordBuyin).toHaveBeenCalledWith('t1', 'a');
+  });
+
+  it('does not count a rebuy whose save conflicts with another request', async () => {
+    mockGetOrRestoreEngine.mockResolvedValue(createEngine('showdown', { a: 0, b: 300 }));
+    mockPersistEngineState.mockResolvedValueOnce('conflict');
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a', decision: 'yes' }), res);
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockRecordBuyin).not.toHaveBeenCalled();
   });
 
   it('refuses a rebuy during a hand, even for a player who folded', async () => {

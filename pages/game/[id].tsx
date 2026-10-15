@@ -19,6 +19,7 @@ import type { GameSettings as GameSettingsType } from '../../src/components/Game
 import { formatChips } from '../../src/utils/chip-display';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../src/lib/shared/feature-flags';
 import { authHeaders } from '../../src/utils/auth-headers';
+import { resolveSessionUserId } from '../../src/utils/session-identity';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -1836,74 +1837,44 @@ export default function GamePage() {
     fetchRoomInfo();
   }, [id]);
 
-  // Initialize player ID only once on component mount
+  // Initialize player ID only once on component mount. Game routes reject a playerId that
+  // differs from the session user, so a signed-in player always acts as that user.
   useEffect(() => {
-    const initializePlayerId = async () => {
-      try {
-        // Get auth token from localStorage
-        const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-        
-        if (authToken) {
-          // Try to get authenticated user ID from server
-          const response = await fetch('/api/auth/me', {
-            headers: {
-              'Authorization': `Bearer ${authToken}`
-            }
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            console.log('=== Game Page Auth Success ===');
-            console.log('Authenticated user ID:', data.userId);
-            console.log('Using authenticated ID for avatar lookup');
-            console.log('=== End Auth Success ===');
-            
-            setPlayerId(data.userId);
-            // Store for future use
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('authenticated_user_id', data.userId);
-            }
-            return;
-          }
-        }
-        
-        // Fallback: generate UUID if authentication fails
-        console.log('=== Game Page Auth Fallback ===');
-        console.log('No auth token or authentication failed, using fallback UUID');
-        
-        const generateUUID = () => {
-          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-          });
-        };
-        
-        const fallbackId = typeof window !== 'undefined' && localStorage.getItem('player_id') || generateUUID();
-        setPlayerId(fallbackId);
-        if (typeof window !== 'undefined') localStorage.setItem('player_id', fallbackId);
-        
-        console.log('Fallback playerId set to:', fallbackId);
-        console.log('=== End Auth Fallback ===');
-        
-      } catch (error) {
-        console.error('Error initializing player ID:', error);
-        // Use fallback UUID on error
-        const generateUUID = () => {
-          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-          });
-        };
-        
-        const errorFallbackId = generateUUID();
-        setPlayerId(errorFallbackId);
-        console.log('Error fallback playerId set to:', errorFallbackId);
-      }
+    const generateUUID = () => {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
     };
-    
-    // Initialize player ID asynchronously
+
+    const initializePlayerId = async () => {
+      const sessionUserId = await resolveSessionUserId();
+      if (sessionUserId) {
+        setPlayerId(sessionUserId);
+        try {
+          localStorage.setItem('authenticated_user_id', sessionUserId);
+        } catch {
+          // Storage unavailable; the in-memory ID is enough
+        }
+        return;
+      }
+
+      // No confirmed session: watch as a spectator. Game actions need a session and will be refused.
+      console.log('No confirmed session; viewing the table as a spectator');
+      let fallbackId = '';
+      try {
+        fallbackId = localStorage.getItem('player_id') || '';
+        if (!fallbackId) {
+          fallbackId = generateUUID();
+          localStorage.setItem('player_id', fallbackId);
+        }
+      } catch {
+        fallbackId = fallbackId || generateUUID();
+      }
+      setPlayerId(fallbackId);
+    };
+
     initializePlayerId();
   }, []); // Empty dependency array - only run once on mount
 
@@ -2209,9 +2180,11 @@ export default function GamePage() {
     }
   }, [id, playerId, maxPlayers, lastSeatStorageKey]); // Include maxPlayers in dependencies
 
-  // Sync playerId with canonical seat assignment to avoid mismatched prompts/actions
+  // Restore the player's remembered seat. The player ID always comes from the session; a
+  // remembered seat held by a different player (another account in this browser) is forgotten
+  // rather than adopted, since acting under that player's ID would be refused by the server.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !playerId) return;
     const seatNumberFromState = currentPlayerSeat ?? null;
     const seatNumberFromStorage = readSeatNumberFromStorage(lastSeatStorageKey);
     const candidateSeatNumber = seatNumberFromState ?? seatNumberFromStorage;
@@ -2219,32 +2192,18 @@ export default function GamePage() {
     const assignment = seatAssignments?.[candidateSeatNumber];
     if (!assignment || !assignment.playerId) return;
 
-    const savedPlayerName = localStorage.getItem('playerName');
-    if (savedPlayerName && assignment.playerName && assignment.playerName !== savedPlayerName) {
+    if (assignment.playerId !== playerId) {
+      if (seatNumberFromState === null) {
+        persistSeatNumber(lastSeatStorageKey, null);
+      }
       return;
     }
+    if (seatNumberFromState === candidateSeatNumber) return;
 
-    if (assignment.playerId === playerId) return;
-
-    console.log('[identity-sync] Updating local playerId from seat assignment', {
-      from: playerId,
-      to: assignment.playerId,
-      seat: candidateSeatNumber,
-    });
-    setPlayerId(assignment.playerId);
     setCurrentPlayerSeat(candidateSeatNumber);
     setPlayerChips(assignment.chips || 0);
     persistSeatNumber(lastSeatStorageKey, candidateSeatNumber);
-    try {
-      localStorage.setItem('player_id', assignment.playerId);
-      localStorage.setItem('authenticated_user_id', assignment.playerId);
-      if (tableId) {
-        localStorage.setItem(`chips_${assignment.playerId}_${tableId}`, String(assignment.chips || 0));
-      }
-    } catch (err) {
-      console.warn('Failed to persist synced player identity:', err);
-    }
-  }, [seatAssignments, currentPlayerSeat, playerId, lastSeatStorageKey, tableId]);
+  }, [seatAssignments, currentPlayerSeat, playerId, lastSeatStorageKey]);
 
   // Toggle settings component
   const toggleSettings = () => {

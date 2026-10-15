@@ -43,6 +43,9 @@ export interface TableState {
   // Each player's stack when the current hand started; start minus current stack is what
   // they have put into the pot this hand, which sets the side pots at showdown
   handStartStacks?: Record<string, number>;
+  // Dealer's Choice: hands started since the last variant choice. Kept in the saved state
+  // (not server memory) so every server instance sees the same count.
+  dealersChoiceHandCount?: number;
   communityCards: Card[];
   currentBet: number;
   dealerPosition: number;

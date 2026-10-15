@@ -109,7 +109,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (g.roomConfigs?.get(tableId)) {
       const roomConfig = g.roomConfigs.get(tableId);
       roomConfig.chosenVariant = chosenVariant;
-      roomConfig.dcStepCount = 0;
       g.roomConfigs.set(tableId, roomConfig);
     }
 

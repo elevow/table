@@ -231,6 +231,7 @@ export class PokerEngine {
     this.gameStateManager.rotateDealerButton();
     // Snapshot stacks before blinds, antes or bring-ins so showdown can size the side pots
     this.state.handStartStacks = Object.fromEntries(this.state.players.map(p => [p.id, p.stack]));
+    this.state.dealersChoiceHandCount = (this.state.dealersChoiceHandCount || 0) + 1;
   // Reset consents for any new hand
   this.ritConsents.clear();
   // Reset rabbit preview tracking for new hand
@@ -1239,6 +1240,8 @@ export class PokerEngine {
 
   // Dealer's Choice tables pause the game until the dealer selects a variant
   public pauseForDealerChoice(): TableState {
+    // Each dealer's-choice round starts at this pause
+    this.state.dealersChoiceHandCount = 0;
     this.state.stage = 'awaiting-dealer-choice';
     this.state.activePlayer = '';
     this.state.pot = 0;

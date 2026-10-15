@@ -25,7 +25,6 @@ interface RoomConfiguration {
   variant?: string;
   bettingMode?: 'no-limit' | 'pot-limit';
   chosenVariant?: string;
-  dcStepCount?: number;
 }
 
 interface BlindLevels {
@@ -111,7 +110,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             mode: isDealersChoiceDb ? 'dealers-choice' : 'fixed',
             allowedVariants: isDealersChoiceDb ? DEFAULT_DEALERS_CHOICE_VARIANTS : undefined,
             chosenVariant: isDealersChoiceDb ? (config.chosenVariant || 'texas-holdem') : undefined,
-            dcStepCount: isDealersChoiceDb ? (config.dcStepCount || 0) : undefined,
           };
           
           // Cache the restored roomConfig in memory for subsequent requests
@@ -217,7 +215,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json({ success: true, awaitingRebuyDecisions: true, pending: pendingRebuyCount(tableId) });
       }
 
-      const applyVariantAndStart = async ({ chosenVariant, dcStepCount }: { chosenVariant?: GameVariant; dcStepCount?: number } = {}) => {
+      const applyVariantAndStart = async ({ chosenVariant }: { chosenVariant?: GameVariant } = {}) => {
         let mutated = false;
         if (chosenVariant) {
           if (typeof engine.setVariant === 'function') {
@@ -228,10 +226,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             engine.setBettingMode(nextMode);
           }
           roomConfig.chosenVariant = chosenVariant;
-          mutated = true;
-        }
-        if (typeof dcStepCount === 'number') {
-          roomConfig.dcStepCount = dcStepCount;
           mutated = true;
         }
         if (mutated) {
@@ -285,9 +279,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
         const dealerId = getDealerChoiceChooserId(state);
 
-        roomConfig.dcStepCount = 0;
-        persistRoomConfig();
-
         await publishAwaitingDealerChoice(tableId, {
           dealerId: dealerId || playerId,
           allowedVariants,
@@ -298,21 +289,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (isDealersChoice) {
         if (variant) {
-          return applyVariantAndStart({ chosenVariant: variant, dcStepCount: 0 });
+          return applyVariantAndStart({ chosenVariant: variant });
         }
 
         if (awaitingDealerChoiceStage) {
           return res.status(200).json({ success: true, awaitingChoice: true });
         }
 
-        const threshold = (playerCount > 0 ? playerCount : 1) + 1;
-        const nextStep = Number(roomConfig.dcStepCount || 0) + 1;
+        // A round is players + 1 hands, so the next chooser is also the next dealer. The count
+        // comes from the saved game state; server memory doesn't survive across instances.
+        const roundLength = (playerCount > 0 ? playerCount : 1) + 1;
+        const handsThisRound = Number(currentState.dealersChoiceHandCount) || 0;
 
-        if (nextStep >= threshold) {
+        if (handsThisRound >= roundLength) {
           return promptDealerChoice();
         }
 
-        return applyVariantAndStart({ dcStepCount: nextStep });
+        return applyVariantAndStart();
       }
 
       // Regular game: start next hand with same variant

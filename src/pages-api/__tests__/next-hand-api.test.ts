@@ -50,8 +50,10 @@ jest.mock('../../../src/lib/database/pool', () => ({
   getPool: jest.fn(() => ({})),
 }));
 
+// The room row the route rebuilds its config from when server memory has none
+const mockGetRoomById = jest.fn().mockResolvedValue(null);
 jest.mock('../../../src/lib/services/game-service', () => ({
-  GameService: jest.fn().mockImplementation(() => ({ getRoomById: jest.fn().mockResolvedValue(null) })),
+  GameService: jest.fn().mockImplementation(() => ({ getRoomById: (...args: any[]) => mockGetRoomById(...args) })),
 }));
 
 // Simulate a signed-in caller whose session matches the playerId they send
@@ -79,11 +81,13 @@ function createRes(): NextApiResponse & { status: jest.Mock; json: jest.Mock } {
   return res;
 }
 
-// With the button on index 0, player b is the dealer's-choice chooser
-function createEngine(stage: string) {
+// With the button on index 0, player b is the dealer's-choice chooser.
+// dealersChoiceHandCount is the number of hands started since the last variant choice.
+function createEngine(stage: string, dealersChoiceHandCount = 0) {
   const state: any = {
     stage,
     dealerPosition: 0,
+    dealersChoiceHandCount,
     players: [{ id: 'a', name: 'A', stack: 100 }, { id: 'b', name: 'B', stack: 100 }],
   };
   return {
@@ -107,7 +111,6 @@ const DEALERS_CHOICE_CONFIG = {
   mode: 'dealers-choice',
   bettingMode: 'no-limit',
   chosenVariant: 'texas-holdem',
-  dcStepCount: 0,
 };
 
 describe('/api/games/next-hand', () => {
@@ -179,11 +182,35 @@ describe('/api/games/next-hand', () => {
     expect(engine.startNewHand).toHaveBeenCalled();
   });
 
-  it('persists the dealer-choice pause and announces the chooser', async () => {
-    const engine = createEngine('showdown');
+  it('starts another hand of the chosen game until the round is complete', async () => {
+    // Two players: a round is three hands
+    const engine = createEngine('showdown', 2);
     mockGetOrRestoreEngine.mockResolvedValue(engine);
-    // Two players: the prompt is due once the step count reaches three
-    setRoomConfig({ ...DEALERS_CHOICE_CONFIG, dcStepCount: 2 });
+    setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(engine.startNewHand).toHaveBeenCalled();
+    expect(engine.pauseForDealerChoice).not.toHaveBeenCalled();
+  });
+
+  it('ends the round using the saved hand count when server memory has no room config', async () => {
+    // Another server instance played the round; this one rebuilds the config from the room row
+    (global as any).roomConfigs = undefined;
+    mockGetRoomById.mockResolvedValueOnce({ configuration: { variant: 'dealers-choice' }, blindLevels: { sb: 1, bb: 2 } });
+    const engine = createEngine('showdown', 3);
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(engine.pauseForDealerChoice).toHaveBeenCalled();
+    expect(engine.startNewHand).not.toHaveBeenCalled();
+    expect(mockPublishAwaitingDealerChoice).toHaveBeenCalledWith('t1', expect.objectContaining({ dealerId: 'b' }));
+  });
+
+  it('persists the dealer-choice pause and announces the chooser', async () => {
+    // Two players: the round is complete after three hands
+    const engine = createEngine('showdown', 3);
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
     const res = createRes();
     await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
     expect(res.json).toHaveBeenCalledWith({ success: true, awaitingChoice: true });

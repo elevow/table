@@ -192,7 +192,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (isDealersChoice) {
       roomConfigPayload.allowedVariants = allowedDcVariants;
       roomConfigPayload.chosenVariant = 'texas-holdem';
-      roomConfigPayload.dcStepCount = 0;
     }
     g.roomConfigs.set(tableId, roomConfigPayload);
 

@@ -250,7 +250,7 @@ describe('/api/games/choose-variant', () => {
     };
     mockGetOrRestoreEngine.mockResolvedValue(engine);
 
-    const roomConfig = { chosenVariant: 'texas-holdem', dcStepCount: 2 };
+    const roomConfig = { chosenVariant: 'texas-holdem' };
     const roomConfigs = new Map([['table-1', roomConfig]]);
     (global as any).roomConfigs = roomConfigs;
 
@@ -259,7 +259,6 @@ describe('/api/games/choose-variant', () => {
     await handler(req as NextApiRequest, res as NextApiResponse);
 
     expect(roomConfig.chosenVariant).toBe('five-card-stud');
-    expect(roomConfig.dcStepCount).toBe(0);
     expect(res.status).toHaveBeenCalledWith(200);
   });
 

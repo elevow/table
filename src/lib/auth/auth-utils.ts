@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../database/pool';
-import { isUserAdminBySession } from '../api/admin-auth';
+import { isAdminEmail } from '../../utils/roleUtils';
 
 /**
  * Extract session token from request headers or cookies
@@ -100,17 +100,31 @@ export async function requireAdminSession(
   req: NextApiRequest,
   res: NextApiResponse
 ): Promise<string | null> {
-  const userId = await getAuthenticatedUserId(req);
+  const token = getAuthToken(req);
+  let user: { id: string; email: string | null } | undefined;
+  if (token && token !== 'null') {
+    try {
+      const result = await getPool().query(
+        `SELECT u.id, u.email FROM users u
+         JOIN auth_tokens at ON u.id = at.user_id
+         WHERE at.token_hash = $1 AND at.type = 'session' AND at.expires_at > NOW()`,
+        [token]
+      );
+      user = result.rows[0];
+    } catch (error) {
+      console.error('Error verifying admin session:', error);
+    }
+  }
 
-  if (!userId) {
+  if (!user) {
     res.status(401).json({ error: 'Authentication required' });
     return null;
   }
 
-  if (!(await isUserAdminBySession(req, getPool))) {
+  if (!user.email || !isAdminEmail(user.email)) {
     res.status(403).json({ error: 'Admin access required' });
     return null;
   }
 
-  return userId;
+  return user.id;
 }

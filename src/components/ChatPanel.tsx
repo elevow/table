@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, memo, useCallback } from 'react';
 import type { ChatMessage } from '../types/chat';
 import { useSupabaseChatRealtime } from '../hooks/useSupabaseChatRealtime';
+import { getStoredAuthToken } from '../utils/auth-headers';
 
 interface ChatPanelProps {
   gameId: string;
@@ -272,9 +273,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
       });
 
       // Get auth token for admin authorization check
-      const authToken = typeof window !== 'undefined' 
-        ? localStorage.getItem('auth_token') || localStorage.getItem('session_token') 
-        : null;
+      const authToken = getStoredAuthToken();
       
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (authToken) {

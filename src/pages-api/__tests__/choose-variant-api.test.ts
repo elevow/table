@@ -66,9 +66,10 @@ function createRes(): { status: jest.Mock; json: jest.Mock } & Partial<NextApiRe
   return res;
 }
 
+// With the button on seat index 0, the next player (p1) chooses the variant
 const AWAITING_STATE = {
   stage: 'awaiting-dealer-choice',
-  players: [],
+  players: [{ id: 'p0' }, { id: 'p1' }],
   pot: 0,
   communityCards: [],
   dealerPosition: 0,
@@ -170,6 +171,23 @@ describe('/api/games/choose-variant', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ error: 'Game is not waiting for a dealer variant choice' })
     );
+  });
+
+  it('should return 403 without changing the game when the caller is not the chooser', async () => {
+    const engine = {
+      getState: jest.fn().mockReturnValue(AWAITING_STATE),
+      setVariant: jest.fn(),
+      setBettingMode: jest.fn(),
+      startNewHand: jest.fn(),
+    };
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    const req = createReq('POST', { tableId: 'table-1', playerId: 'p0', variant: 'omaha' });
+    const res = createRes();
+    await handler(req as NextApiRequest, res as NextApiResponse);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(engine.setVariant).not.toHaveBeenCalled();
+    expect(engine.startNewHand).not.toHaveBeenCalled();
+    expect(mockPersistEngineState).not.toHaveBeenCalled();
   });
 
   it('should apply variant, start hand, persist, broadcast and return 200', async () => {

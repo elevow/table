@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { isAdminEmail } from '../utils/roleUtils';
+import { getStoredAuthToken } from '../utils/auth-headers';
 
 interface Room {
   id: string;
@@ -39,7 +40,7 @@ export default function AdminRoomsPanel() {
   useEffect(() => {
     async function checkAdminStatus() {
       try {
-        const sessionToken = localStorage.getItem('auth_token') || localStorage.getItem('session_token');
+        const sessionToken = getStoredAuthToken();
         console.log('AdminRoomsPanel: Checking admin status, session token:', sessionToken ? 'Present' : 'Missing');
         
         if (!sessionToken || sessionToken === 'null') {
@@ -84,7 +85,7 @@ export default function AdminRoomsPanel() {
       if (!isAdmin) return;
 
       try {
-        const sessionToken = localStorage.getItem('auth_token') || localStorage.getItem('session_token');
+        const sessionToken = getStoredAuthToken();
         const response = await fetch('/api/admin/rooms?page=1&limit=20', {
           headers: {
             'Authorization': `Bearer ${sessionToken}`,
@@ -114,7 +115,7 @@ export default function AdminRoomsPanel() {
       setMessage('');
       setError('');
 
-      const sessionToken = localStorage.getItem('auth_token') || localStorage.getItem('session_token');
+      const sessionToken = getStoredAuthToken();
       const response = await fetch(`/api/admin/rooms/${roomId}`, {
         method: 'DELETE',
         headers: {

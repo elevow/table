@@ -8,13 +8,28 @@ import { resolveVariantAndMode, defaultBettingModeForVariant } from '../../../sr
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
-import { persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { getLastActionAt, getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
+import type { TableState } from '../../../src/types/poker';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
   to: (room: string) => { emit: (event: string, data: unknown) => void };
 };
+
+// A hand with no activity for this long counts as abandoned and can be replaced by a new game
+const ABANDONED_HAND_MS = 10 * 60 * 1000;
+
+/**
+ * True when the table has a hand in progress that has seen recent activity.
+ * Without a last-action time (no database) an in-progress hand is treated as live.
+ */
+async function hasLiveHand(tableId: string, existingState: TableState | undefined): Promise<boolean> {
+  const stage = existingState?.stage;
+  if (!stage || stage === 'showdown' || stage === 'awaiting-dealer-choice') return false;
+  const lastActionAt = await getLastActionAt(tableId);
+  return !lastActionAt || Date.now() - lastActionAt.getTime() < ABANDONED_HAND_MS;
+}
 
 function getIo(res: NextApiResponse): SocketIOServer | null {
   try {
@@ -43,6 +58,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!tableId) return res.status(400).json({ error: 'Missing tableId' });
 
   try {
+    // Starting replaces the table's engine, so refuse while a hand is being played
+    const existingEngine = await getOrRestoreEngine(tableId);
+    const existingState = existingEngine && typeof existingEngine.getState === 'function' ? existingEngine.getState() : undefined;
+    if (await hasLiveHand(tableId, existingState)) {
+      return res.status(409).json({ error: 'A hand is already in progress' });
+    }
+
     // Try to get seats from in-memory store first (socket mode), then fallback to client-provided seats (Supabase/HTTP mode)
     let seatedPlayers: Array<{ seatNumber: number; playerId: string; playerName: string; chips: number }>;
     
@@ -86,6 +108,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!seatedPlayers.some(p => p.playerId === playerId)) {
       return res.status(403).json({ error: 'Only a seated player can start the game' });
+    }
+
+    // Seat chips are the buy-in and are not updated during play, so players already in the
+    // current game keep their engine stacks; otherwise a restart would reset everyone's chips.
+    const existingStacks = new Map<string, number>(
+      (existingState?.players ?? []).map(p => [p.id, Number(p.stack) || 0])
+    );
+    seatedPlayers = seatedPlayers.map(p =>
+      existingStacks.has(p.playerId) ? { ...p, chips: existingStacks.get(p.playerId) as number } : p
+    );
+    if (seatedPlayers.some(p => p.chips <= 0)) {
+      return res.status(409).json({ error: 'Waiting for busted players to rebuy or leave' });
     }
 
   // Determine blinds and variant/mode (centralized mapping)

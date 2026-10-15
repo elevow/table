@@ -7,6 +7,7 @@ import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/e
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import type { GameVariant } from '../../../src/types/poker';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
+import { getDealerChoiceChooserId } from '../../../src/lib/poker/dealer-choice';
 
 const ALLOWED_VARIANTS: GameVariant[] = [
   'texas-holdem',
@@ -79,6 +80,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         error: 'Game is not waiting for a dealer variant choice',
         stage: currentState.stage,
       });
+    }
+
+    if (getDealerChoiceChooserId(currentState) !== playerId) {
+      return res.status(403).json({ error: 'Only the dealer can choose the variant' });
     }
 
     // Apply the chosen variant and matching betting mode

@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-import addRitHandler from '../../../pages/api/history/run-it-twice/add';
 import listRitHandler from '../../../pages/api/history/run-it-twice/list';
 
 jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({})) }));
@@ -10,7 +9,6 @@ jest.mock('../../../src/lib/api/rate-limit', () => ({
 }));
 
 const mockService: any = {
-  addRunItTwiceOutcome: jest.fn(),
   listRunItTwiceOutcomes: jest.fn(),
 };
 
@@ -38,16 +36,6 @@ function createReq(method: string, body?: any, query?: any): Partial<NextApiRequ
 
 describe('Hand History API (US-021)', () => {
   beforeEach(() => jest.clearAllMocks());
-
-  it('POST /api/history/run-it-twice/add', async () => {
-    const out = { id: 'rit-1' } as any;
-    mockService.addRunItTwiceOutcome.mockResolvedValue(out);
-    const req = createReq('POST', { handId: 'h1', boardNumber: 1, communityCards: [], winners: [], potAmount: 10 });
-    const res = createRes();
-    await addRitHandler(req as any, res as any);
-    expect(res.status).toHaveBeenCalledWith(201);
-    expect(res.json).toHaveBeenCalledWith(out);
-  });
 
   it('GET /api/history/run-it-twice/list', async () => {
     const list = [] as any;

@@ -3,16 +3,11 @@ import { getPool } from '../../../../src/lib/database/pool';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { GameService } from '../../../../src/lib/services/game-service';
 import { createSafeAudit } from '../../../../src/lib/api/audit';
+import { getAuthenticatedUserId } from '../../../../src/lib/auth/auth-utils';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
   return (fwd.split(',').map(s => s.trim())[0]) || (req.socket.remoteAddress || 'unknown');
-}
-
-function getCallerUserId(req: NextApiRequest): string | null {
-  const fromHeader = (req.headers['x-user-id'] as string) || '';
-  const fromQuery = (req.query && (req.query as any).userId as string) || '';
-  return (fromHeader || fromQuery) || null;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -24,10 +19,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const ip = getClientIp(req);
   const userAgent = (req.headers['user-agent'] as string) || '';
   const meta = { ip, userAgent, endpoint: '/api/games/active/by-room' } as Record<string, any>;
+  // Private-room access and the audit log use the session's user, never a client-supplied ID
+  let callerUserId: string | null = null;
   try {
+    callerUserId = await getAuthenticatedUserId(req);
     const service = new GameService(pool);
     const roomId = String(req.query.roomId || '');
-    const callerUserId = getCallerUserId(req);
     const game = callerUserId
       ? await service.getActiveGameByRoom(roomId, callerUserId)
       : await service.getActiveGameByRoom(roomId);
@@ -44,8 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { state: _engineState, ...publicGame } = game;
     return res.status(200).json(publicGame);
   } catch (err: any) {
-    const callerUserId = getCallerUserId(req) || '00000000-0000-0000-0000-000000000000';
-    await safeLog(callerUserId, 'games', 'read', false, { ...meta, reason: err?.message || 'error' });
+    await safeLog(callerUserId || '00000000-0000-0000-0000-000000000000', 'games', 'read', false, { ...meta, reason: err?.message || 'error' });
     return res.status(400).json({ error: err?.message || 'Bad request' });
   }
 }

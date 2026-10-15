@@ -26,7 +26,8 @@ jest.mock('../../../src/lib/services/game-service', () => ({
 
 // Mock auth to always return a valid user id
 jest.mock('../../../src/lib/auth/auth-utils', () => ({
-  requireAuth: jest.fn().mockResolvedValue('test-user-id')
+  requireAuth: jest.fn().mockResolvedValue('test-user-id'),
+  getAuthenticatedUserId: jest.fn().mockResolvedValue(null)
 }));
 
 function createRes() {

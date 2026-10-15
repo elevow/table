@@ -101,6 +101,25 @@ export async function restoreEngineFromDb(tableId: string): Promise<PokerEngine 
 }
 
 /**
+ * Returns when the table's saved game last changed, or null if there is no saved
+ * game or the database is unavailable.
+ */
+export async function getLastActionAt(tableId: string): Promise<Date | null> {
+  try {
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT last_action_at FROM active_games WHERE room_id = $1 ORDER BY last_action_at DESC LIMIT 1`,
+      [tableId]
+    );
+    const value = result.rows[0]?.last_action_at;
+    return value ? new Date(value) : null;
+  } catch (error) {
+    console.warn('[engine-persistence] Failed to read last action time:', error);
+    return null;
+  }
+}
+
+/**
  * Type guard to validate the serialized state structure at runtime
  */
 function isValidSerializedState(data: unknown): data is SerializedEngineState {

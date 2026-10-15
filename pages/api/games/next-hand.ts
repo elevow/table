@@ -14,6 +14,7 @@ import {
 } from '../../../src/lib/server/rebuy-state';
 import { autoStandPlayer } from '../../../src/lib/server/rebuy-actions';
 import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { getDealerChoiceChooserId } from '../../../src/lib/poker/dealer-choice';
 import { getPool } from '../../../src/lib/database/pool';
 import { GameService } from '../../../src/lib/services/game-service';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
@@ -157,6 +158,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (playerCount < 2) {
         return res.status(409).json({ error: 'Need at least two players to start the next hand', gameState: currentState });
       }
+      if (!currentState.players.some((p: any) => p?.id === playerId)) {
+        return res.status(403).json({ error: 'Only a player at this table can start the next hand' });
+      }
+      // Only the announced chooser may pick the variant, and only while the game waits for that choice
+      if (isDealersChoice && variant) {
+        if (!awaitingDealerChoiceStage) {
+          return res.status(409).json({ error: 'Game is not waiting for a dealer variant choice' });
+        }
+        if (getDealerChoiceChooserId(currentState) !== playerId) {
+          return res.status(403).json({ error: 'Only the dealer can choose the variant' });
+        }
+      }
 
       // Check for busted players and issue rebuy prompts
       const handleBustedPlayers = async (): Promise<boolean> => {
@@ -263,10 +276,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             state.currentBet = 0;
             state.minRaise = state.bigBlind;
           }
+          // Persist the pause so a restored engine still accepts the dealer's choice
+          await persistEngineState(tableId, engine);
         }
-        const rawDealerIdx = typeof state?.dealerPosition === 'number' ? state.dealerPosition : 0;
-        const dealerIdx = playerCount > 0 ? ((rawDealerIdx + 1) % playerCount) : rawDealerIdx;
-        const dealerId = Array.isArray(state?.players) && state?.players?.[dealerIdx]?.id ? String(state.players[dealerIdx].id) : undefined;
+        const dealerId = getDealerChoiceChooserId(state);
 
         roomConfig.dcStepCount = 0;
         persistRoomConfig();

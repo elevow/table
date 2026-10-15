@@ -413,7 +413,8 @@ export class HandEvaluator {
 
     // Determine if the best 5 cards form a royal flush (A,K,Q,J,10 same suit)
     const isRoyal = (() => {
-      if (!desc.includes('straight') || !desc.includes('flush')) return false;
+      // Judge by the cards: the solver describes this hand as "Royal Flush", not as a straight flush
+      if (cards.length !== 5) return false;
       const ranks = new Set(cards.map(c => c.rank));
       const suits = new Set(cards.map(c => c.suit));
       return (
@@ -471,7 +472,8 @@ export class HandEvaluator {
       '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
     };
     const isRoyal = (() => {
-      if (!desc.includes('straight') || !desc.includes('flush')) return false;
+      // Judge by the cards: the solver describes this hand as "Royal Flush", not as a straight flush
+      if (cards.length !== 5) return false;
       const ranks = new Set(cards.map(c => c.rank));
       const suits = new Set(cards.map(c => c.suit));
       return suits.size === 1 && ['A', 'K', 'Q', 'J', '10'].every(r => ranks.has(r as Card['rank']));

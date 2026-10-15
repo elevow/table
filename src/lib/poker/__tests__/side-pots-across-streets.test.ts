@@ -1,5 +1,6 @@
 import { PokerEngine } from '../poker-engine';
 import { PotCalculator } from '../pot-calculator';
+import { DeckManager } from '../deck-manager';
 import { Card, Player, TableState } from '../../../types/poker';
 
 const createPlayer = (id: string, position: number, stack: number): Player => ({
@@ -72,6 +73,9 @@ describe('side pots use contributions from the whole hand', () => {
           internal.players.find(p => p.id === 'b')!.holeCards = [card('2', 'clubs'), card('3', 'diamonds')];
           internal.players.find(p => p.id === 'c')!.holeCards = [card('4', 'clubs'), card('5', 'diamonds')];
           internal.communityCards = [...ROYAL_FLOP];
+          // Rebuild the deck without the cards assigned above so the turn and river can't repeat them
+          const assigned = [...internal.players.flatMap(p => p.holeCards || []), ...internal.communityCards];
+          (engine as any).deckManager = DeckManager.fromExcluding(assigned);
         }
       }
     );

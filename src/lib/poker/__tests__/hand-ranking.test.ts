@@ -36,3 +36,31 @@ describe('US-026: Hand Rankings', () => {
     expect(typeof r1.name).toBe('string');
   });
 });
+
+describe('royal flush ranking', () => {
+  // The solver describes this hand as "Royal Flush"; it used to be mapped to a plain Flush
+  const board = [C('Q', 'hearts'), C('J', 'hearts'), C('10', 'hearts'), C('9', 'hearts'), C('8', 'hearts')];
+
+  it("ranks a Hold'em royal flush above a straight flush", () => {
+    const royal = HandEvaluator.getHandRanking([C('A', 'hearts'), C('K', 'hearts')], board);
+    const boardStraightFlush = HandEvaluator.getHandRanking([C('2', 'clubs'), C('3', 'diamonds')], board);
+    expect(royal.rank).toBe(HandRank.RoyalFlush);
+    expect(royal.name).toBe('Royal Flush');
+    expect(boardStraightFlush.rank).toBe(HandRank.StraightFlush);
+    expect(royal.rank).toBeGreaterThan(boardStraightFlush.rank);
+  });
+
+  it('ranks an Omaha royal flush above a straight flush', () => {
+    const omahaBoard = [C('Q', 'hearts'), C('J', 'hearts'), C('10', 'hearts'), C('2', 'clubs'), C('3', 'diamonds')];
+    const royal = HandEvaluator.getOmahaHandRanking(
+      [C('A', 'hearts'), C('K', 'hearts'), C('4', 'spades'), C('5', 'spades')],
+      omahaBoard
+    );
+    const straightFlush = HandEvaluator.getOmahaHandRanking(
+      [C('9', 'hearts'), C('8', 'hearts'), C('4', 'clubs'), C('5', 'clubs')],
+      omahaBoard
+    );
+    expect(royal.rank).toBe(HandRank.RoyalFlush);
+    expect(straightFlush.rank).toBe(HandRank.StraightFlush);
+  });
+});

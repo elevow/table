@@ -23,8 +23,12 @@ jest.mock('../../../src/lib/database/pool', () => ({
   getPool: jest.fn(() => ({})),
 }));
 
+const mockGetRoomById = jest.fn();
 jest.mock('../../../src/lib/services/game-service', () => ({
-  GameService: jest.fn().mockImplementation(() => ({ startGame: jest.fn().mockResolvedValue(undefined) })),
+  GameService: jest.fn().mockImplementation(() => ({
+    startGame: jest.fn().mockResolvedValue(undefined),
+    getRoomById: (...args: any[]) => mockGetRoomById(...args),
+  })),
 }));
 
 jest.mock('../../../src/lib/poker/engine-persistence', () => ({
@@ -101,6 +105,7 @@ describe('/api/games/start', () => {
     mockGetRoomSeats.mockReturnValue(SEATS);
     mockGetOrRestoreEngine.mockResolvedValue(null);
     mockGetLastActionAt.mockResolvedValue(null);
+    mockGetRoomById.mockResolvedValue({ id: 't1', configuration: {}, blindLevels: { sb: 1, bb: 2 } });
     (global as any).activeGames = undefined;
     (global as any).roomConfigs = undefined;
   });
@@ -150,6 +155,50 @@ describe('/api/games/start', () => {
     const res = createRes();
     await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
     expect(res.status).toHaveBeenCalledWith(409);
+    expect(MockPokerEngine).not.toHaveBeenCalled();
+  });
+
+  it('uses the room game type and blinds and ignores those sent in the request', async () => {
+    mockGetRoomById.mockResolvedValue({
+      id: 't1',
+      configuration: { variant: 'omaha', bettingMode: 'pot-limit' },
+      blindLevels: { sb: 5, bb: 10 },
+    });
+    const res = createRes();
+    await handler(createReq({
+      tableId: 't1', playerId: 'a', variant: 'five-card-stud', bettingMode: 'no-limit', sb: 500, bb: 1000,
+    }), res);
+    expect(res.status).toHaveBeenCalledWith(201);
+    const [, , smallBlind, bigBlind, options] = MockPokerEngine.mock.calls[0];
+    expect([smallBlind, bigBlind]).toEqual([5, 10]);
+    expect(options).toEqual({ variant: 'omaha', bettingMode: 'pot-limit' });
+    expect((global as any).roomConfigs.get('t1')).toMatchObject({ variant: 'omaha', smallBlind: 5, bigBlind: 10 });
+  });
+
+  it('cannot turn a fixed-game room into dealers choice from the request', async () => {
+    mockGetRoomById.mockResolvedValue({ id: 't1', configuration: { variant: 'texas-holdem' }, blindLevels: {} });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a', variant: 'dealers-choice' }), res);
+    expect(res.status).toHaveBeenCalledWith(201);
+    const [, , smallBlind, bigBlind, options] = MockPokerEngine.mock.calls[0];
+    expect([smallBlind, bigBlind]).toEqual([1, 2]);
+    expect(options.variant).toBe('texas-holdem');
+    expect((global as any).roomConfigs.get('t1').mode).toBe('fixed');
+  });
+
+  it('returns 404 for a room that does not exist', async () => {
+    mockGetRoomById.mockResolvedValue(null);
+    const res = createRes();
+    await handler(createReq({ tableId: 'missing', playerId: 'a' }), res);
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(MockPokerEngine).not.toHaveBeenCalled();
+  });
+
+  it('refuses to start when the room settings cannot be loaded', async () => {
+    mockGetRoomById.mockRejectedValue(new Error('connection refused'));
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a', variant: 'omaha', sb: 500, bb: 1000 }), res);
+    expect(res.status).toHaveBeenCalledWith(503);
     expect(MockPokerEngine).not.toHaveBeenCalled();
   });
 });

@@ -837,13 +837,7 @@ export default function GamePage() {
         playerName: (assignment as any)!.playerName,
         chips: (assignment as any)!.chips
       }));
-    const variant = roomConfig?.variant || undefined;
-    const bettingMode = roomConfig?.bettingMode || (variant === 'omaha' || variant === 'omaha-hi-lo' ? 'pot-limit' : undefined);
-    const sb = roomConfig?.sb;
-    const bb = roomConfig?.bb;
-    const numberOfRebuys = roomConfig?.numberOfRebuys;
-
-    // HTTP API for game start
+    // HTTP API for game start; the server takes the game type and blinds from the room
     try {
       const response = await fetch(`/api/games/start`, {
         method: 'POST',
@@ -852,14 +846,6 @@ export default function GamePage() {
           tableId: id,
           playerId,
           seatedPlayers: seated,
-          variant,
-          initialChoice: 'texas-holdem',
-          bettingMode,
-          smallBlind: sb,
-          bigBlind: bb,
-          sb,
-          bb,
-          numberOfRebuys,
         }),
       });
 

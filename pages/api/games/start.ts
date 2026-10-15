@@ -31,6 +31,31 @@ async function hasLiveHand(tableId: string, existingState: TableState | undefine
   return !lastActionAt || Date.now() - lastActionAt.getTime() < ABANDONED_HAND_MS;
 }
 
+type RoomGameSettings = { variant?: string; bettingMode?: string; smallBlind: number; bigBlind: number };
+
+function positiveNumber(...values: unknown[]): number | undefined {
+  for (const v of values) {
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return undefined;
+}
+
+/** The game type, betting mode and blinds the room was created with; null if there is no such room. */
+async function loadRoomGameSettings(tableId: string): Promise<RoomGameSettings | null> {
+  const service = new GameService(getPool() as any);
+  const room = await service.getRoomById(tableId);
+  if (!room) return null;
+  const config = (room.configuration || {}) as Record<string, unknown>;
+  const blinds = (room.blindLevels || {}) as Record<string, unknown>;
+  return {
+    variant: typeof config.variant === 'string' ? config.variant : undefined,
+    bettingMode: typeof config.bettingMode === 'string' ? config.bettingMode : undefined,
+    smallBlind: positiveNumber(blinds.sb, blinds.smallBlind) ?? 1,
+    bigBlind: positiveNumber(blinds.bb, blinds.bigBlind) ?? 2,
+  };
+}
+
 function getIo(res: NextApiResponse): SocketIOServer | null {
   try {
     // @ts-ignore
@@ -44,18 +69,24 @@ function getIo(res: NextApiResponse): SocketIOServer | null {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { tableId, playerId: claimedPlayerId, variant, bettingMode, sb, bb, seatedPlayers: clientSeatedPlayers } = (req.body || {}) as {
+  // Game type, betting mode and blinds come from the room record; any sent in the body are ignored
+  const { tableId, playerId: claimedPlayerId, seatedPlayers: clientSeatedPlayers } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
-    variant?: string;
-    bettingMode?: 'no-limit' | 'pot-limit';
-    sb?: number;
-    bb?: number;
     seatedPlayers?: Array<{ seatNumber: number; playerId: string; playerName: string; chips: number }>;
   };
   const playerId = await requirePlayer(req, res, claimedPlayerId);
   if (!playerId) return;
   if (!tableId) return res.status(400).json({ error: 'Missing tableId' });
+
+  let roomSettings: RoomGameSettings | null;
+  try {
+    roomSettings = await loadRoomGameSettings(tableId);
+  } catch (e) {
+    console.warn('[games/start] Room lookup failed:', (e as any)?.message || e);
+    return res.status(503).json({ error: 'Unable to load room settings' });
+  }
+  if (!roomSettings) return res.status(404).json({ error: 'Room not found' });
 
   try {
     // Starting replaces the table's engine, so refuse while a hand is being played
@@ -123,10 +154,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(409).json({ error: 'Waiting for busted players to rebuy or leave' });
     }
 
-  // Determine blinds and variant/mode (centralized mapping)
-    const smallBlind = typeof sb === 'number' ? sb : 1;
-    const bigBlind = typeof bb === 'number' ? bb : 2;
-  const { variant: resolvedVariant, bettingMode: resolvedMode } = resolveVariantAndMode({ variant, bettingMode });
+    // Determine blinds and variant/mode from the room (centralized mapping)
+    const { smallBlind, bigBlind } = roomSettings;
+    const { variant: resolvedVariant, bettingMode: resolvedMode } = resolveVariantAndMode({
+      variant: roomSettings.variant,
+      bettingMode: roomSettings.bettingMode,
+    });
   const isDealersChoice = resolvedVariant === 'dealers-choice';
 
     // Build engine players in seat order

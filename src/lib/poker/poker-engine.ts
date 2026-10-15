@@ -232,6 +232,7 @@ export class PokerEngine {
     // Snapshot stacks before blinds, antes or bring-ins so showdown can size the side pots
     this.state.handStartStacks = Object.fromEntries(this.state.players.map(p => [p.id, p.stack]));
     this.state.dealersChoiceHandCount = (this.state.dealersChoiceHandCount || 0) + 1;
+    this.state.turnSeq = (this.state.turnSeq || 0) + 1;
   // Reset consents for any new hand
   this.ritConsents.clear();
   // Reset rabbit preview tracking for new hand
@@ -338,6 +339,12 @@ export class PokerEngine {
   }
 
   public handleAction(action: PlayerAction): void {
+    this.applyAction(action);
+    // Only reached when the action was accepted
+    this.state.turnSeq = (this.state.turnSeq || 0) + 1;
+  }
+
+  private applyAction(action: PlayerAction): void {
     this.log(`Handling action ${action.type} from ${action.playerId} for amount ${action.amount}`);
     this.log(`Before action - pot: ${this.state.pot}, currentBet: ${this.state.currentBet}, minRaise: ${this.state.minRaise}`);
     this.log(`Player states:`, this.state.players.map(p => ({

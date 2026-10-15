@@ -1,4 +1,5 @@
 import { PokerEngine } from '../poker-engine';
+import { DeckManager } from '../deck-manager';
 import { Card, Player, PlayerAction, TableState } from '../../../types/poker';
 
 describe('PokerEngine', () => {
@@ -271,6 +272,21 @@ describe('PokerEngine', () => {
       const initialStack = 1000;
       const engine = new PokerEngine('table1', players, 5, 10);
       engine.startNewHand();
+
+      // Fix the cards so the hand can't end in a split pot: p1 makes a royal flush.
+      // The deck deals from the end, so the board comes out Qh Jh 10h, then 2c, then 3d.
+      const internal = (engine as any).state as TableState;
+      const hole: Record<string, Card[]> = {
+        p1: [{ rank: 'A', suit: 'hearts' }, { rank: 'K', suit: 'hearts' }],
+        p2: [{ rank: '4', suit: 'clubs' }, { rank: '5', suit: 'diamonds' }],
+        p3: [{ rank: '6', suit: 'clubs' }, { rank: '7', suit: 'diamonds' }],
+      };
+      internal.players.forEach(p => { p.holeCards = hole[p.id]; });
+      const board: Card[] = [
+        { rank: 'Q', suit: 'hearts' }, { rank: 'J', suit: 'hearts' }, { rank: '10', suit: 'hearts' },
+        { rank: '2', suit: 'clubs' }, { rank: '3', suit: 'diamonds' },
+      ];
+      (engine as any).deckManager = DeckManager.fromSerialized([...board].reverse());
       let state = engine.getState();
 
       // Complete all betting rounds with calls
@@ -283,8 +299,12 @@ describe('PokerEngine', () => {
       }
 
       // Check that pot was distributed
+      expect(state.stage).toBe('showdown');
       expect(state.pot).toBe(0); // Pot should be empty after distribution
-      expect(state.players.some(p => p.stack !== initialStack)).toBeTruthy(); // Someone's stack should have changed
+      const stackOf = (id: string) => state.players.find(p => p.id === id)!.stack;
+      expect(stackOf('p1')).toBeGreaterThan(initialStack); // p1's royal flush wins
+      expect(stackOf('p2')).toBeLessThan(initialStack);
+      expect(stackOf('p3')).toBeLessThan(initialStack);
       expect(state.players.reduce((sum, p) => sum + p.stack, 0)).toBe(initialStack * players.length); // Total chips should remain constant
     });
   });

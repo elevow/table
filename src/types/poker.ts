@@ -46,6 +46,9 @@ export interface TableState {
   // Dealer's Choice: hands started since the last variant choice. Kept in the saved state
   // (not server memory) so every server instance sees the same count.
   dealersChoiceHandCount?: number;
+  // Increases with every applied action and every new hand. Clients send the value they
+  // acted on, so a duplicate or late request can't land on a later decision.
+  turnSeq?: number;
   communityCards: Card[];
   currentBet: number;
   dealerPosition: number;

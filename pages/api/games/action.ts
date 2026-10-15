@@ -37,11 +37,13 @@ function getIo(res: NextApiResponse): SocketIOServer | null {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { tableId, playerId: claimedPlayerId, action, amount } = (req.body || {}) as {
+  const { tableId, playerId: claimedPlayerId, action, amount, expectedTurnSeq } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
     action?: string;
     amount?: number;
+    // turnSeq of the state the player acted on; omitted by older clients
+    expectedTurnSeq?: number;
   };
 
   const playerId = await requirePlayer(req, res, claimedPlayerId);
@@ -57,10 +59,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!engine) {
       return res.status(404).json({ error: 'No active game found for this table' });
     }
+    const currentState = engine.getState();
+
+    // Refuse an action made on an earlier state, e.g. a duplicate submit arriving after the first
+    // was applied and the turn came back to the same player on the next street
+    if (typeof expectedTurnSeq === 'number' && expectedTurnSeq !== (currentState.turnSeq || 0)) {
+      return res.status(409).json(STALE_STATE_RESPONSE);
+    }
     clearSupabaseAutoRunout(tableId);
 
     // Log current game state for debugging
-    const currentState = engine.getState();
     console.log('[action] Current activePlayer:', currentState.activePlayer, 'Action from:', playerId, 'Action:', action);
 
     // Snapshot community cards/stage before applying the action so we can detect premature board reveals

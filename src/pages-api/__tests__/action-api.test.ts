@@ -68,8 +68,8 @@ function createRes(): NextApiResponse & { status: jest.Mock; json: jest.Mock } {
   return res;
 }
 
-function createEngine() {
-  const state: any = { stage: 'flop', communityCards: [], players: [{ id: 'a' }, { id: 'b' }], activePlayer: 'a' };
+function createEngine(turnSeq = 7) {
+  const state: any = { stage: 'flop', communityCards: [], players: [{ id: 'a' }, { id: 'b' }], activePlayer: 'a', turnSeq };
   return {
     getState: jest.fn(() => ({ ...state })),
     handleAction: jest.fn(),
@@ -92,6 +92,29 @@ describe('/api/games/action saves', () => {
     await handler(createReq({ tableId: 't1', playerId: 'a', action: 'check' }), res);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(mockPublishGameStateUpdate).toHaveBeenCalled();
+  });
+
+  it('refuses an action made on an earlier state without touching the game', async () => {
+    // e.g. a duplicate check that arrives after the first moved the hand to the next street
+    const engine = createEngine(7);
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a', action: 'check', expectedTurnSeq: 6 }), res);
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(STALE_STATE_RESPONSE);
+    expect(engine.handleAction).not.toHaveBeenCalled();
+    expect(mockPersistEngineState).not.toHaveBeenCalled();
+    expect(mockPublishGameStateUpdate).not.toHaveBeenCalled();
+  });
+
+  it('applies an action made on the current state', async () => {
+    const engine = createEngine(7);
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    mockPersistEngineState.mockResolvedValue('saved');
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a', action: 'check', expectedTurnSeq: 7 }), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(engine.handleAction).toHaveBeenCalled();
   });
 
   it('returns 409 without broadcasting when another request saved first', async () => {

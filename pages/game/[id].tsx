@@ -911,12 +911,26 @@ export default function GamePage() {
           playerId,
           action,
           amount,
+          // The decision this click answers; the server refuses it if the game has moved on
+          expectedTurnSeq: typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
         }),
       });
 
       if (!response.ok) {
         const err = await response.json();
         console.error('Poker action failed:', err);
+        if (err?.code === 'STALE_GAME_STATE') {
+          // This view was behind the server; refresh it so the next action uses the current state
+          try {
+            const latest = await fetch(`/api/games/state?tableId=${id}`, { headers: authHeaders() });
+            if (latest.ok) {
+              const latestData = await latest.json();
+              if (latestData?.gameState) setPokerGameState(latestData.gameState);
+            }
+          } catch (refreshError) {
+            console.warn('Failed to refresh game state after a stale action:', refreshError);
+          }
+        }
       } else {
         // Use the API response to update game state
         // The API returns a sanitized state that includes the current player's hole cards

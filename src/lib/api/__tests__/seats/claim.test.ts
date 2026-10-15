@@ -19,6 +19,11 @@ jest.mock('../../../shared/buyin-amount', () => ({
   fetchRoomBuyIn: jest.fn().mockResolvedValue(500),
 }));
 
+// Seat persistence: nothing saved yet, and saving succeeds
+jest.mock('../../../database/pool', () => ({
+  getPool: () => ({ query: jest.fn().mockResolvedValue({ rows: [], rowCount: 1 }) }),
+}));
+
 import handler from '../../../../../pages/api/games/seats/claim';
 import * as GameSeats from '../../../shared/game-seats';
 

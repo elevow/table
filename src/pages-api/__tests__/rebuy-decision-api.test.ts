@@ -25,6 +25,8 @@ jest.mock('../../../src/lib/shared/rebuy-tracker', () => ({
 jest.mock('../../../src/lib/shared/game-seats', () => ({
   getRoomSeats: jest.fn().mockReturnValue({}),
   setRoomSeats: jest.fn(),
+  loadPersistedRoomSeats: jest.fn().mockResolvedValue(null),
+  persistRoomSeats: jest.fn().mockResolvedValue(true),
 }));
 
 jest.mock('../../../src/lib/realtime/sequence', () => ({

@@ -33,9 +33,12 @@ jest.mock('../../../src/lib/poker/engine-persistence', () => ({
   persistEngineState: jest.fn().mockResolvedValue(undefined),
 }));
 
+// No seats saved in the database, so the route uses the in-memory seat map
 jest.mock('../../../src/lib/shared/game-seats', () => ({
   getRoomSeats: jest.fn(),
   setRoomSeats: jest.fn(),
+  loadPersistedRoomSeats: jest.fn().mockResolvedValue(null),
+  persistRoomSeats: jest.fn().mockResolvedValue(true),
 }));
 
 jest.mock('../../../src/lib/poker/poker-engine', () => ({

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, memo, useCallback } from 'react';
 import type { ChatMessage } from '../types/chat';
 import { useSupabaseChatRealtime } from '../hooks/useSupabaseChatRealtime';
-import { getStoredAuthToken } from '../utils/auth-headers';
+import { authHeaders, getStoredAuthToken } from '../utils/auth-headers';
 
 interface ChatPanelProps {
   gameId: string;
@@ -154,8 +154,9 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
       setLoading(true);
       const res = await fetch('/api/chat/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId: gameId, senderId: playerId || 'anon', message: text }),
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        // The server sends as the signed-in user; senderId only has to match it
+        body: JSON.stringify({ roomId: gameId, senderId: playerId || undefined, message: text }),
       });
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
@@ -197,7 +198,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
         });
         const res = await fetch('/api/chat/reactions/remove', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify({ messageId, userId: playerId, emoji }),
         });
         if (!res.ok) {
@@ -226,7 +227,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
         }));
         const res = await fetch('/api/chat/reactions/add', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify({ messageId, userId: playerId, emoji }),
         });
         if (!res.ok) {

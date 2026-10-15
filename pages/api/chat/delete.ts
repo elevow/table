@@ -4,25 +4,25 @@ import { ChatService } from '../../../src/lib/services/chat-service';
 import { publishChatDeleted } from '../../../src/lib/realtime/publisher';
 import { getPool } from '../../../src/lib/database/pool';
 import { isUserAdminBySession } from '../../../src/lib/api/admin-auth';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const rl = rateLimit(req, { limit: 120, windowMs: 60_000 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
-  
+
+  // Ownership is checked against the signed-in user; a userId in the body must match the session
+  const userId = await requirePlayer(req, res, req.body?.userId);
+  if (!userId) return;
+
   try {
-    const { messageId: rawMessageId, userId: rawUserId } = req.body || {};
+    const { messageId: rawMessageId } = req.body || {};
     
     if (!rawMessageId) {
       return res.status(400).json({ error: 'messageId required' });
     }
-    if (!rawUserId) {
-      return res.status(400).json({ error: 'userId required' });
-    }
     
-    // Convert to strings once for consistency
     const messageId = String(rawMessageId);
-    const userId = String(rawUserId);
     
     const pool = getPool();
     const svc = new ChatService(pool);

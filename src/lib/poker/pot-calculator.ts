@@ -72,6 +72,40 @@ export class PotCalculator {
     return sidePots;
   }
 
+  /**
+   * Build the main pot and side pots from what each player put in over the whole hand.
+   * Each pot layer can be won only by non-folded players who paid into that layer.
+   * Chips from a layer no remaining player reached (a folded player's excess) join the
+   * pot below it, so no chips are left without an eligible winner.
+   */
+  static calculatePotsFromContributions(
+    players: Array<{ id: string; contributed: number; isFolded: boolean }>
+  ): SidePot[] {
+    const levels = Array.from(new Set(players.map(p => p.contributed).filter(c => c > 0))).sort((a, b) => a - b);
+    const pots: SidePot[] = [];
+    let previousLevel = 0;
+    for (const level of levels) {
+      const amount = players.reduce(
+        (sum, p) => sum + Math.max(0, Math.min(p.contributed, level) - previousLevel),
+        0
+      );
+      const eligiblePlayers = players.filter(p => !p.isFolded && p.contributed >= level).map(p => p.id);
+      previousLevel = level;
+      if (amount <= 0) continue;
+      const last = pots[pots.length - 1];
+      if (eligiblePlayers.length === 0 && last) {
+        last.amount += amount;
+      } else if (last && last.eligiblePlayers.length === 0) {
+        // A lower layer had no eligible player; fold it into this one
+        last.amount += amount;
+        last.eligiblePlayers = eligiblePlayers;
+      } else {
+        pots.push({ amount, eligiblePlayers });
+      }
+    }
+    return pots;
+  }
+
   static distributePots(
     sidePots: SidePot[], 
     winners: { playerId: string; winAmount: number; strength?: number }[]

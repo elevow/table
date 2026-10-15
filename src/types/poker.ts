@@ -40,6 +40,9 @@ export interface TableState {
   players: Player[];
   activePlayer: string;
   pot: number;
+  // Each player's stack when the current hand started; start minus current stack is what
+  // they have put into the pot this hand, which sets the side pots at showdown
+  handStartStacks?: Record<string, number>;
   communityCards: Card[];
   currentBet: number;
   dealerPosition: number;

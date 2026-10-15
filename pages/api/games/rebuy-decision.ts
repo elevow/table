@@ -89,6 +89,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const engine = await getOrRestoreEngine(tableId);
 
     if (decision === 'yes') {
+      // Rebuys are offered only between hands to a player with no chips left. This is checked
+      // against the saved game, since the pending-prompt list lives in one server's memory.
+      const state = engine && typeof engine.getState === 'function' ? engine.getState() : undefined;
+      const tablePlayer = state?.players?.find((p: { id: string }) => p.id === playerId);
+      if (!state || state.stage !== 'showdown' || !tablePlayer || (Number(tablePlayer.stack) || 0) > 0) {
+        return res.status(409).json({ error: 'Rebuy is only available between hands after losing all your chips' });
+      }
+
       const availability = await getRebuyAvailability(tableId, playerId);
       if (!availability.canRebuy) {
         return res.status(403).json({ error: 'Rebuy limit reached', ...availability });

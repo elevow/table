@@ -29,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const roomId = String(tableId);
 
-    const seats = GameSeats.initializeRoomSeats(String(tableId));
+    const seats = await GameSeats.loadPersistedRoomSeats(roomId) || GameSeats.initializeRoomSeats(roomId);
 
     // Validate seat availability
     if (seats[seatNumber] !== null) {
@@ -62,6 +62,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Claim seat
     seats[seatNumber] = { playerId, playerName, chips: chipAmount };
     GameSeats.setRoomSeats(String(tableId), seats);
+    if (!await GameSeats.persistRoomSeats(roomId, seats)) {
+      seats[seatNumber] = null;
+      GameSeats.setRoomSeats(roomId, seats);
+      return res.status(503).json({ error: 'Unable to persist seat assignment' });
+    }
 
     const seatPayload = { seatNumber, playerId, playerName, chips: chipAmount };
 

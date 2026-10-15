@@ -1,8 +1,12 @@
+jest.mock('../database/pool', () => ({ getPool: jest.fn() }));
+
 import {
   getGameSeats,
   getRoomSeats,
   setRoomSeats,
   initializeRoomSeats,
+  loadPersistedRoomSeats,
+  persistRoomSeats,
   claimSeat,
   leaveSeat,
   getCurrentPlayerCount,
@@ -10,6 +14,9 @@ import {
   getRoomStats,
   type GameSeats,
 } from '../../lib/shared/game-seats';
+import { getPool } from '../database/pool';
+
+const mockQuery = jest.fn();
 
 describe('lib/shared/game-seats', () => {
   const ROOM_A = 'room-a';
@@ -19,6 +26,8 @@ describe('lib/shared/game-seats', () => {
   beforeEach(() => {
     // Clear the global map to isolate tests
     getGameSeats().clear();
+    mockQuery.mockReset();
+    (getPool as jest.Mock).mockReturnValue({ query: mockQuery });
   });
 
   test('initializeRoomSeats creates 9 empty seats (1..9)', () => {
@@ -107,5 +116,29 @@ describe('lib/shared/game-seats', () => {
     const seats = getRoomSeats('unknown');
     expect(seats).toEqual({});
     expect(getCurrentPlayerCount('unknown')).toBe(0);
+  });
+
+  test('loadPersistedRoomSeats restores assignments into a fresh process map', async () => {
+    mockQuery.mockResolvedValue({
+      rows: [{ configuration: { seats: { 1: { playerId: 'p1', playerName: 'Alice', chips: 100 } } } }],
+    });
+
+    const seats = await loadPersistedRoomSeats(ROOM_A);
+
+    expect(seats?.[1]).toEqual({ playerId: 'p1', playerName: 'Alice', chips: 100 });
+    expect(seats?.[2]).toBeNull();
+    expect(getRoomSeats(ROOM_A)).toEqual(seats);
+  });
+
+  test('persistRoomSeats writes assignments to room configuration', async () => {
+    mockQuery.mockResolvedValue({ rowCount: 1 });
+    const seats = initializeRoomSeats(ROOM_A);
+    seats[1] = { playerId: 'p1', playerName: 'Alice', chips: 100 };
+
+    await expect(persistRoomSeats(ROOM_A, seats)).resolves.toBe(true);
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("jsonb_set(COALESCE(configuration, '{}'::jsonb), '{seats}'"),
+      [ROOM_A, JSON.stringify(seats)],
+    );
   });
 });

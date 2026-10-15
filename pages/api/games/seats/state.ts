@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method !== 'GET') {
       res.setHeader('Allow', 'GET');
@@ -14,7 +14,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // Ensure seats exist and return current state
-    const seats = GameSeats.initializeRoomSeats(tableId);
+    const seats = await GameSeats.loadPersistedRoomSeats(tableId) || GameSeats.initializeRoomSeats(tableId);
     return res.status(200).json({ ok: true, seats });
   } catch (e: any) {
     console.error('seats/state error:', e);

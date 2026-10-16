@@ -192,24 +192,30 @@ export class PokerEngine {
   }
 
   public runStudAllInToShowdown(): void {
+    while (this.state.stage !== 'showdown') {
+      this.runStudAllInStreet();
+    }
+  }
+
+  /** Deal the next stud street with no betting (all-in runout), or settle the hand after the last one. */
+  public runStudAllInStreet(): void {
     const studVariant = this.state.variant === 'seven-card-stud'
       || this.state.variant === 'seven-card-stud-hi-lo'
       || this.state.variant === 'five-card-stud';
     if (!studVariant) throw new Error('Stud runout requires a stud variant');
+    if (this.state.stage === 'showdown') return;
 
-    while (this.state.stage !== 'showdown') {
-      const nextStage = this.gameStateManager.moveToNextStage();
-      if (nextStage === 'showdown') {
-        this.determineWinner();
-        return;
-      }
-      if (nextStage === 'seventh') {
-        this.dealStudDownCards(1);
-      } else {
-        this.dealStudUpCards(1);
-      }
-      this.state.activePlayer = '';
+    const nextStage = this.gameStateManager.moveToNextStage();
+    if (nextStage === 'showdown') {
+      this.determineWinner();
+      return;
     }
+    if (nextStage === 'seventh') {
+      this.dealStudDownCards(1);
+    } else {
+      this.dealStudUpCards(1);
+    }
+    this.state.activePlayer = '';
   }
 
   public startNewHand(): void {
@@ -620,8 +626,12 @@ export class PokerEngine {
       const pay = Math.min(amount, player.stack);
       player.stack -= pay;
       player.currentBet += pay;
+      if (player.stack === 0) player.isAllIn = true;
       this.state.pot += pay;
-      // Do not set table currentBet for bring-in in this simplified implementation
+      // The bring-in is a forced bet: the others must call, raise or fold. The bring-in player
+      // only acts again on third street if someone raises.
+      this.state.currentBet = Math.max(this.state.currentBet, player.currentBet);
+      player.hasActed = true;
       this.state.studState!.bringIn = { amount: pay, player: player.id };
       if (process.env.DEBUG_POKER === 'true') {
         // eslint-disable-next-line no-console

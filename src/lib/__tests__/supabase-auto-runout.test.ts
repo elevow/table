@@ -93,7 +93,7 @@ describe('supabase-auto-runout', () => {
     expect(broadcast).not.toHaveBeenCalled();
   });
 
-  it('reveals pending streets on a 2 second cadence and finalizes the hand', async () => {
+  it('reveals pending streets on a 3 second cadence and finalizes the hand', async () => {
     const state = makeState();
     const engine = makeEngine(state);
     const broadcast = jest.fn().mockResolvedValue(undefined);
@@ -105,7 +105,7 @@ describe('supabase-auto-runout', () => {
     expect(prepArgs?.community).toEqual(state.communityCards);
     expect(prepArgs?.known).toEqual(expect.arrayContaining(state.players.flatMap((p) => p.holeCards || [])));
 
-    await jest.advanceTimersByTimeAsync(2000);
+    await jest.advanceTimersByTimeAsync(3000);
     expect(broadcast).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ stage: 'turn', communityCards: expect.arrayContaining([{ rank: '2', suit: 'clubs' }]) }),
@@ -113,7 +113,7 @@ describe('supabase-auto-runout', () => {
     );
     expect(state.communityCards).toHaveLength(4); // Turn card added to initial 3
 
-    await jest.advanceTimersByTimeAsync(2000);
+    await jest.advanceTimersByTimeAsync(3000);
     expect(broadcast).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ stage: 'river', communityCards: expect.arrayContaining([{ rank: '8', suit: 'clubs' }]) }),
@@ -121,7 +121,7 @@ describe('supabase-auto-runout', () => {
     );
     expect(state.communityCards).toHaveLength(5); // River card added to previous 4
 
-    await jest.advanceTimersByTimeAsync(2000);
+    await jest.advanceTimersByTimeAsync(3000);
     expect(engine.runItTwiceNow).toHaveBeenCalledTimes(1);
     expect(broadcast).toHaveBeenLastCalledWith(
       expect.objectContaining({ stage: 'showdown' }),
@@ -159,9 +159,9 @@ describe('supabase-auto-runout', () => {
 
     expect(success).toBe(true);
     
-    // Two street reveals and the showdown each wait for the configured 2-second cadence.
+    // Two street reveals and the showdown each wait for the configured 3-second cadence.
     const duration = endTime - startTime;
-    expect(duration).toBeGreaterThanOrEqual(6000);
+    expect(duration).toBeGreaterThanOrEqual(9000);
     
     // Should have broadcast turn, river, and showdown
     expect(broadcast).toHaveBeenCalledTimes(3);

@@ -215,8 +215,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Sanitize the response for the requesting player - hide other players' hole cards
-    // unless it's showdown or an all-in situation
-    const sanitizedState = sanitizeStateForPlayer(enrichedState, playerId);
+    // unless it's showdown or an all-in situation. After a runout, answer with where it ended
+    // so the response doesn't roll this player's view back to before the runout.
+    const responseState = shouldScheduleAutoRunout ? enrichStateWithRunIt(tableId, engine.getState()) : enrichedState;
+    const sanitizedState = sanitizeStateForPlayer(responseState, playerId);
 
     return res.status(200).json({ success: true, gameState: sanitizedState });
   } catch (e: unknown) {

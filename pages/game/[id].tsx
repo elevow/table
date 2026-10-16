@@ -267,7 +267,9 @@ export default function GamePage() {
           
           // If this is a new hand and we're a participant but don't have our cards,
           // fetch our player-specific state from the API
-          if (isNewHand && missingMyCards && isParticipant && shouldShowCards && effectivePlayerId && id) {
+          // Stud deals the seventh-street card face down, so a broadcast can't carry ours
+          const reachedSeventh = gameState.stage === 'seventh' && pokerStageRef.current !== 'seventh';
+          if ((isNewHand || reachedSeventh) && missingMyCards && isParticipant && shouldShowCards && effectivePlayerId && id) {
             console.log('🎴 New hand detected without cards, fetching player-specific state...');
             fetch(`/api/games/state?tableId=${id}&playerId=${effectivePlayerId}`, { headers: authHeaders() })
               .then(resp => {
@@ -305,15 +307,9 @@ export default function GamePage() {
             const newHoleCards = newMe?.holeCards;
             const hadCards = Array.isArray(prevHoleCards) && prevHoleCards.length > 0;
             const missingCards = !Array.isArray(newHoleCards) || newHoleCards.length === 0;
-            
-            // If the new state already has our cards visible (showdown, all-in, or API response), use them
-            if (!missingCards) return gameState;
-            
-            // If we had no previous cards to preserve, use the new state as-is
-            if (!hadCards) return gameState;
-            
-            // Preserve our hole cards by merging them into the new state
-            const mergedPlayers = Array.isArray(gameState.players)
+
+            // Preserve our hole cards (Hold'em/Omaha) by merging them into the new state
+            const mergedPlayers = (hadCards && missingCards && Array.isArray(gameState.players))
               ? gameState.players.map((p: any) => {
                   if (p.id === resolvedPlayerId) {
                     return { ...p, holeCards: prevHoleCards };
@@ -321,16 +317,21 @@ export default function GamePage() {
                   return p;
                 })
               : gameState.players;
-            
-            // Also preserve stud state down cards for current player if applicable
+
+            // Stud keeps cards in studState rather than holeCards, so preserve our down cards separately.
+            // Only within the same hand: our earlier up cards must still lead the new up cards.
             let mergedStudState = gameState.studState;
-            if (gameState.studState?.playerCards && prevState.studState?.playerCards) {
+            if (!isNewHand && gameState.studState?.playerCards && prevState.studState?.playerCards) {
               const prevStudCards = prevState.studState.playerCards[resolvedPlayerId];
               const newStudCards = gameState.studState.playerCards[resolvedPlayerId];
               const hadDownCards = Array.isArray(prevStudCards?.downCards) && prevStudCards.downCards.length > 0;
               const missingDownCards = !Array.isArray(newStudCards?.downCards) || newStudCards.downCards.length === 0;
-              
-              if (hadDownCards && missingDownCards) {
+              const prevUp: any[] = Array.isArray(prevStudCards?.upCards) ? prevStudCards.upCards : [];
+              const newUp: any[] = Array.isArray(newStudCards?.upCards) ? newStudCards.upCards : [];
+              const sameHand = prevUp.length > 0 && prevUp.length <= newUp.length
+                && prevUp.every((c: any, i: number) => c?.rank === newUp[i]?.rank && c?.suit === newUp[i]?.suit);
+
+              if (hadDownCards && missingDownCards && sameHand) {
                 mergedStudState = {
                   ...gameState.studState,
                   playerCards: {
@@ -1501,7 +1502,9 @@ export default function GamePage() {
       return '-bottom-16 left-1/2 transform -translate-x-1/2';
     };
 
-
+    // Seat records keep the buy-in; once the player is in the game, the engine stack is the truth
+    const seatGamePlayer = assignment ? pokerGameState?.players?.find((p: any) => p.id === assignment.playerId) : undefined;
+    const seatChips = Number(seatGamePlayer ? seatGamePlayer.stack : assignment?.chips) || 0;
 
     return (
       <React.Fragment key={seatNumber}>
@@ -1546,7 +1549,7 @@ export default function GamePage() {
                       : (!seatStateReady ? 'Please wait… syncing seats' : 'Seat not available')
               : isCurrentPlayer
                 ? 'Your seat - click Stand Up button to leave'
-                : `${assignment.playerName} - $${assignment.chips || 0}`
+                : `${assignment.playerName} - $${seatChips}`
           }
         >
           {isEmpty ? (
@@ -1600,8 +1603,8 @@ export default function GamePage() {
               </div>
               <div className="text-green-600 dark:text-green-400 font-bold">
                 {showStackInBB 
-                  ? formatChips(assignment.chips || 20, pokerGameState?.bigBlind || null, true)
-                  : `$${assignment.chips || 20}`
+                  ? formatChips(seatChips, pokerGameState?.bigBlind || null, true)
+                  : `$${seatChips}`
                 }
               </div>
               {/* Show additional game state info if player is in active game */}

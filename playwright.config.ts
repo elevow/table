@@ -1,4 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
+import { config as loadEnv } from 'dotenv';
+
+// Test account credentials (TEST_USER1_* …) and an optional Vercel bypass secret live here
+loadEnv({ path: '.env.local' });
+
+const remoteBaseURL = process.env.PLAYWRIGHT_BASE_URL;
 
 /**
  * Playwright configuration for smoke tests
@@ -51,8 +57,8 @@ export default defineConfig({
     },
   ],
 
-  /* Run your local dev server before starting the tests */
-  webServer: {
+  /* Run your local dev server before starting the tests, unless they target a deployment */
+  webServer: remoteBaseURL ? undefined : {
     command: 'npm run dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,

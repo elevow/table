@@ -39,6 +39,22 @@ Each automated test maps directly to one or more manual test cases documented in
 2. Dependencies installed: `npm install`
 3. Playwright browsers installed: `npx playwright install chromium`
 
+## Multi-player tests
+
+`tests/multiplayer.spec.ts` (API) and `tests/multiplayer-ui.spec.ts` (six browsers) play real hands with the
+six test accounts `TEST_USER1_EMAIL`/`TEST_USER1_PASSWORD` … `TEST_USER6_*`, read from `.env.local`.
+They are skipped when those are not set. Each test creates a table named "E2E multiplayer …" and stands
+everyone up afterwards. The accounts have fake email addresses, so the tests never use a route that sends mail.
+
+Run them against any deployment (a Vercel preview or production) by giving its URL; no local server is started:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://<deployment>.vercel.app npx playwright test e2e/tests/multiplayer
+```
+
+`VERCEL_AUTOMATION_BYPASS_SECRET` gets the tests past Vercel deployment protection. Leave
+`PLAYWRIGHT_BASE_URL` unset to run against `npm run dev`.
+
 ## Running Tests
 
 ### Run all smoke tests:

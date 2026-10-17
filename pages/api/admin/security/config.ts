@@ -1,10 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { requireAdmin } from '../../../../src/lib/api/admin-auth';
+import { requireAdminSession } from '../../../../src/lib/auth/auth-utils';
 import { getLiveSecurityConfig } from '../../../../src/lib/security/security-config';
 import { getSecurityOverrides, updateSecurityOverrides, clearSecurityOverrides } from '../../../../src/lib/security/security-config-runtime';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!requireAdmin(req, res)) return;
+  if (!(await requireAdminSession(req, res))) return;
 
   if (req.method === 'GET') {
     const cfg = getLiveSecurityConfig();

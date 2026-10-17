@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { authHeaders } from '../../../src/utils/auth-headers';
 
 interface AdminAlertDto {
   id: string;
@@ -15,24 +16,13 @@ export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AdminAlertDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [token, setToken] = useState('');
-  const [tokenInput, setTokenInput] = useState('');
-
-  useEffect(() => {
-    // Load saved admin token from localStorage
-    if (typeof window !== 'undefined') {
-      const saved = window.localStorage.getItem('adminToken') || '';
-      setToken(saved);
-      setTokenInput(saved);
-    }
-  }, []);
 
   useEffect(() => {
     const load = async () => {
       try {
-        if (!token) return;
         setLoading(true);
-        const res = await fetch('/api/admin/alerts', { headers: { 'X-Admin-Token': token } });
+        const res = await fetch('/api/admin/alerts', { headers: authHeaders() });
+        if (res.status === 401 || res.status === 403) throw new Error('Sign in with an admin account to view alerts.');
         const json = await res.json();
         setAlerts(json.alerts || []);
       } catch (e: any) {
@@ -42,34 +32,14 @@ export default function AlertsPage() {
       }
     };
     load();
-  }, [token]);
+  }, []);
 
   return (
     <div style={{ padding: 24 }}>
       <h1>Admin Alerts</h1>
-      {!token && (
-        <div style={{ marginBottom: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
-          <p style={{ marginTop: 0 }}>Enter admin token to access alerts.</p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              type="password"
-              placeholder="Admin token"
-              value={tokenInput}
-              onChange={e => setTokenInput(e.target.value)}
-              style={{ flex: 1 }}
-            />
-            <button onClick={() => { setToken(tokenInput); if (typeof window !== 'undefined') window.localStorage.setItem('adminToken', tokenInput); }}>Save</button>
-          </div>
-        </div>
-      )}
-      {token && (
-        <div style={{ marginBottom: 12 }}>
-          <button onClick={() => { setToken(''); if (typeof window !== 'undefined') window.localStorage.removeItem('adminToken'); }}>Change token</button>
-        </div>
-      )}
       {loading && <p>Loading…</p>}
       {error && <p style={{ color: 'red' }}>{error}</p>}
-      {!loading && alerts.length === 0 && <p>No alerts.</p>}
+      {!loading && !error && alerts.length === 0 && <p>No alerts.</p>}
       <ul style={{ listStyle: 'none', padding: 0 }}>
         {alerts.map(a => (
           <li key={a.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 12 }}>

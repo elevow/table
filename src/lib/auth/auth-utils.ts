@@ -93,6 +93,28 @@ export async function requirePlayer(
 }
 
 /**
+ * The user behind a valid session token, or null when signed out or the lookup fails.
+ */
+export async function getSessionUser(
+  req: NextApiRequest
+): Promise<{ id: string; email: string | null } | null> {
+  const token = getAuthToken(req);
+  if (!token || token === 'null') return null;
+  try {
+    const result = await getPool().query(
+      `SELECT u.id, u.email FROM users u
+       JOIN auth_tokens at ON u.id = at.user_id
+       WHERE at.token_hash = $1 AND at.type = 'session' AND at.expires_at > NOW()`,
+      [token]
+    );
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error('Error verifying session:', error);
+    return null;
+  }
+}
+
+/**
  * Require an authenticated admin session (email listed in ADMIN_EMAILS).
  * Returns the admin's user ID, or sends 401/403 and returns null.
  */
@@ -100,21 +122,7 @@ export async function requireAdminSession(
   req: NextApiRequest,
   res: NextApiResponse
 ): Promise<string | null> {
-  const token = getAuthToken(req);
-  let user: { id: string; email: string | null } | undefined;
-  if (token && token !== 'null') {
-    try {
-      const result = await getPool().query(
-        `SELECT u.id, u.email FROM users u
-         JOIN auth_tokens at ON u.id = at.user_id
-         WHERE at.token_hash = $1 AND at.type = 'session' AND at.expires_at > NOW()`,
-        [token]
-      );
-      user = result.rows[0];
-    } catch (error) {
-      console.error('Error verifying admin session:', error);
-    }
-  }
+  const user = await getSessionUser(req);
 
   if (!user) {
     res.status(401).json({ error: 'Authentication required' });

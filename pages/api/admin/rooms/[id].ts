@@ -1,46 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
-import { isAdminEmail } from '../../../../src/utils/roleUtils';
-
-async function isUserAdmin(req: NextApiRequest): Promise<boolean> {
-  try {
-    // Get session token from Authorization header or cookies
-    const authHeader = req.headers.authorization;
-    const sessionToken = authHeader?.replace('Bearer ', '') || req.cookies.session_token || req.cookies.auth_token;
-    
-    if (!sessionToken || sessionToken === 'null') {
-      return false;
-    }
-
-    const pool = getPool();
-    const client = await pool.connect();
-    
-    try {
-      // Get user email from session
-      const result = await client.query(
-        `SELECT u.email FROM users u 
-         JOIN auth_tokens at ON u.id = at.user_id 
-         WHERE at.token_hash = $1 AND at.expires_at > NOW()`,
-        [sessionToken]
-      );
-
-      if (result.rows.length === 0) {
-        return false;
-      }
-
-      const userEmail = result.rows[0].email;
-      const isAdmin = isAdminEmail(userEmail);
-      console.log(`Admin check for ${userEmail}: ${isAdmin}`);
-      return isAdmin;
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('Error checking admin status:', error);
-    return false;
-  }
-}
+import { requireAdminSession } from '../../../../src/lib/auth/auth-utils';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Rate limiting
@@ -50,10 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // Check admin privileges
-  const isAdmin = await isUserAdmin(req);
-  if (!isAdmin) {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
+  if (!(await requireAdminSession(req, res))) return;
 
   const { id } = req.query;
   

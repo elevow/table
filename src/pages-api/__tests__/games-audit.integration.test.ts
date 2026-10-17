@@ -25,9 +25,11 @@ jest.mock('../../../src/lib/services/game-service', () => ({
   GameService: jest.fn().mockImplementation(() => mockService)
 }));
 
-// Mock auth to always return a valid user id for create route
+// Mock auth to always return a valid user id for create route; by-room reads the session user
+const mockGetAuthenticatedUserId = jest.fn().mockResolvedValue(null);
 jest.mock('../../../src/lib/auth/auth-utils', () => ({
-  requireAuth: jest.fn().mockResolvedValue('u100')
+  requireAuth: jest.fn().mockResolvedValue('u100'),
+  getAuthenticatedUserId: (...args: any[]) => mockGetAuthenticatedUserId(...args)
 }));
 
 // Mock the audit helper and capture calls end-to-end
@@ -64,7 +66,8 @@ describe('Games API audit integration (by-room)', () => {
     // Arrange: service returns a game, caller provides user id
     const game = { id: 'g1', roomId: 'r1' } as any;
     mockService.getActiveGameByRoom.mockResolvedValue(game);
-    const req = createReq('GET', { roomId: 'r1' }, { 'x-user-id': 'u1', 'user-agent': 'jest-test' });
+    mockGetAuthenticatedUserId.mockResolvedValueOnce('u1');
+    const req = createReq('GET', { roomId: 'r1' }, { 'user-agent': 'jest-test' });
     const res = createRes();
 
     // Act
@@ -149,7 +152,8 @@ describe('Games API audit integration (by-room)', () => {
   test('GET /api/games/active/by-room (no game) logs success=false with reason=forbidden for authenticated user', async () => {
     // Arrange: service returns null to simulate not visible/forbidden
     mockService.getActiveGameByRoom.mockResolvedValue(null);
-    const req = createReq('GET', { roomId: 'r2' }, { 'x-user-id': 'u2', 'user-agent': 'jest-UA' });
+    mockGetAuthenticatedUserId.mockResolvedValueOnce('u2');
+    const req = createReq('GET', { roomId: 'r2' }, { 'user-agent': 'jest-UA' });
     const res = createRes();
 
     // Act
@@ -175,6 +179,24 @@ describe('Games API audit integration (by-room)', () => {
         ip: '127.0.0.1',
         reason: 'forbidden'
       })
+    );
+  });
+
+  test('GET /api/games/active/by-room ignores a client-supplied user ID without a session', async () => {
+    mockService.getActiveGameByRoom.mockResolvedValue(null);
+    const req = createReq('GET', { roomId: 'r4', userId: 'victim' }, { 'x-user-id': 'victim', 'user-agent': 'jest-UA' });
+    const res = createRes();
+
+    await byRoomHandler(req as any, res as any);
+
+    // Looked up as a spectator, and the read is not attributed to the claimed user
+    expect(mockService.getActiveGameByRoom).toHaveBeenCalledWith('r4');
+    expect(mockSafeLog).toHaveBeenCalledWith(
+      '00000000-0000-0000-0000-000000000000',
+      'games',
+      'read',
+      false,
+      expect.objectContaining({ roomId: 'r4', as: 'spectator' })
     );
   });
 

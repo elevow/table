@@ -8,12 +8,53 @@ import { resolveVariantAndMode, defaultBettingModeForVariant } from '../../../sr
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
-import { persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { getLastActionAt, getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
+import type { TableState } from '../../../src/types/poker';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
   to: (room: string) => { emit: (event: string, data: unknown) => void };
 };
+
+// A hand with no activity for this long counts as abandoned and can be replaced by a new game
+const ABANDONED_HAND_MS = 10 * 60 * 1000;
+
+/**
+ * True when the table has a hand in progress that has seen recent activity.
+ * Without a last-action time (no database) an in-progress hand is treated as live.
+ */
+async function hasLiveHand(tableId: string, existingState: TableState | undefined): Promise<boolean> {
+  const stage = existingState?.stage;
+  if (!stage || stage === 'showdown' || stage === 'awaiting-dealer-choice') return false;
+  const lastActionAt = await getLastActionAt(tableId);
+  return !lastActionAt || Date.now() - lastActionAt.getTime() < ABANDONED_HAND_MS;
+}
+
+type RoomGameSettings = { variant?: string; bettingMode?: string; smallBlind: number; bigBlind: number };
+
+function positiveNumber(...values: unknown[]): number | undefined {
+  for (const v of values) {
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return undefined;
+}
+
+/** The game type, betting mode and blinds the room was created with; null if there is no such room. */
+async function loadRoomGameSettings(tableId: string): Promise<RoomGameSettings | null> {
+  const service = new GameService(getPool() as any);
+  const room = await service.getRoomById(tableId);
+  if (!room) return null;
+  const config = (room.configuration || {}) as Record<string, unknown>;
+  const blinds = (room.blindLevels || {}) as Record<string, unknown>;
+  return {
+    variant: typeof config.variant === 'string' ? config.variant : undefined,
+    bettingMode: typeof config.bettingMode === 'string' ? config.bettingMode : undefined,
+    smallBlind: positiveNumber(blinds.sb, blinds.smallBlind) ?? 1,
+    bigBlind: positiveNumber(blinds.bb, blinds.bigBlind) ?? 2,
+  };
+}
 
 function getIo(res: NextApiResponse): SocketIOServer | null {
   try {
@@ -28,18 +69,33 @@ function getIo(res: NextApiResponse): SocketIOServer | null {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { tableId, playerId, variant, bettingMode, sb, bb, seatedPlayers: clientSeatedPlayers } = (req.body || {}) as {
+  // Game type, betting mode and blinds come from the room record; any sent in the body are ignored
+  const { tableId, playerId: claimedPlayerId, seatedPlayers: clientSeatedPlayers } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
-    variant?: string;
-    bettingMode?: 'no-limit' | 'pot-limit';
-    sb?: number;
-    bb?: number;
     seatedPlayers?: Array<{ seatNumber: number; playerId: string; playerName: string; chips: number }>;
   };
-  if (!tableId || !playerId) return res.status(400).json({ error: 'Missing tableId or playerId' });
+  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  if (!playerId) return;
+  if (!tableId) return res.status(400).json({ error: 'Missing tableId' });
+
+  let roomSettings: RoomGameSettings | null;
+  try {
+    roomSettings = await loadRoomGameSettings(tableId);
+  } catch (e) {
+    console.warn('[games/start] Room lookup failed:', (e as any)?.message || e);
+    return res.status(503).json({ error: 'Unable to load room settings' });
+  }
+  if (!roomSettings) return res.status(404).json({ error: 'Room not found' });
 
   try {
+    // Starting replaces the table's engine, so refuse while a hand is being played
+    const existingEngine = await getOrRestoreEngine(tableId);
+    const existingState = existingEngine && typeof existingEngine.getState === 'function' ? existingEngine.getState() : undefined;
+    if (await hasLiveHand(tableId, existingState)) {
+      return res.status(409).json({ error: 'A hand is already in progress' });
+    }
+
     // Try to get seats from in-memory store first (socket mode), then fallback to client-provided seats (Supabase/HTTP mode)
     let seatedPlayers: Array<{ seatNumber: number; playerId: string; playerName: string; chips: number }>;
     
@@ -58,6 +114,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (serverSeatedPlayers.length >= 2) {
       seatedPlayers = serverSeatedPlayers;
     } else if (clientSeatedPlayers && clientSeatedPlayers.length >= 2) {
+      // Reject before trusting client seats so a non-seated caller cannot overwrite the seat map
+      if (!clientSeatedPlayers.some(p => p.playerId === playerId)) {
+        return res.status(403).json({ error: 'Only a seated player can start the game' });
+      }
       seatedPlayers = clientSeatedPlayers;
       // Update the in-memory store with client seats for consistency
       const newSeats: any = {};
@@ -78,10 +138,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Need at least two seated players to start a game' });
     }
 
-  // Determine blinds and variant/mode (centralized mapping)
-    const smallBlind = typeof sb === 'number' ? sb : 1;
-    const bigBlind = typeof bb === 'number' ? bb : 2;
-  const { variant: resolvedVariant, bettingMode: resolvedMode } = resolveVariantAndMode({ variant, bettingMode });
+    if (!seatedPlayers.some(p => p.playerId === playerId)) {
+      return res.status(403).json({ error: 'Only a seated player can start the game' });
+    }
+
+    // Seat chips are the buy-in and are not updated during play, so players already in the
+    // current game keep their engine stacks; otherwise a restart would reset everyone's chips.
+    const existingStacks = new Map<string, number>(
+      (existingState?.players ?? []).map(p => [p.id, Number(p.stack) || 0])
+    );
+    seatedPlayers = seatedPlayers.map(p =>
+      existingStacks.has(p.playerId) ? { ...p, chips: existingStacks.get(p.playerId) as number } : p
+    );
+    if (seatedPlayers.some(p => p.chips <= 0)) {
+      return res.status(409).json({ error: 'Waiting for busted players to rebuy or leave' });
+    }
+
+    // Determine blinds and variant/mode from the room (centralized mapping)
+    const { smallBlind, bigBlind } = roomSettings;
+    const { variant: resolvedVariant, bettingMode: resolvedMode } = resolveVariantAndMode({
+      variant: roomSettings.variant,
+      bettingMode: roomSettings.bettingMode,
+    });
   const isDealersChoice = resolvedVariant === 'dealers-choice';
 
     // Build engine players in seat order
@@ -147,7 +225,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (isDealersChoice) {
       roomConfigPayload.allowedVariants = allowedDcVariants;
       roomConfigPayload.chosenVariant = 'texas-holdem';
-      roomConfigPayload.dcStepCount = 0;
     }
     g.roomConfigs.set(tableId, roomConfigPayload);
 

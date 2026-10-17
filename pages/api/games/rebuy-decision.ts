@@ -11,7 +11,8 @@ import { recordBuyin } from '../../../src/lib/shared/rebuy-tracker';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
-import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 /**
  * After a rebuy decision, check if we can start the next hand.
@@ -49,8 +50,10 @@ async function maybeStartNextHand(tableId: string, engine: any): Promise<boolean
     if (typeof engine.startNewHand === 'function') {
       engine.startNewHand();
       
-      // Persist engine state for serverless recovery
-      await persistEngineState(tableId, engine);
+      // Persist engine state for serverless recovery; on a conflict another request owns the table
+      if ((await persistEngineState(tableId, engine)) === 'conflict') {
+        return false;
+      }
       
       const newState = engine.getState();
       const enrichedState = enrichStateWithRunIt(tableId, newState);
@@ -76,15 +79,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { tableId, playerId, decision } = req.body;
+    const { tableId, playerId: claimedPlayerId, decision } = req.body;
 
-    if (!tableId || !playerId || (decision !== 'yes' && decision !== 'no')) {
+    const playerId = await requirePlayer(req, res, claimedPlayerId);
+    if (!playerId) return;
+
+    if (!tableId || (decision !== 'yes' && decision !== 'no')) {
       return res.status(400).json({ error: 'Missing or invalid parameters' });
     }
 
     const engine = await getOrRestoreEngine(tableId);
 
     if (decision === 'yes') {
+      // Rebuys are offered only between hands to a player with no chips left. This is checked
+      // against the saved game, since the pending-prompt list lives in one server's memory.
+      const state = engine && typeof engine.getState === 'function' ? engine.getState() : undefined;
+      const tablePlayer = state?.players?.find((p: { id: string }) => p.id === playerId);
+      if (!engine || !state || state.stage !== 'showdown' || !tablePlayer || (Number(tablePlayer.stack) || 0) > 0) {
+        return res.status(409).json({ error: 'Rebuy is only available between hands after losing all your chips' });
+      }
+
       const availability = await getRebuyAvailability(tableId, playerId);
       if (!availability.canRebuy) {
         return res.status(403).json({ error: 'Rebuy limit reached', ...availability });
@@ -93,26 +107,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Fetch the rebuy amount for this room
       const rebuyChips = await fetchRoomRebuyAmount(tableId);
 
+      // Give the player the chips and save before recording the rebuy, so a rebuy is only
+      // counted once the new stack is stored
+      tablePlayer.stack = rebuyChips;
+      tablePlayer.currentBet = 0;
+      tablePlayer.isAllIn = false;
+      tablePlayer.isFolded = false;
+      tablePlayer.hasActed = false;
+      if ((await persistEngineState(tableId, engine)) === 'conflict') {
+        return res.status(409).json(STALE_STATE_RESPONSE);
+      }
+
       // Record the rebuy
       const trackerRecord = recordBuyin(tableId, playerId);
       clearPendingRebuy(tableId, playerId);
-
-      // Update player stack in game engine if available
-      if (engine && typeof engine.getState === 'function') {
-        const state = engine.getState();
-        if (state && Array.isArray(state.players)) {
-          const player = state.players.find((p: { id: string }) => p.id === playerId);
-          if (player) {
-            player.stack = rebuyChips;
-            player.currentBet = 0;
-            player.isAllIn = false;
-            player.isFolded = false;
-            player.hasActed = false;
-          }
-        }
-        // Persist engine state after rebuy
-        await persistEngineState(tableId, engine);
-      }
 
       // Update seat assignment
       const seats = await GameSeats.loadPersistedRoomSeats(tableId) || GameSeats.getRoomSeats(tableId);

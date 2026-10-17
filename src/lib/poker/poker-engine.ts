@@ -1,7 +1,7 @@
 import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking, GameVariant, RunItTwicePrompt } from '../../types/poker';
 import { RunItTwiceOutcomeInput } from '../../types/game-history';
 import { HandEvaluator } from './hand-evaluator';
-import { PotCalculator } from './pot-calculator';
+import { PotCalculator, SidePot } from './pot-calculator';
 import { DeckManager } from './deck-manager';
 import { BettingManager } from './betting-manager';
 import { generateRngSecurity, verifyRngSecurity, RNGSecurity } from './rng-security';
@@ -192,24 +192,30 @@ export class PokerEngine {
   }
 
   public runStudAllInToShowdown(): void {
+    while (this.state.stage !== 'showdown') {
+      this.runStudAllInStreet();
+    }
+  }
+
+  /** Deal the next stud street with no betting (all-in runout), or settle the hand after the last one. */
+  public runStudAllInStreet(): void {
     const studVariant = this.state.variant === 'seven-card-stud'
       || this.state.variant === 'seven-card-stud-hi-lo'
       || this.state.variant === 'five-card-stud';
     if (!studVariant) throw new Error('Stud runout requires a stud variant');
+    if (this.state.stage === 'showdown') return;
 
-    while (this.state.stage !== 'showdown') {
-      const nextStage = this.gameStateManager.moveToNextStage();
-      if (nextStage === 'showdown') {
-        this.determineWinner();
-        return;
-      }
-      if (nextStage === 'seventh') {
-        this.dealStudDownCards(1);
-      } else {
-        this.dealStudUpCards(1);
-      }
-      this.state.activePlayer = '';
+    const nextStage = this.gameStateManager.moveToNextStage();
+    if (nextStage === 'showdown') {
+      this.determineWinner();
+      return;
     }
+    if (nextStage === 'seventh') {
+      this.dealStudDownCards(1);
+    } else {
+      this.dealStudUpCards(1);
+    }
+    this.state.activePlayer = '';
   }
 
   public startNewHand(): void {
@@ -229,6 +235,10 @@ export class PokerEngine {
     this.deckManager.resetDeck();
     this.gameStateManager.resetPlayerStates();
     this.gameStateManager.rotateDealerButton();
+    // Snapshot stacks before blinds, antes or bring-ins so showdown can size the side pots
+    this.state.handStartStacks = Object.fromEntries(this.state.players.map(p => [p.id, p.stack]));
+    this.state.dealersChoiceHandCount = (this.state.dealersChoiceHandCount || 0) + 1;
+    this.state.turnSeq = (this.state.turnSeq || 0) + 1;
   // Reset consents for any new hand
   this.ritConsents.clear();
   // Reset rabbit preview tracking for new hand
@@ -335,6 +345,12 @@ export class PokerEngine {
   }
 
   public handleAction(action: PlayerAction): void {
+    this.applyAction(action);
+    // Only reached when the action was accepted
+    this.state.turnSeq = (this.state.turnSeq || 0) + 1;
+  }
+
+  private applyAction(action: PlayerAction): void {
     this.log(`Handling action ${action.type} from ${action.playerId} for amount ${action.amount}`);
     this.log(`Before action - pot: ${this.state.pot}, currentBet: ${this.state.currentBet}, minRaise: ${this.state.minRaise}`);
     this.log(`Player states:`, this.state.players.map(p => ({
@@ -610,8 +626,12 @@ export class PokerEngine {
       const pay = Math.min(amount, player.stack);
       player.stack -= pay;
       player.currentBet += pay;
+      if (player.stack === 0) player.isAllIn = true;
       this.state.pot += pay;
-      // Do not set table currentBet for bring-in in this simplified implementation
+      // The bring-in is a forced bet: the others must call, raise or fold. The bring-in player
+      // only acts again on third street if someone raises.
+      this.state.currentBet = Math.max(this.state.currentBet, player.currentBet);
+      player.hasActed = true;
       this.state.studState!.bringIn = { amount: pay, player: player.id };
       if (process.env.DEBUG_POKER === 'true') {
         // eslint-disable-next-line no-console
@@ -725,16 +745,8 @@ export class PokerEngine {
   const initialTotal = stacksTotal + potBefore + includeOutstandingBets;
     this.log(`Total chips before distribution: ${initialTotal}`);
 
-  // Build side pots from current bets and eligibility
-  const sidePots = PotCalculator.calculateSidePots(
-      this.state.players.map(p => ({ id: p.id, stack: p.stack, currentBet: p.currentBet, isFolded: p.isFolded }))
-    );
-    this.log(`Calculated side pots: ${JSON.stringify(sidePots)}`);
-
-    // Create a base pot representing chips from previous streets (exclude current round unmatched totals)
-  const baseAmount = Math.max(0, potBefore - betsTotal);
-  const basePot = baseAmount > 0 ? [{ amount: baseAmount, eligiblePlayers: activePlayers.map(p => p.id) }] : [];
-  const potsToDistribute = [...basePot, ...sidePots];
+  const potsToDistribute = this.buildPots(activePlayers);
+    this.log(`Pots to distribute: ${JSON.stringify(potsToDistribute)}`);
 
   // Special handling: Omaha Hi-Lo (US-052)
   if (this.state.variant === 'omaha-hi-lo') {
@@ -1082,6 +1094,37 @@ export class PokerEngine {
   }
 
   // US-029: Execute run-it-twice using separate decks/boards per run and equal pot split
+  /**
+   * Split the pot into the main pot and side pots for showdown.
+   * Uses each player's contribution over the whole hand (hand-start stack minus current stack).
+   * Falls back to the current round's bets when no snapshot exists or it doesn't account for
+   * the pot (state saved before snapshots existed, or stacks edited outside of play).
+   */
+  private buildPots(activePlayers: Player[]): SidePot[] {
+    const betsTotal = this.state.players.reduce((sum, p) => sum + (p.currentBet || 0), 0);
+    const potTotal = this.state.pot > 0 ? this.state.pot : betsTotal;
+    const startStacks = this.state.handStartStacks;
+    if (startStacks && this.state.players.every(p => typeof startStacks[p.id] === 'number')) {
+      const contributions = this.state.players.map(p => ({
+        id: p.id,
+        contributed: Math.max(0, startStacks[p.id] - p.stack),
+        isFolded: p.isFolded || !activePlayers.some(a => a.id === p.id),
+      }));
+      const contributedTotal = contributions.reduce((sum, c) => sum + c.contributed, 0);
+      if (contributedTotal === potTotal) {
+        return PotCalculator.calculatePotsFromContributions(contributions);
+      }
+      this.log(`Hand contributions (${contributedTotal}) do not match pot (${potTotal}); using current-round bets`);
+    }
+
+    const sidePots = PotCalculator.calculateSidePots(
+      this.state.players.map(p => ({ id: p.id, stack: p.stack, currentBet: p.currentBet, isFolded: p.isFolded }))
+    );
+    const baseAmount = Math.max(0, this.state.pot - betsTotal);
+    const basePot = baseAmount > 0 ? [{ amount: baseAmount, eligiblePlayers: activePlayers.map(p => p.id) }] : [];
+    return [...basePot, ...sidePots];
+  }
+
   private executeRunItTwice(): void {
     const rit = this.state.runItTwice!;
     const activePlayers = this.state.players.filter(p => !p.isFolded);
@@ -1106,9 +1149,13 @@ export class PokerEngine {
     activePlayers.forEach(p => (p.holeCards || []).forEach(c => known.push(c)));
     this.state.communityCards.forEach(c => known.push(c));
 
-    const totalPrizePool = this.state.pot;
-    const perRunPot = Math.floor(totalPrizePool / rit.numberOfRuns);
-    let remainder = totalPrizePool % rit.numberOfRuns;
+    // Each pot (main and side) is split evenly across the runs; odd chips go to the earliest runs.
+    // On each run, a pot goes to the best hand among the players eligible for it.
+    const pots = this.buildPots(activePlayers);
+    const runs = rit.numberOfRuns;
+    const potShares = pots.map(pot =>
+      Array.from({ length: runs }, (_, r) => Math.floor(pot.amount / runs) + (r < pot.amount % runs ? 1 : 0))
+    );
 
     const aggregate: Map<string, number> = new Map();
     const results = [] as {
@@ -1131,26 +1178,37 @@ export class PokerEngine {
           ? HandEvaluator.evaluateOmahaHand
           : HandEvaluator.evaluateHand).call(HandEvaluator, player.holeCards || [], runBoard)
       }));
-      const winners = evals.filter(ph => !evals.some(other => ph !== other && HandEvaluator.compareHands(other.evaluation.hand, ph.evaluation.hand) > 0));
+      const bestOf = (candidates: typeof evals) => candidates.filter(ph =>
+        !candidates.some(other => ph !== other && HandEvaluator.compareHands(other.evaluation.hand, ph.evaluation.hand) > 0)
+      );
 
-      // Split this run's pot equally among winners
-      const runPot = perRunPot + (remainder > 0 ? 1 : 0);
-      if (remainder > 0) remainder -= 1;
-      const prizePerWinner = Math.floor(runPot / winners.length);
-      let runRemainder = runPot % winners.length;
+      // Award this run's share of each pot to the best eligible hand(s)
+      let runPot = 0;
+      const runWinnings = new Map<string, number>();
+      pots.forEach((pot, i) => {
+        const share = potShares[i][r];
+        if (share <= 0) return;
+        runPot += share;
+        const eligible = evals.filter(e => pot.eligiblePlayers.includes(e.playerId));
+        const winners = bestOf(eligible.length > 0 ? eligible : evals);
+        const perWinner = Math.floor(share / winners.length);
+        const extra = share % winners.length;
+        winners.forEach((w, idx) => {
+          runWinnings.set(w.playerId, (runWinnings.get(w.playerId) || 0) + perWinner + (idx < extra ? 1 : 0));
+        });
+      });
+
       const runWinners: Array<{ playerId: string; winningHand: HandRanking; potShare: number }> = [];
-      winners.forEach((w, idx) => {
-        const potShare = prizePerWinner + (idx === winners.length - 1 ? runRemainder : 0);
-        const prev = aggregate.get(w.playerId) || 0;
-        aggregate.set(w.playerId, prev + potShare);
+      runWinnings.forEach((potShare, playerId) => {
+        aggregate.set(playerId, (aggregate.get(playerId) || 0) + potShare);
         const winningHand = ((this.state.variant === 'omaha' || this.state.variant === 'omaha-hi-lo')
           ? HandEvaluator.getOmahaHandRanking
           : HandEvaluator.getHandRanking).call(
             HandEvaluator,
-            activePlayers.find(p => p.id === w.playerId)?.holeCards || [],
+            activePlayers.find(p => p.id === playerId)?.holeCards || [],
             runBoard
           );
-        runWinners.push({ playerId: w.playerId, winningHand, potShare });
+        runWinners.push({ playerId, winningHand, potShare });
       });
       results.push({ boardId: `run-${r + 1}`, winners: runWinners });
 
@@ -1199,6 +1257,8 @@ export class PokerEngine {
 
   // Dealer's Choice tables pause the game until the dealer selects a variant
   public pauseForDealerChoice(): TableState {
+    // Each dealer's-choice round starts at this pause
+    this.state.dealersChoiceHandCount = 0;
     this.state.stage = 'awaiting-dealer-choice';
     this.state.activePlayer = '';
     this.state.pot = 0;

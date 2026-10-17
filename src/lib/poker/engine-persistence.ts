@@ -15,6 +15,8 @@ import { Card, TableState } from '../../types/poker';
 
 export interface SerializedEngineState {
   tableState: TableState;
+  // Save counter added by persistEngineState; absent on states saved before versioning
+  version?: number;
   deck: Card[];
   removedPlayers: string[];
   rabbitPreviewed: number;
@@ -23,22 +25,70 @@ export interface SerializedEngineState {
 }
 
 /**
+ * Saved row and version each restored engine was loaded from. Saves check the version so a
+ * request working from an older copy cannot overwrite a change another request already saved.
+ */
+const loadedFrom = new WeakMap<PokerEngine, { rowId: string; version: number }>();
+
+/**
+ * saved: written. conflict: another request saved a newer state since this engine was loaded,
+ * so nothing was written. failed: the database was unavailable (e.g. local runs without one).
+ */
+export type PersistResult = 'saved' | 'conflict' | 'failed';
+
+/** Thrown to stop a multi-step flow (such as an auto-runout) whose state was superseded. */
+export class StaleGameStateError extends Error {
+  constructor(tableId: string) {
+    super(`Game state for table ${tableId} changed while this request was running`);
+    this.name = 'StaleGameStateError';
+  }
+}
+
+/** Response body for a request whose game state was superseded before it could be saved. */
+export const STALE_STATE_RESPONSE = {
+  error: 'The game changed while this request was running; refresh and try again',
+  code: 'STALE_GAME_STATE',
+} as const;
+
+// The version lives in the saved JSON, so no schema change is needed; rows saved before
+// versioning count as version 0.
+const SAVED_VERSION = `COALESCE((state->>'version')::bigint, 0)`;
+
+/**
  * Save the engine state to the database for persistence.
  * This should be called after starting a game or processing an action.
  */
-export async function persistEngineState(tableId: string, engine: PokerEngine): Promise<void> {
+export async function persistEngineState(tableId: string, engine: PokerEngine): Promise<PersistResult> {
   try {
     const pool = getPool();
     const serialized = engine.serialize();
     const stateJson = JSON.stringify(serialized);
+    const loaded = loadedFrom.get(engine);
 
-    // Try to update the most-recent existing row to avoid updating duplicate rows
+    if (loaded) {
+      // Write only if nobody has saved since this engine was loaded
+      const result = await pool.query(
+        `UPDATE active_games
+         SET state = jsonb_set($1::jsonb, '{version}', to_jsonb($3::bigint + 1)), last_action_at = NOW()
+         WHERE id = $2 AND ${SAVED_VERSION} = $3`,
+        [stateJson, loaded.rowId, loaded.version]
+      );
+      if ((result.rowCount ?? 0) === 0) {
+        console.warn(`[engine-persistence] Stale state for table ${tableId}; another request saved first`);
+        return 'conflict';
+      }
+      loaded.version += 1;
+      return 'saved';
+    }
+
+    // A new engine (e.g. a game just started) replaces the most recent row for the room
     const result = await pool.query(
-      `UPDATE active_games 
-       SET state = $1, last_action_at = NOW() 
+      `UPDATE active_games
+       SET state = jsonb_set($1::jsonb, '{version}', to_jsonb(${SAVED_VERSION} + 1)), last_action_at = NOW()
        WHERE id = (
          SELECT id FROM active_games WHERE room_id = $2 ORDER BY last_action_at DESC LIMIT 1
-       )`,
+       )
+       RETURNING id, ${SAVED_VERSION} AS version`,
       [stateJson, tableId]
     );
 
@@ -49,9 +99,10 @@ export async function persistEngineState(tableId: string, engine: PokerEngine): 
       const activePlr = ts.players.find(p => p.id === ts.activePlayer);
       const currentPlayerPosition = activePlr?.position ?? 0;
 
-      await pool.query(
+      const inserted = await pool.query(
         `INSERT INTO active_games (room_id, dealer_position, current_player_position, pot, state)
-         VALUES ($1, $2, $3, $4, $5)`,
+         VALUES ($1, $2, $3, $4, jsonb_set($5::jsonb, '{version}', '1'))
+         RETURNING id`,
         [
           tableId,
           Number(ts.dealerPosition) || 0,
@@ -60,11 +111,22 @@ export async function persistEngineState(tableId: string, engine: PokerEngine): 
           stateJson,
         ]
       );
+      trackSavedRow(engine, inserted.rows?.[0]?.id, 1);
+    } else {
+      trackSavedRow(engine, result.rows?.[0]?.id, Number(result.rows?.[0]?.version));
     }
+    return 'saved';
   } catch (error) {
     // Log but don't throw - we don't want persistence failures to break gameplay
     // when running locally without a database
     console.warn('[engine-persistence] Failed to persist engine state:', error);
+    return 'failed';
+  }
+}
+
+function trackSavedRow(engine: PokerEngine, rowId: unknown, version: number): void {
+  if (typeof rowId === 'string' && Number.isFinite(version)) {
+    loadedFrom.set(engine, { rowId, version });
   }
 }
 
@@ -77,7 +139,7 @@ export async function restoreEngineFromDb(tableId: string): Promise<PokerEngine 
     const pool = getPool();
     
     const result = await pool.query(
-      `SELECT state FROM active_games WHERE room_id = $1 ORDER BY last_action_at DESC LIMIT 1`,
+      `SELECT id, state FROM active_games WHERE room_id = $1 ORDER BY last_action_at DESC LIMIT 1`,
       [tableId]
     );
     
@@ -93,9 +155,31 @@ export async function restoreEngineFromDb(tableId: string): Promise<PokerEngine 
       return null;
     }
     
-    return PokerEngine.fromSerialized(raw);
+    const engine = PokerEngine.fromSerialized(raw);
+    const version = Number((raw as { version?: unknown }).version);
+    trackSavedRow(engine, result.rows[0].id, Number.isFinite(version) ? version : 0);
+    return engine;
   } catch (error) {
     console.warn('[engine-persistence] Failed to restore engine from DB:', error);
+    return null;
+  }
+}
+
+/**
+ * Returns when the table's saved game last changed, or null if there is no saved
+ * game or the database is unavailable.
+ */
+export async function getLastActionAt(tableId: string): Promise<Date | null> {
+  try {
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT last_action_at FROM active_games WHERE room_id = $1 ORDER BY last_action_at DESC LIMIT 1`,
+      [tableId]
+    );
+    const value = result.rows[0]?.last_action_at;
+    return value ? new Date(value) : null;
+  } catch (error) {
+    console.warn('[engine-persistence] Failed to read last action time:', error);
     return null;
   }
 }

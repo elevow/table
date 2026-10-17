@@ -8,10 +8,16 @@ import {
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { runSupabaseAutoRunoutSync, clearSupabaseAutoRunout } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
-import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import {
+  getOrRestoreEngine,
+  persistEngineState,
+  StaleGameStateError,
+  STALE_STATE_RESPONSE,
+} from '../../../src/lib/poker/engine-persistence';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../../src/lib/shared/feature-flags';
 import type { Card, GameStage, TableState } from '../../../src/types/poker';
 import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -31,15 +37,20 @@ function getIo(res: NextApiResponse): SocketIOServer | null {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { tableId, playerId, action, amount } = (req.body || {}) as {
+  const { tableId, playerId: claimedPlayerId, action, amount, expectedTurnSeq } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
     action?: string;
     amount?: number;
+    // turnSeq of the state the player acted on; omitted by older clients
+    expectedTurnSeq?: number;
   };
 
-  if (!tableId || !playerId || !action) {
-    return res.status(400).json({ error: 'Missing tableId, playerId, or action' });
+  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  if (!playerId) return;
+
+  if (!tableId || !action) {
+    return res.status(400).json({ error: 'Missing tableId or action' });
   }
 
   try {
@@ -48,10 +59,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!engine) {
       return res.status(404).json({ error: 'No active game found for this table' });
     }
+    const currentState = engine.getState();
+
+    // Refuse an action made on an earlier state, e.g. a duplicate submit arriving after the first
+    // was applied and the turn came back to the same player on the next street
+    if (typeof expectedTurnSeq === 'number' && expectedTurnSeq !== (currentState.turnSeq || 0)) {
+      return res.status(409).json(STALE_STATE_RESPONSE);
+    }
     clearSupabaseAutoRunout(tableId);
 
     // Log current game state for debugging
-    const currentState = engine.getState();
     console.log('[action] Current activePlayer:', currentState.activePlayer, 'Action from:', playerId, 'Action:', action);
 
     // Snapshot community cards/stage before applying the action so we can detect premature board reveals
@@ -121,8 +138,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: e?.message || 'Action failed' });
     }
 
-    // Persist the updated engine state to database for serverless recovery
-    await persistEngineState(tableId, engine);
+    // Persist the updated engine state to database for serverless recovery. A conflict means
+    // another request (e.g. a duplicate submit) changed the game first, so this action is dropped.
+    if ((await persistEngineState(tableId, engine)) === 'conflict') {
+      return res.status(409).json(STALE_STATE_RESPONSE);
+    }
 
     // Get updated game state
     let gameState = engine.getState();
@@ -151,11 +171,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (issuedPrompt) {
       engine.setRunItTwicePrompt(issuedPrompt);
       gameState = engine.getState();
-      await persistEngineState(tableId, engine);
+      if ((await persistEngineState(tableId, engine)) === 'conflict') {
+        return res.status(409).json(STALE_STATE_RESPONSE);
+      }
     } else if (autoEligible) {
       engine.setAutoRunoutProgress(gameState.stage, gameState.communityCards);
       gameState = engine.getState();
-      await persistEngineState(tableId, engine);
+      if ((await persistEngineState(tableId, engine)) === 'conflict') {
+        return res.status(409).json(STALE_STATE_RESPONSE);
+      }
     }
 
     const enrichedState = await broadcastState(gameState, { action, playerId, amount });
@@ -175,7 +199,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Track whether we've already posted the hand result for auto-runout
       let handResultPosted = false;
       await runSupabaseAutoRunoutSync(tableId, engine, async (state, meta) => {
-        await persistEngineState(tableId, engine);
+        // Stop the runout rather than broadcast a state another request has replaced
+        if ((await persistEngineState(tableId, engine)) === 'conflict') throw new StaleGameStateError(tableId);
         await broadcastState(state, meta);
         // Post hand result to chat when auto-runout reaches showdown
         if (state.stage === 'showdown' && !handResultPosted) {
@@ -190,8 +215,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Sanitize the response for the requesting player - hide other players' hole cards
-    // unless it's showdown or an all-in situation
-    const sanitizedState = sanitizeStateForPlayer(enrichedState, playerId);
+    // unless it's showdown or an all-in situation. After a runout, answer with where it ended
+    // so the response doesn't roll this player's view back to before the runout.
+    const responseState = shouldScheduleAutoRunout ? enrichStateWithRunIt(tableId, engine.getState()) : enrichedState;
+    const sanitizedState = sanitizeStateForPlayer(responseState, playerId);
 
     return res.status(200).json({ success: true, gameState: sanitizedState });
   } catch (e: unknown) {

@@ -4,6 +4,7 @@ import { publishSeatClaimed, publishSeatState } from '../../../../src/lib/realti
 import { fetchRoomRebuyLimit } from '../../../../src/lib/shared/rebuy-limit';
 import { fetchRoomBuyIn } from '../../../../src/lib/shared/buyin-amount';
 import { getPlayerRebuyInfo, recordBuyin } from '../../../../src/lib/shared/rebuy-tracker';
+import { requirePlayer } from '../../../../src/lib/auth/auth-utils';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -12,15 +13,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    const { tableId, seatNumber, playerId, playerName, chips } = (req.body || {}) as {
+    const { tableId, seatNumber, playerId: claimedPlayerId, playerName } = (req.body || {}) as {
       tableId?: string;
       seatNumber?: number;
       playerId?: string;
       playerName?: string;
-      chips?: number;
     };
 
-    if (!tableId || !seatNumber || !playerId || !playerName) {
+    const playerId = await requirePlayer(req, res, claimedPlayerId);
+    if (!playerId) return;
+
+    if (!tableId || !seatNumber || !playerName) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -53,8 +56,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(403).json({ error: message, rebuyLimit, rebuysUsed });
     }
 
-    // Use chips from request if provided, otherwise use room's buyIn
-    const chipAmount = Number(chips) || buyInAmount;
+    // Stack size always comes from the room's buy-in; a client-sent chip count is ignored
+    const chipAmount = buyInAmount;
 
     // Claim seat
     seats[seatNumber] = { playerId, playerName, chips: chipAmount };

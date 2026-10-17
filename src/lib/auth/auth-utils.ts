@@ -1,5 +1,6 @@
-import type { NextApiRequest } from 'next';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../database/pool';
+import { isAdminEmail } from '../../utils/roleUtils';
 
 /**
  * Extract session token from request headers or cookies
@@ -64,4 +65,66 @@ export async function requireAuth(req: NextApiRequest): Promise<string> {
   }
   
   return userId;
+}
+
+/**
+ * Authenticate the caller of a game route and confirm they are acting as themselves.
+ * Returns the authenticated user ID, or sends 401/403 and returns null.
+ * A claimedPlayerId from the request is optional; when present it must match the session.
+ */
+export async function requirePlayer(
+  req: NextApiRequest,
+  res: NextApiResponse,
+  claimedPlayerId?: unknown
+): Promise<string | null> {
+  const userId = await getAuthenticatedUserId(req);
+
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return null;
+  }
+
+  if (claimedPlayerId != null && claimedPlayerId !== '' && String(claimedPlayerId) !== userId) {
+    res.status(403).json({ error: 'playerId does not match the authenticated user' });
+    return null;
+  }
+
+  return userId;
+}
+
+/**
+ * Require an authenticated admin session (email listed in ADMIN_EMAILS).
+ * Returns the admin's user ID, or sends 401/403 and returns null.
+ */
+export async function requireAdminSession(
+  req: NextApiRequest,
+  res: NextApiResponse
+): Promise<string | null> {
+  const token = getAuthToken(req);
+  let user: { id: string; email: string | null } | undefined;
+  if (token && token !== 'null') {
+    try {
+      const result = await getPool().query(
+        `SELECT u.id, u.email FROM users u
+         JOIN auth_tokens at ON u.id = at.user_id
+         WHERE at.token_hash = $1 AND at.type = 'session' AND at.expires_at > NOW()`,
+        [token]
+      );
+      user = result.rows[0];
+    } catch (error) {
+      console.error('Error verifying admin session:', error);
+    }
+  }
+
+  if (!user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return null;
+  }
+
+  if (!user.email || !isAdminEmail(user.email)) {
+    res.status(403).json({ error: 'Admin access required' });
+    return null;
+  }
+
+  return user.id;
 }

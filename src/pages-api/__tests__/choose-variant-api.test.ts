@@ -38,6 +38,12 @@ jest.mock('../../../src/lib/game/variant-mapping', () => ({
 }));
 
 import { NextApiRequest, NextApiResponse } from 'next';
+// Simulate a signed-in caller whose session matches the playerId they send
+const mockRequirePlayer = jest.fn(async (_req: any, _res: any, claimed?: unknown) => (claimed ? String(claimed) : 'p1'));
+jest.mock('../../../src/lib/auth/auth-utils', () => ({
+  requirePlayer: (...args: any[]) => mockRequirePlayer(...args),
+}));
+
 import handler from '../../../pages/api/games/choose-variant';
 import * as enginePersistence from '../../../src/lib/poker/engine-persistence';
 import * as publisher from '../../../src/lib/realtime/publisher';
@@ -60,9 +66,10 @@ function createRes(): { status: jest.Mock; json: jest.Mock } & Partial<NextApiRe
   return res;
 }
 
+// With the button on seat index 0, the next player (p1) chooses the variant
 const AWAITING_STATE = {
   stage: 'awaiting-dealer-choice',
-  players: [],
+  players: [{ id: 'p0' }, { id: 'p1' }],
   pot: 0,
   communityCards: [],
   dealerPosition: 0,
@@ -101,15 +108,19 @@ describe('/api/games/choose-variant', () => {
     const res = createRes();
     await handler(req as NextApiRequest, res as NextApiResponse);
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Missing tableId or playerId' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Missing tableId' });
   });
 
-  it('should return 400 when playerId is missing', async () => {
-    const req = createReq('POST', { tableId: 'table-1', variant: 'texas-holdem' });
+  it('should stop without touching the game when the caller is not authenticated', async () => {
+    mockRequirePlayer.mockImplementationOnce(async (_req: any, res: any) => {
+      res.status(401).json({ error: 'Authentication required' });
+      return null;
+    });
+    const req = createReq('POST', { tableId: 'table-1', playerId: 'p1', variant: 'texas-holdem' });
     const res = createRes();
     await handler(req as NextApiRequest, res as NextApiResponse);
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Missing tableId or playerId' });
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(mockGetOrRestoreEngine).not.toHaveBeenCalled();
   });
 
   it('should return 400 for an invalid variant', async () => {
@@ -160,6 +171,23 @@ describe('/api/games/choose-variant', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ error: 'Game is not waiting for a dealer variant choice' })
     );
+  });
+
+  it('should return 403 without changing the game when the caller is not the chooser', async () => {
+    const engine = {
+      getState: jest.fn().mockReturnValue(AWAITING_STATE),
+      setVariant: jest.fn(),
+      setBettingMode: jest.fn(),
+      startNewHand: jest.fn(),
+    };
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    const req = createReq('POST', { tableId: 'table-1', playerId: 'p0', variant: 'omaha' });
+    const res = createRes();
+    await handler(req as NextApiRequest, res as NextApiResponse);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(engine.setVariant).not.toHaveBeenCalled();
+    expect(engine.startNewHand).not.toHaveBeenCalled();
+    expect(mockPersistEngineState).not.toHaveBeenCalled();
   });
 
   it('should apply variant, start hand, persist, broadcast and return 200', async () => {
@@ -222,7 +250,7 @@ describe('/api/games/choose-variant', () => {
     };
     mockGetOrRestoreEngine.mockResolvedValue(engine);
 
-    const roomConfig = { chosenVariant: 'texas-holdem', dcStepCount: 2 };
+    const roomConfig = { chosenVariant: 'texas-holdem' };
     const roomConfigs = new Map([['table-1', roomConfig]]);
     (global as any).roomConfigs = roomConfigs;
 
@@ -231,7 +259,6 @@ describe('/api/games/choose-variant', () => {
     await handler(req as NextApiRequest, res as NextApiResponse);
 
     expect(roomConfig.chosenVariant).toBe('five-card-stud');
-    expect(roomConfig.dcStepCount).toBe(0);
     expect(res.status).toHaveBeenCalledWith(200);
   });
 

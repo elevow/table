@@ -3,6 +3,7 @@ import { publishGameStateUpdate, publishAwaitingDealerChoice, publishRebuyPrompt
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { fetchRoomRebuyLimit, fetchRoomRebuyAmount } from '../../../src/lib/shared/rebuy-limit';
 import { getPlayerRebuyInfo } from '../../../src/lib/shared/rebuy-tracker';
 import {
@@ -12,7 +13,8 @@ import {
   setPendingRebuy,
 } from '../../../src/lib/server/rebuy-state';
 import { autoStandPlayer } from '../../../src/lib/server/rebuy-actions';
-import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
+import { getDealerChoiceChooserId } from '../../../src/lib/poker/dealer-choice';
 import { getPool } from '../../../src/lib/database/pool';
 import { GameService } from '../../../src/lib/services/game-service';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
@@ -23,7 +25,6 @@ interface RoomConfiguration {
   variant?: string;
   bettingMode?: 'no-limit' | 'pot-limit';
   chosenVariant?: string;
-  dcStepCount?: number;
 }
 
 interface BlindLevels {
@@ -62,15 +63,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { tableId, playerId, variant: rawVariant } = req.body;
+    const { tableId, playerId: claimedPlayerId, variant: rawVariant } = req.body;
+
+    const playerId = await requirePlayer(req, res, claimedPlayerId);
+    if (!playerId) return;
     
     // Validate variant if provided
     const isValidVariant = (v: unknown): v is GameVariant => 
       typeof v === 'string' && DEFAULT_DEALERS_CHOICE_VARIANTS.includes(v as GameVariant);
     const variant: GameVariant | undefined = isValidVariant(rawVariant) ? rawVariant : undefined;
 
-    if (!tableId || !playerId) {
-      return res.status(400).json({ error: 'Missing tableId or playerId' });
+    if (!tableId) {
+      return res.status(400).json({ error: 'Missing tableId' });
     }
 
     // Get the active game engine from memory or restore from database
@@ -106,7 +110,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             mode: isDealersChoiceDb ? 'dealers-choice' : 'fixed',
             allowedVariants: isDealersChoiceDb ? DEFAULT_DEALERS_CHOICE_VARIANTS : undefined,
             chosenVariant: isDealersChoiceDb ? (config.chosenVariant || 'texas-holdem') : undefined,
-            dcStepCount: isDealersChoiceDb ? (config.dcStepCount || 0) : undefined,
           };
           
           // Cache the restored roomConfig in memory for subsequent requests
@@ -152,6 +155,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const playerCount = Array.isArray(currentState.players) ? currentState.players.length : 0;
       if (playerCount < 2) {
         return res.status(409).json({ error: 'Need at least two players to start the next hand', gameState: currentState });
+      }
+      if (!currentState.players.some((p: any) => p?.id === playerId)) {
+        return res.status(403).json({ error: 'Only a player at this table can start the next hand' });
+      }
+      // Only the announced chooser may pick the variant, and only while the game waits for that choice
+      if (isDealersChoice && variant) {
+        if (!awaitingDealerChoiceStage) {
+          return res.status(409).json({ error: 'Game is not waiting for a dealer variant choice' });
+        }
+        if (getDealerChoiceChooserId(currentState) !== playerId) {
+          return res.status(403).json({ error: 'Only the dealer can choose the variant' });
+        }
       }
 
       // Check for busted players and issue rebuy prompts
@@ -200,7 +215,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json({ success: true, awaitingRebuyDecisions: true, pending: pendingRebuyCount(tableId) });
       }
 
-      const applyVariantAndStart = async ({ chosenVariant, dcStepCount }: { chosenVariant?: GameVariant; dcStepCount?: number } = {}) => {
+      const applyVariantAndStart = async ({ chosenVariant }: { chosenVariant?: GameVariant } = {}) => {
         let mutated = false;
         if (chosenVariant) {
           if (typeof engine.setVariant === 'function') {
@@ -213,10 +228,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           roomConfig.chosenVariant = chosenVariant;
           mutated = true;
         }
-        if (typeof dcStepCount === 'number') {
-          roomConfig.dcStepCount = dcStepCount;
-          mutated = true;
-        }
         if (mutated) {
           persistRoomConfig();
         }
@@ -227,7 +238,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         engine.startNewHand();
 
         // Persist engine state for serverless recovery
-        await persistEngineState(tableId, engine);
+        if ((await persistEngineState(tableId, engine)) === 'conflict') {
+          return res.status(409).json(STALE_STATE_RESPONSE);
+        }
 
         const gameState = engine.getState();
         const enrichedState = enrichStateWithRunIt(tableId, gameState);
@@ -259,13 +272,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             state.currentBet = 0;
             state.minRaise = state.bigBlind;
           }
+          // Persist the pause so a restored engine still accepts the dealer's choice
+          if ((await persistEngineState(tableId, engine)) === 'conflict') {
+            return res.status(409).json(STALE_STATE_RESPONSE);
+          }
         }
-        const rawDealerIdx = typeof state?.dealerPosition === 'number' ? state.dealerPosition : 0;
-        const dealerIdx = playerCount > 0 ? ((rawDealerIdx + 1) % playerCount) : rawDealerIdx;
-        const dealerId = Array.isArray(state?.players) && state?.players?.[dealerIdx]?.id ? String(state.players[dealerIdx].id) : undefined;
-
-        roomConfig.dcStepCount = 0;
-        persistRoomConfig();
+        const dealerId = getDealerChoiceChooserId(state);
 
         await publishAwaitingDealerChoice(tableId, {
           dealerId: dealerId || playerId,
@@ -277,21 +289,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (isDealersChoice) {
         if (variant) {
-          return applyVariantAndStart({ chosenVariant: variant, dcStepCount: 0 });
+          return applyVariantAndStart({ chosenVariant: variant });
         }
 
         if (awaitingDealerChoiceStage) {
           return res.status(200).json({ success: true, awaitingChoice: true });
         }
 
-        const threshold = (playerCount > 0 ? playerCount : 1) + 1;
-        const nextStep = Number(roomConfig.dcStepCount || 0) + 1;
+        // A round is players + 1 hands, so the next chooser is also the next dealer. The count
+        // comes from the saved game state; server memory doesn't survive across instances.
+        const roundLength = (playerCount > 0 ? playerCount : 1) + 1;
+        const handsThisRound = Number(currentState.dealersChoiceHandCount) || 0;
 
-        if (nextStep >= threshold) {
+        if (handsThisRound >= roundLength) {
           return promptDealerChoice();
         }
 
-        return applyVariantAndStart({ dcStepCount: nextStep });
+        return applyVariantAndStart();
       }
 
       // Regular game: start next hand with same variant

@@ -149,7 +149,7 @@ describe('engine-persistence', () => {
       mockQuery.mockRejectedValue(new Error('Database connection failed'));
 
       // Should not throw
-      await expect(persistEngineState('table-1', mockEngine)).resolves.toBeUndefined();
+      await expect(persistEngineState('table-1', mockEngine)).resolves.toBe('failed');
 
       expect(mockEngine.serialize).toHaveBeenCalled();
     });
@@ -162,10 +162,70 @@ describe('engine-persistence', () => {
       } as unknown as PokerEngine;
 
       // Should not throw
-      await expect(persistEngineState('table-1', mockEngine)).resolves.toBeUndefined();
+      await expect(persistEngineState('table-1', mockEngine)).resolves.toBe('failed');
 
       expect(mockEngine.serialize).toHaveBeenCalled();
       expect(mockQuery).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('version-checked saves', () => {
+    const SERIALIZED = {
+      tableState: { tableId: 'table-1', players: [], smallBlind: 5, bigBlind: 10, pot: 0 },
+      deck: [],
+    };
+
+    // Restore an engine from a saved row so later saves are checked against its version
+    async function restoreFrom(row: { id: string; state: any }) {
+      const engine = { getState: jest.fn(), serialize: jest.fn().mockReturnValue(SERIALIZED) } as unknown as PokerEngine;
+      (PokerEngine.fromSerialized as jest.Mock).mockReturnValue(engine);
+      mockQuery.mockResolvedValueOnce({ rows: [row], rowCount: 1 });
+      const restored = await restoreEngineFromDb('table-1');
+      expect(restored).toBe(engine);
+      mockQuery.mockClear();
+      return engine;
+    }
+
+    it('saves only if the row still has the version the engine was loaded at', async () => {
+      const engine = await restoreFrom({ id: 'row-1', state: { ...SERIALIZED, version: 4 } });
+      mockQuery.mockResolvedValue({ rows: [], rowCount: 1 });
+
+      await expect(persistEngineState('table-1', engine)).resolves.toBe('saved');
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+      const [sql, params] = mockQuery.mock.calls[0];
+      expect(sql).toContain("COALESCE((state->>'version')::bigint, 0) = $3");
+      expect(params).toEqual([JSON.stringify(SERIALIZED), 'row-1', 4]);
+
+      // The next save from the same request expects the version it just wrote
+      await persistEngineState('table-1', engine);
+      expect(mockQuery.mock.calls[1][1]).toEqual([JSON.stringify(SERIALIZED), 'row-1', 5]);
+    });
+
+    it('reports a conflict and writes nothing when another request saved first', async () => {
+      const engine = await restoreFrom({ id: 'row-1', state: { ...SERIALIZED, version: 4 } });
+      mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
+
+      await expect(persistEngineState('table-1', engine)).resolves.toBe('conflict');
+      // No fallback INSERT for a stale engine
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats a state saved before versioning as version 0', async () => {
+      const engine = await restoreFrom({ id: 'row-1', state: SERIALIZED });
+      mockQuery.mockResolvedValue({ rows: [], rowCount: 1 });
+
+      await persistEngineState('table-1', engine);
+      expect(mockQuery.mock.calls[0][1]).toEqual([JSON.stringify(SERIALIZED), 'row-1', 0]);
+    });
+
+    it('tracks the row and version written for a new engine', async () => {
+      const engine = { serialize: jest.fn().mockReturnValue(SERIALIZED) } as unknown as PokerEngine;
+      mockQuery.mockResolvedValueOnce({ rows: [{ id: 'row-9', version: 3 }], rowCount: 1 });
+      await expect(persistEngineState('table-1', engine)).resolves.toBe('saved');
+
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 });
+      await persistEngineState('table-1', engine);
+      expect(mockQuery.mock.calls[1][1]).toEqual([JSON.stringify(SERIALIZED), 'row-9', 3]);
     });
   });
 
@@ -220,7 +280,7 @@ describe('engine-persistence', () => {
 
       expect(result).toBe(mockRestoredEngine);
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT state FROM active_games'),
+        expect.stringContaining('SELECT id, state FROM active_games'),
         ['table-1']
       );
       expect(mockQuery.mock.calls[0][0]).toMatch(/ORDER BY last_action_at DESC/);

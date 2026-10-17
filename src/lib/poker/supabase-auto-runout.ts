@@ -8,12 +8,13 @@ type EngineLike = {
   runItTwiceNow?: () => void;
   finalizeToShowdown?: () => void;
   runStudAllInToShowdown?: () => void;
+  runStudAllInStreet?: () => void;
   prepareRabbitPreview?: (opts?: { community?: Card[]; known?: Card[] }) => void;
   setAutoRunoutProgress?: (stage: TableState['stage'], communityCards: Card[]) => void;
 };
 
 type TimerMap = Map<string, NodeJS.Timeout[]>;
-export const AUTO_RUNOUT_DELAY_MS = 2000;
+export const AUTO_RUNOUT_DELAY_MS = 3000;
 
 const getTimerMap = (): TimerMap => {
   const globalObj = global as any;
@@ -133,10 +134,15 @@ export const runSupabaseAutoRunoutSync = async (
     if (state.runItTwicePrompt) return false;
     const variant = state.variant;
     if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
-      if (typeof engine.runStudAllInToShowdown !== 'function') return false;
-      engine.runStudAllInToShowdown();
-      const finalState = engine.getState();
-      await broadcast({ ...finalState, activePlayer: '' }, { action: 'auto_runout_showdown' });
+      // Deal one street at a time so each card is seen before the next, then settle the hand
+      if (typeof engine.runStudAllInStreet !== 'function') return false;
+      for (let streets = 0; engine.getState().stage !== 'showdown' && streets < 6; streets++) {
+        if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
+        engine.runStudAllInStreet();
+        const current = engine.getState();
+        const action = current.stage === 'showdown' ? 'auto_runout_showdown' : `auto_runout_${current.stage}`;
+        await broadcast({ ...current, activePlayer: '' }, { action });
+      }
       return true;
     }
     const communityLen = Array.isArray(state.communityCards) ? state.communityCards.length : 0;

@@ -18,6 +18,12 @@ jest.mock('../../../src/lib/poker/supabase-auto-runout', () => ({
   runSupabaseAutoRunoutSync: jest.fn(),
 }));
 
+// Simulate a signed-in caller whose session matches the playerId they send
+const mockRequirePlayer = jest.fn(async (_req: any, _res: any, claimed?: unknown) => (claimed ? String(claimed) : 'player-1'));
+jest.mock('../../../src/lib/auth/auth-utils', () => ({
+  requirePlayer: (...args: any[]) => mockRequirePlayer(...args),
+}));
+
 import handler from '../../../pages/api/games/enable-rit';
 import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
 

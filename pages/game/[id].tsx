@@ -18,6 +18,8 @@ import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import type { GameSettings as GameSettingsType } from '../../src/components/GameSettings';
 import { formatChips } from '../../src/utils/chip-display';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../src/lib/shared/feature-flags';
+import { authHeaders } from '../../src/utils/auth-headers';
+import { resolveSessionUserId } from '../../src/utils/session-identity';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -265,9 +267,11 @@ export default function GamePage() {
           
           // If this is a new hand and we're a participant but don't have our cards,
           // fetch our player-specific state from the API
-          if (isNewHand && missingMyCards && isParticipant && shouldShowCards && effectivePlayerId && id) {
+          // Stud deals the seventh-street card face down, so a broadcast can't carry ours
+          const reachedSeventh = gameState.stage === 'seventh' && pokerStageRef.current !== 'seventh';
+          if ((isNewHand || reachedSeventh) && missingMyCards && isParticipant && shouldShowCards && effectivePlayerId && id) {
             console.log('🎴 New hand detected without cards, fetching player-specific state...');
-            fetch(`/api/games/state?tableId=${id}&playerId=${effectivePlayerId}`)
+            fetch(`/api/games/state?tableId=${id}&playerId=${effectivePlayerId}`, { headers: authHeaders() })
               .then(resp => {
                 if (!resp.ok) {
                   throw new Error(`HTTP ${resp.status}`);
@@ -303,15 +307,9 @@ export default function GamePage() {
             const newHoleCards = newMe?.holeCards;
             const hadCards = Array.isArray(prevHoleCards) && prevHoleCards.length > 0;
             const missingCards = !Array.isArray(newHoleCards) || newHoleCards.length === 0;
-            
-            // If the new state already has our cards visible (showdown, all-in, or API response), use them
-            if (!missingCards) return gameState;
-            
-            // If we had no previous cards to preserve, use the new state as-is
-            if (!hadCards) return gameState;
-            
-            // Preserve our hole cards by merging them into the new state
-            const mergedPlayers = Array.isArray(gameState.players)
+
+            // Preserve our hole cards (Hold'em/Omaha) by merging them into the new state
+            const mergedPlayers = (hadCards && missingCards && Array.isArray(gameState.players))
               ? gameState.players.map((p: any) => {
                   if (p.id === resolvedPlayerId) {
                     return { ...p, holeCards: prevHoleCards };
@@ -319,16 +317,21 @@ export default function GamePage() {
                   return p;
                 })
               : gameState.players;
-            
-            // Also preserve stud state down cards for current player if applicable
+
+            // Stud keeps cards in studState rather than holeCards, so preserve our down cards separately.
+            // Only within the same hand: our earlier up cards must still lead the new up cards.
             let mergedStudState = gameState.studState;
-            if (gameState.studState?.playerCards && prevState.studState?.playerCards) {
+            if (!isNewHand && gameState.studState?.playerCards && prevState.studState?.playerCards) {
               const prevStudCards = prevState.studState.playerCards[resolvedPlayerId];
               const newStudCards = gameState.studState.playerCards[resolvedPlayerId];
               const hadDownCards = Array.isArray(prevStudCards?.downCards) && prevStudCards.downCards.length > 0;
               const missingDownCards = !Array.isArray(newStudCards?.downCards) || newStudCards.downCards.length === 0;
-              
-              if (hadDownCards && missingDownCards) {
+              const prevUp: any[] = Array.isArray(prevStudCards?.upCards) ? prevStudCards.upCards : [];
+              const newUp: any[] = Array.isArray(newStudCards?.upCards) ? newStudCards.upCards : [];
+              const sameHand = prevUp.length > 0 && prevUp.length <= newUp.length
+                && prevUp.every((c: any, i: number) => c?.rank === newUp[i]?.rank && c?.suit === newUp[i]?.suit);
+
+              if (hadDownCards && missingDownCards && sameHand) {
                 mergedStudState = {
                   ...gameState.studState,
                   playerCards: {
@@ -478,7 +481,7 @@ export default function GamePage() {
           typeof id === 'string' &&
           playerId
         ) {
-          fetch(`/api/games/state?tableId=${encodeURIComponent(id)}&playerId=${encodeURIComponent(playerId)}`)
+          fetch(`/api/games/state?tableId=${encodeURIComponent(id)}&playerId=${encodeURIComponent(playerId)}`, { headers: authHeaders() })
             .then(response => {
               if (!response.ok) throw new Error(`HTTP ${response.status}`);
               return response.json();
@@ -661,7 +664,7 @@ export default function GamePage() {
           console.log('[client auto] Requesting next hand after 5s');
           const response = await fetch('/api/games/next-hand', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
             body: JSON.stringify({ tableId: id, playerId }),
           });
           if (!response.ok) {
@@ -752,15 +755,14 @@ export default function GamePage() {
       const playerNumber = playerId.replace(/\D/g, '').slice(-2) || Math.floor(Math.random() * 99).toString().padStart(2, '0');
       return `Player ${playerNumber}`;
     })();
-    const startingChips = roomConfig?.buyIn || 1000; // Use room's buy-in or default to 1000
 
     setClaimingSeat(seatNumber);
 
     try {
       const resp = await fetch('/api/games/seats/claim', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tableId: id, seatNumber, playerId, playerName, chips: startingChips })
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ tableId: id, seatNumber, playerId, playerName })
       });
       if (!resp.ok) {
         const e = await resp.json().catch(() => ({}));
@@ -769,6 +771,8 @@ export default function GamePage() {
         return;
       }
       const data = await resp.json();
+      // The server sets the stack from the room's buy-in
+      const startingChips = Number(data?.chips) || roomConfig?.buyIn || 1000;
       // Update local state and storage
       setSeatAssignments(prev => ({
         ...prev,
@@ -810,7 +814,7 @@ export default function GamePage() {
     try {
       fetch('/api/games/seats/stand', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ tableId: id, seatNumber: seatToVacate, playerId })
       }).catch(() => {});
     } catch {}
@@ -834,29 +838,15 @@ export default function GamePage() {
         playerName: (assignment as any)!.playerName,
         chips: (assignment as any)!.chips
       }));
-    const variant = roomConfig?.variant || undefined;
-    const bettingMode = roomConfig?.bettingMode || (variant === 'omaha' || variant === 'omaha-hi-lo' ? 'pot-limit' : undefined);
-    const sb = roomConfig?.sb;
-    const bb = roomConfig?.bb;
-    const numberOfRebuys = roomConfig?.numberOfRebuys;
-
-    // HTTP API for game start
+    // HTTP API for game start; the server takes the game type and blinds from the room
     try {
       const response = await fetch(`/api/games/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           tableId: id,
           playerId,
           seatedPlayers: seated,
-          variant,
-          initialChoice: 'texas-holdem',
-          bettingMode,
-          smallBlind: sb,
-          bigBlind: bb,
-          sb,
-          bb,
-          numberOfRebuys,
         }),
       });
 
@@ -902,18 +892,32 @@ export default function GamePage() {
     try {
       const response = await fetch('/api/games/action', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           tableId: id,
           playerId,
           action,
           amount,
+          // The decision this click answers; the server refuses it if the game has moved on
+          expectedTurnSeq: typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
         }),
       });
 
       if (!response.ok) {
         const err = await response.json();
         console.error('Poker action failed:', err);
+        if (err?.code === 'STALE_GAME_STATE') {
+          // This view was behind the server; refresh it so the next action uses the current state
+          try {
+            const latest = await fetch(`/api/games/state?tableId=${id}`, { headers: authHeaders() });
+            if (latest.ok) {
+              const latestData = await latest.json();
+              if (latestData?.gameState) setPokerGameState(latestData.gameState);
+            }
+          } catch (refreshError) {
+            console.warn('Failed to refresh game state after a stale action:', refreshError);
+          }
+        }
       } else {
         // Use the API response to update game state
         // The API returns a sanitized state that includes the current player's hole cards
@@ -1291,7 +1295,7 @@ export default function GamePage() {
     try {
       const response = await fetch('/api/games/enable-rit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ tableId: id, playerId, runs }),
       });
       
@@ -1498,7 +1502,9 @@ export default function GamePage() {
       return '-bottom-16 left-1/2 transform -translate-x-1/2';
     };
 
-
+    // Seat records keep the buy-in; once the player is in the game, the engine stack is the truth
+    const seatGamePlayer = assignment ? pokerGameState?.players?.find((p: any) => p.id === assignment.playerId) : undefined;
+    const seatChips = Number(seatGamePlayer ? seatGamePlayer.stack : assignment?.chips) || 0;
 
     return (
       <React.Fragment key={seatNumber}>
@@ -1543,7 +1549,7 @@ export default function GamePage() {
                       : (!seatStateReady ? 'Please wait… syncing seats' : 'Seat not available')
               : isCurrentPlayer
                 ? 'Your seat - click Stand Up button to leave'
-                : `${assignment.playerName} - $${assignment.chips || 0}`
+                : `${assignment.playerName} - $${seatChips}`
           }
         >
           {isEmpty ? (
@@ -1597,8 +1603,8 @@ export default function GamePage() {
               </div>
               <div className="text-green-600 dark:text-green-400 font-bold">
                 {showStackInBB 
-                  ? formatChips(assignment.chips || 20, pokerGameState?.bigBlind || null, true)
-                  : `$${assignment.chips || 20}`
+                  ? formatChips(seatChips, pokerGameState?.bigBlind || null, true)
+                  : `$${seatChips}`
                 }
               </div>
               {/* Show additional game state info if player is in active game */}
@@ -1833,74 +1839,44 @@ export default function GamePage() {
     fetchRoomInfo();
   }, [id]);
 
-  // Initialize player ID only once on component mount
+  // Initialize player ID only once on component mount. Game routes reject a playerId that
+  // differs from the session user, so a signed-in player always acts as that user.
   useEffect(() => {
-    const initializePlayerId = async () => {
-      try {
-        // Get auth token from localStorage
-        const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-        
-        if (authToken) {
-          // Try to get authenticated user ID from server
-          const response = await fetch('/api/auth/me', {
-            headers: {
-              'Authorization': `Bearer ${authToken}`
-            }
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            console.log('=== Game Page Auth Success ===');
-            console.log('Authenticated user ID:', data.userId);
-            console.log('Using authenticated ID for avatar lookup');
-            console.log('=== End Auth Success ===');
-            
-            setPlayerId(data.userId);
-            // Store for future use
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('authenticated_user_id', data.userId);
-            }
-            return;
-          }
-        }
-        
-        // Fallback: generate UUID if authentication fails
-        console.log('=== Game Page Auth Fallback ===');
-        console.log('No auth token or authentication failed, using fallback UUID');
-        
-        const generateUUID = () => {
-          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-          });
-        };
-        
-        const fallbackId = typeof window !== 'undefined' && localStorage.getItem('player_id') || generateUUID();
-        setPlayerId(fallbackId);
-        if (typeof window !== 'undefined') localStorage.setItem('player_id', fallbackId);
-        
-        console.log('Fallback playerId set to:', fallbackId);
-        console.log('=== End Auth Fallback ===');
-        
-      } catch (error) {
-        console.error('Error initializing player ID:', error);
-        // Use fallback UUID on error
-        const generateUUID = () => {
-          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-          });
-        };
-        
-        const errorFallbackId = generateUUID();
-        setPlayerId(errorFallbackId);
-        console.log('Error fallback playerId set to:', errorFallbackId);
-      }
+    const generateUUID = () => {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
     };
-    
-    // Initialize player ID asynchronously
+
+    const initializePlayerId = async () => {
+      const sessionUserId = await resolveSessionUserId();
+      if (sessionUserId) {
+        setPlayerId(sessionUserId);
+        try {
+          localStorage.setItem('authenticated_user_id', sessionUserId);
+        } catch {
+          // Storage unavailable; the in-memory ID is enough
+        }
+        return;
+      }
+
+      // No confirmed session: watch as a spectator. Game actions need a session and will be refused.
+      console.log('No confirmed session; viewing the table as a spectator');
+      let fallbackId = '';
+      try {
+        fallbackId = localStorage.getItem('player_id') || '';
+        if (!fallbackId) {
+          fallbackId = generateUUID();
+          localStorage.setItem('player_id', fallbackId);
+        }
+      } catch {
+        fallbackId = fallbackId || generateUUID();
+      }
+      setPlayerId(fallbackId);
+    };
+
     initializePlayerId();
   }, []); // Empty dependency array - only run once on mount
 
@@ -2056,7 +2032,7 @@ export default function GamePage() {
       // Restore active game state on reload so players are returned to their seat mid-hand
       if (!alive) return;
       try {
-        const gsResp = await fetch(`/api/games/state?tableId=${id}&playerId=${playerId}`);
+        const gsResp = await fetch(`/api/games/state?tableId=${id}&playerId=${playerId}`, { headers: authHeaders() });
         if (gsResp.ok) {
           const gsData = await gsResp.json();
           if (!alive) return;
@@ -2158,9 +2134,11 @@ export default function GamePage() {
     }
   }, [id, playerId, maxPlayers, lastSeatStorageKey, seatStateReady]);
 
-  // Sync playerId with canonical seat assignment to avoid mismatched prompts/actions
+  // Restore the player's remembered seat. The player ID always comes from the session; a
+  // remembered seat held by a different player (another account in this browser) is forgotten
+  // rather than adopted, since acting under that player's ID would be refused by the server.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !playerId) return;
     const seatNumberFromState = currentPlayerSeat ?? null;
     const seatNumberFromStorage = readSeatNumberFromStorage(lastSeatStorageKey);
     const candidateSeatNumber = seatNumberFromState ?? seatNumberFromStorage;
@@ -2168,32 +2146,18 @@ export default function GamePage() {
     const assignment = seatAssignments?.[candidateSeatNumber];
     if (!assignment || !assignment.playerId) return;
 
-    const savedPlayerName = localStorage.getItem('playerName');
-    if (savedPlayerName && assignment.playerName && assignment.playerName !== savedPlayerName) {
+    if (assignment.playerId !== playerId) {
+      if (seatNumberFromState === null) {
+        persistSeatNumber(lastSeatStorageKey, null);
+      }
       return;
     }
+    if (seatNumberFromState === candidateSeatNumber) return;
 
-    if (assignment.playerId === playerId) return;
-
-    console.log('[identity-sync] Updating local playerId from seat assignment', {
-      from: playerId,
-      to: assignment.playerId,
-      seat: candidateSeatNumber,
-    });
-    setPlayerId(assignment.playerId);
     setCurrentPlayerSeat(candidateSeatNumber);
     setPlayerChips(assignment.chips || 0);
     persistSeatNumber(lastSeatStorageKey, candidateSeatNumber);
-    try {
-      localStorage.setItem('player_id', assignment.playerId);
-      localStorage.setItem('authenticated_user_id', assignment.playerId);
-      if (tableId) {
-        localStorage.setItem(`chips_${assignment.playerId}_${tableId}`, String(assignment.chips || 0));
-      }
-    } catch (err) {
-      console.warn('Failed to persist synced player identity:', err);
-    }
-  }, [seatAssignments, currentPlayerSeat, playerId, lastSeatStorageKey, tableId]);
+  }, [seatAssignments, currentPlayerSeat, playerId, lastSeatStorageKey]);
 
   // Toggle settings component
   const toggleSettings = () => {
@@ -2232,7 +2196,7 @@ export default function GamePage() {
     try {
       const response = await fetch('/api/games/rebuy-decision', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ tableId: id, playerId, decision }),
       });
       const data = await response.json();
@@ -2285,7 +2249,7 @@ export default function GamePage() {
         try {
           const response = await fetch('/api/games/seats/stand', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
             body: JSON.stringify({ tableId: id, seatNumber: seatToVacate, playerId })
           });
           if (!response.ok) {
@@ -2441,7 +2405,7 @@ export default function GamePage() {
                               if (!id || !playerId) return;
                               const response = await fetch('/api/games/next-hand', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: { 'Content-Type': 'application/json', ...authHeaders() },
                                 body: JSON.stringify({ tableId: id, playerId, variant: selectedVariantDC }),
                               });
                               if (!response.ok) {

@@ -1,4 +1,16 @@
+import { randomInt } from 'crypto';
 import { Card } from '../../types/poker';
+
+/**
+ * Fisher-Yates shuffle using the operating system's cryptographic random source.
+ * Math.random is predictable from its outputs, so it must not decide card order.
+ */
+function secureShuffle(cards: Card[]): void {
+  for (let i = cards.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [cards[i], cards[j]] = [cards[j], cards[i]];
+  }
+}
 
 export class DeckManager {
   private deck: Card[] = [];
@@ -18,10 +30,7 @@ export class DeckManager {
   }
 
   private shuffleDeck(): void {
-    for (let i = this.deck.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [this.deck[i], this.deck[j]] = [this.deck[j], this.deck[i]];
-    }
+    secureShuffle(this.deck);
   }
 
   public dealCard(): Card | undefined {
@@ -69,7 +78,7 @@ export class DeckManager {
         if (!excluded.has(key)) full.push({ suit, rank });
       }
     }
-    // Deterministic shuffle if seed provided; else random
+    // Deterministic shuffle if seed provided; else cryptographically random
     dm.deck = full;
     if (seed !== undefined) {
       // Simple LCG-based shuffle for determinism within tests
@@ -80,11 +89,7 @@ export class DeckManager {
         [dm.deck[i], dm.deck[j]] = [dm.deck[j], dm.deck[i]];
       }
     } else {
-      // randomize a bit
-      for (let i = dm.deck.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [dm.deck[i], dm.deck[j]] = [dm.deck[j], dm.deck[i]];
-      }
+      secureShuffle(dm.deck);
     }
     return dm;
   }

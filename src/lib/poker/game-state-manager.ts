@@ -34,7 +34,7 @@ export class GameStateManager {
     // Default legacy mapping (fallback): preflop -> position 1; postflop -> position 2
     let activePlayer: Player | undefined;
     if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
-      // Stud rules: on third street, bring-in (lowest upcard) acts first; on later streets, highest showing upcards acts first.
+      // Stud rules: on third street, the player after the bring-in (lowest upcard) acts first; on later streets, highest showing upcards acts first.
   const isActive = (p: Player) => !(p as any).folded && !p.isFolded && !p.isAllIn;
   const actives = this.state.players.filter(isActive);
   const weight: Record<any, number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
@@ -43,9 +43,9 @@ export class GameStateManager {
       if (stage === 'third') {
         // Prefer computed bring-in
         const bringInId = this.state.studState?.bringIn?.player;
-        const bringInPlayer = bringInId ? actives.find(p => p.id === bringInId) : undefined;
+        const bringInPlayer = bringInId ? this.state.players.find(p => p.id === bringInId && !p.isFolded) : undefined;
         if (bringInPlayer) {
-          activePlayer = bringInPlayer;
+          activePlayer = this.findNextActivePlayer(bringInPlayer.position) || (isActive(bringInPlayer) ? bringInPlayer : actives[0]);
           if (process.env.DEBUG_POKER === 'true') {
             const up = this.state.studState?.playerCards[activePlayer.id]?.upCards?.[0];
             // eslint-disable-next-line no-console

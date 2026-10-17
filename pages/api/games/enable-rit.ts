@@ -9,10 +9,16 @@ import {
 } from '../../../src/lib/poker/run-it-twice-manager';
 import { clearSupabaseAutoRunout, runSupabaseAutoRunoutSync } from '../../../src/lib/poker/supabase-auto-runout';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
-import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import {
+  getOrRestoreEngine,
+  persistEngineState,
+  StaleGameStateError,
+  STALE_STATE_RESPONSE,
+} from '../../../src/lib/poker/engine-persistence';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../../src/lib/shared/feature-flags';
 import type { TableState } from '../../../src/types/poker';
 import { postHandResultToChat } from '../../../src/lib/utils/post-hand-result';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -53,14 +59,17 @@ const revealAllHoleCards = (engine: any, state: TableState): TableState => {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { tableId, playerId, runs } = (req.body || {}) as {
+  const { tableId, playerId: claimedPlayerId, runs } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
     runs?: number;
   };
 
-  if (!tableId || !playerId || typeof runs !== 'number') {
-    return res.status(400).json({ error: 'Missing tableId, playerId, or runs' });
+  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  if (!playerId) return;
+
+  if (!tableId || typeof runs !== 'number') {
+    return res.status(400).json({ error: 'Missing tableId or runs' });
   }
 
   try {
@@ -163,7 +172,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Persist engine state for serverless recovery
-    await persistEngineState(tableId, engine);
+    if ((await persistEngineState(tableId, engine)) === 'conflict') {
+      return res.status(409).json(STALE_STATE_RESPONSE);
+    }
 
     const enrichedState = await broadcastState(updatedState, { action: actionName, playerId, runs });
 
@@ -173,7 +184,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let handResultPosted = false;
       // Use synchronous runout that awaits delays - this keeps the serverless function alive
       await runSupabaseAutoRunoutSync(tableId, engine, async (state, meta) => {
-        await persistEngineState(tableId, engine);
+        // Stop the runout rather than broadcast a state another request has replaced
+        if ((await persistEngineState(tableId, engine)) === 'conflict') throw new StaleGameStateError(tableId);
         await broadcastState(state, meta);
         // Post hand result to chat when auto-runout reaches showdown
         if (state.stage === 'showdown' && !handResultPosted) {

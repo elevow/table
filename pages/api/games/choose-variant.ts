@@ -3,9 +3,11 @@ import { publishGameStateUpdate } from '../../../src/lib/realtime/publisher';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
-import { getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import type { GameVariant } from '../../../src/types/poker';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
+import { getDealerChoiceChooserId } from '../../../src/lib/poker/dealer-choice';
 
 const ALLOWED_VARIANTS: GameVariant[] = [
   'texas-holdem',
@@ -49,10 +51,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { tableId, playerId, variant: rawVariant } = req.body ?? {};
+  const { tableId, playerId: claimedPlayerId, variant: rawVariant } = req.body ?? {};
 
-  if (!tableId || !playerId) {
-    return res.status(400).json({ error: 'Missing tableId or playerId' });
+  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  if (!playerId) return;
+
+  if (!tableId) {
+    return res.status(400).json({ error: 'Missing tableId' });
   }
 
   if (!isValidVariant(rawVariant)) {
@@ -77,6 +82,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    if (getDealerChoiceChooserId(currentState) !== playerId) {
+      return res.status(403).json({ error: 'Only the dealer can choose the variant' });
+    }
+
     // Apply the chosen variant and matching betting mode
     if (typeof engine.setVariant === 'function') {
       engine.setVariant(chosenVariant);
@@ -91,14 +100,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     engine.startNewHand();
 
     // Persist updated engine state for serverless recovery
-    await persistEngineState(tableId, engine);
+    if ((await persistEngineState(tableId, engine)) === 'conflict') {
+      return res.status(409).json(STALE_STATE_RESPONSE);
+    }
 
     // Store chosen variant in room config for future hands
     const g: any = global as any;
     if (g.roomConfigs?.get(tableId)) {
       const roomConfig = g.roomConfigs.get(tableId);
       roomConfig.chosenVariant = chosenVariant;
-      roomConfig.dcStepCount = 0;
       g.roomConfigs.set(tableId, roomConfig);
     }
 

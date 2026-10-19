@@ -5,7 +5,7 @@ Scope
 - Admin API to read/update effective config.
 - Admin UI page to view/edit overrides and control the security scheduler.
 
-Key Endpoints (admin-only; require `X-Admin-Token`)
+Key Endpoints (admin-only; require a signed-in admin session — see ADMIN_ALERTS_AUTH.md)
 - GET /api/admin/security/config → { config, overrides }
 - PATCH /api/admin/security/config → apply overrides or `{ clear: true }`
 - GET /api/admin/security/scheduler → { lastRun }
@@ -13,7 +13,7 @@ Key Endpoints (admin-only; require `X-Admin-Token`)
 
 UI
 - Page: /admin/security
-- Store admin token in localStorage (`adminToken`).
+- Uses the signed-in admin session; no separate token.
 - Shows effective config and current overrides; edit overrides JSON and save/clear.
 - Buttons for Start/Stop/Run once; shows lastRun timestamp.
 

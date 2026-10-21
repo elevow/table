@@ -4,6 +4,7 @@ import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { UserManager } from '../../../src/lib/database/user-manager';
 import { createUserService } from '../../../src/lib/services/user-service';
 import { createSafeAudit } from '../../../src/lib/api/audit';
+import { hashSessionToken } from '../../../src/lib/auth/session-token';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -60,7 +61,7 @@ export default async function handler(
     try {
       const tokenResult = await client.query(
         `SELECT user_id FROM auth_tokens WHERE token_hash = $1 AND type = 'session' AND expires_at > NOW()`,
-        [token]
+        [hashSessionToken(token)]
       );
 
       if (tokenResult.rows.length === 0) {

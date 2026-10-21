@@ -172,6 +172,63 @@ describe('state-sanitizer', () => {
       });
     });
 
+    it('should keep folded players cards hidden at showdown', () => {
+      const state = createState({
+        stage: 'showdown',
+        players: [
+          createPlayer('p1'),
+          createPlayer('p2'),
+          createPlayer('p3', { isFolded: true })
+        ]
+      });
+      const sanitized = sanitizeStateForPlayer(state, 'p1');
+
+      expect(sanitized.players.find(p => p.id === 'p2')?.holeCards).toHaveLength(2);
+      expect(sanitized.players.find(p => p.id === 'p3')?.holeCards).toBeUndefined();
+    });
+
+    it('should not show the winners cards when everyone else folded', () => {
+      const state = createState({
+        stage: 'showdown',
+        players: [
+          createPlayer('p1', { isFolded: true }),
+          createPlayer('p2'),
+          createPlayer('p3', { isFolded: true })
+        ]
+      });
+      const sanitized = sanitizeStateForPlayer(state, 'p1');
+
+      expect(sanitized.players.find(p => p.id === 'p1')?.holeCards).toHaveLength(2);
+      expect(sanitized.players.find(p => p.id === 'p2')?.holeCards).toBeUndefined();
+      expect(sanitized.players.find(p => p.id === 'p3')?.holeCards).toBeUndefined();
+    });
+
+    it('should withhold Run It Twice seeds until showdown', () => {
+      const runItTwice = {
+        enabled: true,
+        numberOfRuns: 2,
+        boards: [],
+        results: [],
+        potDistribution: [],
+        seeds: ['aa', 'bb'],
+        rngSecurity: {
+          seedGeneration: { entropy: 'secret-entropy', timestamp: 1, playerEntropy: '', vrf: 'v' },
+          verification: { publicSeed: 'pub', hashChain: ['aa', 'bb'], proof: 'secret' }
+        }
+      };
+      const players = [createPlayer('p1', { isAllIn: true }), createPlayer('p2', { isAllIn: true })];
+
+      const during = sanitizeStateForBroadcast(createState({ stage: 'turn', players, runItTwice }));
+      expect(during.runItTwice?.seeds).toEqual([]);
+      expect(during.runItTwice?.rngSecurity?.verification).toEqual({ publicSeed: 'pub', hashChain: [], proof: '' });
+      expect(during.runItTwice?.rngSecurity?.seedGeneration.entropy).toBeUndefined();
+
+      const after = sanitizeStateForBroadcast(createState({ stage: 'showdown', players, runItTwice }));
+      expect(after.runItTwice?.seeds).toEqual(['aa', 'bb']);
+      expect(after.runItTwice?.rngSecurity?.verification.proof).toBe('secret');
+      expect(after.runItTwice?.rngSecurity?.seedGeneration.entropy).toBeUndefined();
+    });
+
     it('should show all hole cards in all-in situation', () => {
       const state = createState({
         stage: 'flop',
@@ -182,6 +239,7 @@ describe('state-sanitizer', () => {
         ]
       });
       const sanitized = sanitizeStateForPlayer(state, 'p1');
+      expect(sanitized.players.find(p => p.id === 'p3')?.holeCards).toBeUndefined();
       
       const p1 = sanitized.players.find(p => p.id === 'p1');
       const p2 = sanitized.players.find(p => p.id === 'p2');

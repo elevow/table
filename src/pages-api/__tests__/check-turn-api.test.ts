@@ -8,6 +8,11 @@ import handler from '../../../pages/api/games/check-turn';
 import * as enginePersistence from '../../../src/lib/poker/engine-persistence';
 
 jest.mock('../../../src/lib/poker/engine-persistence');
+// Signed in as player1; a claimed playerId is passed through as the session user
+jest.mock('../../../src/lib/auth/auth-utils', () => ({
+  requirePlayer: jest.fn(async (_req: unknown, _res: unknown, claimed?: unknown) => (claimed ? String(claimed) : 'player1')),
+}));
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 describe('/api/games/check-turn', () => {
   let req: Partial<NextApiRequest>;
@@ -53,13 +58,29 @@ describe('/api/games/check-turn', () => {
     expect(jsonMock).toHaveBeenCalledWith({ error: 'Missing tableId or playerId' });
   });
 
-  it('should return 400 when playerId is missing', async () => {
+  it('should answer for the signed-in player when playerId is omitted', async () => {
     req.query = { tableId: 'table1' };
+    (enginePersistence.getOrRestoreEngine as jest.Mock).mockResolvedValue({
+      getState: () => ({ activePlayer: 'player1', stage: 'flop' }),
+    });
 
     await handler(req as NextApiRequest, res as NextApiResponse);
 
-    expect(statusMock).toHaveBeenCalledWith(400);
-    expect(jsonMock).toHaveBeenCalledWith({ error: 'Missing tableId or playerId' });
+    expect(statusMock).toHaveBeenCalledWith(200);
+    expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ isMyTurn: true }));
+  });
+
+  it('should not answer when the caller is not signed in', async () => {
+    req.query = { tableId: 'table1', playerId: 'player1' };
+    (requirePlayer as jest.Mock).mockImplementationOnce(async (_req: unknown, r: NextApiResponse) => {
+      r.status(401).json({ error: 'Authentication required' });
+      return null;
+    });
+
+    await handler(req as NextApiRequest, res as NextApiResponse);
+
+    expect(statusMock).toHaveBeenCalledWith(401);
+    expect(enginePersistence.getOrRestoreEngine).not.toHaveBeenCalled();
   });
 
   it('should return 404 when no active game is found', async () => {

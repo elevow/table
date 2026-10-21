@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../database/pool';
 import { isAdminEmail } from '../../utils/roleUtils';
+import { hashSessionToken } from './session-token';
 
 /**
  * Extract session token from request headers or cookies
@@ -36,7 +37,7 @@ export async function getAuthenticatedUserId(req: NextApiRequest): Promise<strin
       const result = await client.query(
         `SELECT user_id FROM auth_tokens 
          WHERE token_hash = $1 AND type = 'session' AND expires_at > NOW()`,
-        [token]
+        [hashSessionToken(token)]
       );
       
       if (result.rows.length === 0) {
@@ -105,7 +106,7 @@ export async function getSessionUser(
       `SELECT u.id, u.email FROM users u
        JOIN auth_tokens at ON u.id = at.user_id
        WHERE at.token_hash = $1 AND at.type = 'session' AND at.expires_at > NOW()`,
-      [token]
+      [hashSessionToken(token)]
     );
     return result.rows[0] || null;
   } catch (error) {

@@ -13,6 +13,7 @@ import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
+import { sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 
 /**
  * After a rebuy decision, check if we can start the next hand.
@@ -59,8 +60,9 @@ async function maybeStartNextHand(tableId: string, engine: any): Promise<boolean
       const enrichedState = enrichStateWithRunIt(tableId, newState);
       const sequence = nextSeq(tableId);
 
+      // The table channel is shared, so it must never carry anyone's hidden cards
       await publishGameStateUpdate(tableId, {
-        gameState: enrichedState,
+        gameState: sanitizeStateForBroadcast(enrichedState),
         seq: sequence,
         lastAction: { action: 'next_hand_started', playerId: 'system', reason: 'rebuy_complete' },
         timestamp: new Date().toISOString(),

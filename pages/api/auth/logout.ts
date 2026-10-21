@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { createSafeAudit } from '../../../src/lib/api/audit';
+import { hashSessionToken } from '../../../src/lib/auth/session-token';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -54,7 +55,7 @@ export default async function handler(
       // Find the session token and get user ID
       const tokenResult = await client.query(
         `SELECT user_id FROM auth_tokens WHERE token_hash = $1 AND type = 'session' AND expires_at > NOW()`,
-        [token]
+        [hashSessionToken(token)]
       );
 
       if (tokenResult.rows.length > 0) {
@@ -64,7 +65,7 @@ export default async function handler(
       // Delete the session token (logout)
       await client.query(
         `DELETE FROM auth_tokens WHERE token_hash = $1 AND type = 'session'`,
-        [token]
+        [hashSessionToken(token)]
       );
 
       // Optionally, delete all session tokens for this user (logout from all devices)

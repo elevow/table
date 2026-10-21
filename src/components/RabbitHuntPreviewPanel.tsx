@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { authHeaders } from '../utils/auth-headers';
 
 type Street = 'flop' | 'turn' | 'river';
 
@@ -49,7 +50,7 @@ export default function RabbitHuntPreviewPanel({ roomId }: Props) {
       const qs = new URLSearchParams({ roomId, street, userId }).toString();
       const res = await fetch(`/api/rabbit-hunt/preview?${qs}`, {
         method: 'GET',
-        headers: { 'Accept': 'application/json' },
+        headers: { 'Accept': 'application/json', ...authHeaders() },
       });
       const data = await res.json();
       if (!res.ok) {

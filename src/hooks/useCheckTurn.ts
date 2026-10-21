@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { authHeaders } from '../utils/auth-headers';
 
 interface TurnStatus {
   isMyTurn: boolean;
@@ -61,7 +62,7 @@ export function useCheckTurn(
     try {
       const response = await fetch(
         `/api/games/check-turn?tableId=${encodeURIComponent(tableId)}&playerId=${encodeURIComponent(playerId)}`,
-        { signal: abortController.signal }
+        { signal: abortController.signal, headers: authHeaders() }
       );
 
       if (!response.ok) {

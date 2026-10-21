@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
 import { publishSeatState, publishSeatVacated, publishGameStateUpdate } from '../../../../src/lib/realtime/publisher';
 import { requirePlayer } from '../../../../src/lib/auth/auth-utils';
+import { sanitizeStateForBroadcast } from '../../../../src/lib/poker/state-sanitizer';
+import { enrichStateWithRunIt } from '../../../../src/lib/poker/run-it-twice-manager';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -91,8 +93,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
           // Broadcast game state update via Supabase
           try {
+            // The table channel is shared, so it must never carry anyone's hidden cards
             await publishGameStateUpdate(String(tableId), {
-              gameState,
+              gameState: sanitizeStateForBroadcast(enrichStateWithRunIt(String(tableId), gameState)),
               lastAction: { playerId, action: 'auto_fold_on_stand_up' },
               timestamp: new Date().toISOString(),
             });

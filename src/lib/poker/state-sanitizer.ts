@@ -1,9 +1,10 @@
 /**
  * Sanitizes game state for client consumption.
  * 
- * Hides other players' holeCards unless:
- * 1. The game is at showdown stage
+ * Hides other players' holeCards (and stud down cards) unless the player is still in the hand and:
+ * 1. The hand reached a contested showdown, or
  * 2. All active (non-folded) players are all-in (all-in situation)
+ * Folded cards, and the cards of a player who won because everyone else folded, are never shown.
  */
 
 import { TableState, Player, Card } from '../../types/poker';
@@ -56,45 +57,101 @@ export function isAllInSituation(state: TableState): boolean {
 /**
  * Determines whether hole cards should be revealed to all players.
  * Cards are revealed during:
- * 1. Showdown stage
+ * 1. A contested showdown (two or more players still in the hand). A hand won because
+ *    everyone else folded ends at the 'showdown' stage too, but the winner never shows.
  * 2. All-in situations
+ * Even then, only players still in the hand are revealed; folded cards stay hidden.
  */
 export function shouldRevealHoleCards(state: TableState): boolean {
-  // Always reveal at showdown
-  if (state.stage === 'showdown') return true;
-  
+  if (state.stage === 'showdown') {
+    return state.players.filter(p => !p.isFolded).length >= 2;
+  }
+
   // Reveal during all-in situations
   return isAllInSituation(state);
 }
 
 /**
- * Sanitizes a single player's data for client consumption.
- * Hides holeCards if they should not be revealed to the viewing player.
+ * Whether one player's private cards may be shown to the viewer (null viewer = public broadcast).
  */
-function sanitizePlayer(
-  player: Player,
-  viewerId: string,
-  revealAllCards: boolean
-): Player {
-  // Always show own cards
-  if (player.id === viewerId) {
-    return player;
+function canSeePrivateCards(playerId: string, viewerId: string | null, revealedIds: Set<string>): boolean {
+  return playerId === viewerId || revealedIds.has(playerId);
+}
+
+/**
+ * Players whose cards are face up for the whole table: everyone still in the hand
+ * when cards are revealed, nobody otherwise.
+ */
+function revealedPlayerIds(state: TableState): Set<string> {
+  if (!shouldRevealHoleCards(state)) return new Set();
+  return new Set(state.players.filter(p => !p.isFolded).map(p => p.id));
+}
+
+/**
+ * Run It Twice seeds decide the run boards (the shuffle is deterministic from them), so they and
+ * the values they can be rebuilt from are withheld until showdown. The public seed is a commitment
+ * and is safe to send early; the generation entropy is never sent.
+ */
+function sanitizeRunItTwice(state: TableState): TableState['runItTwice'] {
+  const rit = state.runItTwice;
+  if (!rit) return rit;
+  const atShowdown = state.stage === 'showdown';
+  const rng = rit.rngSecurity;
+  return {
+    ...rit,
+    seeds: atShowdown ? rit.seeds : [],
+    rngSecurity: rng
+      ? {
+          seedGeneration: { ...rng.seedGeneration, entropy: undefined },
+          verification: atShowdown
+            ? rng.verification
+            : { publicSeed: rng.verification.publicSeed, hashChain: [], proof: '' },
+        }
+      : undefined,
+  };
+}
+
+/**
+ * Builds the view of the state that viewerId may see; a null viewer gets the public view.
+ */
+function sanitizeState(state: TableState, viewerId: string | null): TableState {
+  const revealedIds = revealedPlayerIds(state);
+
+  const sanitizedPlayers = state.players.map(player => {
+    if (canSeePrivateCards(player.id, viewerId, revealedIds)) return player;
+    const { holeCards: _, ...playerWithoutCards } = player;
+    return { ...playerWithoutCards, holeCards: undefined };
+  });
+
+  // Stud: down cards are private; up cards are face up for everyone at the table
+  let sanitizedStudState = state.studState;
+  if (state.studState) {
+    const sanitizedPlayerCards: Record<string, { downCards: Card[]; upCards: Card[] }> = {};
+    for (const [playerId, cards] of Object.entries(state.studState.playerCards)) {
+      sanitizedPlayerCards[playerId] = canSeePrivateCards(playerId, viewerId, revealedIds)
+        ? cards
+        : { downCards: [], upCards: cards.upCards };
+    }
+    sanitizedStudState = {
+      ...state.studState,
+      playerCards: sanitizedPlayerCards
+    };
   }
-  
-  // Show cards if we should reveal all (showdown or all-in)
-  if (revealAllCards) {
-    return player;
+
+  const result: TableState = {
+    ...state,
+    players: sanitizedPlayers,
+    studState: sanitizedStudState
+  };
+  if (state.runItTwice) {
+    result.runItTwice = sanitizeRunItTwice(state);
   }
-  
-  // Hide other players' hole cards by setting to undefined (matches the optional type)
-  // Using object destructuring to create a new object without copying holeCards
-  const { holeCards: _, ...playerWithoutCards } = player;
-  return { ...playerWithoutCards, holeCards: undefined };
+  return result;
 }
 
 /**
  * Sanitizes the game state for a specific viewing player.
- * 
+ *
  * @param state - The full game state
  * @param viewerId - The ID of the player viewing this state
  * @returns A sanitized state where other players' hole cards are hidden when appropriate
@@ -103,51 +160,13 @@ export function sanitizeStateForPlayer(
   state: TableState,
   viewerId: string
 ): TableState {
-  const revealAllCards = shouldRevealHoleCards(state);
-  
-  const sanitizedPlayers = state.players.map(player => 
-    sanitizePlayer(player, viewerId, revealAllCards)
-  );
-  
-  // Also handle stud variant state if present
-  // Note: When revealAllCards is true (showdown or all-in), we skip this block and 
-  // the original studState with all cards is preserved
-  let sanitizedStudState = state.studState;
-  if (state.studState && !revealAllCards) {
-    const sanitizedPlayerCards: Record<string, { downCards: Card[]; upCards: Card[] }> = {};
-    
-    for (const [playerId, cards] of Object.entries(state.studState.playerCards)) {
-      if (playerId === viewerId) {
-        // Show all own cards
-        sanitizedPlayerCards[playerId] = cards;
-      } else {
-        // For other players during active play (not showdown/all-in):
-        // - Hide down cards (face-down, private to the player)
-        // - Show up cards (face-up, visible to everyone at the table)
-        sanitizedPlayerCards[playerId] = {
-          downCards: [], // Hide down cards
-          upCards: cards.upCards // Up cards are public in stud variants
-        };
-      }
-    }
-    
-    sanitizedStudState = {
-      ...state.studState,
-      playerCards: sanitizedPlayerCards
-    };
-  }
-  
-  return {
-    ...state,
-    players: sanitizedPlayers,
-    studState: sanitizedStudState
-  };
+  return sanitizeState(state, viewerId);
 }
 
 /**
  * Sanitizes game state for broadcasting to all players.
  * Returns a map of player IDs to their sanitized view of the state.
- * 
+ *
  * @param state - The full game state
  * @returns A map from player ID to their sanitized view
  */
@@ -155,58 +174,24 @@ export function sanitizeStateForAllPlayers(
   state: TableState
 ): Map<string, TableState> {
   const result = new Map<string, TableState>();
-  
+
   for (const player of state.players) {
     result.set(player.id, sanitizeStateForPlayer(state, player.id));
   }
-  
+
   return result;
 }
 
 /**
  * Sanitizes game state for public broadcast where no specific viewer is known.
- * Hides all hole cards unless cards should be revealed (showdown or all-in).
- * 
+ * Hides all hole cards except those face up for the table (contested showdown or all-in).
+ *
  * This is used for Supabase broadcasts where we can't send per-player data.
  * Each player's own cards will be visible from their API responses.
- * 
+ *
  * @param state - The full game state
- * @returns A sanitized state with hole cards hidden unless at showdown/all-in
+ * @returns A sanitized state that is safe for anyone at (or watching) the table
  */
 export function sanitizeStateForBroadcast(state: TableState): TableState {
-  // If cards should be revealed (showdown or all-in), return state as-is
-  if (shouldRevealHoleCards(state)) {
-    return state;
-  }
-  
-  // Hide all hole cards for broadcast
-  const sanitizedPlayers = state.players.map(player => {
-    const { holeCards: _, ...playerWithoutCards } = player;
-    return { ...playerWithoutCards, holeCards: undefined };
-  });
-  
-  // Also handle stud variant state if present
-  let sanitizedStudState = state.studState;
-  if (state.studState) {
-    const sanitizedPlayerCards: Record<string, { downCards: Card[]; upCards: Card[] }> = {};
-    
-    for (const [playerId, cards] of Object.entries(state.studState.playerCards)) {
-      // For broadcasts, hide all down cards but show up cards (always public in stud)
-      sanitizedPlayerCards[playerId] = {
-        downCards: [], // Hide down cards
-        upCards: cards.upCards // Up cards are public in stud variants
-      };
-    }
-    
-    sanitizedStudState = {
-      ...state.studState,
-      playerCards: sanitizedPlayerCards
-    };
-  }
-  
-  return {
-    ...state,
-    players: sanitizedPlayers,
-    studState: sanitizedStudState
-  };
+  return sanitizeState(state, null);
 }

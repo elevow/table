@@ -93,6 +93,19 @@ describe('publisher', () => {
       });
     });
 
+    it('publishGameStateUpdate never sends hidden hole cards, even if the caller did not sanitize', async () => {
+      const player = (id: string) => ({
+        id, name: id, position: 0, stack: 100, currentBet: 0, hasActed: false, isFolded: false, isAllIn: false, timeBank: 30,
+        holeCards: [{ suit: 'hearts', rank: 'A' }, { suit: 'spades', rank: 'K' }],
+      });
+      const gameState = { stage: 'preflop', players: [player('p1'), player('p2')], currentBet: 0 };
+      await publishGameStateUpdate('table-123', { gameState, seq: 2 });
+
+      const sent = mockSend.mock.calls[0][0].payload;
+      expect(sent.seq).toBe(2);
+      expect(sent.gameState.players.map((p: { holeCards?: unknown }) => p.holeCards)).toEqual([undefined, undefined]);
+    });
+
     it('publishSeatClaimed should broadcast seat_claimed event', async () => {
       const payload = { seatNumber: 3, playerId: 'player-abc', playerName: 'Alice', chips: 1000 };
       await publishSeatClaimed('room-456', payload);

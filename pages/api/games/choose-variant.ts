@@ -85,6 +85,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (getDealerChoiceChooserId(currentState) !== playerId) {
       return res.status(403).json({ error: 'Only the dealer can choose the variant' });
     }
+    if (typeof engine.canStartNewHand === 'function' && !engine.canStartNewHand()) {
+      return res.status(409).json({ error: 'Waiting for at least two players to sit in', code: 'NOT_ENOUGH_PLAYERS_SITTING_IN' });
+    }
 
     // Apply the chosen variant and matching betting mode
     if (typeof engine.setVariant === 'function') {

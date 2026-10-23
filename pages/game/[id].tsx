@@ -20,6 +20,12 @@ import { formatChips } from '../../src/utils/chip-display';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../src/lib/shared/feature-flags';
 import { authHeaders } from '../../src/utils/auth-headers';
 import { resolveSessionUserId } from '../../src/utils/session-identity';
+import { useTurnClock } from '../../src/hooks/useTurnClock';
+import { useTurnAlerts } from '../../src/hooks/useTurnAlerts';
+import TurnClockBar from '../../src/components/TurnClockBar';
+import PreActionBar from '../../src/components/PreActionBar';
+import { resolvePreAction } from '../../src/lib/shared/pre-action';
+import type { PreAction } from '../../src/lib/shared/pre-action';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -446,6 +452,24 @@ export default function GamePage() {
   useEffect(() => {
     pokerStageRef.current = pokerGameState?.stage;
   }, [pokerGameState?.stage]);
+
+  // Turn clock: counts down the player to act; every player's client asks the server to act for
+  // a player whose time has run out, so nobody can stall the table
+  const amInGame = !!pokerGameState?.players?.some((p: any) => p.id === playerId);
+  const turnClock = useTurnClock({
+    state: gameStarted ? pokerGameState : null,
+    tableId,
+    playerId,
+    enforce: amInGame && !!playerId,
+    onState: setPokerGameState,
+  });
+  const isMyTurn = gameStarted && !!playerId && pokerGameState?.activePlayer === playerId && pokerGameState?.stage !== 'showdown';
+  const myTurnKey = isMyTurn ? `${pokerGameState?.turnSeq ?? ''}:${playerId}:${pokerGameState?.stage ?? ''}` : null;
+  const turnAlerts = useTurnAlerts(isMyTurn, turnClock.remainingMs, myTurnKey);
+  const me = amInGame ? pokerGameState.players.find((p: any) => p.id === playerId) : null;
+  const sittingInCount = Array.isArray(pokerGameState?.players)
+    ? pokerGameState.players.filter((p: any) => !p.isSittingOut).length
+    : 0;
   
   // Poll for turn status every 10 seconds when waiting
   // This complements Supabase Realtime notifications to ensure players are notified of their turn even if broadcasts are missed
@@ -689,8 +713,9 @@ export default function GamePage() {
       }
       autoNextHandScheduledRef.current = false;
     };
-  }, [pokerGameState?.stage, id, playerId]);
-  
+    // Re-run when players sit in or out, so a table waiting for players starts once enough return
+  }, [pokerGameState?.stage, id, playerId, sittingInCount]);
+
   // Periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {
     if (!id) return;
@@ -1314,13 +1339,16 @@ export default function GamePage() {
       const gs = pokerGameState;
       if (!gs || !Array.isArray(gs.players) || gs.players.length < 2) return null;
 
-      const players = gs.players as Array<{ id: string; position?: number }>;
-      const dealerIdx = Number(gs.dealerPosition);
-      if (!Number.isFinite(dealerIdx)) return null;
-      const n = players.length;
-
-      const dealerId = players[dealerIdx]?.id;
+      const allPlayers = gs.players as Array<{ id: string; position?: number; isSittingOut?: boolean }>;
+      const dealerIdxAll = Number(gs.dealerPosition);
+      if (!Number.isFinite(dealerIdxAll)) return null;
+      const dealerId = allPlayers[dealerIdxAll]?.id;
       if (!dealerId) return null;
+      // Blinds go round the players sitting in, as on the server
+      const players = allPlayers.filter(p => !p.isSittingOut);
+      const dealerIdx = Math.max(0, players.findIndex(p => p.id === dealerId));
+      const n = players.length;
+      if (n < 2) return null;
 
       if (n === 2) {
         // Heads-up: dealer posts SB; other posts BB
@@ -1347,72 +1375,72 @@ export default function GamePage() {
   // Local state for inputs
   const [betInput, setBetInput] = useState<number>(0);
   const [raiseInput, setRaiseInput] = useState<number>(0);
-  // Auto-fold preference (when it's not our turn, fold immediately when it becomes our turn)
-  const [autoFold, setAutoFold] = useState<boolean>(false);
-  // Auto-call preference (when it's not our turn, call immediately when it becomes our turn)
-  const [autoCall, setAutoCall] = useState<boolean>(false);
-  // Auto-check preference (when it's not our turn, check immediately when it becomes our turn and no bet is required)
-  const [autoCheck, setAutoCheck] = useState<boolean>(false);
+  // Pre-action queued for when it becomes our turn (current betting round only)
+  const [preAction, setPreAction] = useState<PreAction | null>(null);
+  const myOwed = me ? Math.max(0, Number(pokerGameState?.currentBet || 0) - Number(me.currentBet || 0)) : 0;
 
-  // Update defaults when it's our turn or state changes
+  // A pre-action applies to one betting round
   useEffect(() => {
-    if (!pokerGameState || pokerGameState.activePlayer !== playerId) return;
-    const mode = (pokerGameState?.bettingMode || 'no-limit') as 'no-limit' | 'pot-limit';
-    if ((pokerGameState.currentBet || 0) === 0) {
-      const { min, max } = mode === 'no-limit' ? getBetBounds() : getPotLimitBetBounds();
-      setBetInput(clamp(min, min, max));
-    } else {
-      const { min, max } = mode === 'no-limit' ? getRaiseBounds() : getPotLimitRaiseBounds();
-      setRaiseInput(clamp(min, min, max));
+    setPreAction(null);
+  }, [pokerGameState?.stage]);
+
+  // A bet cancels "Check", and a raise cancels "Call X"
+  useEffect(() => {
+    if (!preAction || isMyTurn) return;
+    if ((preAction.type === 'check' && myOwed > 0) || (preAction.type === 'call' && myOwed !== preAction.amount)) {
+      setPreAction(null);
     }
-  }, [pokerGameState, playerId, getBetBounds, getPotLimitBetBounds, getRaiseBounds, getPotLimitRaiseBounds]);
+  }, [preAction, myOwed, isMyTurn]);
 
-  // If Auto Fold is enabled and it's our turn, immediately fold and clear the checkbox
+  // Carry out the queued pre-action as soon as the turn arrives
   useEffect(() => {
-    if (!autoFold) return;
-    const gs = pokerGameState;
-    if (!gs || gs.stage === 'showdown') return;
-    if (gs.activePlayer !== playerId) return;
-    const me = gs.players?.find((p: any) => p.id === playerId);
-    if (!me || me.isFolded) return;
-    // Execute fold and clear autoFold to prevent repeated triggers
-    handleFold();
-    setAutoFold(false);
-  }, [autoFold, pokerGameState, playerId, handleFold]);
+    if (!preAction || !isMyTurn || !me || me.isFolded) return;
+    // A Run It Twice decision is not a betting turn
+    if (pokerGameState?.runItTwicePrompt) return;
+    const result = resolvePreAction(preAction, myOwed);
+    setPreAction(null);
+    if (result.action === 'cancel') return;
+    if (result.action === 'call') handlePokerAction('call', result.amount);
+    else handlePokerAction(result.action);
+  }, [preAction, isMyTurn, me, myOwed, pokerGameState?.runItTwicePrompt, handlePokerAction]);
 
-  // If Auto Call is enabled and it's our turn, immediately call (even if amount is 0) and clear the checkbox
-  useEffect(() => {
-    if (!autoCall) return;
-    const gs = pokerGameState;
-    if (!gs || gs.stage === 'showdown') return;
-    if (gs.activePlayer !== playerId) return;
-    // If auto-fold is also enabled, give fold priority and let autoCall wait or be toggled off by user
-    if (autoFold) return;
-    const me = gs.players?.find((p: any) => p.id === playerId);
-    if (!me || me.isFolded) return;
-    const neededAmount = Math.max(0, Number(gs.currentBet || 0) - Number(me.currentBet || 0));
-    // If no bet is required and autoCheck is enabled, prefer check over a zero-call
-    if (neededAmount === 0 && autoCheck) return;
-    handlePokerAction('call', neededAmount);
-    setAutoCall(false);
-  }, [autoCall, autoFold, autoCheck, pokerGameState, playerId, handlePokerAction]);
-
-  // If Auto Check is enabled and it's our turn with no bet required, immediately check and clear the checkbox
-  useEffect(() => {
-    if (!autoCheck) return;
-    const gs = pokerGameState;
-    if (!gs || gs.stage === 'showdown') return;
-    if (gs.activePlayer !== playerId) return;
-    // If auto-fold is enabled, fold has priority.
-    if (autoFold) return;
-    const me = gs.players?.find((p: any) => p.id === playerId);
-    if (!me || me.isFolded) return;
-    const neededAmount = Math.max(0, Number(gs.currentBet || 0) - Number(me.currentBet || 0));
-    if (neededAmount === 0) {
-      handleCheck();
-      setAutoCheck(false);
+  // Sit out from the next hand, or back in
+  const [sitOutPending, setSitOutPending] = useState(false);
+  const toggleSitOut = useCallback(async () => {
+    if (!tableId || !playerId || !me) return;
+    setSitOutPending(true);
+    try {
+      const resp = await fetch('/api/games/sit-out', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ tableId, playerId, sittingOut: !me.isSittingOut }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && data?.gameState) setPokerGameState(data.gameState);
+      else console.warn('Sit out request failed:', data);
+    } catch (err) {
+      console.warn('Sit out request failed:', err);
+    } finally {
+      setSitOutPending(false);
     }
-  }, [autoCheck, autoFold, pokerGameState, playerId, handleCheck]);
+  }, [tableId, playerId, me]);
+
+  // After the hand: turn our cards face up for the table
+  const showMyCards = useCallback(async () => {
+    if (!tableId || !playerId) return;
+    try {
+      const resp = await fetch('/api/games/show-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ tableId, playerId }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && data?.gameState) setPokerGameState(data.gameState);
+      else console.warn('Show cards failed:', data);
+    } catch (err) {
+      console.warn('Show cards failed:', err);
+    }
+  }, [tableId, playerId]);
 
   // Get position for current player's hole cards based on their seat
   const getCurrentPlayerCardsPosition = () => {
@@ -1612,7 +1640,8 @@ export default function GamePage() {
                 const gamePlayer = pokerGameState.players?.find((p: any) => p.id === assignment.playerId);
                 return gamePlayer && (
                   <div className="text-xs mt-1">
-                    {gamePlayer.folded && <span className="text-red-500">Folded</span>}
+                    {gamePlayer.isSittingOut && <span className="text-gray-500 dark:text-gray-400 italic">Sitting out</span>}
+                    {(gamePlayer.folded || gamePlayer.isFolded) && !gamePlayer.isSittingOut && <span className="text-red-500">Folded</span>}
                     {gamePlayer.isAllIn && <span className="text-yellow-500">All-in</span>}
                     {gamePlayer.currentBet > 0 && !gamePlayer.folded && (
                       <span className="text-blue-500">
@@ -1622,6 +1651,7 @@ export default function GamePage() {
                         }
                       </span>
                     )}
+                    {turnClock.activePlayer === gamePlayer.id && <TurnClockBar clock={turnClock} compact />}
                   </div>
                 );
               })()}
@@ -1690,6 +1720,13 @@ export default function GamePage() {
 
           // Hold'em/Omaha opponents: at showdown, reveal hole cards; otherwise show backs
           const showFaceUp = pokerGameState?.stage === 'showdown' && Array.isArray(gamePlayer.holeCards) && gamePlayer.holeCards.length > 0;
+          if (pokerGameState?.stage === 'showdown' && !showFaceUp && getActiveNonFoldedPlayers().length >= 2) {
+            return (
+              <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent mucked">
+                <span className="px-2 py-0.5 rounded bg-gray-800/70 text-[10px] text-gray-200">Mucked</span>
+              </div>
+            );
+          }
           if (showFaceUp) {
             const holes = gamePlayer.holeCards as any[];
             return (
@@ -2327,6 +2364,39 @@ export default function GamePage() {
                 <span className="whitespace-nowrap">Stand Up (P{currentPlayerSeat})</span>
               </button>
             )}
+            {gameStarted && me && (
+              <button
+                onClick={toggleSitOut}
+                disabled={sitOutPending}
+                className={`${me.isSittingOut ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-600 hover:bg-gray-700'} disabled:opacity-60 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 w-full sm:w-auto whitespace-nowrap`}
+                title={me.isSittingOut ? 'You are sitting out; you will be dealt in from the next hand' : 'Keep your seat but skip hands from the next one'}
+                aria-pressed={!!me.isSittingOut}
+              >
+                {me.isSittingOut ? "I'm Back" : 'Sit Out'}
+              </button>
+            )}
+            {gameStarted && me && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => turnAlerts.setSoundEnabled(!turnAlerts.soundEnabled)}
+                  className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  title={turnAlerts.soundEnabled ? 'Turn off the sound when it is your turn' : 'Play a sound when it is your turn'}
+                  aria-pressed={turnAlerts.soundEnabled}
+                >
+                  {turnAlerts.soundEnabled ? 'Sound on' : 'Sound off'}
+                </button>
+                {turnAlerts.notifyPermission !== 'unsupported' && turnAlerts.notifyPermission !== 'denied' && (
+                  <button
+                    onClick={() => turnAlerts.setNotifyEnabled(!turnAlerts.notifyEnabled)}
+                    className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    title="Get a browser notification when it is your turn and this tab is in the background"
+                    aria-pressed={turnAlerts.notifyEnabled}
+                  >
+                    {turnAlerts.notifyEnabled ? 'Alerts on' : 'Alert me'}
+                  </button>
+                )}
+              </div>
+            )}
             {canStartGame() && !gameStarted && (
               <button
                 onClick={handleStartGame}
@@ -2561,7 +2631,8 @@ export default function GamePage() {
           {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && (
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Your Turn</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Your Turn</h3>
+              <TurnClockBar clock={turnClock} />
               {(() => {
                 const summary = getMyHandSummary();
                 const isHiLo = pokerGameState?.variant === 'omaha-hi-lo' || pokerGameState?.variant === 'seven-card-stud-hi-lo';
@@ -2957,39 +3028,18 @@ export default function GamePage() {
             <div className="lg:col-span-2 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-md p-4 mt-4">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Game Status</h3>
-                <div className="flex items-center gap-4">
-                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200" title="If checked, you will fold immediately when it becomes your turn">
-                    <input
-                      type="checkbox"
-                      checked={autoFold}
-                      onChange={(e) => setAutoFold(e.target.checked)}
-                      className="h-4 w-4 accent-red-600"
-                      aria-label="Enable auto fold"
-                    />
-                    <span>Auto Fold</span>
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200" title="If checked, you will check immediately when it becomes your turn and no bet is required">
-                    <input
-                      type="checkbox"
-                      checked={autoCheck}
-                      onChange={(e) => setAutoCheck(e.target.checked)}
-                      className="h-4 w-4 accent-blue-600"
-                      aria-label="Enable auto check"
-                    />
-                    <span>Auto Check</span>
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200" title="If checked, you will call immediately when it becomes your turn">
-                    <input
-                      type="checkbox"
-                      checked={autoCall}
-                      onChange={(e) => setAutoCall(e.target.checked)}
-                      className="h-4 w-4 accent-green-600"
-                      aria-label="Enable auto call"
-                    />
-                    <span>Auto Call</span>
-                  </label>
-                </div>
               </div>
+              {me && !me.isFolded && !me.isAllIn && (
+                <div className="mb-3">
+                  <PreActionBar
+                    owed={myOwed}
+                    selected={preAction}
+                    onSelect={setPreAction}
+                    formatAmount={(amount) => showStackInBB ? formatChips(amount, pokerGameState?.bigBlind || null, true) : `$${amount}`}
+                  />
+                </div>
+              )}
+              <TurnClockBar clock={turnClock} />
               <div className="text-sm text-gray-600 dark:text-gray-300">
                 <p>Waiting for {pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'} to act...</p>
                 <p>Current Bet: {showStackInBB 
@@ -3135,6 +3185,29 @@ export default function GamePage() {
             </div>
           )}
 
+          {/* After the hand: let a player whose cards stayed hidden show them */}
+          {gameStarted && pokerGameState?.stage === 'showdown' && me && (() => {
+            const myStud = pokerGameState?.studState?.playerCards?.[playerId];
+            const dealtIn = (me.holeCards?.length || 0) > 0 || (myStud?.downCards?.length || 0) > 0;
+            if (!dealtIn) return null;
+            const contested = getActiveNonFoldedPlayers().length >= 2;
+            const winners: string[] = Array.isArray(pokerGameState.handWinners) ? pokerGameState.handWinners : [];
+            const alreadyShown = (pokerGameState.shownCards || []).includes(playerId)
+              || (contested && !me.isFolded && (anyAllIn() || winners.includes(playerId)));
+            if (alreadyShown) return null;
+            return (
+              <div className="lg:col-span-2 flex items-center justify-between gap-3 bg-white dark:bg-gray-800 rounded-lg shadow-md p-3 mt-4">
+                <span className="text-sm text-gray-700 dark:text-gray-200">Your cards are hidden from the table.</span>
+                <button
+                  onClick={showMyCards}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-1.5 rounded"
+                >
+                  Show my cards
+                </button>
+              </div>
+            );
+          })()}
+
           {/* Showdown banner when not RIT: compute true winners instead of assuming the first remaining */}
           {gameStarted && pokerGameState && (pokerGameState.stage === 'showdown' || getActiveNonFoldedPlayers().length === 1)
             && !pokerGameState.runItTwice?.enabled
@@ -3153,13 +3226,18 @@ export default function GamePage() {
                   );
                 }
 
-                // Standard showdown with 2+ active players: evaluate winners client-side for display only
+                // Standard showdown with 2+ active players: evaluate winners client-side for display only.
+                // Losers' cards are mucked, so evaluate only the players the server says won.
+                const serverWinners: string[] = Array.isArray(pokerGameState?.handWinners) ? pokerGameState.handWinners : [];
+                const contenders = serverWinners.length
+                  ? remaining.filter((p: any) => serverWinners.includes(p.id))
+                  : remaining;
                 try {
                   const variant = pokerGameState?.variant as string | undefined;
                   const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
 
                   type EvalRes = { playerId: string; name: string; hand: any; label: string };
-                  const evals: EvalRes[] = remaining.map((p: any) => {
+                  const evals: EvalRes[] = contenders.map((p: any) => {
                     if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
                       const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
                       const down = Array.isArray(st?.downCards) ? st.downCards : [];

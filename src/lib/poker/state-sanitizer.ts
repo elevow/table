@@ -79,12 +79,27 @@ function canSeePrivateCards(playerId: string, viewerId: string | null, revealedI
 }
 
 /**
- * Players whose cards are face up for the whole table: everyone still in the hand
- * when cards are revealed, nobody otherwise.
+ * Players whose cards are face up for the whole table:
+ * - during an all-in runout, everyone still in the hand;
+ * - at a contested showdown, the winners (who must show to take the pot), or everyone still in
+ *   when it ended in an all-in (their cards were already face up for the runout); losers muck;
+ * - after the hand, anyone who chose to show.
  */
 function revealedPlayerIds(state: TableState): Set<string> {
-  if (!shouldRevealHoleCards(state)) return new Set();
-  return new Set(state.players.filter(p => !p.isFolded).map(p => p.id));
+  const inHand = state.players.filter(p => !p.isFolded);
+  if (state.stage !== 'showdown') {
+    return new Set(isAllInSituation(state) ? inHand.map(p => p.id) : []);
+  }
+  const revealed = new Set<string>(state.shownCards || []);
+  if (inHand.length >= 2) {
+    // States saved before winners were recorded keep the old rule of showing everyone still in
+    const winners = state.handWinners;
+    const mustShow = isAllInSituation(state) || !Array.isArray(winners)
+      ? inHand
+      : inHand.filter(p => winners.includes(p.id));
+    mustShow.forEach(p => revealed.add(p.id));
+  }
+  return revealed;
 }
 
 /**
@@ -143,6 +158,12 @@ function sanitizeState(state: TableState, viewerId: string | null): TableState {
     players: sanitizedPlayers,
     studState: sanitizedStudState
   };
+  // Clients count down from what was left when this was sent, not from their own clock
+  if (typeof state.turnDeadline === 'number') {
+    result.turnTimeRemainingMs = state.turnDeadline - Date.now();
+  } else {
+    delete result.turnTimeRemainingMs;
+  }
   if (state.runItTwice) {
     result.runItTwice = sanitizeRunItTwice(state);
   }

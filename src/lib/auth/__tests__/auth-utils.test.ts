@@ -2,6 +2,7 @@ import type { NextApiRequest } from 'next';
 import type { NextApiResponse } from 'next';
 import { getAuthToken, getAuthenticatedUserId, requireAuth, requirePlayer, requireAdminSession } from '../auth-utils';
 import { isAdminEmail } from '../../../utils/roleUtils';
+import { hashSessionToken } from '../session-token';
 
 // Mock shared getPool used by auth-utils
 const mockClient: any = { query: jest.fn(), release: jest.fn() };
@@ -175,7 +176,7 @@ describe('auth-utils', () => {
       expect(mockClient.query).toHaveBeenCalledWith(
         `SELECT user_id FROM auth_tokens 
          WHERE token_hash = $1 AND type = 'session' AND expires_at > NOW()`,
-        ['valid-token']
+        [hashSessionToken('valid-token')]
       );
       expect(mockClient.release).toHaveBeenCalled();
     });
@@ -203,7 +204,7 @@ describe('auth-utils', () => {
       expect(mockPool.connect).toHaveBeenCalled();
       expect(mockClient.query).toHaveBeenCalledWith(
         expect.stringContaining('SELECT user_id FROM auth_tokens'),
-        ['test-token']
+        [hashSessionToken('test-token')]
       );
       expect(mockClient.release).toHaveBeenCalled();
     });
@@ -364,7 +365,7 @@ describe('auth-utils', () => {
       expect(mockPool.query).toHaveBeenCalledTimes(1);
       const [sql, params] = mockPool.query.mock.calls[0];
       expect(sql).toContain("at.type = 'session'");
-      expect(params).toEqual(['session-token']);
+      expect(params).toEqual([hashSessionToken('session-token')]);
       expect(mockIsAdminEmail).toHaveBeenCalledWith('admin@example.com');
     });
 
@@ -457,7 +458,7 @@ describe('auth-utils', () => {
       expect(userId).toBe('cookie-user-789');
       expect(mockClient.query).toHaveBeenCalledWith(
         expect.any(String),
-        ['cookie-token-123']
+        [hashSessionToken('cookie-token-123')]
       );
     });
   });

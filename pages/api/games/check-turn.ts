@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
+import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 /**
  * GET /api/games/check-turn?tableId=xxx&playerId=yyy
@@ -18,11 +19,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
   const tableId = String(req.query.tableId || '');
-  const playerId = String(req.query.playerId || '');
-
-  if (!tableId || !playerId) {
+  if (!tableId) {
     return res.status(400).json({ error: 'Missing tableId or playerId' });
   }
+
+  // Turn status is only for signed-in players asking about themselves
+  const playerId = await requirePlayer(req, res, req.query.playerId || undefined);
+  if (!playerId) return;
 
   try {
     // Get the active game engine from memory or restore from database

@@ -7,6 +7,7 @@ import { createUserService } from '../../../src/lib/services/user-service';
 import { createSafeAudit } from '../../../src/lib/api/audit';
 import { emailService } from '../../../src/lib/services/email-service';
 import { v4 as uuidv4 } from 'uuid';
+import { generateSessionToken, hashSessionToken } from '../../../src/lib/auth/session-token';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -125,7 +126,7 @@ export default async function handler(
     });
 
     // Generate a simple session token (stored in auth_tokens table)
-    const sessionToken = uuidv4();
+    const sessionToken = generateSessionToken();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
@@ -135,7 +136,7 @@ export default async function handler(
       await client.query(
         `INSERT INTO auth_tokens (id, user_id, token_hash, expires_at, type) 
          VALUES ($1, $2, $3, $4, $5)`,
-        [uuidv4(), newUser.id, sessionToken, expiresAt, 'session']
+        [uuidv4(), newUser.id, hashSessionToken(sessionToken), expiresAt, 'session']
       );
     } finally {
       client.release();

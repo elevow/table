@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { sanitizeStateForBroadcast } from '../poker/state-sanitizer';
 
 function getSupabaseServer() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -29,6 +30,11 @@ export async function publishGameStateUpdate(tableId: string, payload: any) {
   const supa = getSupabaseServer();
   if (!supa) return;
   console.log('[publisher] Publishing game_state_update with seq:', payload?.seq);
+  // Every listener on the table channel gets this payload, so hidden cards are always stripped
+  // here as well, even if the caller already did it
+  if (Array.isArray(payload?.gameState?.players)) {
+    payload = { ...payload, gameState: sanitizeStateForBroadcast(payload.gameState) };
+  }
   await supa.channel(`table:${tableId}`).send({ type: 'broadcast', event: 'game_state_update', payload });
 }
 

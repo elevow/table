@@ -38,7 +38,8 @@ jobs:
         run: npm run build
 
   e2e-tests:
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.57 has no Chromium build for ubuntu-latest (26.04)
+    runs-on: ubuntu-24.04
     needs: build
 
     steps:

@@ -85,6 +85,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (getDealerChoiceChooserId(currentState) !== playerId) {
       return res.status(403).json({ error: 'Only the dealer can choose the variant' });
     }
+    if (currentState.paused) {
+      return res.status(409).json({ error: 'The host has paused the game', code: 'PAUSED' });
+    }
     if (typeof engine.canStartNewHand === 'function' && !engine.canStartNewHand()) {
       return res.status(409).json({ error: 'Waiting for at least two players to sit in', code: 'NOT_ENOUGH_PLAYERS_SITTING_IN' });
     }

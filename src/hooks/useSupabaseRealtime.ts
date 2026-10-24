@@ -9,6 +9,7 @@ type Callbacks = {
   onAwaitingDealerChoice?: (p: any) => void;
   onRebuyPrompt?: (p: any) => void;
   onRebuyResult?: (p: any) => void;
+  onTableEvent?: (p: { type: string; [key: string]: unknown }) => void;
 };
 
 // Track active channels to prevent conflicts when multiple components subscribe
@@ -78,6 +79,11 @@ export function useSupabaseRealtime(tableId?: string | string[], callbacks?: Cal
         .on('broadcast', { event: 'rebuy_result' }, (p) => {
           channelEntry!.callbackRefs.forEach(ref => {
             try { ref.current?.onRebuyResult?.(p.payload); } catch (e) { console.error('[realtime] rebuy_result error:', e); }
+          });
+        })
+        .on('broadcast', { event: 'table_event' }, (p) => {
+          channelEntry!.callbackRefs.forEach(ref => {
+            try { ref.current?.onTableEvent?.(p.payload); } catch (e) { console.error('[realtime] table_event error:', e); }
           });
         })
         .subscribe();

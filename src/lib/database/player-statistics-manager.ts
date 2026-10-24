@@ -101,12 +101,20 @@ export class PlayerStatisticsManager {
   async getLeaderboard(metric: LeaderboardMetric, limit = 10): Promise<LeaderboardEntry[]> {
     const column = metric; // trusted from union type
     const res = await this.pool.query(
-      `SELECT user_id, ${column} as value
-       FROM player_statistics
-       ORDER BY ${column} DESC NULLS LAST
+      `SELECT ps.user_id, ps.${column} as value, u.username, ps.hands_played
+       FROM player_statistics ps
+       LEFT JOIN users u ON u.id = ps.user_id
+       WHERE ps.hands_played > 0
+       ORDER BY ps.${column} DESC NULLS LAST
        LIMIT $1`,
       [limit],
     );
-    return (res.rows as any[]).map((r, idx) => ({ userId: r.user_id, value: toNumber(r.value), rank: idx + 1 }));
+    return (res.rows as any[]).map((r, idx) => ({
+      userId: r.user_id,
+      username: r.username ?? null,
+      value: toNumber(r.value),
+      handsPlayed: Number(r.hands_played) || 0,
+      rank: idx + 1,
+    }));
   }
 }

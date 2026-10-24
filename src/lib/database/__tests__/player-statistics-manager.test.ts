@@ -98,15 +98,16 @@ describe('PlayerStatisticsManager (US-022)', () => {
 
   it('getLeaderboard maps and ranks results; converts numeric strings', async () => {
   query.mockResolvedValueOnce({ rows: [
-      { user_id: 'u9', value: '100.5' },
-      { user_id: 'u10', value: 50 },
+      { user_id: 'u9', value: '100.5', username: 'nine', hands_played: '12' },
+      { user_id: 'u10', value: 50, username: null, hands_played: 3 },
     ]});
 
     const lb = await mgr.getLeaderboard('total_profit', 2);
     expect(lb).toEqual([
-      { userId: 'u9', value: 100.5, rank: 1 },
-      { userId: 'u10', value: 50, rank: 2 },
+      { userId: 'u9', username: 'nine', value: 100.5, handsPlayed: 12, rank: 1 },
+      { userId: 'u10', username: null, value: 50, handsPlayed: 3, rank: 2 },
     ]);
-    expect(query.mock.calls[0][0]).toContain('ORDER BY total_profit DESC');
+    expect(query.mock.calls[0][0]).toContain('ORDER BY ps.total_profit DESC');
+    expect(query.mock.calls[0][0]).toContain('LEFT JOIN users');
   });
 });

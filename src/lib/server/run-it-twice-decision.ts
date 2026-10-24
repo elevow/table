@@ -5,7 +5,7 @@ import { persistEngineState, StaleGameStateError } from '../poker/engine-persist
 import { sanitizeStateForBroadcast } from '../poker/state-sanitizer';
 import type { PokerEngine } from '../poker/poker-engine';
 import type { TableState } from '../../types/poker';
-import { postHandResultToChat } from '../utils/post-hand-result';
+import { finishHand } from './hand-records';
 import { broadcastGameState, getIo } from './game-action-pipeline';
 
 const revealAllHoleCards = (engine: any, state: TableState): TableState => {
@@ -113,7 +113,7 @@ export async function resolveRunItTwiceDecision(opts: {
       if (state.stage === 'showdown' && !handResultPosted) {
         handResultPosted = true;
         try {
-          await postHandResultToChat(tableId, state);
+          await finishHand(tableId, state);
         } catch (chatError) {
           console.warn('Failed to post hand result to chat (auto-runout):', chatError);
         }

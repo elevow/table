@@ -49,6 +49,8 @@ export interface AchievementRow {
 
 export interface LeaderboardEntry {
   userId: string;
+  username?: string | null;
   value: number;
+  handsPlayed?: number;
   rank: number;
 }

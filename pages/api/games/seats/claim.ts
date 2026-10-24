@@ -1,10 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import * as GameSeats from '../../../../src/lib/shared/game-seats';
-import { publishSeatClaimed, publishSeatState } from '../../../../src/lib/realtime/publisher';
-import { fetchRoomRebuyLimit } from '../../../../src/lib/shared/rebuy-limit';
-import { fetchRoomBuyIn } from '../../../../src/lib/shared/buyin-amount';
-import { getPlayerRebuyInfo, recordBuyin } from '../../../../src/lib/shared/rebuy-tracker';
+import { publishTableEvent } from '../../../../src/lib/realtime/publisher';
 import { requirePlayer } from '../../../../src/lib/auth/auth-utils';
+import { performSeatClaim } from '../../../../src/lib/server/seat-actions';
+import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../../src/lib/server/room-config';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -28,61 +26,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const roomId = String(tableId);
+    const room = await loadRoom(roomId).catch(() => null);
+    const config = (room?.configuration || {}) as TableExtrasConfig;
+    const isHost = !!room?.createdBy && room.createdBy === playerId;
 
-    const seats = await GameSeats.loadPersistedRoomSeats(roomId) || GameSeats.initializeRoomSeats(roomId);
-
-    // Validate seat availability
-    if (seats[seatNumber] !== null) {
-      return res.status(409).json({ error: 'Seat already occupied', seatNumber });
+    // A seat offered to the next player on the waitlist is theirs until the offer runs out
+    const offer = config.seatOffer;
+    if (offer && Date.now() < offer.expiresAt && offer.seatNumber === Number(seatNumber) && offer.playerId !== playerId) {
+      return res.status(409).json({ error: 'This seat is being offered to the next player on the waitlist', code: 'SEAT_HELD' });
     }
 
-    // Ensure player is not already seated elsewhere
-    const existing = Object.entries(seats).find(([, a]) => a?.playerId === playerId);
-    if (existing) {
-      return res.status(409).json({ error: 'Player already has a seat', seatNumber: Number(existing[0]) });
+    // Tables that need the host's approval queue the request instead of seating the player
+    if (config.requireSeatApproval && !isHost) {
+      const requests = (config.seatRequests || []).filter(r => r.playerId !== playerId);
+      requests.push({ playerId, playerName, seatNumber: Number(seatNumber), requestedAt: Date.now() });
+      await updateRoomConfig(roomId, { seatRequests: requests });
+      await publishTableEvent(roomId, { type: 'seat_request', playerId, playerName }).catch(() => {});
+      return res.status(202).json({ ok: true, pending: true, seatNumber: Number(seatNumber) });
     }
 
-    const rebuyLimit = await fetchRoomRebuyLimit(roomId);
-    const buyInAmount = await fetchRoomBuyIn(roomId);
-    const previous = getPlayerRebuyInfo(roomId, playerId);
-    const isInitial = !previous;
-    const rebuysUsed = previous?.rebuys ?? 0;
-    const numericLimit = rebuyLimit === 'unlimited' ? Number.POSITIVE_INFINITY : rebuyLimit;
-
-    if (!isInitial && rebuysUsed >= numericLimit) {
-      const message = rebuyLimit === 'unlimited'
-        ? 'Rebuys are currently unavailable.'
-        : `Rebuy limit (${rebuyLimit}) reached for this room.`;
-      return res.status(403).json({ error: message, rebuyLimit, rebuysUsed });
-    }
-
-    // Stack size always comes from the room's buy-in; a client-sent chip count is ignored
-    const chipAmount = buyInAmount;
-
-    // Claim seat
-    seats[seatNumber] = { playerId, playerName, chips: chipAmount };
-    GameSeats.setRoomSeats(String(tableId), seats);
-    if (!await GameSeats.persistRoomSeats(roomId, seats)) {
-      seats[seatNumber] = null;
-      GameSeats.setRoomSeats(roomId, seats);
-      return res.status(503).json({ error: 'Unable to persist seat assignment' });
-    }
-
-    const seatPayload = { seatNumber, playerId, playerName, chips: chipAmount };
-
-    // Fan out to Supabase realtime
-    try {
-      await Promise.all([
-        publishSeatClaimed(String(tableId), seatPayload),
-        publishSeatState(String(tableId), { seats })
-      ]);
-    } catch (pubErr) {
-      console.warn('Seat claim Supabase publish failed:', pubErr);
-    }
-
-    const rebuyRecord = recordBuyin(roomId, playerId);
-
-    return res.status(200).json({ ok: true, ...seatPayload, seats, rebuyCount: rebuyRecord.rebuys });
+    const result = await performSeatClaim(roomId, Number(seatNumber), playerId, playerName);
+    return res.status(result.status).json(result.body);
   } catch (e: any) {
     console.error('seats/claim error:', e);
     return res.status(500).json({ error: 'Internal Server Error' });

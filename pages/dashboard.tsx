@@ -197,6 +197,14 @@ const Dashboard: NextPage = () => {
               Create Room (choose variant)
             </button>
           </div>
+          <div className="flex gap-4 text-sm">
+            <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/history')}>
+              Hand history
+            </button>
+            <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/leaderboard')}>
+              Leaderboard &amp; achievements
+            </button>
+          </div>
           
           {/* Room code join section */}
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">

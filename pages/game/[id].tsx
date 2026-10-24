@@ -26,6 +26,13 @@ import TurnClockBar from '../../src/components/TurnClockBar';
 import PreActionBar from '../../src/components/PreActionBar';
 import { resolvePreAction } from '../../src/lib/shared/pre-action';
 import type { PreAction } from '../../src/lib/shared/pre-action';
+import { useTableExtras } from '../../src/hooks/useTableExtras';
+import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
+import EquityPanel from '../../src/components/EquityPanel';
+import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/components/PlayerNotesPanel';
+import HostControlsPanel from '../../src/components/HostControlsPanel';
+import WaitlistPanel from '../../src/components/WaitlistPanel';
+import { NOTE_COLOR_CLASSES, type NoteColor } from '../../src/lib/shared/note-colors';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -222,6 +229,10 @@ export default function GamePage() {
   
   // Supabase is now the only supported transport
   const socketsDisabled = true;
+
+  // Host, table settings, waitlist and seat requests
+  const { extras: tableExtras, refresh: refreshTableExtras } = useTableExtras(tableId);
+  const [seatNotice, setSeatNotice] = useState<string | null>(null);
   
   // Subscribe to Supabase realtime updates
   useSupabaseRealtime(
@@ -419,6 +430,15 @@ export default function GamePage() {
         if (!payload || payload.playerId !== playerId) return;
         const { baseChips = 20, rebuysUsed = 0, rebuyLimit = 'unlimited', remaining = 'unlimited' } = payload;
         setRebuyPrompt({ baseChips, rebuysUsed, rebuyLimit, remaining });
+      },
+      onTableEvent: (payload: any) => {
+        refreshTableExtras();
+        if (payload?.type === 'kicked' && payload.playerId === playerId) {
+          setSeatNotice('The host removed you from the table.');
+        }
+        if (payload?.type === 'seat_request_resolved' && payload.playerId === playerId) {
+          setSeatNotice(payload.approved ? 'The host approved your seat.' : 'The host declined your seat request.');
+        }
       },
       onRebuyResult: (payload: any) => {
         console.log('📡 Supabase rebuy_result:', payload);
@@ -789,12 +809,21 @@ export default function GamePage() {
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ tableId: id, seatNumber, playerId, playerName })
       });
-      if (!resp.ok) {
-        const e = await resp.json().catch(() => ({}));
-        console.warn('Seat claim failed:', e);
+      if (resp.status === 202) {
+        // The host approves who sits at this table
+        setSeatNotice('Seat requested. Waiting for the host to approve.');
+        refreshTableExtras();
         setClaimingSeat(null);
         return;
       }
+      if (!resp.ok) {
+        const e = await resp.json().catch(() => ({}));
+        console.warn('Seat claim failed:', e);
+        if (e?.code === 'SEAT_HELD') setSeatNotice(e.error);
+        setClaimingSeat(null);
+        return;
+      }
+      setSeatNotice(null);
       const data = await resp.json();
       // The server sets the stack from the room's buy-in
       const startingChips = Number(data?.chips) || roomConfig?.buyIn || 1000;
@@ -1375,6 +1404,47 @@ export default function GamePage() {
   // Local state for inputs
   const [betInput, setBetInput] = useState<number>(0);
   const [raiseInput, setRaiseInput] = useState<number>(0);
+  // Private notes about the other seated players
+  const [playerNotes, setPlayerNotes] = useState<NotesMap>({});
+  const otherSeated = useMemo(
+    () => Object.values(seatAssignments)
+      .filter((a): a is { playerId: string; playerName: string; chips: number } => !!a && a.playerId !== playerId)
+      .map(a => ({ id: a.playerId, name: a.playerName || 'Player' })),
+    [seatAssignments, playerId]
+  );
+  const otherSeatedKey = otherSeated.map(p => p.id).sort().join(',');
+  useEffect(() => {
+    if (!playerId || !otherSeatedKey) return;
+    fetchNotes(otherSeatedKey.split(',')).then(setPlayerNotes).catch(() => {});
+  }, [playerId, otherSeatedKey]);
+
+  // Waitlist
+  const isSeated = currentPlayerSeat !== null;
+  const tableFull = Object.entries(seatAssignments).filter(([n]) => Number(n) <= maxPlayers).every(([, a]) => !!a);
+  const toggleWaitlist = useCallback(async (join: boolean) => {
+    if (!tableId || !playerId) return;
+    let name = 'Player';
+    try { name = localStorage.getItem('playerName') || name; } catch {}
+    await fetch('/api/games/waitlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ tableId, playerId, join, playerName: name }),
+    }).catch(() => {});
+    refreshTableExtras();
+  }, [tableId, playerId, refreshTableExtras]);
+
+  // Straddle next hand
+  const toggleStraddle = useCallback(async () => {
+    if (!tableId || !playerId || !me) return;
+    const resp = await fetch('/api/games/straddle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ tableId, playerId, wants: !me.wantsStraddle }),
+    }).catch(() => null);
+    const data = await resp?.json().catch(() => ({}));
+    if (resp?.ok && data?.gameState) setPokerGameState(data.gameState);
+  }, [tableId, playerId, me]);
+
   // Pre-action queued for when it becomes our turn (current betting round only)
   const [preAction, setPreAction] = useState<PreAction | null>(null);
   const myOwed = me ? Math.max(0, Number(pokerGameState?.currentBet || 0) - Number(me.currentBet || 0)) : 0;
@@ -1589,7 +1659,10 @@ export default function GamePage() {
               <Avatar 
                 src={getPlayerAvatarSrc(assignment.playerId)}
                 size="lg"
-                className="w-12 h-12 rounded-full border-2 border-white shadow-sm"
+                className={`w-12 h-12 rounded-full border-2 border-white shadow-sm ${(() => {
+                  const tag = playerNotes[assignment.playerId]?.color as NoteColor | undefined;
+                  return tag && NOTE_COLOR_CLASSES[tag] ? `ring-4 ${NOTE_COLOR_CLASSES[tag].ring}` : '';
+                })()}`}
                 alt={assignment.playerName || `Player ${seatNumber}`}
               />
               {(() => {
@@ -2364,6 +2437,22 @@ export default function GamePage() {
                 <span className="whitespace-nowrap">Stand Up (P{currentPlayerSeat})</span>
               </button>
             )}
+            <a
+              href={`/history?room=${encodeURIComponent(tableId)}`}
+              className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-center whitespace-nowrap"
+            >
+              Hand history
+            </a>
+            {gameStarted && me && tableExtras?.allowStraddle && !isStudVariant() && (pokerGameState?.players?.length || 0) >= 3 && (
+              <button
+                onClick={toggleStraddle}
+                className={`${me.wantsStraddle ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'} text-white font-medium px-4 py-2 rounded-lg w-full sm:w-auto whitespace-nowrap`}
+                title="Post twice the big blind under the gun next hand (only if you are under the gun)"
+                aria-pressed={!!me.wantsStraddle}
+              >
+                {me.wantsStraddle ? 'Straddling next hand' : 'Straddle next hand'}
+              </button>
+            )}
             {gameStarted && me && (
               <button
                 onClick={toggleSitOut}
@@ -2426,6 +2515,35 @@ export default function GamePage() {
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {seatNotice && (
+            <div className="lg:col-span-3 flex items-center justify-between gap-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg p-3 text-sm text-blue-900 dark:text-blue-100" role="status">
+              <span>{seatNotice}</span>
+              <button onClick={() => setSeatNotice(null)} className="text-xs underline">Dismiss</button>
+            </div>
+          )}
+          {tableExtras && userRole !== 'guest' && (
+            <WaitlistPanel
+              extras={tableExtras}
+              playerId={playerId}
+              isSeated={isSeated}
+              tableFull={tableFull}
+              canSit={!!playerId}
+              onToggleWaitlist={toggleWaitlist}
+              onTakeSeat={(n) => claimSeat(n)}
+            />
+          )}
+          {gameStarted && pokerGameState?.paused && (
+            <div className="lg:col-span-3 bg-gray-800 text-white rounded-lg p-3 text-center font-semibold" role="status">
+              The host has paused the game.
+            </div>
+          )}
+          {gameStarted && (pokerGameState?.handKind === 'bomb-pot' || pokerGameState?.bombPotNext) && pokerGameState?.stage !== 'showdown' && (
+            <div className="lg:col-span-3 bg-orange-100 dark:bg-orange-900/30 border border-orange-300 dark:border-orange-700 rounded-lg p-3 text-sm text-orange-900 dark:text-orange-100" role="status">
+              {pokerGameState?.handKind === 'bomb-pot'
+                ? 'Bomb pot! Everyone anted and the betting starts on the flop.'
+                : `Next hand is a bomb pot (${pokerGameState.bombPotNext.anteBB} big blind ante).`}
+            </div>
+          )}
           {/* Dealer's Choice selection banner */}
           {gameStarted && awaitingDealerChoice && (
             <div className="lg:col-span-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 rounded-lg shadow-md p-4">
@@ -3287,6 +3405,15 @@ export default function GamePage() {
             </div>
           )}
 
+          {/* Chance to win during an all-in, when everyone's cards are face up */}
+          {gameStarted && pokerGameState && anyAllIn() && pokerGameState.stage !== 'showdown' && !isStudVariant() && (
+            <EquityPanel
+              players={getActiveNonFoldedPlayers()}
+              board={Array.isArray(pokerGameState.communityCards) ? pokerGameState.communityCards : []}
+              omaha={pokerGameState.variant === 'omaha' || pokerGameState.variant === 'omaha-hi-lo'}
+            />
+          )}
+
           {/* Outs Display: Show outs and odds when there's an all-in scenario before showdown */}
           {gameStarted && pokerGameState && anyAllIn() && pokerGameState.stage !== 'showdown' && (() => {
             try {
@@ -3362,7 +3489,8 @@ export default function GamePage() {
             }
           })()}
 
-          {/* Combined Timer and Statistics */}
+          {/* Right column: timer and statistics, then host controls, session and notes */}
+          <div className="flex flex-col gap-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
             {id && playerId && (
               <CombinedTimerStats 
@@ -3383,7 +3511,25 @@ export default function GamePage() {
               </div>
             )}
           </div>
-          
+          {tableExtras?.isHost && (
+            <HostControlsPanel
+              tableId={tableId}
+              playerId={playerId}
+              extras={tableExtras}
+              gameState={gameStarted ? pokerGameState : null}
+              players={otherSeated}
+              onState={setPokerGameState}
+              onRefresh={refreshTableExtras}
+            />
+          )}
+          {playerId && (isSeated || amInGame) && (
+            <SessionLedgerPanel tableId={tableId} refreshKey={`${pokerGameState?.handNumber ?? 0}:${pokerGameState?.stage === 'showdown'}`} />
+          )}
+          {playerId && (
+            <PlayerNotesPanel players={otherSeated} notes={playerNotes} onNotesChange={setPlayerNotes} />
+          )}
+          </div>
+
           {/* Less critical component in viewport */}
           <div ref={chatPanelRef} className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6">
             <ChatPanel gameId={String(id)} playerId={playerId} isAdmin={userRole === 'admin'} />

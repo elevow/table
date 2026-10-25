@@ -13,6 +13,8 @@ import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
+import { recordLedger } from '../../../src/lib/server/chip-ledger';
+import { syncWaitlist } from '../../../src/lib/server/seat-actions';
 import { sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 
 /**
@@ -41,7 +43,7 @@ async function maybeStartNextHand(tableId: string, engine: any): Promise<boolean
   console.log(`[rebuy-decision] Players with money: ${playersWithMoney.length}, pending rebuys: ${pendingCount}`);
 
   // Need at least 2 players with money and no pending rebuy decisions
-  const enoughSittingIn = typeof engine.canStartNewHand !== 'function' || engine.canStartNewHand();
+  const enoughSittingIn = !state.paused && (typeof engine.canStartNewHand !== 'function' || engine.canStartNewHand());
   if (playersWithMoney.length >= 2 && pendingCount === 0 && enoughSittingIn) {
     console.log(`[rebuy-decision] Starting next hand for table ${tableId}`);
     
@@ -123,6 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Record the rebuy
       const trackerRecord = recordBuyin(tableId, playerId);
+      await recordLedger({ roomId: tableId, playerId, playerName: tablePlayer.name, kind: 'rebuy', amount: rebuyChips });
       clearPendingRebuy(tableId, playerId);
 
       // Update seat assignment
@@ -202,6 +205,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         playerId,
         status: 'declined',
       });
+      // The freed seat goes to the waitlist
+      await syncWaitlist(tableId);
 
       // Check if we can start the next hand now (remaining players may have enough)
       const handStarted = await maybeStartNextHand(tableId, engine);

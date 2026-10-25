@@ -1,9 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
-import { publishSeatState, publishSeatVacated, publishGameStateUpdate } from '../../../../src/lib/realtime/publisher';
 import { requirePlayer } from '../../../../src/lib/auth/auth-utils';
-import { sanitizeStateForBroadcast } from '../../../../src/lib/poker/state-sanitizer';
-import { enrichStateWithRunIt } from '../../../../src/lib/poker/run-it-twice-manager';
+import { leaveTable } from '../../../../src/lib/server/seat-actions';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -62,47 +60,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(403).json({ error: 'Not your seat' });
     }
 
-    // Vacate
-    seats[sNum] = null;
-    GameSeats.setRoomSeats(String(tableId), seats);
-    await GameSeats.persistRoomSeats(String(tableId), seats);
-
-    const seatPayload = { seatNumber: sNum, playerId };
-
-    // Broadcast via Supabase for realtime clients
-    try {
-      await Promise.all([
-        publishSeatVacated(String(tableId), seatPayload),
-        publishSeatState(String(tableId), { seats })
-      ]);
-    } catch (pubErr) {
-      console.warn('Seat vacate Supabase publish failed:', pubErr);
-    }
-
-    // If a game engine is active, attempt auto-fold and update (best-effort)
-    try {
-      if ((global as any).activeGames && (global as any).activeGames.has(String(tableId))) {
-        const engine = (global as any).activeGames.get(String(tableId));
-        if (engine && typeof engine.removePlayer === 'function') {
-          engine.removePlayer(playerId);
-          let gameState = engine.getState();
-          const activeCount = (gameState.players || []).filter((p: any) => !(p.isFolded || (p as any).folded)).length;
-          if (activeCount === 1 && gameState.stage !== 'showdown' && typeof engine.ensureWinByFoldIfSingle === 'function') {
-            engine.ensureWinByFoldIfSingle();
-            gameState = engine.getState();
-          }
-          // Broadcast game state update via Supabase
-          try {
-            // The table channel is shared, so it must never carry anyone's hidden cards
-            await publishGameStateUpdate(String(tableId), {
-              gameState: sanitizeStateForBroadcast(enrichStateWithRunIt(String(tableId), gameState)),
-              lastAction: { playerId, action: 'auto_fold_on_stand_up' },
-              timestamp: new Date().toISOString(),
-            });
-          } catch {}
-        }
-      }
-    } catch {}
+    // Fold them out of any hand, vacate the seat, record the cash-out and offer the seat to the waitlist
+    await leaveTable({ roomId: String(tableId), playerId, reason: 'stand_up', res });
 
     return res.status(200).json({ ok: true, seatNumber: sNum, playerId });
   } catch (e: any) {

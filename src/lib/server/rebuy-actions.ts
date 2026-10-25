@@ -4,6 +4,7 @@ import * as GameSeats from '../shared/game-seats';
 import { recordBuyin } from '../shared/rebuy-tracker';
 import { fetchRoomRebuyAmount } from '../shared/rebuy-limit';
 import type { TableState } from '../../types/poker';
+import { syncWaitlist } from './seat-actions';
 
 export async function autoStandPlayer(
   io: Broadcaster | null,
@@ -26,6 +27,7 @@ export async function autoStandPlayer(
       publishSeatVacated(tableId, payload),
       publishSeatState(tableId, { seats })
     ]);
+    await syncWaitlist(tableId);
   } catch (err) {
     console.warn('autoStandPlayer failed:', err);
   }

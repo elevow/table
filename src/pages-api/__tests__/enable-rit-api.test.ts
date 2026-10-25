@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+jest.mock('../../../src/lib/server/hand-records', () => ({ finishHand: jest.fn().mockResolvedValue(undefined) }));
+
 jest.mock('../../../src/lib/poker/engine-persistence', () => ({
   getOrRestoreEngine: jest.fn(),
   persistEngineState: jest.fn().mockResolvedValue(undefined),

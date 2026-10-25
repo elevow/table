@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { PlayerStatisticsService } from '../../../src/lib/services/player-statistics-service';
 
@@ -9,7 +9,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
   try {
     const userId = String(req.query.userId || '');
-    const pool = new Pool();
+    // The app's configured connection (new Pool() would ignore DATABASE_URL and SSL settings)
+    const pool = getPool();
     const svc = new PlayerStatisticsService(pool);
     const stats = await svc.getOrCreate(userId);
     return res.status(200).json(stats);

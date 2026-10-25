@@ -14,7 +14,10 @@ jest.mock('../../../src/lib/poker/supabase-auto-runout', () => ({
   clearSupabaseAutoRunout: jest.fn(),
   runSupabaseAutoRunoutSync: jest.fn(),
 }));
-jest.mock('../../../src/lib/utils/post-hand-result', () => ({ postHandResultToChat: jest.fn() }));
+jest.mock('../../../src/lib/server/hand-records', () => ({
+  finishHand: jest.fn().mockResolvedValue(undefined),
+  markCardsShown: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('../../../src/lib/server/run-it-twice-decision', () => ({
   resolveRunItTwiceDecision: jest.fn(async (opts: any) => ({ status: 'ok', state: opts.engine.getState() })),
 }));

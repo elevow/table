@@ -1,4 +1,18 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+jest.mock('pg', () => ({ Pool: jest.fn() }));
+// No saved game, ledger or waitlist in these tests
+jest.mock('../../../poker/engine-persistence', () => ({
+  getOrRestoreEngine: jest.fn().mockResolvedValue(null),
+  persistEngineState: jest.fn().mockResolvedValue('saved'),
+  StaleGameStateError: class extends Error {},
+}));
+jest.mock('../../../server/chip-ledger', () => ({ recordLedger: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('../../../server/room-config', () => ({
+  loadRoom: jest.fn().mockResolvedValue(null),
+  updateRoomConfig: jest.fn().mockResolvedValue(undefined),
+  advanceSeatOffer: jest.fn(() => ({ waitlist: [], seatOffer: null, changed: false })),
+  freeSeatNumbers: jest.fn(() => []),
+}));
 // Simulate a signed-in caller whose session matches the playerId they send
 const mockRequirePlayer = jest.fn(async (_req: any, _res: any, claimed?: unknown) => (claimed ? String(claimed) : 'player1'));
 jest.mock('../../../auth/auth-utils', () => ({

@@ -12,7 +12,7 @@ import { persistEngineState, StaleGameStateError } from '../poker/engine-persist
 import type { PokerEngine } from '../poker/poker-engine';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../shared/feature-flags';
 import type { Card, GameStage, TableState } from '../../types/poker';
-import { postHandResultToChat } from '../utils/post-hand-result';
+import { finishHand } from './hand-records';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -155,7 +155,7 @@ export async function runGameAction(opts: {
   // Post hand result to chat when the game reaches showdown
   if (enrichedState.stage === 'showdown' && preActionStage !== 'showdown') {
     try {
-      await postHandResultToChat(tableId, enrichedState);
+      await finishHand(tableId, enrichedState);
     } catch (chatError) {
       // Log but don't fail the action if chat posting fails
       console.warn('Failed to post hand result to chat:', chatError);
@@ -174,7 +174,7 @@ export async function runGameAction(opts: {
       if (state.stage === 'showdown' && !handResultPosted) {
         handResultPosted = true;
         try {
-          await postHandResultToChat(tableId, state);
+          await finishHand(tableId, state);
         } catch (chatError) {
           console.warn('Failed to post hand result to chat (auto-runout):', chatError);
         }

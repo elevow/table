@@ -30,6 +30,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       maxPlayers: room.maxPlayers,
       status: room.status,
       createdAt: room.createdAt,
+      // The host, who has the table controls
+      createdBy: room.createdBy,
       configuration: room.configuration || null,
       blindLevels: room.blindLevels || null,
     });

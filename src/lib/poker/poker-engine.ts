@@ -1,4 +1,5 @@
-import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking, GameVariant, RunItTwicePrompt } from '../../types/poker';
+import { randomUUID } from 'crypto';
+import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking, GameVariant, RunItTwicePrompt, HandActionEntry } from '../../types/poker';
 import { RunItTwiceOutcomeInput } from '../../types/game-history';
 import { HandEvaluator } from './hand-evaluator';
 import { PotCalculator, SidePot } from './pot-calculator';
@@ -236,9 +237,13 @@ export class PokerEngine {
       }
       // Do not clear removedPlayers here in case multiple successive starts need pruning
     }
+    if (this.state.paused) {
+      throw new Error('The game is paused');
+    }
     if (!this.canStartNewHand()) {
       throw new Error('Need at least two players sitting in to start a hand');
     }
+    this.applyPendingBlinds();
     this.deckManager.resetDeck();
     this.gameStateManager.resetPlayerStates();
     this.gameStateManager.rotateDealerButton();
@@ -251,6 +256,13 @@ export class PokerEngine {
     });
     delete this.state.handWinners;
     delete this.state.shownCards;
+    delete this.state.handResult;
+    delete this.state.straddle;
+    this.state.handId = randomUUID();
+    this.state.handNumber = (this.state.handNumber || 0) + 1;
+    this.state.handStartedAt = Date.now();
+    this.state.handActions = [];
+    this.state.handKind = 'normal';
     // Snapshot stacks before blinds, antes or bring-ins so showdown can size the side pots
     this.state.handStartStacks = Object.fromEntries(this.state.players.map(p => [p.id, p.stack]));
     this.state.dealersChoiceHandCount = (this.state.dealersChoiceHandCount || 0) + 1;
@@ -264,12 +276,147 @@ export class PokerEngine {
       // Stud uses bring-in instead of blinds
       this.computeStudBringIn();
       this.gameStateManager.startBettingRound('third');
+    } else if (this.state.bombPotNext) {
+      this.startBombPot(this.state.bombPotNext.anteBB);
     } else {
       this.dealHoleCards();
   this.postBlinds();
       this.gameStateManager.startBettingRound('preflop');
+      this.postStraddle();
     }
+    this.state.players.forEach(p => { delete p.wantsStraddle; });
     this.startTurnClock(Date.now());
+  }
+
+  private logAction(entry: HandActionEntry): void {
+    if (!this.state.handActions) this.state.handActions = [];
+    this.state.handActions.push(entry);
+  }
+
+  /** Put chips from a player's stack into the pot as a forced bet (blind, straddle, ante). */
+  private postForced(player: Player, amount: number, countsAsBet: boolean): number {
+    const pay = Math.max(0, Math.min(amount, player.stack));
+    player.stack -= pay;
+    if (countsAsBet) player.currentBet += pay;
+    if (player.stack === 0) player.isAllIn = true;
+    this.state.pot += pay;
+    return pay;
+  }
+
+  /** Blinds the host set take effect between hands. */
+  private applyPendingBlinds(): void {
+    const pending = this.state.pendingBlinds;
+    if (!pending) return;
+    this.state.smallBlind = pending.smallBlind;
+    this.state.bigBlind = pending.bigBlind;
+    this.state.minRaise = pending.bigBlind;
+    this.bettingManager = new BettingManager(pending.smallBlind, pending.bigBlind);
+    this.bettingManager.setMode(this.state.bettingMode || 'no-limit');
+    delete this.state.pendingBlinds;
+  }
+
+  /** Host sets new blinds; they apply from the next hand. */
+  public setPendingBlinds(smallBlind: number, bigBlind: number): void {
+    if (!(smallBlind > 0) || !(bigBlind >= smallBlind)) throw new Error('Blinds must be positive and the big blind at least the small blind');
+    this.state.pendingBlinds = { smallBlind, bigBlind };
+  }
+
+  /** Host pauses or resumes the game. The clock stops while paused, without charging time banks. */
+  public setPaused(paused: boolean, now: number = Date.now()): void {
+    if (paused === !!this.state.paused) return;
+    if (paused) {
+      this.state.paused = true;
+      if (typeof this.state.turnDeadline === 'number') {
+        this.state.pausedTurnRemainingMs = Math.max(0, this.state.turnDeadline - now);
+      }
+      delete this.state.turnDeadline;
+      delete this.state.turnStartedAt;
+      return;
+    }
+    this.state.paused = false;
+    const remaining = this.state.pausedTurnRemainingMs;
+    delete this.state.pausedTurnRemainingMs;
+    const player = this.state.players.find(p => p.id === this.state.activePlayer);
+    if (typeof remaining === 'number' && player) {
+      // Resume where the clock stopped; the start time moves so the time bank is charged only for
+      // time actually spent deciding
+      this.state.turnDeadline = now + remaining;
+      this.state.turnStartedAt = this.state.turnDeadline - (BASE_TURN_MS + Math.max(0, player.timeBank || 0) * 1000);
+    } else {
+      this.startTurnClock(now);
+    }
+  }
+
+  /** Host allows or disallows straddles at this table. */
+  public setAllowStraddle(allow: boolean): void {
+    this.state.allowStraddle = allow;
+    if (!allow) this.state.players.forEach(p => { delete p.wantsStraddle; });
+  }
+
+  /** A player asks to straddle next hand (posted only if they are under the gun). */
+  public setWantsStraddle(playerId: string, wants: boolean): void {
+    if (!this.state.allowStraddle && wants) throw new Error('Straddles are not allowed at this table');
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player) throw new Error('Player not found');
+    player.wantsStraddle = wants;
+  }
+
+  /** Host makes the next hand a bomb pot, or cancels it. */
+  public setBombPotNext(anteBB: number | null): void {
+    if (anteBB === null) {
+      this.state.bombPotNext = null;
+      return;
+    }
+    if (!(anteBB > 0)) throw new Error('The bomb pot ante must be positive');
+    this.state.bombPotNext = { anteBB };
+  }
+
+  /**
+   * Under-the-gun straddle: the player after the big blind posts twice the big blind and acts last
+   * preflop. Only with three or more players in the hand.
+   */
+  private postStraddle(): void {
+    if (!this.state.allowStraddle) return;
+    const dealtIn = this.gameStateManager.dealtInPlayers();
+    const n = dealtIn.length;
+    if (n < 3) return;
+    const dealerIdx = Math.max(0, dealtIn.indexOf(this.state.players[this.state.dealerPosition]));
+    const utg = dealtIn[(dealerIdx + 3) % n];
+    if (!utg.wantsStraddle || utg.stack <= 0 || utg.isAllIn) return;
+    const straddle = this.state.bigBlind * 2;
+    const pay = this.postForced(utg, straddle, true);
+    this.state.currentBet = Math.max(this.state.currentBet, utg.currentBet);
+    this.state.minRaise = straddle;
+    this.state.straddle = { playerId: utg.id, amount: pay };
+    this.logAction({ playerId: utg.id, action: 'straddle', amount: utg.currentBet, put: pay, stage: 'preflop' });
+    // Action starts after the straddler, who gets the last word preflop
+    const next = this.gameStateManager.findNextActivePlayer(utg.position);
+    if (next) this.state.activePlayer = next.id;
+  }
+
+  /**
+   * Bomb pot: everyone antes, no preflop betting, the flop is dealt straight away and betting
+   * starts there.
+   */
+  private startBombPot(anteBB: number): void {
+    this.state.handKind = 'bomb-pot';
+    this.state.bombPotNext = null;
+    this.dealHoleCards();
+    const ante = Math.max(1, Math.round(anteBB * this.state.bigBlind));
+    for (const p of this.gameStateManager.dealtInPlayers()) {
+      const pay = this.postForced(p, ante, false);
+      this.logAction({ playerId: p.id, action: 'ante', put: pay, stage: 'preflop' });
+    }
+    this.state.currentBet = 0;
+    this.state.minRaise = this.state.bigBlind;
+    this.dealCommunityCards(3);
+    this.gameStateManager.startBettingRound('flop');
+    const canAct = this.getActivePlayers().filter(p => !p.isAllIn);
+    if (canAct.length < 2) {
+      // Antes put (nearly) everyone all-in: deal the rest and settle
+      this.dealCommunityCards(5 - this.state.communityCards.length);
+      this.determineWinner();
+    }
   }
 
   /** Whether at least two players (not leaving) are sitting in, as a new hand needs. */
@@ -414,6 +561,11 @@ export class PokerEngine {
     const dealtIn = this.gameStateManager.dealtInPlayers();
     const dealerIdx = Math.max(0, dealtIn.indexOf(this.state.players[this.state.dealerPosition]));
     const { pot, currentBet } = this.bettingManager.postBlinds(dealtIn, dealerIdx);
+    const posters = dealtIn.filter(p => p.currentBet > 0).sort((a, b) => a.currentBet - b.currentBet);
+    posters.forEach((p, i) => {
+      const action = i === posters.length - 1 && posters.length > 1 ? 'big-blind' : 'small-blind';
+      this.logAction({ playerId: p.id, action, amount: p.currentBet, put: p.currentBet, stage: 'preflop' });
+    });
     this.log(`Blind amounts: pot=${pot}, currentBet=${currentBet}`);
     
     // Add blind bets to pot
@@ -447,8 +599,19 @@ export class PokerEngine {
   }
 
   private applyDecision(action: PlayerAction, source: 'player' | 'timeout', now: number): void {
+    if (this.state.paused) throw new Error('The game is paused');
     const actor = this.state.players.find(p => p.id === action.playerId);
+    const stage = this.state.stage;
+    const stackBefore = actor?.stack ?? 0;
+    const betBefore = actor?.currentBet ?? 0;
     this.applyAction(action);
+    if (actor) {
+      const put = Math.max(0, stackBefore - actor.stack);
+      const entry: HandActionEntry = { playerId: actor.id, action: action.type, put, stage };
+      if (action.type === 'call' || action.type === 'bet' || action.type === 'raise') entry.amount = betBefore + put;
+      if (source === 'timeout') entry.auto = true;
+      this.logAction(entry);
+    }
     // Only reached when the action was accepted
     if (actor && source === 'player') {
       this.chargeTimeBank(actor, now);
@@ -747,6 +910,7 @@ export class PokerEngine {
       this.state.currentBet = Math.max(this.state.currentBet, player.currentBet);
       player.hasActed = true;
       this.state.studState!.bringIn = { amount: pay, player: player.id };
+      this.logAction({ playerId: player.id, action: 'bring-in', amount: player.currentBet, put: pay, stage: this.state.stage });
       if (process.env.DEBUG_POKER === 'true') {
         // eslint-disable-next-line no-console
         console.log(`[DEBUG] Stud bring-in computed: player=${player.id} amount=${pay} upcards=`, debug);
@@ -757,11 +921,21 @@ export class PokerEngine {
   /** Settle the hand and record who won chips, which decides whose cards are shown. */
   private determineWinner(): void {
     const stacksBefore = new Map(this.state.players.map(p => [p.id, p.stack]));
+    const starts = this.state.handStartStacks;
+    const potBefore = starts && this.state.players.every(p => typeof starts[p.id] === 'number')
+      ? this.state.players.reduce((sum, p) => sum + Math.max(0, starts[p.id] - p.stack), 0)
+      : this.state.pot;
     this.settleHand();
     if (this.state.stage === 'showdown') {
       this.state.handWinners = this.state.players
         .filter(p => p.stack > (stacksBefore.get(p.id) ?? p.stack))
         .map(p => p.id);
+      const winnings: Record<string, number> = {};
+      this.state.players.forEach(p => {
+        const won = p.stack - (stacksBefore.get(p.id) ?? p.stack);
+        if (won > 0) winnings[p.id] = won;
+      });
+      this.state.handResult = { pot: potBefore, winnings };
       this.startTurnClock(Date.now());
     }
   }

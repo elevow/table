@@ -50,6 +50,16 @@ export async function publishRebuyPrompt(tableId: string, payload: any) {
   await supa.channel(`table:${tableId}`).send({ type: 'broadcast', event: 'rebuy_prompt', payload });
 }
 
+/**
+ * Table changes that are not part of the game state (waitlist, seat requests, host settings).
+ * Clients refetch /api/games/table-extras when they see one.
+ */
+export async function publishTableEvent(tableId: string, payload: { type: string; [key: string]: unknown }) {
+  const supa = getSupabaseServer();
+  if (!supa) return;
+  await supa.channel(`table:${tableId}`).send({ type: 'broadcast', event: 'table_event', payload });
+}
+
 export async function publishRebuyResult(tableId: string, payload: any) {
   const supa = getSupabaseServer();
   if (!supa) return;

@@ -85,7 +85,7 @@ function canSeePrivateCards(playerId: string, viewerId: string | null, revealedI
  *   when it ended in an all-in (their cards were already face up for the runout); losers muck;
  * - after the hand, anyone who chose to show.
  */
-function revealedPlayerIds(state: TableState): Set<string> {
+export function revealedPlayerIds(state: TableState): Set<string> {
   const inHand = state.players.filter(p => !p.isFolded);
   if (state.stage !== 'showdown') {
     return new Set(isAllInSituation(state) ? inHand.map(p => p.id) : []);

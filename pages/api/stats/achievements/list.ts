@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../../src/lib/database/pool';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { PlayerStatisticsService } from '../../../../src/lib/services/player-statistics-service';
 
@@ -11,7 +11,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userId = String(req.query.userId || '');
     const limit = Number(req.query.limit || 50);
     const offset = Number(req.query.offset || 0);
-    const pool = new Pool();
+    // The app's configured connection (new Pool() would ignore DATABASE_URL and SSL settings)
+    const pool = getPool();
     const svc = new PlayerStatisticsService(pool);
     const items = await svc.listAchievements(userId, limit, offset);
     return res.status(200).json({ items });

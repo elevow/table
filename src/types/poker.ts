@@ -37,6 +37,21 @@ export interface Player {
   isSittingOut?: boolean;
   // Turns in a row the clock ran out on; reset when the player acts
   consecutiveTimeouts?: number;
+  // Asked to straddle (post twice the big blind under the gun) next hand
+  wantsStraddle?: boolean;
+}
+
+/** One entry in a hand's action log, kept for hand history and the replayer. */
+export interface HandActionEntry {
+  playerId: string;
+  action: 'small-blind' | 'big-blind' | 'straddle' | 'ante' | 'bring-in' | 'fold' | 'check' | 'call' | 'bet' | 'raise';
+  // The player's total bet on this street after the action, where that applies
+  amount?: number;
+  // Chips this action moved from the player's stack into the pot
+  put: number;
+  stage: GameStage;
+  // Taken by the turn clock rather than the player
+  auto?: boolean;
 }
 
 export interface TableState {
@@ -65,6 +80,26 @@ export interface TableState {
   handWinners?: string[];
   // Players who chose to show their cards after the hand ended
   shownCards?: string[];
+  // Identity of the current hand and what has happened in it, for hand history
+  handId?: string;
+  handNumber?: number;
+  handStartedAt?: number;
+  handActions?: HandActionEntry[];
+  // Set when the hand is settled: chips in the pot and what each winner took from it
+  handResult?: { pot: number; winnings: Record<string, number> };
+  // Host has paused the game: no actions, no clock, no new hands
+  paused?: boolean;
+  pausedTurnRemainingMs?: number;
+  // Blinds the host set, taking effect when the next hand starts
+  pendingBlinds?: { smallBlind: number; bigBlind: number };
+  // Table allows an under-the-gun straddle (Hold'em and Omaha)
+  allowStraddle?: boolean;
+  // The straddle posted this hand, if any
+  straddle?: { playerId: string; amount: number };
+  // Next hand is a bomb pot: everyone antes this many big blinds and betting starts on the flop
+  bombPotNext?: { anteBB: number } | null;
+  // What kind of hand is being played
+  handKind?: 'normal' | 'bomb-pot';
   communityCards: Card[];
   currentBet: number;
   dealerPosition: number;

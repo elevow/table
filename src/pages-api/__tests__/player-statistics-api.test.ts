@@ -5,6 +5,8 @@ import listHandler from '../../../pages/api/stats/achievements/list';
 import leaderboardHandler from '../../../pages/api/stats/leaderboard';
 
 jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({})) }));
+// The routes use the shared pool, which needs a database URL that CI doesn't have
+jest.mock('../../../src/lib/database/pool', () => ({ getPool: jest.fn(() => ({})) }));
 jest.mock('../../../src/lib/api/rate-limit', () => ({ rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 }) }));
 
 const mockService: any = {

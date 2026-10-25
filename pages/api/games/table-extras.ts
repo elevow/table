@@ -35,6 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       isHost,
       requireSeatApproval: !!config.requireSeatApproval,
       allowStraddle: !!config.allowStraddle,
+      allowRunItTwice: !!config.allowRunItTwice,
       waitlist: next.waitlist.map(w => ({ playerId: w.playerId, playerName: w.playerName })),
       seatOffer: next.seatOffer,
       seatRequests: isHost ? config.seatRequests || [] : undefined,

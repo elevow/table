@@ -121,6 +121,18 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             />
           </label>
         )}
+        {!stud && (
+          <label className="flex items-center justify-between gap-2">
+            <span>Allow run it twice</span>
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={extras.allowRunItTwice}
+              disabled={!!busy}
+              onChange={e => send('rit', { action: 'allow-run-it-twice', allow: e.target.checked })}
+            />
+          </label>
+        )}
         <label className="flex items-center justify-between gap-2">
           <span>Approve players before they sit</span>
           <input

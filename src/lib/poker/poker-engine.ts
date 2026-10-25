@@ -348,6 +348,11 @@ export class PokerEngine {
   }
 
   /** Host allows or disallows straddles at this table. */
+  /** Whether this table offers run it twice after an all-in. */
+  public setAllowRunItTwice(allow: boolean): void {
+    this.state.allowRunItTwice = allow;
+  }
+
   public setAllowStraddle(allow: boolean): void {
     this.state.allowStraddle = allow;
     if (!allow) this.state.players.forEach(p => { delete p.wantsStraddle; });

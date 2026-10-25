@@ -2417,6 +2417,14 @@ export default function GamePage() {
                 Rebuys: {roomConfig.numberOfRebuys === 'unlimited' ? 'Unlimited' : roomConfig.numberOfRebuys}
               </span>
             )}
+            {tableExtras?.allowRunItTwice && (
+              <span
+                className="inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-100"
+                title="After an all-in, the weakest hand can choose to run the board more than once"
+              >
+                Run it twice
+              </span>
+            )}
             {/* Removed seated info banner at user request */}
             {/* Removed game started banner at user request */}
           </div>

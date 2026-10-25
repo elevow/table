@@ -103,6 +103,7 @@ describe('/api/games/enable-rit', () => {
         { id: 'player-2', isFolded: false },
       ],
       runItTwicePrompt: { playerId: 'player-1', boardCardsCount: 0 },
+      allowRunItTwice: true,
     };
     const engine = {
       getState: jest.fn(() => state),
@@ -125,6 +126,7 @@ describe('/api/games/enable-rit', () => {
       stage: 'preflop',
       players: [{ id: 'player-1', isFolded: false }, { id: 'player-2', isFolded: false }],
       runItTwicePrompt: { playerId: 'player-1', boardCardsCount: 0 },
+      allowRunItTwice: true,
     };
     const engine = {
       getState: jest.fn(() => state),
@@ -139,6 +141,24 @@ describe('/api/games/enable-rit', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(engine.setRunItTwicePrompt).not.toHaveBeenCalled();
+  });
+
+  it('refuses more than one run at a table that does not allow run it twice', async () => {
+    const state: any = {
+      tableId: 'table-1',
+      stage: 'preflop',
+      players: [{ id: 'player-1', isFolded: false }, { id: 'player-2', isFolded: false }],
+      runItTwicePrompt: { playerId: 'player-1', boardCardsCount: 0 },
+    };
+    const engine = { getState: jest.fn(() => state), setRunItTwicePrompt: jest.fn(), startRunItTwice: jest.fn() };
+    (getOrRestoreEngine as jest.Mock).mockResolvedValue(engine);
+    (global as any).runItTwiceState = new Map([['table-1', { prompt: null, disabled: false }]]);
+
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as Partial<NextApiResponse>;
+    await handler({ method: 'POST', body: { tableId: 'table-1', playerId: 'player-1', runs: 2 } } as any, res as NextApiResponse);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(engine.startRunItTwice).not.toHaveBeenCalled();
   });
 
   it('rejects multi-run requests while Run-It-Twice decisions are disabled', async () => {

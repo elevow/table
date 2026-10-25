@@ -54,6 +54,7 @@ export function buildHandRecord(tableId: string, state: TableState): HandRecord 
     startedAt: state.handStartedAt ? new Date(state.handStartedAt).toISOString() : null,
     endedAt: new Date().toISOString(),
     board: state.communityCards || [],
+    runBoards: (state.runItTwice?.boards?.length || 0) > 1 ? state.runItTwice!.boards : undefined,
     players,
     actions: state.handActions || [],
     winners: Object.entries(winnings).map(([playerId, amount]) => ({ playerId, amount })),
@@ -65,8 +66,8 @@ export function buildHandRecord(tableId: string, state: TableState): HandRecord 
 export async function saveHandRecord(pool: Pool, record: HandRecord): Promise<boolean> {
   const result = await pool.query(
     `INSERT INTO hand_records (id, room_id, hand_number, variant, kind, small_blind, big_blind, started_at, ended_at,
-       board, players, actions, winners, pot, player_ids)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       board, players, actions, winners, pot, player_ids, run_boards)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      ON CONFLICT (id) DO NOTHING`,
     [
       record.id,
@@ -84,6 +85,7 @@ export async function saveHandRecord(pool: Pool, record: HandRecord): Promise<bo
       JSON.stringify(record.winners),
       record.pot,
       record.players.map(p => p.id),
+      record.runBoards ? JSON.stringify(record.runBoards) : null,
     ]
   );
   return (result.rowCount ?? 0) > 0;
@@ -215,6 +217,7 @@ export function rowToHandRecord(row: any): HandRecord {
     startedAt: row.started_at ? new Date(row.started_at).toISOString() : null,
     endedAt: new Date(row.ended_at).toISOString(),
     board: parseJson(row.board, []),
+    runBoards: row.run_boards ? parseJson(row.run_boards, undefined) : undefined,
     players: parseJson(row.players, []),
     actions: parseJson(row.actions, []),
     winners: parseJson(row.winners, []),

@@ -42,7 +42,7 @@ export async function resolveRunItTwiceDecision(opts: {
   runs: number;
   // Recorded on the broadcast, e.g. when the clock decided for the player
   reason?: string;
-}): Promise<{ status: 'ok'; state: TableState } | { status: 'conflict' }> {
+}): Promise<{ status: 'ok'; state: TableState } | { status: 'conflict' } | { status: 'rejected'; error: string }> {
   const { tableId, engine, res, playerId, runs, reason } = opts;
   const autoRunoutDebug = !!process.env.AUTO_RUNOUT_DEBUG;
   const gameState = engine.getState();
@@ -69,8 +69,12 @@ export async function resolveRunItTwiceDecision(opts: {
     if (autoRunoutDebug) {
       console.log(`[rit-decision] Player ${playerId} accepted Run-It-Twice with ${runs} runs for table ${tableId}`);
     }
-    if (typeof engine.enableRunItTwice === 'function') {
-      engine.enableRunItTwice(runs);
+    // Deal every run from the board players saw when the decision was offered
+    const visibleBoardCount = gameState.runItTwicePrompt?.boardCardsCount;
+    try {
+      engine.startRunItTwice(runs, typeof visibleBoardCount === 'number' ? visibleBoardCount : undefined);
+    } catch (e: any) {
+      return { status: 'rejected', error: e?.message || 'Cannot run it that many times' };
     }
     disableRunItPrompt(tableId, true);
     engine.setRunItTwicePrompt(null, true);

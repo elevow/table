@@ -11,10 +11,13 @@ type EngineLike = {
   runStudAllInStreet?: () => void;
   prepareRabbitPreview?: (opts?: { community?: Card[]; known?: Card[] }) => void;
   setAutoRunoutProgress?: (stage: TableState['stage'], communityCards: Card[]) => void;
+  revealRunItTwiceStep?: () => boolean;
 };
 
 type TimerMap = Map<string, NodeJS.Timeout[]>;
 export const AUTO_RUNOUT_DELAY_MS = 3000;
+// Pause between streets when the board is run more than once, so several runs fit in one request
+export const RUN_IT_TWICE_STEP_DELAY_MS = 2000;
 
 const getTimerMap = (): TimerMap => {
   const globalObj = global as any;
@@ -132,6 +135,21 @@ export const runSupabaseAutoRunoutSync = async (
     if (!state) return false;
     if (!isAutoRunoutEligible(state)) return false;
     if (state.runItTwicePrompt) return false;
+    if (state.runItTwice?.enabled && typeof engine.revealRunItTwiceStep === 'function') {
+      // Every run's board is already dealt; show run 1 street by street, then run 2, and so on
+      const stepDelay = delayMs > 0 ? Math.min(delayMs, RUN_IT_TWICE_STEP_DELAY_MS) : 0;
+      clearSupabaseAutoRunout(tableId);
+      for (let steps = 0; steps < 20; steps++) {
+        if (stepDelay > 0) await new Promise(resolve => setTimeout(resolve, stepDelay));
+        // The run about to get its next street
+        const run = (engine.getState().runItTwice?.revealed || []).findIndex(n => n < 5);
+        if (!engine.revealRunItTwiceStep()) break;
+        await broadcast({ ...engine.getState(), activePlayer: '' }, { action: 'run_it_twice_reveal', run: run + 1 });
+      }
+      if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
+      await finalizeRunout(tableId, engine, broadcast);
+      return true;
+    }
     const variant = state.variant;
     if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
       // Deal one street at a time so each card is seen before the next, then settle the hand

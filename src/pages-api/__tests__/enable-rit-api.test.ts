@@ -2,6 +2,12 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 jest.mock('../../../src/lib/server/hand-records', () => ({ finishHand: jest.fn().mockResolvedValue(undefined) }));
 
+// The feature flag, switchable per test
+let mockRitEnabled = true;
+jest.mock('../../../src/lib/shared/feature-flags', () => ({
+  get RUN_IT_TWICE_DECISIONS_ENABLED() { return mockRitEnabled; },
+}));
+
 jest.mock('../../../src/lib/poker/engine-persistence', () => ({
   getOrRestoreEngine: jest.fn(),
   persistEngineState: jest.fn().mockResolvedValue(undefined),
@@ -88,7 +94,55 @@ describe('/api/games/enable-rit', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, runs: 1 }));
   });
 
+  it('starts run it twice from the board shown when the decision was offered', async () => {
+    const state: any = {
+      tableId: 'table-1',
+      stage: 'flop',
+      players: [
+        { id: 'player-1', isFolded: false },
+        { id: 'player-2', isFolded: false },
+      ],
+      runItTwicePrompt: { playerId: 'player-1', boardCardsCount: 0 },
+    };
+    const engine = {
+      getState: jest.fn(() => state),
+      setRunItTwicePrompt: jest.fn(),
+      startRunItTwice: jest.fn(),
+    };
+    (getOrRestoreEngine as jest.Mock).mockResolvedValue(engine);
+    (global as any).runItTwiceState = new Map([['table-1', { prompt: null, disabled: false }]]);
+
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as Partial<NextApiResponse>;
+    await handler({ method: 'POST', body: { tableId: 'table-1', playerId: 'player-1', runs: 2 } } as any, res as NextApiResponse);
+
+    expect(engine.startRunItTwice).toHaveBeenCalledWith(2, 0);
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('refuses more runs than there are cards for', async () => {
+    const state: any = {
+      tableId: 'table-1',
+      stage: 'preflop',
+      players: [{ id: 'player-1', isFolded: false }, { id: 'player-2', isFolded: false }],
+      runItTwicePrompt: { playerId: 'player-1', boardCardsCount: 0 },
+    };
+    const engine = {
+      getState: jest.fn(() => state),
+      setRunItTwicePrompt: jest.fn(),
+      startRunItTwice: jest.fn(() => { throw new Error('Not enough cards left to run it that many times'); }),
+    };
+    (getOrRestoreEngine as jest.Mock).mockResolvedValue(engine);
+    (global as any).runItTwiceState = new Map([['table-1', { prompt: null, disabled: false }]]);
+
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as Partial<NextApiResponse>;
+    await handler({ method: 'POST', body: { tableId: 'table-1', playerId: 'player-1', runs: 2 } } as any, res as NextApiResponse);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(engine.setRunItTwicePrompt).not.toHaveBeenCalled();
+  });
+
   it('rejects multi-run requests while Run-It-Twice decisions are disabled', async () => {
+    mockRitEnabled = false;
     const state: any = {
       tableId: 'table-1',
       stage: 'preflop',
@@ -120,5 +174,6 @@ describe('/api/games/enable-rit', () => {
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({ error: 'Run-It-Twice is temporarily disabled' });
     expect(engine.enableRunItTwice).not.toHaveBeenCalled();
+    mockRitEnabled = true;
   });
 });

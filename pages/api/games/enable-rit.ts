@@ -6,6 +6,9 @@ import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../../src/lib/shared/feature-
 import { resolveRunItTwiceDecision } from '../../../src/lib/server/run-it-twice-decision';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
+// Running the board out several times, with pauses between streets, can take a while
+export const config = { maxDuration: 60 };
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -49,6 +52,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const result = await resolveRunItTwiceDecision({ tableId, engine, res, playerId, runs });
     if (result.status === 'conflict') {
       return res.status(409).json(STALE_STATE_RESPONSE);
+    }
+    if (result.status === 'rejected') {
+      return res.status(400).json({ error: result.error });
     }
 
     // Sanitize the response for the requesting player - hide other players' hole cards

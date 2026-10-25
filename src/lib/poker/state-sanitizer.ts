@@ -112,8 +112,14 @@ function sanitizeRunItTwice(state: TableState): TableState['runItTwice'] {
   if (!rit) return rit;
   const atShowdown = state.stage === 'showdown';
   const rng = rit.rngSecurity;
+  // Each run's board only as far as it has been dealt out to the table
+  const revealed = rit.revealed;
+  const boards = atShowdown || !revealed
+    ? rit.boards
+    : rit.boards.map((board, i) => board.slice(0, revealed[i] ?? 0));
   return {
     ...rit,
+    boards,
     seeds: atShowdown ? rit.seeds : [],
     rngSecurity: rng
       ? {

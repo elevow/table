@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS hand_records (
   pot NUMERIC NOT NULL DEFAULT 0,
   player_ids TEXT[] NOT NULL DEFAULT '{}'
 );
+-- Boards of a hand run more than once (run it twice); NULL otherwise
+ALTER TABLE hand_records ADD COLUMN IF NOT EXISTS run_boards JSONB;
 CREATE INDEX IF NOT EXISTS idx_hand_records_room_ended ON hand_records (room_id, ended_at DESC);
 CREATE INDEX IF NOT EXISTS idx_hand_records_player_ids ON hand_records USING GIN (player_ids);
 

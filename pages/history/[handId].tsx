@@ -83,9 +83,19 @@ export default function HandReplayPage() {
             {/* Table */}
             <div className="rounded-2xl p-4 sm:p-6 mb-4 shadow-inner" style={{ background: 'radial-gradient(ellipse at center, #16a34a 0%, #15803d 60%, #14532d 100%)' }}>
               <div className="flex flex-col items-center gap-2 mb-5">
-                <div className="flex gap-1 min-h-[3.5rem]">
-                  {hand.board.slice(0, frame.boardCount).map((c, i) => <MiniCard key={i} card={c} size="md" />)}
-                </div>
+                {frame.result && hand.runBoards?.length ? (
+                  // Run more than once: every run's board on the result
+                  hand.runBoards.map((board, r) => (
+                    <div key={r} className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-amber-100 w-12">Run {r + 1}</span>
+                      <div className="flex gap-1">{board.map((c, i) => <MiniCard key={i} card={c} size="md" />)}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex gap-1 min-h-[3.5rem]">
+                    {hand.board.slice(0, frame.boardCount).map((c, i) => <MiniCard key={i} card={c} size="md" />)}
+                  </div>
+                )}
                 <div className="px-3 py-1 rounded bg-gray-900/70 text-white text-sm font-semibold">Pot {money(frame.pot)}</div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

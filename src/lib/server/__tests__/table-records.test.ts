@@ -35,6 +35,20 @@ describe('hand records', () => {
     record.players.forEach(p => expect(p.revealed).toBe(state.handWinners!.includes(p.id)));
   });
 
+  it('keeps the board of every run for a hand run more than once', () => {
+    const engine = new PokerEngine('room-1', [mk('a', 1), mk('b', 2)], 5, 10);
+    engine.startNewHand();
+    let s = engine.getState();
+    engine.handleAction({ type: 'raise', amount: 1000, playerId: s.activePlayer, tableId: 'room-1', timestamp: 0 } as any);
+    s = engine.getState();
+    engine.handleAction({ type: 'call', playerId: s.activePlayer, tableId: 'room-1', timestamp: 0 } as any);
+    engine.startRunItTwice(2, 0);
+    engine.runItTwiceNow();
+    const record = buildHandRecord('room-1', engine.getState())!;
+    expect(record.runBoards).toHaveLength(2);
+    expect(record.winners.length).toBeGreaterThan(0);
+  });
+
   it('returns nothing for a hand still being played', () => {
     const engine = new PokerEngine('room-1', [mk('a', 1), mk('b', 2)], 5, 10);
     engine.startNewHand();

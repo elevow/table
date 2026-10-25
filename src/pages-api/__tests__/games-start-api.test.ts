@@ -48,6 +48,8 @@ jest.mock('../../../src/lib/shared/game-seats', () => ({
 jest.mock('../../../src/lib/poker/poker-engine', () => ({
   PokerEngine: jest.fn().mockImplementation((tableId: string, players: any[]) => ({
     startNewHand: jest.fn(),
+    setAllowRunItTwice: jest.fn(),
+    setAllowStraddle: jest.fn(),
     getState: () => ({ tableId, stage: 'preflop', players, dealerPosition: 0, activePlayer: players[0]?.id, pot: 3 }),
   })),
 }));
@@ -173,6 +175,21 @@ describe('/api/games/start', () => {
     expect([smallBlind, bigBlind]).toEqual([5, 10]);
     expect(options).toEqual({ variant: 'omaha', bettingMode: 'pot-limit' });
     expect((global as any).roomConfigs.get('t1')).toMatchObject({ variant: 'omaha', smallBlind: 5, bigBlind: 10 });
+  });
+
+  it('applies the room’s run it twice and straddle options to the new game', async () => {
+    mockGetRoomById.mockResolvedValue({ id: 't1', configuration: { allowRunItTwice: true }, blindLevels: {} });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    const engine = MockPokerEngine.mock.results[0].value;
+    expect(engine.setAllowRunItTwice).toHaveBeenCalledWith(true);
+    expect(engine.setAllowStraddle).toHaveBeenCalledWith(false);
+  });
+
+  it('leaves run it twice off for rooms that never chose it', async () => {
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(MockPokerEngine.mock.results[0].value.setAllowRunItTwice).toHaveBeenCalledWith(false);
   });
 
   it('cannot turn a fixed-game room into dealers choice from the request', async () => {

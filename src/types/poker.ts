@@ -94,6 +94,8 @@ export interface TableState {
   pendingBlinds?: { smallBlind: number; bigBlind: number };
   // Table allows an under-the-gun straddle (Hold'em and Omaha)
   allowStraddle?: boolean;
+  // Table offers run it twice after an all-in (a room setting; off unless the room turned it on)
+  allowRunItTwice?: boolean;
   // The straddle posted this hand, if any
   straddle?: { playerId: string; amount: number };
   // Next hand is a bomb pot: everyone antes this many big blinds and betting starts on the flop

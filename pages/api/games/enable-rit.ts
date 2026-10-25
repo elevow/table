@@ -38,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!prompt || prompt.playerId !== playerId) {
       return res.status(400).json({ error: 'No active Run-It-Twice prompt for this player' });
     }
-    if (!RUN_IT_TWICE_DECISIONS_ENABLED && runs > 1) {
+    if ((!RUN_IT_TWICE_DECISIONS_ENABLED || !gameState.allowRunItTwice) && runs > 1) {
       return res.status(403).json({ error: 'Run-It-Twice is temporarily disabled' });
     }
 

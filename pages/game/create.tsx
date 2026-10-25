@@ -19,6 +19,7 @@ export default function CreateGameRoomPage() {
   const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unlimited');
   const [rebuyAmount, setRebuyAmount] = useState(20);
   const [buyIn, setBuyIn] = useState(1000);
+  const [allowRunItTwice, setAllowRunItTwice] = useState(false);
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
@@ -80,6 +81,7 @@ export default function CreateGameRoomPage() {
             numberOfRebuys: numberOfRebuys === 'unlimited' ? 'unlimited' : Number(numberOfRebuys),
             rebuyAmount: numberOfRebuys !== 0 ? rebuyAmount : undefined,
             buyIn,
+            allowRunItTwice,
             tournament: TOURNAMENT_STRUCTURE_CREATION_ENABLED && enableTournament
               ? { preset: presetKey, config: selectedTournamentConfig }
               : undefined,
@@ -274,7 +276,20 @@ export default function CreateGameRoomPage() {
             </select>
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Set 0-10 or leave as Unlimited for cash-style games.</p>
           </div>
-          {/* Removed Require unanimous RIT consent checkbox per request */}
+          <div>
+            <label className="inline-flex items-center space-x-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-blue-600 dark:accent-blue-500"
+                checked={allowRunItTwice}
+                onChange={e => setAllowRunItTwice(e.target.checked)}
+              />
+              <span>Allow Run It Twice</span>
+            </label>
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+              After an all-in, the player with the weakest hand can choose to deal the rest of the board more than once and split the pot between the runs. Hold&apos;em and Omaha only.
+            </p>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>

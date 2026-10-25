@@ -14,6 +14,7 @@ type HostAction =
   | { action: 'resume' }
   | { action: 'set-blinds'; smallBlind: number; bigBlind: number }
   | { action: 'allow-straddle'; allow: boolean }
+  | { action: 'allow-run-it-twice'; allow: boolean }
   | { action: 'bomb-pot'; anteBB: number | null }
   | { action: 'kick'; targetId: string }
   | { action: 'require-approval'; required: boolean }
@@ -24,7 +25,7 @@ type HostAction =
  * POST /api/games/host { tableId, action, ... }
  *
  * Controls for the room's host (its creator): pause and resume, change blinds for the next hand,
- * allow straddles, schedule a bomb pot, remove a player, and approve who sits down.
+ * allow straddles and run it twice, schedule a bomb pot, remove a player, and approve who sits down.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -88,6 +89,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         await publishTableEvent(tableId, { type: 'settings' }).catch(() => {});
         break; // also applied to the running game below
       }
+      case 'allow-run-it-twice': {
+        await updateRoomConfig(tableId, { allowRunItTwice: !!body.allow });
+        await publishTableEvent(tableId, { type: 'settings' }).catch(() => {});
+        break; // also applied to the running game below
+      }
       case 'set-blinds': {
         const sb = Number(body.smallBlind);
         const bb = Number(body.bigBlind);
@@ -112,7 +118,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Changes to the running game
     const engine = await getOrRestoreEngine(tableId);
     if (!engine) {
-      if (body.action === 'allow-straddle' || body.action === 'set-blinds') return res.status(200).json({ ok: true });
+      if (body.action === 'allow-straddle' || body.action === 'allow-run-it-twice' || body.action === 'set-blinds') {
+        return res.status(200).json({ ok: true });
+      }
       return res.status(404).json({ error: 'No active game found for this table' });
     }
     try {
@@ -120,6 +128,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       else if (body.action === 'resume') engine.setPaused(false);
       else if (body.action === 'set-blinds') engine.setPendingBlinds(Number(body.smallBlind), Number(body.bigBlind));
       else if (body.action === 'allow-straddle') engine.setAllowStraddle(!!body.allow);
+      else if (body.action === 'allow-run-it-twice') engine.setAllowRunItTwice(!!body.allow);
       else if (body.action === 'bomb-pot') {
         const variant = engine.getState().variant;
         if (body.anteBB !== null && String(variant || '').includes('stud')) {

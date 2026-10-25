@@ -119,7 +119,7 @@ export async function runGameAction(opts: {
   const autoRunoutDebug = !!process.env.AUTO_RUNOUT_DEBUG;
   const autoEligible = isAutoRunoutEligible(gameState);
   let issuedPrompt = null;
-  if (autoEligible && RUN_IT_TWICE_DECISIONS_ENABLED) {
+  if (autoEligible && RUN_IT_TWICE_DECISIONS_ENABLED && gameState.allowRunItTwice) {
     const postCommunityCount = Array.isArray(gameState.communityCards) ? gameState.communityCards.length : 0;
     const preCommunityCount = preActionCommunity.length;
     const boardAdvanced = postCommunityCount > preCommunityCount;

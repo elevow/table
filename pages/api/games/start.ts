@@ -31,7 +31,14 @@ async function hasLiveHand(tableId: string, existingState: TableState | undefine
   return !lastActionAt || Date.now() - lastActionAt.getTime() < ABANDONED_HAND_MS;
 }
 
-type RoomGameSettings = { variant?: string; bettingMode?: string; smallBlind: number; bigBlind: number };
+type RoomGameSettings = {
+  variant?: string;
+  bettingMode?: string;
+  smallBlind: number;
+  bigBlind: number;
+  allowRunItTwice: boolean;
+  allowStraddle: boolean;
+};
 
 function positiveNumber(...values: unknown[]): number | undefined {
   for (const v of values) {
@@ -41,7 +48,7 @@ function positiveNumber(...values: unknown[]): number | undefined {
   return undefined;
 }
 
-/** The game type, betting mode and blinds the room was created with; null if there is no such room. */
+/** The game type, betting mode, blinds and table options of the room; null if there is no such room. */
 async function loadRoomGameSettings(tableId: string): Promise<RoomGameSettings | null> {
   const service = new GameService(getPool() as any);
   const room = await service.getRoomById(tableId);
@@ -53,6 +60,8 @@ async function loadRoomGameSettings(tableId: string): Promise<RoomGameSettings |
     bettingMode: typeof config.bettingMode === 'string' ? config.bettingMode : undefined,
     smallBlind: positiveNumber(blinds.sb, blinds.smallBlind) ?? 1,
     bigBlind: positiveNumber(blinds.bb, blinds.bigBlind) ?? 2,
+    allowRunItTwice: config.allowRunItTwice === true,
+    allowStraddle: config.allowStraddle === true,
   };
 }
 
@@ -183,6 +192,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Create new engine for table (replace any existing)
     const engine = new PokerEngine(tableId, engPlayers as any, smallBlind, bigBlind, { variant: resolvedVariant as any, bettingMode: resolvedMode });
+    engine.setAllowRunItTwice(roomSettings.allowRunItTwice);
+    engine.setAllowStraddle(roomSettings.allowStraddle);
     let gameState: any;
     if (isDealersChoice) {
       if (typeof (engine as any)?.pauseForDealerChoice === 'function') {

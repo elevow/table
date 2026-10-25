@@ -58,6 +58,12 @@ export class BettingManager {
       // Backward-compatible fallback by fixed positions (legacy tests/flows)
       smallBlindPlayer = players.find(p => p.position === 1);
       bigBlindPlayer = players.find(p => p.position === 2);
+      // Those seats may be empty or sitting out; then the blinds follow the dealer instead
+      if ((!smallBlindPlayer || !bigBlindPlayer) && typeof dealerPosition === 'number' && players.length >= 3) {
+        const n = players.length;
+        smallBlindPlayer = players[(dealerPosition + 1) % n];
+        bigBlindPlayer = players[(dealerPosition + 2) % n];
+      }
     }
 
     if (!smallBlindPlayer) throw new Error('Could not find small blind player');

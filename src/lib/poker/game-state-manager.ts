@@ -104,26 +104,26 @@ export class GameStateManager {
         // eslint-disable-next-line no-console
         console.log(`[DEBUG] Stud first-to-act (${stage}) -> ${activePlayer?.id}`);
       }
-    } else if (typeof this.state.dealerPosition === 'number' && this.state.players.length >= 2) {
-      const n = this.state.players.length;
-      const isHeadsUp = n === 2;
-      if (isHeadsUp) {
+    } else if (typeof this.state.dealerPosition === 'number' && this.dealtInPlayers().length >= 2) {
+      // Order is among players dealt into the hand; sitting-out players hold no seat in it
+      const dealtIn = this.dealtInPlayers();
+      const n = dealtIn.length;
+      const dealerIdx = Math.max(0, dealtIn.indexOf(this.state.players[this.state.dealerPosition]));
+      let firstIndex: number;
+      if (n === 2) {
         // HU rules: dealer posts SB and acts first preflop; postflop non-dealer (BB) acts first
-        if (stage === 'preflop') {
-          activePlayer = this.state.players[this.state.dealerPosition];
-        } else {
-          activePlayer = this.state.players[(this.state.dealerPosition + 1) % n];
-        }
+        firstIndex = stage === 'preflop' ? dealerIdx : (dealerIdx + 1) % n;
       } else {
         // 3+ players: preflop first to act is left of the big blind; postflop is left of dealer (SB)
-        if (stage === 'preflop') {
-          const bbIndex = (this.state.dealerPosition + 2) % n; // BB relative to dealer
-          const firstIndex = (bbIndex + 1) % n; // left of BB
-          activePlayer = this.state.players[firstIndex];
-        } else {
-          const firstIndex = (this.state.dealerPosition + 1) % n; // left of dealer (SB)
-          activePlayer = this.state.players[firstIndex];
-        }
+        firstIndex = stage === 'preflop' ? (dealerIdx + 3) % n : (dealerIdx + 1) % n;
+      }
+      // That seat may have folded or be all-in (e.g. the small blind folded preflop); the action
+      // starts with the next player who can still act
+      const canAct = (p: Player) => !(p as any).folded && !p.isFolded && !p.isAllIn;
+      activePlayer = dealtIn[firstIndex];
+      for (let i = 0; i < n; i++) {
+        const candidate = dealtIn[(firstIndex + i) % n];
+        if (canAct(candidate)) { activePlayer = candidate; break; }
       }
     } else {
       // Legacy fallback when dealerPosition not provided
@@ -186,8 +186,19 @@ export class GameStateManager {
     }
   }
 
+  /** Players taking part in the current hand: everyone not sitting out. */
+  public dealtInPlayers(): Player[] {
+    return this.state.players.filter(p => !p.isSittingOut);
+  }
+
   public rotateDealerButton(): number {
-    this.state.dealerPosition = (this.state.dealerPosition + 1) % this.state.players.length;
+    // The button moves to the next player who is sitting in
+    const n = this.state.players.length;
+    let next = (this.state.dealerPosition + 1) % n;
+    for (let i = 0; i < n && this.state.players[next]?.isSittingOut; i++) {
+      next = (next + 1) % n;
+    }
+    this.state.dealerPosition = next;
     if (process.env.DEBUG_POKER === 'true') {
       // eslint-disable-next-line no-console
       console.log(`[DEBUG] Dealer rotated -> new dealerIdx=${this.state.dealerPosition} (playerId=${this.state.players[this.state.dealerPosition]?.id})`);

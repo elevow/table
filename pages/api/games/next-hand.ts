@@ -159,6 +159,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!currentState.players.some((p: any) => p?.id === playerId)) {
         return res.status(403).json({ error: 'Only a player at this table can start the next hand' });
       }
+      // Sitting-out players are not dealt in, so the table waits until two players sit in
+      if (typeof engine.canStartNewHand === 'function' && !engine.canStartNewHand()) {
+        return res.status(409).json({ error: 'Waiting for at least two players to sit in', code: 'NOT_ENOUGH_PLAYERS_SITTING_IN' });
+      }
       // Only the announced chooser may pick the variant, and only while the game waits for that choice
       if (isDealersChoice && variant) {
         if (!awaitingDealerChoiceStage) {

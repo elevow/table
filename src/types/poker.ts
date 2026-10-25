@@ -31,7 +31,12 @@ export interface Player {
   hasActed: boolean;
   isFolded: boolean;
   isAllIn: boolean;
+  // Seconds of extra thinking time left once the base turn clock runs out; used up across the game
   timeBank: number;
+  // Not dealt in, posts no blinds and is skipped by the button until they sit back in
+  isSittingOut?: boolean;
+  // Turns in a row the clock ran out on; reset when the player acts
+  consecutiveTimeouts?: number;
 }
 
 export interface TableState {
@@ -49,6 +54,17 @@ export interface TableState {
   // Increases with every applied action and every new hand. Clients send the value they
   // acted on, so a duplicate or late request can't land on a later decision.
   turnSeq?: number;
+  // Turn clock for the player in activePlayer (epoch ms, server clock): when the turn started and
+  // when it times out, base time plus that player's time bank
+  turnStartedAt?: number;
+  turnDeadline?: number;
+  // Added when the state is sent to a client: ms left on the clock at that moment, so clients
+  // count down without depending on their own clock matching the server's
+  turnTimeRemainingMs?: number;
+  // Players who won chips in the hand just settled; set at showdown, cleared when a hand starts
+  handWinners?: string[];
+  // Players who chose to show their cards after the hand ended
+  shownCards?: string[];
   communityCards: Card[];
   currentBet: number;
   dealerPosition: number;

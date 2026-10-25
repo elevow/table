@@ -6,6 +6,7 @@ import { DeckManager } from './deck-manager';
 import { BettingManager } from './betting-manager';
 import { generateRngSecurity, verifyRngSecurity, RNGSecurity } from './rng-security';
 import { GameStateManager } from './game-state-manager';
+import { BASE_TURN_MS, TIMEOUTS_BEFORE_SIT_OUT } from '../shared/turn-clock';
 
 export class PokerEngine {
   private state: TableState;
@@ -183,12 +184,15 @@ export class PokerEngine {
     } else if (disabled) {
       this.state.activePlayer = '';
     }
+    // The run-it-twice decision is on the clock like any other
+    this.startTurnClock(Date.now());
   }
 
   public setAutoRunoutProgress(stage: GameStage, communityCards: Card[]): void {
     this.state.stage = stage;
     this.state.communityCards = [...communityCards];
     this.state.activePlayer = '';
+    this.startTurnClock(Date.now());
   }
 
   public runStudAllInToShowdown(): void {
@@ -232,9 +236,21 @@ export class PokerEngine {
       }
       // Do not clear removedPlayers here in case multiple successive starts need pruning
     }
+    if (!this.canStartNewHand()) {
+      throw new Error('Need at least two players sitting in to start a hand');
+    }
     this.deckManager.resetDeck();
     this.gameStateManager.resetPlayerStates();
     this.gameStateManager.rotateDealerButton();
+    // Sitting-out players keep their seat and stack but take no part in the hand
+    this.state.players.forEach(p => {
+      if (p.isSittingOut) {
+        p.isFolded = true;
+        p.hasActed = true;
+      }
+    });
+    delete this.state.handWinners;
+    delete this.state.shownCards;
     // Snapshot stacks before blinds, antes or bring-ins so showdown can size the side pots
     this.state.handStartStacks = Object.fromEntries(this.state.players.map(p => [p.id, p.stack]));
     this.state.dealersChoiceHandCount = (this.state.dealersChoiceHandCount || 0) + 1;
@@ -253,6 +269,84 @@ export class PokerEngine {
   this.postBlinds();
       this.gameStateManager.startBettingRound('preflop');
     }
+    this.startTurnClock(Date.now());
+  }
+
+  /** Whether at least two players (not leaving) are sitting in, as a new hand needs. */
+  public canStartNewHand(): boolean {
+    return this.state.players.filter(p => !p.isSittingOut && !this.removedPlayers.has(p.id)).length >= 2;
+  }
+
+  /**
+   * Sit a player out from the next hand on, or back in. A hand already in progress is unaffected:
+   * a player dealt into it plays it out, and one sat out of it stays out until it ends.
+   */
+  public setSittingOut(playerId: string, sittingOut: boolean): void {
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player) throw new Error('Player not found');
+    player.isSittingOut = sittingOut;
+    if (!sittingOut) player.consecutiveTimeouts = 0;
+  }
+
+  /** After a hand ends, a player who was dealt in may show their cards to the table. */
+  public showCards(playerId: string): void {
+    if (this.state.stage !== 'showdown') throw new Error('Cards can only be shown after the hand ends');
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player) throw new Error('Player not found');
+    const stud = this.state.studState?.playerCards?.[playerId];
+    const hasCards = (player.holeCards?.length || 0) > 0 || (stud?.downCards?.length || 0) > 0;
+    if (!hasCards) throw new Error('No cards to show');
+    const shown = new Set(this.state.shownCards || []);
+    shown.add(playerId);
+    this.state.shownCards = Array.from(shown);
+  }
+
+  /**
+   * Start the clock for the decision now facing activePlayer, or clear it when nobody is to act.
+   * The deadline is the base turn time plus whatever is left in that player's time bank.
+   */
+  private startTurnClock(now: number): void {
+    const decisionStage = this.state.stage !== 'showdown' && this.state.stage !== 'awaiting-dealer-choice';
+    const player = decisionStage && this.state.activePlayer
+      ? this.state.players.find(p => p.id === this.state.activePlayer)
+      : undefined;
+    if (!player) {
+      delete this.state.turnStartedAt;
+      delete this.state.turnDeadline;
+      return;
+    }
+    this.state.turnStartedAt = now;
+    this.state.turnDeadline = now + BASE_TURN_MS + Math.max(0, player.timeBank || 0) * 1000;
+  }
+
+  /** Charge the time a player took beyond the base turn time to their time bank. */
+  private chargeTimeBank(player: Player, now: number): void {
+    if (typeof this.state.turnStartedAt !== 'number') return;
+    const overMs = now - this.state.turnStartedAt - BASE_TURN_MS;
+    if (overMs > 0) {
+      player.timeBank = Math.max(0, (player.timeBank || 0) - Math.ceil(overMs / 1000));
+    }
+  }
+
+  /**
+   * Act for the player whose clock has run out: check when that is free, otherwise fold.
+   * The time bank is used up, and enough timeouts in a row sit the player out from the next hand.
+   */
+  public handleTimeout(now: number = Date.now()): { playerId: string; action: 'check' | 'fold'; satOut: boolean } {
+    const playerId = this.state.activePlayer;
+    const deadline = this.state.turnDeadline;
+    if (!playerId || typeof deadline !== 'number' || now < deadline) {
+      throw new Error('The turn has not timed out');
+    }
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player) throw new Error('Player not found');
+    const action: 'check' | 'fold' = player.currentBet < this.state.currentBet ? 'fold' : 'check';
+    this.applyDecision({ type: action, playerId, tableId: this.state.tableId, timestamp: now }, 'timeout', now);
+    player.timeBank = 0;
+    player.consecutiveTimeouts = (player.consecutiveTimeouts || 0) + 1;
+    const satOut = player.consecutiveTimeouts >= TIMEOUTS_BEFORE_SIT_OUT;
+    if (satOut) player.isSittingOut = true;
+    return { playerId, action, satOut };
   }
 
   // Force-fold a player immediately; if it's their turn, route through standard action logic
@@ -291,6 +385,7 @@ export class PokerEngine {
       for (let i = 0; i < this.state.players.length; i++) {
         const playerPosition = (this.state.dealerPosition + 1 + i) % this.state.players.length;
         const player = this.state.players[playerPosition];
+        if (player.isSittingOut) continue;
         
         if (!player.holeCards) {
           player.holeCards = [];
@@ -315,7 +410,10 @@ export class PokerEngine {
       bet: p.currentBet
     })));
     
-  const { pot, currentBet } = this.bettingManager.postBlinds(this.state.players, this.state.dealerPosition);
+    // Blinds go round the players sitting in; the button is always on one of them
+    const dealtIn = this.gameStateManager.dealtInPlayers();
+    const dealerIdx = Math.max(0, dealtIn.indexOf(this.state.players[this.state.dealerPosition]));
+    const { pot, currentBet } = this.bettingManager.postBlinds(dealtIn, dealerIdx);
     this.log(`Blind amounts: pot=${pot}, currentBet=${currentBet}`);
     
     // Add blind bets to pot
@@ -345,9 +443,19 @@ export class PokerEngine {
   }
 
   public handleAction(action: PlayerAction): void {
+    this.applyDecision(action, 'player', Date.now());
+  }
+
+  private applyDecision(action: PlayerAction, source: 'player' | 'timeout', now: number): void {
+    const actor = this.state.players.find(p => p.id === action.playerId);
     this.applyAction(action);
     // Only reached when the action was accepted
+    if (actor && source === 'player') {
+      this.chargeTimeBank(actor, now);
+      actor.consecutiveTimeouts = 0;
+    }
     this.state.turnSeq = (this.state.turnSeq || 0) + 1;
+    this.startTurnClock(now);
   }
 
   private applyAction(action: PlayerAction): void {
@@ -536,11 +644,13 @@ export class PokerEngine {
     if (this.state.variant === 'five-card-stud') {
       // Five-card stud: 1 down, then one up to start (total 2 cards initially)
       for (const p of this.state.players) {
+        if (p.isSittingOut) continue;
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].downCards.push(c);
       }
       for (const p of this.state.players) {
+        if (p.isSittingOut) continue;
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
@@ -549,12 +659,14 @@ export class PokerEngine {
       // Seven-card stud: 2 down, 1 up initially
       for (let r = 0; r < 2; r++) {
         for (const p of this.state.players) {
+          if (p.isSittingOut) continue;
           const c = this.deckManager.dealCard();
           if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
           if (c) this.state.studState!.playerCards[p.id].downCards.push(c);
         }
       }
       for (const p of this.state.players) {
+        if (p.isSittingOut) continue;
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
@@ -572,6 +684,7 @@ export class PokerEngine {
     }
     for (let k = 0; k < count; k++) {
       for (const p of this.state.players) {
+        if (p.isSittingOut) continue;
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
@@ -589,6 +702,7 @@ export class PokerEngine {
     }
     for (let k = 0; k < count; k++) {
       for (const p of this.state.players) {
+        if (p.isSittingOut) continue;
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].downCards.push(c);
@@ -640,7 +754,19 @@ export class PokerEngine {
     }
   }
 
+  /** Settle the hand and record who won chips, which decides whose cards are shown. */
   private determineWinner(): void {
+    const stacksBefore = new Map(this.state.players.map(p => [p.id, p.stack]));
+    this.settleHand();
+    if (this.state.stage === 'showdown') {
+      this.state.handWinners = this.state.players
+        .filter(p => p.stack > (stacksBefore.get(p.id) ?? p.stack))
+        .map(p => p.id);
+      this.startTurnClock(Date.now());
+    }
+  }
+
+  private settleHand(): void {
     // Normalize: if any player has external folded flag, reflect it in engine state
     this.state.players.forEach(p => {
       if ((p as any).folded && !p.isFolded) {
@@ -1261,6 +1387,7 @@ export class PokerEngine {
     this.state.dealersChoiceHandCount = 0;
     this.state.stage = 'awaiting-dealer-choice';
     this.state.activePlayer = '';
+    this.startTurnClock(Date.now());
     this.state.pot = 0;
     this.state.currentBet = 0;
     this.state.minRaise = this.state.bigBlind;

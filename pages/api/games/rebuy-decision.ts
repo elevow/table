@@ -41,7 +41,8 @@ async function maybeStartNextHand(tableId: string, engine: any): Promise<boolean
   console.log(`[rebuy-decision] Players with money: ${playersWithMoney.length}, pending rebuys: ${pendingCount}`);
 
   // Need at least 2 players with money and no pending rebuy decisions
-  if (playersWithMoney.length >= 2 && pendingCount === 0) {
+  const enoughSittingIn = typeof engine.canStartNewHand !== 'function' || engine.canStartNewHand();
+  if (playersWithMoney.length >= 2 && pendingCount === 0 && enoughSittingIn) {
     console.log(`[rebuy-decision] Starting next hand for table ${tableId}`);
     
     // Clear Run-It-Twice state for new hand

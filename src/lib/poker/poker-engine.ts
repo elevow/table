@@ -1440,14 +1440,15 @@ export class PokerEngine {
     if (missing <= 0) {
       // Already have full board; fallback to standard showdown
       this.state.runItTwice = undefined;
-      this.determineWinner();
+      this.settleHand();
       return;
     }
 
-    // Exclude all known cards (players' hole cards + current community)
-    const known: Card[] = [];
-    activePlayers.forEach(p => (p.holeCards || []).forEach(c => known.push(c)));
-    this.state.communityCards.forEach(c => known.push(c));
+    // Every run's board comes from one deck, so no card appears on two runs
+    this.dealRunItTwiceBoards();
+    const boards = rit.boards;
+    const hiLo = this.state.variant === 'omaha-hi-lo';
+    const omaha = this.state.variant === 'omaha' || hiLo;
 
     // Each pot (main and side) is split evenly across the runs; odd chips go to the earliest runs.
     // On each run, a pot goes to the best hand among the players eligible for it.
@@ -1464,23 +1465,39 @@ export class PokerEngine {
     }[];
 
     for (let r = 0; r < rit.numberOfRuns; r++) {
-      // Build a fresh deck excluding knowns; use a simple numeric seed from seed string for determinism
-      const seedStr = rit.seeds[r] || `${r + 1}`;
-      const seedNum = Array.from(seedStr).reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 0);
-      const dm = DeckManager.fromExcluding(known, seedNum);
-      const runBoard = [...this.state.communityCards, ...dm.dealCards(missing)];
-      rit.boards.push(runBoard);
+      const runBoard = boards[r];
 
       // Evaluate winners on this run's board; enforce Omaha rules when applicable
       const evals = activePlayers.map(player => ({
         playerId: player.id,
-        evaluation: ((this.state.variant === 'omaha' || this.state.variant === 'omaha-hi-lo')
-          ? HandEvaluator.evaluateOmahaHand
-          : HandEvaluator.evaluateHand).call(HandEvaluator, player.holeCards || [], runBoard)
+        evaluation: (omaha ? HandEvaluator.evaluateOmahaHand : HandEvaluator.evaluateHand)
+          .call(HandEvaluator, player.holeCards || [], runBoard)
       }));
       const bestOf = (candidates: typeof evals) => candidates.filter(ph =>
         !candidates.some(other => ph !== other && HandEvaluator.compareHands(other.evaluation.hand, ph.evaluation.hand) > 0)
       );
+      // Hi-Lo: qualifying 8-or-better lows on this board (lower ranks win)
+      const lows = new Map<string, { ranks: number[]; lowCards: Card[] }>();
+      if (hiLo) {
+        activePlayers.forEach(p => {
+          const low = HandEvaluator.evaluateOmahaLowEightOrBetter(p.holeCards || [], runBoard);
+          if (low) lows.set(p.id, low);
+        });
+      }
+      const cmpLow = (x: number[], y: number[]) => {
+        for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] - y[i];
+        return x.length - y.length;
+      };
+      const sides = new Map<string, Set<'high' | 'low'>>();
+      const pay = (ids: string[], amount: number, side: 'high' | 'low', into: Map<string, number>) => {
+        const per = Math.floor(amount / ids.length);
+        const extra = amount % ids.length;
+        ids.forEach((id, idx) => {
+          into.set(id, (into.get(id) || 0) + per + (idx < extra ? 1 : 0));
+          if (!sides.has(id)) sides.set(id, new Set());
+          sides.get(id)!.add(side);
+        });
+      };
 
       // Award this run's share of each pot to the best eligible hand(s)
       let runPot = 0;
@@ -1490,25 +1507,35 @@ export class PokerEngine {
         if (share <= 0) return;
         runPot += share;
         const eligible = evals.filter(e => pot.eligiblePlayers.includes(e.playerId));
-        const winners = bestOf(eligible.length > 0 ? eligible : evals);
-        const perWinner = Math.floor(share / winners.length);
-        const extra = share % winners.length;
-        winners.forEach((w, idx) => {
-          runWinnings.set(w.playerId, (runWinnings.get(w.playerId) || 0) + perWinner + (idx < extra ? 1 : 0));
-        });
+        const pool = eligible.length > 0 ? eligible : evals;
+        const highWinners = bestOf(pool).map(w => w.playerId);
+        // Hi-Lo: the low half goes to the best qualifying low, if anyone has one
+        const lowPool = pool.map(w => w.playerId).filter(id => lows.has(id));
+        let lowWinners: string[] = [];
+        if (hiLo && lowPool.length > 0) {
+          const best = lowPool.reduce((m, id) => (cmpLow(lows.get(id)!.ranks, lows.get(m)!.ranks) < 0 ? id : m), lowPool[0]);
+          lowWinners = lowPool.filter(id => cmpLow(lows.get(id)!.ranks, lows.get(best)!.ranks) === 0);
+        }
+        if (lowWinners.length > 0) {
+          // Odd chip goes to the high side
+          pay(highWinners, Math.ceil(share / 2), 'high', runWinnings);
+          pay(lowWinners, Math.floor(share / 2), 'low', runWinnings);
+        } else {
+          pay(highWinners, share, 'high', runWinnings);
+        }
       });
 
-      const runWinners: Array<{ playerId: string; winningHand: HandRanking; potShare: number }> = [];
+      const runWinners: Array<{ playerId: string; winningHand: HandRanking; potShare: number; side?: 'high' | 'low' | 'both' }> = [];
       runWinnings.forEach((potShare, playerId) => {
         aggregate.set(playerId, (aggregate.get(playerId) || 0) + potShare);
-        const winningHand = ((this.state.variant === 'omaha' || this.state.variant === 'omaha-hi-lo')
-          ? HandEvaluator.getOmahaHandRanking
-          : HandEvaluator.getHandRanking).call(
-            HandEvaluator,
-            activePlayers.find(p => p.id === playerId)?.holeCards || [],
-            runBoard
-          );
-        runWinners.push({ playerId, winningHand, potShare });
+        const won = sides.get(playerId) || new Set(['high']);
+        const holeCards = activePlayers.find(p => p.id === playerId)?.holeCards || [];
+        const low = lows.get(playerId);
+        const winningHand: HandRanking = won.has('high') || !low
+          ? (omaha ? HandEvaluator.getOmahaHandRanking : HandEvaluator.getHandRanking).call(HandEvaluator, holeCards, runBoard)
+          : { rank: 0, name: `Low ${low.ranks.slice().reverse().map(n => (n === 1 ? 'A' : String(n))).join('-')}`, cards: low.lowCards, kickers: [], strength: 0 };
+        const side = hiLo ? (won.size === 2 ? 'both' : won.has('low') ? 'low' : 'high') : undefined;
+        runWinners.push(side ? { playerId, winningHand, potShare, side } : { playerId, winningHand, potShare });
       });
       results.push({ boardId: `run-${r + 1}`, winners: runWinners });
 
@@ -1542,8 +1569,9 @@ export class PokerEngine {
       if (player) player.stack += amount;
     }
 
-    // Persist results on state and finalize
+    // Persist results on state and finalize; every board is now face up
     rit.results = results;
+    rit.revealed = boards.map(board => board.length);
     rit.potDistribution = Array.from(aggregate.entries()).map(([playerId, amount]) => ({ playerId, amount }));
     this.state.stage = 'showdown';
     this.state.activePlayer = '';
@@ -1552,7 +1580,63 @@ export class PokerEngine {
   // Public helper to trigger RIT resolution immediately (for tests/integration when betting is closed)
   public runItTwiceNow(): void {
     if (!this.state.runItTwice?.enabled) throw new Error('Run It Twice is not enabled');
-    this.executeRunItTwice();
+    // Through determineWinner, so the winners and pot are recorded like any other showdown
+    this.determineWinner();
+  }
+
+  /** Every card dealt this hand: all players' cards, folded hands included, and the board. */
+  private dealtCards(): Card[] {
+    const cards: Card[] = [...this.state.communityCards];
+    this.state.players.forEach(p => (p.holeCards || []).forEach(c => cards.push(c)));
+    Object.values(this.state.studState?.playerCards || {}).forEach(s => cards.push(...(s.downCards || []), ...(s.upCards || [])));
+    return cards;
+  }
+
+  /**
+   * Deal every run's board from one deck: the cards not dealt this hand, shuffled from the first
+   * run seed so the boards can be verified once the seeds are published. The runs share the
+   * cards already on the board, and no card appears on two runs.
+   */
+  private dealRunItTwiceBoards(): void {
+    const rit = this.state.runItTwice;
+    if (!rit) return;
+    if (rit.boards.length === rit.numberOfRuns && rit.boards.every(board => board.length === 5)) return;
+    const shared = [...this.state.communityCards];
+    const missing = 5 - shared.length;
+    const seedStr = rit.seeds[0] || '1';
+    const seedNum = Array.from(seedStr).reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 0);
+    const deck = DeckManager.fromExcluding(this.dealtCards(), seedNum);
+    rit.boards = Array.from({ length: rit.numberOfRuns }, () => [...shared, ...deck.dealCards(missing)]);
+    rit.revealed = rit.boards.map(() => shared.length);
+  }
+
+  /**
+   * Run the board out more than once after the all-in. The board goes back to what players saw
+   * when the decision was offered (cards dealt after that were never shown and return to the
+   * deck), then every run's board is dealt, to be revealed run by run.
+   */
+  public startRunItTwice(runs: number, visibleBoardCount?: number): void {
+    if (typeof visibleBoardCount === 'number' && visibleBoardCount >= 0 && visibleBoardCount < this.state.communityCards.length) {
+      this.state.communityCards = this.state.communityCards.slice(0, visibleBoardCount);
+      this.state.stage = visibleBoardCount >= 4 ? 'turn' : visibleBoardCount === 3 ? 'flop' : 'preflop';
+    }
+    const missing = 5 - this.state.communityCards.length;
+    if (missing * runs > 52 - this.dealtCards().length) {
+      throw new Error('Not enough cards left to run it that many times');
+    }
+    this.enableRunItTwice(runs);
+    this.dealRunItTwiceBoards();
+  }
+
+  /** Reveal the next street of the next run. Returns false once every run is face up. */
+  public revealRunItTwiceStep(): boolean {
+    const rit = this.state.runItTwice;
+    if (!rit?.enabled || !rit.revealed || rit.boards.length === 0) return false;
+    const run = rit.revealed.findIndex((shown, i) => shown < rit.boards[i].length);
+    if (run < 0) return false;
+    const shown = rit.revealed[run];
+    rit.revealed = rit.revealed.map((n, i) => (i === run ? (shown < 3 ? 3 : shown + 1) : n));
+    return true;
   }
 
   // Dealer's Choice tables pause the game until the dealer selects a variant

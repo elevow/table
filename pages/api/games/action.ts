@@ -4,6 +4,9 @@ import { getOrRestoreEngine, STALE_STATE_RESPONSE } from '../../../src/lib/poker
 import { runGameAction } from '../../../src/lib/server/game-action-pipeline';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
+// An all-in runs the board out, with pauses between streets
+export const config = { maxDuration: 60 };
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 

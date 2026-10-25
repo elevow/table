@@ -14,6 +14,9 @@ import { requirePlayer } from '../../../src/lib/auth/auth-utils';
  * has expired, acts for the player (check when free, otherwise fold). An expired Run-It-Twice
  * decision runs the board once. Duplicate calls are refused because the turn has moved on.
  */
+// An all-in after a timeout runs the board out, with pauses between streets
+export const config = { maxDuration: 60 };
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -62,7 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         runs: 1,
         reason: 'timeout',
       });
-      if (result.status === 'conflict') return res.status(409).json(STALE_STATE_RESPONSE);
+      if (result.status !== 'ok') return res.status(409).json(STALE_STATE_RESPONSE);
       return res.status(200).json({ success: true, gameState: sanitizeStateForPlayer(result.state, callerId) });
     }
 

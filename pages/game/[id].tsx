@@ -1327,9 +1327,6 @@ export default function GamePage() {
   const runItTwiceBoards = Array.isArray(pokerGameState?.runItTwice?.boards)
     ? pokerGameState.runItTwice.boards
     : [];
-  const supabaseSecondRunBoard = runItTwiceBoards.length > 1
-    ? runItTwiceBoards[1]
-    : null;
   const anyAllIn = () => {
     try {
       return Array.isArray(pokerGameState?.players) && pokerGameState.players.some((p: any) => p.isAllIn);
@@ -2659,8 +2656,28 @@ export default function GamePage() {
                   renderSeat(seatData.seatNumber, seatData.position, seatData.style)
                 )}
                 
-                {/* Community Cards */}
-                {pokerGameState?.communityCards && pokerGameState.communityCards.length > 0 && (
+                {/* Community cards, or one row per run when the board is run more than once */}
+                {runItTwiceBoards.length > 1 ? (
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-6 flex flex-col items-center gap-1" aria-label="Run it twice boards">
+                    {runItTwiceBoards.map((board: any[], run: number) => (
+                      <div key={`run-${run}`} className="flex items-center gap-1">
+                        <span className="text-[10px] uppercase tracking-wide text-amber-200 font-semibold drop-shadow w-10 text-right">Run {run + 1}</span>
+                        {board.map((card: any, index: number) => (
+                          <div key={index} className="bg-white rounded border text-[10px] p-0.5 w-7 h-10 flex flex-col items-center justify-center text-black font-bold">
+                            <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
+                            <div className={suitColorClass(card.suit)}>
+                              {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
+                            </div>
+                          </div>
+                        ))}
+                        {/* Spaces for cards still to come on this run */}
+                        {Array.from({ length: Math.max(0, 5 - board.length) }, (_, i) => (
+                          <div key={`empty-${i}`} className="w-7 h-10 rounded border border-dashed border-white/40" />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                ) : pokerGameState?.communityCards && pokerGameState.communityCards.length > 0 && (
                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-8 flex gap-1">
                     {pokerGameState.communityCards.map((card: any, index: number) => (
                       <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold">
@@ -2670,24 +2687,6 @@ export default function GamePage() {
                         </div>
                       </div>
                     ))}
-                  </div>
-                )}
-
-                {supabaseSecondRunBoard && supabaseSecondRunBoard.length > 0 && (
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-2 flex flex-col items-center gap-1">
-                    <span className="text-[10px] uppercase tracking-wide text-amber-200 font-semibold drop-shadow">
-                      Run 2
-                    </span>
-                    <div className="flex gap-1">
-                      {supabaseSecondRunBoard.map((card: any, index: number) => (
-                        <div key={`rit-second-${index}`} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold">
-                          <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
-                          <div className={suitColorClass(card.suit)}>
-                            {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 )}
 
@@ -3219,7 +3218,10 @@ export default function GamePage() {
                         const player = pokerGameState.players.find((p: any) => p.id === w.playerId);
                         return (
                           <div key={w.playerId} className="text-xs flex items-center justify-between bg-purple-100 dark:bg-purple-800/40 px-2 py-1 rounded">
-                            <span className="font-medium">{player?.name || w.playerId.slice(0,6)}</span>
+                            <span className="font-medium">
+                              {player?.name || w.playerId.slice(0,6)}
+                              {w.side && <span className="ml-1 text-[10px] uppercase opacity-70">{w.side === 'both' ? 'scoops' : w.side}</span>}
+                            </span>
                             <span className="text-purple-700 dark:text-purple-300 font-semibold">
                               +{showStackInBB 
                                 ? formatChips(w.potShare, pokerGameState?.bigBlind || null, true)

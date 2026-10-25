@@ -194,6 +194,8 @@ export interface RunResult {
     playerId: string;
     winningHand: HandRanking;
     potShare: number;
+    // Hi-Lo games: which half of the pot this player won on this run
+    side?: 'high' | 'low' | 'both';
   }>;
 }
 
@@ -201,6 +203,8 @@ export interface RunItTwice {
   enabled: boolean;
   numberOfRuns: number; // 2-4
   boards: Card[][]; // Full community boards per run
+  // Cards of each board shown to players so far; the rest stay hidden until revealed
+  revealed?: number[];
   results: RunResult[];
   potDistribution: PotSplit[]; // aggregated distribution across runs
   seeds: string[]; // RNG seeds (opaque strings)

@@ -33,6 +33,8 @@ export interface HandRecord {
   startedAt: string | null;
   endedAt: string;
   board: Card[];
+  // Each run's full board when the hand was run more than once
+  runBoards?: Card[][];
   players: HandRecordPlayer[];
   actions: HandActionEntry[];
   winners: Array<{ playerId: string; amount: number }>;

@@ -1,63 +1,48 @@
 import { nextSeq, resetSeq } from '../sequence';
 
 describe('sequence', () => {
+  let now = 1_800_000_000_000;
+
   beforeEach(() => {
-    // Reset all sequences before each test
+    now = 1_800_000_000_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
     resetSeq('table1');
     resetSeq('table2');
   });
-
-  describe('nextSeq', () => {
-    it('should start at 1 for a new table', () => {
-      expect(nextSeq('table1')).toBe(1);
-    });
-
-    it('should increment sequence for the same table', () => {
-      expect(nextSeq('table1')).toBe(1);
-      expect(nextSeq('table1')).toBe(2);
-      expect(nextSeq('table1')).toBe(3);
-    });
-
-    it('should maintain separate sequences for different tables', () => {
-      expect(nextSeq('table1')).toBe(1);
-      expect(nextSeq('table2')).toBe(1);
-      expect(nextSeq('table1')).toBe(2);
-      expect(nextSeq('table2')).toBe(2);
-      expect(nextSeq('table1')).toBe(3);
-    });
-
-    it('should continue incrementing after multiple calls', () => {
-      for (let i = 1; i <= 100; i++) {
-        expect(nextSeq('table1')).toBe(i);
-      }
-    });
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
-  describe('resetSeq', () => {
-    it('should reset sequence to start from 1 again', () => {
-      nextSeq('table1');
-      nextSeq('table1');
-      nextSeq('table1');
-      
-      resetSeq('table1');
-      
-      expect(nextSeq('table1')).toBe(1);
-    });
+  it('keeps increasing within a server, even within one millisecond', () => {
+    const a = nextSeq('table1');
+    const b = nextSeq('table1');
+    const c = nextSeq('table1');
+    expect(b).toBeGreaterThan(a);
+    expect(c).toBeGreaterThan(b);
+  });
 
-    it('should only reset the specified table', () => {
-      nextSeq('table1');
-      nextSeq('table1');
-      nextSeq('table2');
-      nextSeq('table2');
-      
-      resetSeq('table1');
-      
-      expect(nextSeq('table1')).toBe(1);
-      expect(nextSeq('table2')).toBe(3);
-    });
+  it('follows the clock, so a later update from a fresh server still sorts after earlier ones', () => {
+    // Many updates on one server
+    let last = 0;
+    for (let i = 0; i < 100; i++) last = nextSeq('table1');
+    // A different server instance starts with no memory of this table
+    resetSeq('table1');
+    now += 5;
+    expect(nextSeq('table1')).toBeGreaterThan(last);
+  });
 
-    it('should not throw when resetting non-existent table', () => {
-      expect(() => resetSeq('non-existent-table')).not.toThrow();
-    });
+  it('keeps tables separate', () => {
+    nextSeq('table1');
+    nextSeq('table1');
+    const first2 = nextSeq('table2');
+    expect(first2).toBe(now * 1000);
+  });
+
+  it('stays a safe integer', () => {
+    expect(Number.isSafeInteger(nextSeq('table1'))).toBe(true);
+  });
+
+  it('does not throw when resetting a table it never saw', () => {
+    expect(() => resetSeq('non-existent-table')).not.toThrow();
   });
 });

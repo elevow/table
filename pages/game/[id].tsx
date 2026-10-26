@@ -1757,7 +1757,11 @@ export default function GamePage() {
         {gameStarted && pokerGameState && !isEmpty && assignment && !isCurrentPlayer && (() => {
           const gamePlayer = pokerGameState.players?.find((p: any) => p.id === assignment.playerId);
           const hasFolded = !!(gamePlayer?.folded || gamePlayer?.isFolded);
-          if (!gamePlayer || hasFolded) return null;
+          // A folded player can still show their cards once the hand is over
+          const studShown = (pokerGameState?.studState?.playerCards?.[assignment.playerId]?.downCards?.length || 0) > 0;
+          const shownAfterFold = hasFolded && pokerGameState?.stage === 'showdown'
+            && ((Array.isArray(gamePlayer?.holeCards) && gamePlayer.holeCards.length > 0) || studShown);
+          if (!gamePlayer || (hasFolded && !shownAfterFold)) return null;
 
           // Compute position offset based on seat location (push cards slightly further from table center)
           let cardStyle: React.CSSProperties | undefined = undefined;

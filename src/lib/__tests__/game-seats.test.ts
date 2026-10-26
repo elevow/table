@@ -1,6 +1,7 @@
 jest.mock('../database/pool', () => ({ getPool: jest.fn() }));
 
 import {
+  countSeatedInConfig,
   getGameSeats,
   getRoomSeats,
   setRoomSeats,
@@ -140,5 +141,22 @@ describe('lib/shared/game-seats', () => {
       expect.stringContaining("jsonb_set(COALESCE(configuration, '{}'::jsonb), '{seats}'"),
       [ROOM_A, JSON.stringify(seats)],
     );
+  });
+
+  it('counts players from the seats saved with a room, within its size', () => {
+    const configuration = {
+      seats: {
+        1: { playerId: 'a', playerName: 'A', chips: 100 },
+        2: null,
+        5: { playerId: 'b', playerName: 'B', chips: 100 },
+        8: { playerId: 'c', playerName: 'C', chips: 100 },
+      },
+    };
+    expect(countSeatedInConfig(configuration, 9)).toBe(3);
+    // A 6-max room ignores a stray seat 8
+    expect(countSeatedInConfig(configuration, 6)).toBe(2);
+    // Everyone stood up
+    expect(countSeatedInConfig({ seats: { 1: null, 2: null } }, 9)).toBe(0);
+    expect(countSeatedInConfig(null)).toBe(0);
   });
 });

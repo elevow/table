@@ -37,3 +37,87 @@
 	@apply fixed top-10 right-4 z-50 rounded px-3 py-1 text-sm shadow;
 	@apply bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200;
 }
+
+/* Table reactions: a bubble pops in over the seat and fades out after its few seconds */
+@keyframes table-reaction-pop {
+	0% { opacity: 0; transform: scale(0.6) translateY(6px); }
+	12% { opacity: 1; transform: scale(1.1) translateY(0); }
+	20% { transform: scale(1); }
+	85% { opacity: 1; }
+	100% { opacity: 0; }
+}
+.table-reaction-pop {
+	animation: table-reaction-pop 3s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+	.table-reaction-pop {
+		animation: none;
+	}
+}
+
+/*
+ * Table animations. They only react to state that has already arrived, so nothing waits on
+ * them. The individual translate/rotate/scale properties are used instead of transform so
+ * they combine with the Tailwind transforms (rotate-3, -translate-x-1/2) already on elements.
+ */
+@keyframes table-card-deal {
+	from { opacity: 0; translate: 0 -24px; scale: 0.85; }
+	to { opacity: 1; translate: 0 0; scale: 1; }
+}
+.table-card-deal {
+	animation: table-card-deal 280ms ease-out backwards;
+}
+
+@keyframes table-card-flip {
+	from { opacity: 0; rotate: y 90deg; }
+	to { opacity: 1; rotate: y 0deg; }
+}
+.table-card-flip {
+	animation: table-card-flip 320ms ease-out backwards;
+}
+
+/* A chip sprite travels between the --chip-from and --chip-to points on the felt */
+@keyframes table-chip-fly {
+	0% { left: var(--chip-from-x); top: var(--chip-from-y); opacity: 0; }
+	15% { opacity: 1; }
+	85% { opacity: 1; }
+	100% { left: var(--chip-to-x); top: var(--chip-to-y); opacity: 0; }
+}
+.table-chip-fly {
+	position: absolute;
+	left: var(--chip-to-x);
+	top: var(--chip-to-y);
+	translate: -50% -50%;
+	opacity: 0;
+	animation: table-chip-fly 600ms ease-in-out forwards;
+}
+/* Winnings leave the pot just after the last bet has landed in it */
+.table-chip-fly-win {
+	animation-duration: 700ms;
+	animation-delay: 350ms;
+}
+
+@keyframes table-winner-pulse {
+	0%, 100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.9); }
+	50% { box-shadow: 0 0 0 10px rgba(250, 204, 21, 0); }
+}
+.table-winner-pulse {
+	border-color: rgb(250 204 21) !important;
+	animation: table-winner-pulse 1.2s ease-out infinite;
+}
+
+/* No movement for players who asked for less: cards appear at once, chips don't fly */
+@media (prefers-reduced-motion: reduce) {
+	.table-card-deal,
+	.table-card-flip {
+		animation: none;
+	}
+	.table-chip-fly {
+		display: none;
+		animation: none;
+	}
+	.table-winner-pulse {
+		animation: none;
+		box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.9);
+	}
+}

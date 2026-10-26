@@ -41,6 +41,9 @@ import ReactionPicker from '../../src/components/ReactionPicker';
 import SeatReactionBubbles from '../../src/components/SeatReactionBubbles';
 import { useTableReactions } from '../../src/hooks/useTableReactions';
 import TableChipAnimations from '../../src/components/TableChipAnimations';
+import MobileCollapsible from '../../src/components/MobileCollapsible';
+import { useMediaQuery, NARROW_SCREEN_QUERY } from '../../src/hooks/useMediaQuery';
+import { narrowInfoBoxStyle } from '../../src/lib/shared/seat-layout';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -1491,6 +1494,9 @@ export default function GamePage() {
   // Emote reactions shown over seats
   const reactions = useTableReactions(tableId || undefined, playerId);
 
+  // Phones in portrait get compact seats with their info boxes next to the seat
+  const isNarrowScreen = useMediaQuery(NARROW_SCREEN_QUERY);
+
   // Sit out from the next hand, or back in
   const [sitOutPending, setSitOutPending] = useState(false);
   const toggleSitOut = useCallback(async () => {
@@ -1627,7 +1633,7 @@ export default function GamePage() {
       <React.Fragment key={seatNumber}>
         {/* Main seat */}
         <div
-          className={`absolute w-16 h-16 rounded-full border-2 flex flex-col items-center justify-center text-white text-xs font-semibold relative ${position} ${
+          className={`absolute w-16 h-16 max-sm:w-12 max-sm:h-12 rounded-full border-2 flex flex-col items-center justify-center text-white text-xs font-semibold relative ${position} ${
             isEmpty
               ? canClaim
                 ? 'bg-gray-600 border-gray-500 hover:bg-gray-500 hover:border-gray-400 cursor-pointer opacity-60 hover:opacity-80'
@@ -1678,7 +1684,7 @@ export default function GamePage() {
               <Avatar 
                 src={getPlayerAvatarSrc(assignment.playerId)}
                 size="lg"
-                className={`w-12 h-12 rounded-full border-2 border-white shadow-sm ${(() => {
+                className={`w-12 h-12 max-sm:w-10 max-sm:h-10 rounded-full border-2 border-white shadow-sm ${(() => {
                   const tag = playerNotes[assignment.playerId]?.color as NoteColor | undefined;
                   return tag && NOTE_COLOR_CLASSES[tag] ? `ring-4 ${NOTE_COLOR_CLASSES[tag].ring}` : '';
                 })()}`}
@@ -1710,15 +1716,15 @@ export default function GamePage() {
         {/* Player info box - only show if seat is occupied */}
         {!isEmpty && assignment && (
           <div
-            className={`absolute ${getInfoBoxPosition(position, style)} z-10`}
-            style={{ pointerEvents: 'none' }}
+            className={isNarrowScreen ? 'absolute z-10' : `absolute ${getInfoBoxPosition(position, style)} z-10`}
+            style={isNarrowScreen ? narrowInfoBoxStyle(style) : { pointerEvents: 'none' }}
           >
-            <div className={`px-3 py-2 rounded-lg shadow-lg border-2 text-xs ${
+            <div className={`px-3 py-2 max-sm:px-2 max-sm:py-1 max-sm:text-[10px] max-sm:max-w-[104px] rounded-lg shadow-lg border-2 text-xs ${
               isCurrentPlayer
                 ? 'bg-blue-100 dark:bg-blue-900/80 border-blue-300 dark:border-blue-600 text-blue-900 dark:text-blue-100'
                 : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100'
             }`}>
-              <div className="font-semibold whitespace-nowrap">
+              <div className="font-semibold whitespace-nowrap max-sm:truncate">
                 {assignment.playerName || `Player ${seatNumber}`}
               </div>
               <div className="text-green-600 dark:text-green-400 font-bold">
@@ -2407,7 +2413,7 @@ export default function GamePage() {
     .filter(a => a.playerId);
 
   return (
-    <div className="game-page bg-gray-100 dark:bg-gray-900 min-h-screen">
+    <div className="game-page bg-gray-100 dark:bg-gray-900 min-h-screen overflow-x-clip">
       <ShortcutHelpOverlay open={shortcuts.helpOpen} onClose={() => shortcuts.setHelpOpen(false)} />
       {/* Screen readers hear turns, actions, board cards and results */}
       <TableAnnouncer
@@ -2446,7 +2452,7 @@ export default function GamePage() {
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Game: {id}</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 max-sm:break-all">Game: {id}</h1>
             {roomConfig?.numberOfRebuys !== undefined && (
               <span className="inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-100">
                 Rebuys: {roomConfig.numberOfRebuys === 'unlimited' ? 'Unlimited' : roomConfig.numberOfRebuys}
@@ -2669,7 +2675,7 @@ export default function GamePage() {
           {/* Poker Table - Green Felt Design */}
           <div className="lg:col-span-2 relative">
             {/* Green felt table surface */}
-            <div className="relative bg-gradient-to-br from-green-700 via-green-800 to-green-900 rounded-full mx-auto shadow-2xl border-8 border-amber-800" 
+            <div className="relative bg-gradient-to-br from-green-700 via-green-800 to-green-900 rounded-full mx-auto shadow-2xl border-8 border-amber-800 max-sm:mt-12 max-sm:mb-20" 
                  style={{
                    width: '100%',
                    maxWidth: '800px',
@@ -2800,7 +2806,7 @@ export default function GamePage() {
 
           {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && (
-            <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4">
+            <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Your Turn</h3>
                 <button
@@ -2843,7 +2849,7 @@ export default function GamePage() {
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={handleFold}
-                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition-colors"
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
                 >
                   Fold
                 </button>
@@ -2851,14 +2857,14 @@ export default function GamePage() {
                 {(pokerGameState.currentBet || 0) === 0 ? (
                   <button
                     onClick={handleCheck}
-                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors"
+                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
                   >
                     Check
                   </button>
                 ) : (
                   <button
                     onClick={handleCall}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors"
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
                   >
                     Call {showStackInBB ? formatChips(pokerGameState.currentBet, pokerGameState?.bigBlind || null, true) : `$${pokerGameState.currentBet}`}
                   </button>
@@ -2920,7 +2926,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
                                   </button>
                                 );
@@ -2985,7 +2991,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
                                   </button>
                                 );
@@ -3052,7 +3058,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
                                   </button>
                                 );
@@ -3115,7 +3121,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
                                   </button>
                                 );
@@ -3619,17 +3625,23 @@ export default function GamePage() {
             />
           )}
           {playerId && (isSeated || amInGame) && (
+            <MobileCollapsible title="Session">
             <SessionLedgerPanel tableId={tableId} refreshKey={`${pokerGameState?.handNumber ?? 0}:${pokerGameState?.stage === 'showdown'}`} />
+            </MobileCollapsible>
           )}
           {playerId && (
+            <MobileCollapsible title="Player notes">
             <PlayerNotesPanel players={otherSeated} notes={playerNotes} onNotesChange={setPlayerNotes} />
+            </MobileCollapsible>
           )}
           </div>
 
           {/* Less critical component in viewport */}
-          <div ref={chatPanelRef} className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6">
+          <MobileCollapsible title="Chat" className="lg:col-span-2">
+          <div ref={chatPanelRef} className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6 max-sm:mt-0">
             <ChatPanel gameId={String(id)} playerId={playerId} isAdmin={userRole === 'admin'} />
           </div>
+          </MobileCollapsible>
 
           {/* Settings panel moved next to stats above; bottom button removed */}
         </div>

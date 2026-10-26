@@ -11,7 +11,8 @@ interface Props {
 /** Row of quick reactions for seated players, with a switch to hide other people's. */
 export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMuted }: Props) {
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Table reactions">
+    // The top margin clears our own seat, which hangs below the felt on wide screens
+    <div className="mt-10 max-sm:mt-2 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Table reactions">
       {TABLE_REACTIONS.map(emote => (
         <button
           key={emote}

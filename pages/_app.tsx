@@ -92,7 +92,8 @@ function MyApp({ Component, pageProps }: AppProps) {
   return (
     <ThemeProvider>
       <Head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        {/* viewport-fit=cover lets the table's bottom action bar pad itself clear of the iPhone home bar */}
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta name="description" content="Online poker game platform" />
         <link rel="icon" href="/favicon.ico" />
         

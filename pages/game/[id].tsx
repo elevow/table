@@ -36,6 +36,7 @@ import { NOTE_COLOR_CLASSES, type NoteColor } from '../../src/lib/shared/note-co
 import BetPresetButtons from '../../src/components/BetPresetButtons';
 import ShortcutHelpOverlay from '../../src/components/ShortcutHelpOverlay';
 import { useTableShortcuts } from '../../src/hooks/useTableShortcuts';
+import TableAnnouncer from '../../src/components/TableAnnouncer';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -2393,6 +2394,13 @@ export default function GamePage() {
   return (
     <div className="game-page bg-gray-100 dark:bg-gray-900 min-h-screen">
       <ShortcutHelpOverlay open={shortcuts.helpOpen} onClose={() => shortcuts.setHelpOpen(false)} />
+      {/* Screen readers hear turns, actions, board cards and results */}
+      <TableAnnouncer
+        gameState={gameStarted ? pokerGameState : null}
+        viewerId={playerId}
+        nameOf={(pid) => getPlayerLabel(pid) || 'A player'}
+        formatAmount={(amount) => (showStackInBB ? formatChips(amount, pokerGameState?.bigBlind || null, true) : `$${amount}`)}
+      />
       {rebuyPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900">

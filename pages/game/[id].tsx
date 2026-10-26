@@ -33,6 +33,7 @@ import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/component
 import HostControlsPanel from '../../src/components/HostControlsPanel';
 import WaitlistPanel from '../../src/components/WaitlistPanel';
 import { NOTE_COLOR_CLASSES, type NoteColor } from '../../src/lib/shared/note-colors';
+import BetPresetButtons from '../../src/components/BetPresetButtons';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -2826,7 +2827,7 @@ export default function GamePage() {
                             {showStackInBB && bb > 0 && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(betInput, min, max), bb, true)}</div>
                             )}
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <input
                                 type="number"
                                 min={min}
@@ -2835,14 +2836,20 @@ export default function GamePage() {
                                 value={Number(clamp(betInput, min, max)).toFixed(2)}
                                 onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                                 className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                                data-shortcut-amount="true"
                               />
-                              <div className="flex flex-wrap gap-2">
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(min)}>Min</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(betInput + bb, min, max))}>+BB</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(pot / 2, min, max))}>1/2 Pot</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(pot, min, max))}>Pot</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(max)}>All-in</button>
-                              </div>
+                              <BetPresetButtons
+                                kind="bet"
+                                bettingMode={pokerGameState?.bettingMode}
+                                pot={pot}
+                                currentBet={Number(pokerGameState.currentBet || 0) || 0}
+                                myBet={Number(getMe()?.currentBet || 0)}
+                                min={min}
+                                max={max}
+                                bigBlind={bb}
+                                value={clamp(betInput, min, max)}
+                                onChange={setBetInput}
+                              />
                               {(() => {
                                 const me = getMe();
                                 const prev = Number(me?.currentBet || 0);
@@ -2854,7 +2861,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
                                   </button>
                                 );
@@ -2885,7 +2892,7 @@ export default function GamePage() {
                             {showStackInBB && bb > 0 && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(raiseInput, min, max), bb, true)}</div>
                             )}
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <input
                                 type="number"
                                 min={min}
@@ -2894,14 +2901,20 @@ export default function GamePage() {
                                 value={Number(clamp(raiseInput, min, max)).toFixed(2)}
                                 onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                                 className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                                data-shortcut-amount="true"
                               />
-                              <div className="flex flex-wrap gap-2">
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp((curr + (pokerGameState.minRaise || bb)), min, max))}>+MinRaise</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(curr + (bb * 2), min, max))}>+2BB</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(curr + (bb * 3), min, max))}>+3BB</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(pot, min, max))}>Pot</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(max)}>All-in</button>
-                              </div>
+                              <BetPresetButtons
+                                kind="raise"
+                                bettingMode={pokerGameState?.bettingMode}
+                                pot={pot}
+                                currentBet={curr}
+                                myBet={Number(getMe()?.currentBet || 0)}
+                                min={min}
+                                max={max}
+                                bigBlind={bb}
+                                value={clamp(raiseInput, min, max)}
+                                onChange={setRaiseInput}
+                              />
                               {(() => {
                                 const me = getMe();
                                 const prev = Number(me?.currentBet || 0);
@@ -2913,7 +2926,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
                                   </button>
                                 );
@@ -2948,7 +2961,7 @@ export default function GamePage() {
                             {showStackInBB && bb > 0 && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(betInput, min, max), bb, true)}</div>
                             )}
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <input
                                 type="number"
                                 min={min}
@@ -2957,13 +2970,20 @@ export default function GamePage() {
                                 value={Number(clamp(betInput, min, max)).toFixed(2)}
                                 onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                                 className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                                data-shortcut-amount="true"
                               />
-                              <div className="flex flex-wrap gap-2">
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(min)}>Min</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(betInput + bb, min, max))}>+BB</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(pot / 2, min, max))}>1/2 Pot</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(max)}>Pot</button>
-                              </div>
+                              <BetPresetButtons
+                                kind="bet"
+                                bettingMode={pokerGameState?.bettingMode}
+                                pot={pot}
+                                currentBet={Number(pokerGameState.currentBet || 0) || 0}
+                                myBet={Number(getMe()?.currentBet || 0)}
+                                min={min}
+                                max={max}
+                                bigBlind={bb}
+                                value={clamp(betInput, min, max)}
+                                onChange={setBetInput}
+                              />
                               {(() => {
                                 const me = getMe();
                                 const prev = Number(me?.currentBet || 0);
@@ -2973,7 +2993,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
                                   </button>
                                 );
@@ -3004,7 +3024,7 @@ export default function GamePage() {
                             {showStackInBB && bb > 0 && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(raiseInput, min, max), bb, true)}</div>
                             )}
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <input
                                 type="number"
                                 min={min}
@@ -3013,13 +3033,20 @@ export default function GamePage() {
                                 value={Number(clamp(raiseInput, min, max)).toFixed(2)}
                                 onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                                 className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                                data-shortcut-amount="true"
                               />
-                              <div className="flex flex-wrap gap-2">
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp((curr + (pokerGameState.minRaise || bb)), min, max))}>+MinRaise</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(curr + (bb * 2), min, max))}>+2BB</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(curr + (bb * 3), min, max))}>+3BB</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(max)}>Pot</button>
-                              </div>
+                              <BetPresetButtons
+                                kind="raise"
+                                bettingMode={pokerGameState?.bettingMode}
+                                pot={pot}
+                                currentBet={curr}
+                                myBet={Number(getMe()?.currentBet || 0)}
+                                min={min}
+                                max={max}
+                                bigBlind={bb}
+                                value={clamp(raiseInput, min, max)}
+                                onChange={setRaiseInput}
+                              />
                               {(() => {
                                 const me = getMe();
                                 const prev = Number(me?.currentBet || 0);
@@ -3029,7 +3056,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
                                   </button>
                                 );

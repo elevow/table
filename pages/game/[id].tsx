@@ -40,6 +40,7 @@ import TableAnnouncer from '../../src/components/TableAnnouncer';
 import ReactionPicker from '../../src/components/ReactionPicker';
 import SeatReactionBubbles from '../../src/components/SeatReactionBubbles';
 import { useTableReactions } from '../../src/hooks/useTableReactions';
+import TableChipAnimations from '../../src/components/TableChipAnimations';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -1619,6 +1620,8 @@ export default function GamePage() {
     // Seat records keep the buy-in; once the player is in the game, the engine stack is the truth
     const seatGamePlayer = assignment ? pokerGameState?.players?.find((p: any) => p.id === assignment.playerId) : undefined;
     const seatChips = Number(seatGamePlayer ? seatGamePlayer.stack : assignment?.chips) || 0;
+    // Pulse the winners' seats while the result is on show
+    const isHandWinner = !!assignment && pokerGameState?.stage === 'showdown' && Array.isArray(pokerGameState?.handWinners) && pokerGameState.handWinners.includes(assignment.playerId);
 
     return (
       <React.Fragment key={seatNumber}>
@@ -1632,7 +1635,7 @@ export default function GamePage() {
               : isCurrentPlayer
                 ? 'bg-blue-600 border-blue-500 opacity-90'
                 : 'bg-green-600 border-green-500 opacity-80'
-          }`}
+          } ${isHandWinner ? 'table-winner-pulse' : ''}`}
           style={style}
           onClick={() => {
             if (canClaim) {
@@ -1835,12 +1838,12 @@ export default function GamePage() {
           }
 
           return (
-            <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (hidden)">
+            <div key={`opp-backs-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (hidden)">
               <div className="flex gap-1">
-                <div className="w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center">
+                <div className="table-card-deal w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center">
                   <div className="w-6 h-10 rounded bg-blue-600/50 border border-blue-400"></div>
                 </div>
-                <div className="w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center -ml-3 rotate-3">
+                <div className="table-card-deal w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center -ml-3 rotate-3" style={{ animationDelay: '80ms' }}>
                   <div className="w-6 h-10 rounded bg-blue-600/50 border border-blue-400"></div>
                 </div>
               </div>
@@ -2703,7 +2706,7 @@ export default function GamePage() {
                       <div key={`run-${run}`} className="flex items-center gap-1">
                         <span className="text-[10px] uppercase tracking-wide text-amber-200 font-semibold drop-shadow w-10 text-right">Run {run + 1}</span>
                         {board.map((card: any, index: number) => (
-                          <div key={index} className="bg-white rounded border text-[10px] p-0.5 w-7 h-10 flex flex-col items-center justify-center text-black font-bold">
+                          <div key={index} className="table-card-flip bg-white rounded border text-[10px] p-0.5 w-7 h-10 flex flex-col items-center justify-center text-black font-bold">
                             <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                             <div className={suitColorClass(card.suit)}>
                               {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
@@ -2720,7 +2723,7 @@ export default function GamePage() {
                 ) : pokerGameState?.communityCards && pokerGameState.communityCards.length > 0 && (
                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-8 flex gap-1">
                     {pokerGameState.communityCards.map((card: any, index: number) => (
-                      <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold">
+                      <div key={index} className="table-card-flip bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold" style={{ animationDelay: `${index < 3 ? index * 90 : 0}ms` }}>
                         <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                         <div className={suitColorClass(card.suit)}>
                           {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
@@ -2751,9 +2754,9 @@ export default function GamePage() {
                     // Show ALL of my cards face-up (no face-down backs for the current player)
                     const all = [...down, ...up];
                     return (
-                      <div className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
+                      <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
                         {all.map((card: any, i: number) => (
-                          <div key={`me-card-${i}`} className="bg-white rounded border text-xs p-1 w-10 h-14 flex flex-col items-center justify-center text-black font-bold shadow-lg">
+                          <div key={`me-card-${i}`} style={{ animationDelay: `${Math.min(i, 2) * 80}ms` }} className="table-card-deal bg-white rounded border text-xs p-1 w-10 h-14 flex flex-col items-center justify-center text-black font-bold shadow-lg">
                             <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                             <div className={suitColorClass(card.suit)}>
                               {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
@@ -2768,9 +2771,9 @@ export default function GamePage() {
                   const holes = getCurrentPlayerCards();
                   if (!holes || holes.length === 0) return null;
                   return (
-                    <div className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
+                    <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
                       {holes.map((card: any, index: number) => (
-                        <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-lg">
+                        <div key={index} style={{ animationDelay: `${index * 80}ms` }} className="table-card-deal bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-lg">
                           <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                           <div className={suitColorClass(card.suit)}>
                             {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
@@ -2781,6 +2784,7 @@ export default function GamePage() {
                   );
                 })()}
                 
+                <TableChipAnimations anchors={seatAnchors} gameState={gameStarted ? pokerGameState : null} />
                 <SeatReactionBubbles anchors={seatAnchors} bubbles={reactions.bubbles} nameOf={(pid) => getPlayerLabel(pid) || 'A player'} />
               </div>
             </div>

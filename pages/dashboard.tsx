@@ -201,6 +201,9 @@ const Dashboard: NextPage = () => {
             <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/history')}>
               Hand history
             </button>
+            <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/stats')}>
+              My results
+            </button>
             <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/leaderboard')}>
               Leaderboard &amp; achievements
             </button>

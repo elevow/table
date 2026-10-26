@@ -8,6 +8,7 @@ import { leaveTable, performSeatClaim, syncWaitlist } from '../../../src/lib/ser
 import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../src/lib/server/room-config';
 import { publishTableEvent } from '../../../src/lib/realtime/publisher';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
+import { isStudVariant } from '../../../src/lib/poker/variant-rules';
 
 type HostAction =
   | { action: 'pause' }
@@ -131,7 +132,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       else if (body.action === 'allow-run-it-twice') engine.setAllowRunItTwice(!!body.allow);
       else if (body.action === 'bomb-pot') {
         const variant = engine.getState().variant;
-        if (body.anteBB !== null && String(variant || '').includes('stud')) {
+        if (body.anteBB !== null && isStudVariant(variant)) {
           return res.status(409).json({ error: 'Bomb pots are for Hold\'em and Omaha' });
         }
         engine.setBombPotNext(body.anteBB === null ? null : Number(body.anteBB));

@@ -1,4 +1,5 @@
 import { Card, GameVariant } from '../../types/poker';
+import { isOmahaVariant, isStudVariant } from './variant-rules';
 import { HandEvaluator } from './hand-evaluator';
 
 export interface OutsResult {
@@ -63,7 +64,7 @@ export class OutsCalculator {
     communityCards: Card[],
     variant?: GameVariant
   ): OutsResult {
-    const isOmaha = variant === 'omaha' || variant === 'omaha-hi-lo';
+    const isOmaha = isOmahaVariant(variant);
     
     // Get all known cards
     const knownCards = [
@@ -168,7 +169,7 @@ export class OutsCalculator {
   ): OutsResult {
     // For stud variants, outs calculation is more complex and not implemented yet
     // as cards are dealt to individual players rather than as community cards
-    if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+    if (isStudVariant(variant)) {
       return {
         outs: [],
         oddsNextCard: 0,

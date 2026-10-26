@@ -1,4 +1,5 @@
 import { randomInt } from 'crypto';
+import { isOmahaVariant } from './variant-rules';
 import { HandEvaluator } from './hand-evaluator';
 import { RunItTwicePrompt, TableState, Card, GameStage } from '../../types/poker';
 import { HandInterface } from '../../types/poker-engine';
@@ -164,8 +165,8 @@ export const determineRunItTwicePrompt = (state: TableState, boardOverride?: Car
   try {
     const board = Array.isArray(boardOverride) ? boardOverride : (Array.isArray(state.communityCards) ? state.communityCards : []);
     const variant = state.variant;
-    const minHoleCards = variant === 'omaha' || variant === 'omaha-hi-lo' ? 4 : 2;
-    const evaluator = variant === 'omaha' || variant === 'omaha-hi-lo'
+    const minHoleCards = isOmahaVariant(variant) ? 4 : 2;
+    const evaluator = isOmahaVariant(variant)
       ? HandEvaluator.evaluateOmahaHand.bind(HandEvaluator)
       : HandEvaluator.evaluateHand.bind(HandEvaluator);
     const contenders = state.players

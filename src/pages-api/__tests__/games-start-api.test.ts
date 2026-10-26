@@ -50,6 +50,9 @@ jest.mock('../../../src/lib/poker/poker-engine', () => ({
     startNewHand: jest.fn(),
     setAllowRunItTwice: jest.fn(),
     setAllowStraddle: jest.fn(),
+    setAnte: jest.fn(),
+    setSevenDeuceBounty: jest.fn(),
+    setMixedGame: jest.fn(),
     getState: () => ({ tableId, stage: 'preflop', players, dealerPosition: 0, activePlayer: players[0]?.id, pot: 3 }),
   })),
 }));
@@ -190,6 +193,63 @@ describe('/api/games/start', () => {
     const res = createRes();
     await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
     expect(MockPokerEngine.mock.results[0].value.setAllowRunItTwice).toHaveBeenCalledWith(false);
+  });
+
+  it('applies the room’s ante, 7-2 bounty and fixed-limit betting', async () => {
+    mockGetRoomById.mockResolvedValue({
+      id: 't1',
+      configuration: { variant: 'texas-holdem', bettingMode: 'fixed-limit', ante: 1, sevenDeuceBounty: 5 },
+      blindLevels: { sb: 1, bb: 2 },
+    });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(res.status).toHaveBeenCalledWith(201);
+    const engine = MockPokerEngine.mock.results[0].value;
+    expect(engine.setAnte).toHaveBeenCalledWith(1);
+    expect(engine.setSevenDeuceBounty).toHaveBeenCalledWith(5);
+    expect(engine.setMixedGame).not.toHaveBeenCalled();
+    expect(MockPokerEngine.mock.calls[0][4]).toMatchObject({ variant: 'texas-holdem', bettingMode: 'fixed-limit' });
+  });
+
+  it('turns antes and the bounty off for rooms without them, or with nonsense values', async () => {
+    mockGetRoomById.mockResolvedValue({ id: 't1', configuration: { ante: 'lots', sevenDeuceBounty: -3 }, blindLevels: {} });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    const engine = MockPokerEngine.mock.results[0].value;
+    expect(engine.setAnte).toHaveBeenCalledWith(0);
+    expect(engine.setSevenDeuceBounty).toHaveBeenCalledWith(0);
+  });
+
+  it('starts a mixed game with the first game of the room’s rotation', async () => {
+    mockGetRoomById.mockResolvedValue({
+      id: 't1',
+      configuration: {
+        variant: 'mixed',
+        mixedGames: [{ variant: 'razz', bettingMode: 'fixed-limit' }, { variant: 'omaha-5' }, { variant: 'nonsense' }],
+        handsPerGame: 3,
+      },
+      blindLevels: {},
+    });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(MockPokerEngine.mock.calls[0][4]).toMatchObject({ variant: 'razz', bettingMode: 'fixed-limit' });
+    const engine = MockPokerEngine.mock.results[0].value;
+    expect(engine.setMixedGame).toHaveBeenCalledWith(
+      [{ variant: 'razz', bettingMode: 'fixed-limit' }, { variant: 'omaha-5', bettingMode: 'pot-limit' }],
+      3
+    );
+    expect(engine.startNewHand).toHaveBeenCalled();
+  });
+
+  it('falls back to HORSE when a mixed room has no usable game list', async () => {
+    mockGetRoomById.mockResolvedValue({ id: 't1', configuration: { variant: 'mixed' }, blindLevels: {} });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    const engine = MockPokerEngine.mock.results[0].value;
+    const [games, hands] = engine.setMixedGame.mock.calls[0];
+    expect(games.map((g: any) => g.variant)).toEqual(['texas-holdem', 'omaha-hi-lo', 'razz', 'seven-card-stud', 'seven-card-stud-hi-lo']);
+    expect(hands).toBe(8);
   });
 
   it('cannot turn a fixed-game room into dealers choice from the request', async () => {

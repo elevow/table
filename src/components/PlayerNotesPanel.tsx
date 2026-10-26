@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { authHeaders } from '../utils/auth-headers';
 import { NOTE_COLORS, NOTE_COLOR_CLASSES, type NoteColor } from '../lib/shared/note-colors';
+import HudBadge, { fetchHudStats, type HudMap } from './HudBadge';
+
+// HUD numbers change slowly, so a refresh every few minutes is plenty
+const HUD_REFRESH_MS = 3 * 60 * 1000;
 
 export type NotesMap = Record<string, { note: string; color: string | null }>;
 
@@ -28,6 +32,20 @@ export default function PlayerNotesPanel({ players, notes, onNotesChange }: Prop
   const [draft, setDraft] = useState('');
   const [color, setColor] = useState<NoteColor | null>(null);
   const [saving, setSaving] = useState(false);
+  const [hud, setHud] = useState<HudMap>({});
+  const playerKey = players.map(p => p.id).sort().join(',');
+
+  useEffect(() => {
+    if (!playerKey) return;
+    let cancelled = false;
+    const load = () => fetchHudStats(playerKey.split(',')).then(s => { if (!cancelled) setHud(s); }).catch(() => {});
+    load();
+    const t = setInterval(load, HUD_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [playerKey]);
 
   useEffect(() => {
     if (!editing) return;
@@ -63,7 +81,7 @@ export default function PlayerNotesPanel({ players, notes, onNotesChange }: Prop
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
       <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Player notes</h3>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Private to you.</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Private to you. Tags show VPIP/PFR · hands played together.</p>
       <ul className="space-y-1">
         {players.map(p => {
           const n = notes[p.id];
@@ -78,6 +96,7 @@ export default function PlayerNotesPanel({ players, notes, onNotesChange }: Prop
                 <span className={`inline-block w-3 h-3 rounded-full border border-gray-300 dark:border-gray-600 ${swatch || 'bg-transparent'}`} aria-hidden="true" />
                 <span className="font-medium">{p.name}</span>
                 {n?.note && <span className="truncate text-xs text-gray-500 dark:text-gray-400">— {n.note}</span>}
+                <HudBadge stats={hud[p.id]} />
               </button>
               {editing === p.id && (
                 <div className="mt-1 mb-2 px-2">

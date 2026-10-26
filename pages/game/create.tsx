@@ -4,9 +4,12 @@ import { useRouter } from 'next/router';
 import { tournamentPresets } from '../../src/lib/tournament/tournament-utils';
 import { TOURNAMENT_STRUCTURE_CREATION_ENABLED } from '../../src/lib/shared/feature-flags';
 import type { TournamentConfig } from '../../src/types/tournament';
+import type { BettingMode, MixedGameEntry } from '../../src/types/poker';
+import MixedGameSetup from '../../src/components/MixedGameSetup';
+import { defaultBettingModeForVariant } from '../../src/lib/game/variant-mapping';
+import { DEFAULT_HANDS_PER_GAME, HORSE_GAMES } from '../../src/lib/poker/variant-rules';
 
-type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'dealers-choice';
-type BettingMode = 'no-limit' | 'pot-limit';
+type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'razz' | 'omaha-5' | 'dealers-choice' | 'mixed';
 
 export default function CreateGameRoomPage() {
   const router = useRouter();
@@ -20,6 +23,12 @@ export default function CreateGameRoomPage() {
   const [rebuyAmount, setRebuyAmount] = useState(20);
   const [buyIn, setBuyIn] = useState(1000);
   const [allowRunItTwice, setAllowRunItTwice] = useState(false);
+  // Table options that are off unless set: antes and the 7-2 bounty, in chips
+  const [ante, setAnte] = useState(0);
+  const [sevenDeuceBounty, setSevenDeuceBounty] = useState(0);
+  // Mixed games: the rotation and how many hands each game lasts
+  const [mixedGames, setMixedGames] = useState<MixedGameEntry[]>(HORSE_GAMES.map(g => ({ ...g })));
+  const [handsPerGame, setHandsPerGame] = useState(DEFAULT_HANDS_PER_GAME);
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
@@ -62,6 +71,12 @@ export default function CreateGameRoomPage() {
         return;
       }
 
+      if (variant === 'mixed' && mixedGames.length < 2) {
+        setError('Choose at least two games for the mix');
+        setSubmitting(false);
+        return;
+      }
+
       console.log('Creating game room...');
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
       if (!token) {
@@ -82,6 +97,10 @@ export default function CreateGameRoomPage() {
             rebuyAmount: numberOfRebuys !== 0 ? rebuyAmount : undefined,
             buyIn,
             allowRunItTwice,
+            ante: ante > 0 ? ante : undefined,
+            sevenDeuceBounty: sevenDeuceBounty > 0 ? sevenDeuceBounty : undefined,
+            mixedGames: variant === 'mixed' ? mixedGames : undefined,
+            handsPerGame: variant === 'mixed' ? handsPerGame : undefined,
             tournament: TOURNAMENT_STRUCTURE_CREATION_ENABLED && enableTournament
               ? { preset: presetKey, config: selectedTournamentConfig }
               : undefined,
@@ -228,7 +247,12 @@ export default function CreateGameRoomPage() {
             <select
               className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               value={variant}
-              onChange={e => setVariant(e.target.value as Variant)}
+              onChange={e => {
+                const next = e.target.value as Variant;
+                setVariant(next);
+                // Start from the usual betting for the game (Omaha pot limit, Razz fixed limit)
+                if (next !== 'dealers-choice' && next !== 'mixed') setBettingMode(defaultBettingModeForVariant(next));
+              }}
             >
               <option value="texas-holdem">Texas Hold&apos;em</option>
               <option value="omaha">Omaha</option>
@@ -236,7 +260,10 @@ export default function CreateGameRoomPage() {
               <option value="seven-card-stud">Seven-Card Stud</option>
               <option value="seven-card-stud-hi-lo">Seven-Card Stud Hi-Lo (8 or Better)</option>
               <option value="five-card-stud">Five-Card Stud</option>
+              <option value="razz">Razz (Seven-Card Stud, lowest hand wins)</option>
+              <option value="omaha-5">5-Card Omaha</option>
               <option value="dealers-choice">Dealer&apos;s Choice (dealer selects each hand)</option>
+              <option value="mixed">Mixed Games (rotate every few hands)</option>
             </select>
             {variant === 'dealers-choice' && (
               <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
@@ -250,11 +277,20 @@ export default function CreateGameRoomPage() {
               className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               value={bettingMode}
               onChange={e => setBettingMode(e.target.value as BettingMode)}
-              disabled={variant === 'dealers-choice'}
+              disabled={variant === 'dealers-choice' || variant === 'mixed'}
             >
               <option value="no-limit">No Limit</option>
               <option value="pot-limit">Pot Limit</option>
+              <option value="fixed-limit">Fixed Limit</option>
             </select>
+            {bettingMode === 'fixed-limit' && variant !== 'dealers-choice' && variant !== 'mixed' && (
+              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                Bets and raises are one big blind early in the hand and two big blinds later, up to four bets per round.
+              </p>
+            )}
+            {variant === 'mixed' && (
+              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Each game in the mix sets its own betting.</p>
+            )}
             {variant === 'dealers-choice' && (
               <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Betting mode is determined by the dealer’s selected variant.</p>
             )}
@@ -289,6 +325,39 @@ export default function CreateGameRoomPage() {
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
               After an all-in, the player with the weakest hand can choose to deal the rest of the board more than once and split the pot between the runs. Hold&apos;em and Omaha only.
             </p>
+          </div>
+        </div>
+        {variant === 'mixed' && (
+          <MixedGameSetup
+            games={mixedGames}
+            handsPerGame={handsPerGame}
+            onChange={(games, hands) => { setMixedGames(games); setHandsPerGame(hands); }}
+          />
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium">Ante (chips)</label>
+            <input
+              type="number"
+              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              min={0}
+              step={0.01}
+              value={ante}
+              onChange={e => setAnte(Math.max(0, parseFloat(e.target.value || '0') || 0))}
+            />
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Every player posts this before each Hold&apos;em or Omaha hand. 0 for no antes.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium">7-2 bounty (chips)</label>
+            <input
+              type="number"
+              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              min={0}
+              step={0.01}
+              value={sevenDeuceBounty}
+              onChange={e => setSevenDeuceBounty(Math.max(0, parseFloat(e.target.value || '0') || 0))}
+            />
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Hold&apos;em only. Win a pot with 7-2 offsuit and show it, and every other player in the hand pays you this. 0 for off.</p>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Table">
+  <!-- Full-bleed background with the artwork inside the central safe zone, for masked launcher icons -->
+  <rect width="512" height="512" fill="#14532d"/>
+  <ellipse cx="256" cy="256" rx="150" ry="112" fill="#16a34a" stroke="#92400e" stroke-width="16"/>
+  <path d="M256 170c-30 39-72 60-72 96 0 22 18 39 39 39 14 0 24-6 30-15-3 22-12 39-25 51h56c-13-12-22-29-25-51 6 9 16 15 30 15 21 0 39-17 39-39 0-36-42-57-72-96z" fill="#ffffff"/>
+</svg>

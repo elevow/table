@@ -1,15 +1,16 @@
-import { Player } from '../../types/poker';
+import { BettingMode, Player } from '../../types/poker';
 import { PlayerAction } from '../../types/poker-engine';
 import { PotLimitCalculator } from './pot-limit';
+import { FIXED_LIMIT_CAP, fixedLimitRaiseTarget } from './fixed-limit';
 
 export class BettingManager {
-  private mode: 'no-limit' | 'pot-limit' = 'no-limit';
+  private mode: BettingMode = 'no-limit';
   constructor(
     private readonly smallBlind: number,
     private readonly bigBlind: number
   ) {}
 
-  public setMode(mode: 'no-limit' | 'pot-limit') {
+  public setMode(mode: BettingMode) {
     this.mode = mode;
   }
 
@@ -94,10 +95,14 @@ export class BettingManager {
     action: PlayerAction,
     currentBet: number,
     minRaise: number,
-    ctx?: { currentPot: number; players: Player[] }
-  ): { pot: number; currentBet: number; minRaise: number } {
+    ctx?: { currentPot: number; players: Player[]; fixedLimit?: { unit: number; bets: number } }
+  ): { pot: number; currentBet: number; minRaise: number; limitBets?: number } {
     let potIncrease = 0;
     const previousBet = player.currentBet;
+
+    if (this.mode === 'fixed-limit' && (action.type === 'bet' || action.type === 'raise')) {
+      return this.processFixedLimitBet(player, action, currentBet, ctx?.fixedLimit);
+    }
 
     switch (action.type) {
       case 'bet': {
@@ -200,6 +205,42 @@ export class BettingManager {
     }
 
     return { pot: potIncrease, currentBet, minRaise };
+  }
+
+  /**
+   * Fixed limit: a bet or raise is exactly one bet (the street's unit) above the current level,
+   * whatever amount was asked for, so a stale amount from the client can't change the size.
+   * A player without enough chips goes all-in for less; that doesn't count towards the cap.
+   */
+  private processFixedLimitBet(
+    player: Player,
+    action: PlayerAction,
+    currentBet: number,
+    limit?: { unit: number; bets: number }
+  ): { pot: number; currentBet: number; minRaise: number; limitBets: number } {
+    const unit = limit?.unit && limit.unit > 0 ? limit.unit : this.bigBlind;
+    const bets = limit?.bets || 0;
+    const maxTotal = player.currentBet + player.stack;
+    let target: number;
+    if (action.type === 'bet') {
+      if (currentBet > 0) throw new Error('Cannot bet when there is an active bet; use raise');
+      target = unit;
+    } else {
+      if (currentBet <= 0) throw new Error('Nothing to raise; bet instead');
+      if (bets >= FIXED_LIMIT_CAP) throw new Error(`Betting is capped at ${FIXED_LIMIT_CAP} bets this street`);
+      if (maxTotal <= currentBet) throw new Error('Not enough chips to raise; call instead');
+      target = fixedLimitRaiseTarget(currentBet, bets, unit);
+    }
+    const total = Math.min(target, maxTotal);
+    const potIncrease = this.placeBet(player, total);
+    player.hasActed = true;
+    return {
+      pot: potIncrease,
+      currentBet: Math.max(currentBet, player.currentBet),
+      minRaise: unit,
+      // Only a full bet or raise counts towards the cap
+      limitBets: total >= target ? bets + 1 : bets,
+    };
   }
 
   /**

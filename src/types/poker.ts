@@ -5,7 +5,18 @@ export type GameStage =
   | 'awaiting-dealer-choice'; // Dealer's Choice pre-hand pause
 
 // Game variant type - shared across TableState and PokerEngine
-export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud';
+export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud'
+  // Razz: seven-card stud played for the lowest hand. 'omaha-5': Omaha with five hole cards.
+  | 'razz' | 'omaha-5';
+
+// How much a player may bet: any amount, up to the pot, or one fixed bet per bet or raise
+export type BettingMode = 'no-limit' | 'pot-limit' | 'fixed-limit';
+
+/** One game in a mixed-game rotation, with the betting it is played with. */
+export interface MixedGameEntry {
+  variant: GameVariant;
+  bettingMode: BettingMode;
+}
 
 export interface Card {
   suit: 'hearts' | 'diamonds' | 'clubs' | 'spades';
@@ -44,11 +55,15 @@ export interface Player {
 /** One entry in a hand's action log, kept for hand history and the replayer. */
 export interface HandActionEntry {
   playerId: string;
-  action: 'small-blind' | 'big-blind' | 'straddle' | 'ante' | 'bring-in' | 'fold' | 'check' | 'call' | 'bet' | 'raise';
+  action: 'small-blind' | 'big-blind' | 'straddle' | 'ante' | 'bring-in' | 'fold' | 'check' | 'call' | 'bet' | 'raise'
+    // Paid after the hand, straight to the player in toPlayerId rather than into the pot
+    | 'bounty';
   // The player's total bet on this street after the action, where that applies
   amount?: number;
-  // Chips this action moved from the player's stack into the pot
+  // Chips this action moved from the player's stack into the pot (for a bounty, to toPlayerId)
   put: number;
+  // Bounty: the player who was paid
+  toPlayerId?: string;
   stage: GameStage;
   // Taken by the turn clock rather than the player
   auto?: boolean;
@@ -111,8 +126,22 @@ export interface TableState {
   lastRaise: number;
   // Optional game variant; when set to 'omaha' or 'omaha-hi-lo', rules and dealing are adapted accordingly
   variant?: GameVariant;
-  // Betting mode for the table: 'no-limit' (default) or 'pot-limit'
-  bettingMode?: 'no-limit' | 'pot-limit';
+  // Betting mode for the table: 'no-limit' (default), 'pot-limit' or 'fixed-limit'
+  bettingMode?: BettingMode;
+  // Fixed limit: full bets and raises made on the current street (the big blind counts as the
+  // first one preflop; a stud bring-in does not). Betting is capped at FIXED_LIMIT_CAP.
+  limitBets?: number;
+  // Room option: every player dealt into a Hold'em or Omaha hand posts this ante (0 or unset = none)
+  ante?: number;
+  // Room option (Hold'em only): winning a pot with 7-2 and showing it collects this from every
+  // other player dealt in (0 or unset = off)
+  sevenDeuceBounty?: number;
+  // The 7-2 bounty paid in the current hand, once it has been won
+  sevenDeuceResult?: { playerId: string; total: number; payments: Record<string, number> };
+  // Mixed games: the games played in turn, each for handsPerGame hands. index is the game being
+  // played and handsInGame how many of its hands have started. Kept in the saved state, not in
+  // server memory, so every server instance agrees on where the rotation is.
+  mixedGame?: { games: MixedGameEntry[]; handsPerGame: number; index: number; handsInGame: number };
   // Policy: when true, Run It Twice requires unanimous consent from all active players
   requireRunItTwiceUnanimous?: boolean;
   // US-029: Run It Twice state (set only when enabled)

@@ -28,11 +28,26 @@ import { resolvePreAction } from '../../src/lib/shared/pre-action';
 import type { PreAction } from '../../src/lib/shared/pre-action';
 import { useTableExtras } from '../../src/hooks/useTableExtras';
 import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
+import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
+import FixedLimitControls from '../../src/components/FixedLimitControls';
+import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
+import { ALL_VARIANTS, VARIANT_LABELS, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
 import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/components/PlayerNotesPanel';
 import HostControlsPanel from '../../src/components/HostControlsPanel';
 import WaitlistPanel from '../../src/components/WaitlistPanel';
 import { NOTE_COLOR_CLASSES, type NoteColor } from '../../src/lib/shared/note-colors';
+import BetPresetButtons from '../../src/components/BetPresetButtons';
+import ShortcutHelpOverlay from '../../src/components/ShortcutHelpOverlay';
+import { useTableShortcuts } from '../../src/hooks/useTableShortcuts';
+import TableAnnouncer from '../../src/components/TableAnnouncer';
+import ReactionPicker from '../../src/components/ReactionPicker';
+import SeatReactionBubbles from '../../src/components/SeatReactionBubbles';
+import { useTableReactions } from '../../src/hooks/useTableReactions';
+import TableChipAnimations from '../../src/components/TableChipAnimations';
+import MobileCollapsible from '../../src/components/MobileCollapsible';
+import { useMediaQuery, NARROW_SCREEN_QUERY } from '../../src/hooks/useMediaQuery';
+import { narrowInfoBoxStyle } from '../../src/lib/shared/seat-layout';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -432,7 +447,8 @@ export default function GamePage() {
         setRebuyPrompt({ baseChips, rebuysUsed, rebuyLimit, remaining });
       },
       onTableEvent: (payload: any) => {
-        refreshTableExtras();
+        // Reactions come often and change nothing the extras panel shows
+        if (payload?.type !== 'reaction') refreshTableExtras();
         if (payload?.type === 'kicked' && payload.playerId === playerId) {
           setSeatNotice('The host removed you from the table.');
         }
@@ -561,14 +577,7 @@ export default function GamePage() {
   // Track if the dealer has manually changed the selection to avoid overwriting with stale prompts
   const userChangedVariantRef = useRef<boolean>(false);
   const lastAwaitingDealerIdRef = useRef<string | undefined>(undefined);
-  const allowedDealerChoiceVariants = useRef([
-    'texas-holdem',
-    'omaha',
-    'omaha-hi-lo',
-    'seven-card-stud',
-    'seven-card-stud-hi-lo',
-    'five-card-stud',
-  ]);
+  const allowedDealerChoiceVariants = useRef<string[]>([...ALL_VARIANTS]);
 
   const applyDealerChoicePrompt = useCallback((prompt: { dealerId?: string; allowedVariants?: string[]; current?: string } | null) => {
     if (!prompt) {
@@ -1011,10 +1020,7 @@ export default function GamePage() {
   };
 
   // Variant helpers
-  const isStudVariant = () => {
-    const v = pokerGameState?.variant;
-    return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud';
-  };
+  const isStudVariant = () => isStudGame(pokerGameState?.variant);
 
   const getStudCardsForPlayer = useCallback((pid: string) => {
     const st = (pokerGameState as any)?.studState?.playerCards?.[pid];
@@ -1097,10 +1103,12 @@ export default function GamePage() {
       };
 
       const computeHighLabel = (): string | null => {
-        if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+        if (isStudGame(variant)) {
           const { down, up } = getStudCardsForPlayer(playerId);
           const all = [...(down || []), ...(up || [])];
           if (!all || all.length === 0) return null;
+          // Razz is played for the lowest hand
+          if (variant === 'razz') return HandEvaluator.evaluateRazzLow(all).description;
           if (all.length < 5) return partialLabel(all);
           const ranking = HandEvaluator.getHandRanking(all, []);
           return formatWithKickers(ranking) || null;
@@ -1112,7 +1120,7 @@ export default function GamePage() {
         const known = [...holes, ...board];
         if (known.length < 5) return partialLabel(known);
 
-        if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+        if (isOmahaVariant(variant)) {
           const ranking = HandEvaluator.getOmahaHandRanking(holes, board);
           return formatWithKickers(ranking) || null;
         }
@@ -1471,6 +1479,20 @@ export default function GamePage() {
     else handlePokerAction(result.action);
   }, [preAction, isMyTurn, me, myOwed, pokerGameState?.runItTwicePrompt, handlePokerAction]);
 
+  // Keyboard shortcuts work only while the Your Turn panel is showing (same conditions as the panel)
+  const actionPanelOpen = !!(gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt);
+  const shortcuts = useTableShortcuts({
+    enabled: actionPanelOpen,
+    onFold: handleFold,
+    onCheckOrCall: () => (myOwed > 0 ? handlePokerAction('call', myOwed) : handleCheck()),
+  });
+
+  // Emote reactions shown over seats
+  const reactions = useTableReactions(tableId || undefined, playerId);
+
+  // Phones in portrait get compact seats with their info boxes next to the seat
+  const isNarrowScreen = useMediaQuery(NARROW_SCREEN_QUERY);
+
   // Sit out from the next hand, or back in
   const [sitOutPending, setSitOutPending] = useState(false);
   const toggleSitOut = useCallback(async () => {
@@ -1600,12 +1622,14 @@ export default function GamePage() {
     // Seat records keep the buy-in; once the player is in the game, the engine stack is the truth
     const seatGamePlayer = assignment ? pokerGameState?.players?.find((p: any) => p.id === assignment.playerId) : undefined;
     const seatChips = Number(seatGamePlayer ? seatGamePlayer.stack : assignment?.chips) || 0;
+    // Pulse the winners' seats while the result is on show
+    const isHandWinner = !!assignment && pokerGameState?.stage === 'showdown' && Array.isArray(pokerGameState?.handWinners) && pokerGameState.handWinners.includes(assignment.playerId);
 
     return (
       <React.Fragment key={seatNumber}>
         {/* Main seat */}
         <div
-          className={`absolute w-16 h-16 rounded-full border-2 flex flex-col items-center justify-center text-white text-xs font-semibold relative ${position} ${
+          className={`absolute w-16 h-16 max-sm:w-12 max-sm:h-12 rounded-full border-2 flex flex-col items-center justify-center text-white text-xs font-semibold relative ${position} ${
             isEmpty
               ? canClaim
                 ? 'bg-gray-600 border-gray-500 hover:bg-gray-500 hover:border-gray-400 cursor-pointer opacity-60 hover:opacity-80'
@@ -1613,7 +1637,7 @@ export default function GamePage() {
               : isCurrentPlayer
                 ? 'bg-blue-600 border-blue-500 opacity-90'
                 : 'bg-green-600 border-green-500 opacity-80'
-          }`}
+          } ${isHandWinner ? 'table-winner-pulse' : ''}`}
           style={style}
           onClick={() => {
             if (canClaim) {
@@ -1656,7 +1680,7 @@ export default function GamePage() {
               <Avatar 
                 src={getPlayerAvatarSrc(assignment.playerId)}
                 size="lg"
-                className={`w-12 h-12 rounded-full border-2 border-white shadow-sm ${(() => {
+                className={`w-12 h-12 max-sm:w-10 max-sm:h-10 rounded-full border-2 border-white shadow-sm ${(() => {
                   const tag = playerNotes[assignment.playerId]?.color as NoteColor | undefined;
                   return tag && NOTE_COLOR_CLASSES[tag] ? `ring-4 ${NOTE_COLOR_CLASSES[tag].ring}` : '';
                 })()}`}
@@ -1688,15 +1712,15 @@ export default function GamePage() {
         {/* Player info box - only show if seat is occupied */}
         {!isEmpty && assignment && (
           <div
-            className={`absolute ${getInfoBoxPosition(position, style)} z-10`}
-            style={{ pointerEvents: 'none' }}
+            className={isNarrowScreen ? 'absolute z-10' : `absolute ${getInfoBoxPosition(position, style)} z-10`}
+            style={isNarrowScreen ? narrowInfoBoxStyle(style) : { pointerEvents: 'none' }}
           >
-            <div className={`px-3 py-2 rounded-lg shadow-lg border-2 text-xs ${
+            <div className={`px-3 py-2 max-sm:px-2 max-sm:py-1 max-sm:text-[10px] max-sm:max-w-[104px] rounded-lg shadow-lg border-2 text-xs ${
               isCurrentPlayer
                 ? 'bg-blue-100 dark:bg-blue-900/80 border-blue-300 dark:border-blue-600 text-blue-900 dark:text-blue-100'
                 : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100'
             }`}>
-              <div className="font-semibold whitespace-nowrap">
+              <div className="font-semibold whitespace-nowrap max-sm:truncate">
                 {assignment.playerName || `Player ${seatNumber}`}
               </div>
               <div className="text-green-600 dark:text-green-400 font-bold">
@@ -1816,12 +1840,12 @@ export default function GamePage() {
           }
 
           return (
-            <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (hidden)">
+            <div key={`opp-backs-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (hidden)">
               <div className="flex gap-1">
-                <div className="w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center">
+                <div className="table-card-deal w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center">
                   <div className="w-6 h-10 rounded bg-blue-600/50 border border-blue-400"></div>
                 </div>
-                <div className="w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center -ml-3 rotate-3">
+                <div className="table-card-deal w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center -ml-3 rotate-3" style={{ animationDelay: '80ms' }}>
                   <div className="w-6 h-10 rounded bg-blue-600/50 border border-blue-400"></div>
                 </div>
               </div>
@@ -2379,8 +2403,21 @@ export default function GamePage() {
     }
   };
   
+  // Where each seated player sits on the felt, for overlays drawn over the seats
+  const seatAnchors = getRotatedSeatPositions()
+    .map(s => ({ playerId: seatAssignments[s.seatNumber]?.playerId || '', left: String(s.style.left), top: String(s.style.top) }))
+    .filter(a => a.playerId);
+
   return (
-    <div className="game-page bg-gray-100 dark:bg-gray-900 min-h-screen">
+    <div className="game-page bg-gray-100 dark:bg-gray-900 min-h-screen overflow-x-clip">
+      <ShortcutHelpOverlay open={shortcuts.helpOpen} onClose={() => shortcuts.setHelpOpen(false)} />
+      {/* Screen readers hear turns, actions, board cards and results */}
+      <TableAnnouncer
+        gameState={gameStarted ? pokerGameState : null}
+        viewerId={playerId}
+        nameOf={(pid) => getPlayerLabel(pid) || 'A player'}
+        formatAmount={(amount) => (showStackInBB ? formatChips(amount, pokerGameState?.bigBlind || null, true) : `$${amount}`)}
+      />
       {rebuyPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900">
@@ -2411,7 +2448,7 @@ export default function GamePage() {
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Game: {id}</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 max-sm:break-all">Game: {id}</h1>
             {roomConfig?.numberOfRebuys !== undefined && (
               <span className="inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-100">
                 Rebuys: {roomConfig.numberOfRebuys === 'unlimited' ? 'Unlimited' : roomConfig.numberOfRebuys}
@@ -2425,6 +2462,7 @@ export default function GamePage() {
                 Run it twice
               </span>
             )}
+            <GameRulesBadges state={pokerGameState} />
             {/* Removed seated info banner at user request */}
             {/* Removed game started banner at user request */}
           </div>
@@ -2549,6 +2587,7 @@ export default function GamePage() {
                 : `Next hand is a bomb pot (${pokerGameState.bombPotNext.anteBB} big blind ante).`}
             </div>
           )}
+          {gameStarted && <SevenDeuceBountyBanner state={pokerGameState} />}
           {/* Dealer's Choice selection banner */}
           {gameStarted && awaitingDealerChoice && (
             <div className="lg:col-span-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 rounded-lg shadow-md p-4">
@@ -2556,16 +2595,9 @@ export default function GamePage() {
                 const dealerId = awaitingDealerChoice?.dealerId;
                 const allowed = Array.isArray(awaitingDealerChoice?.allowedVariants)
                   ? awaitingDealerChoice!.allowedVariants!
-                  : ['texas-holdem','omaha','omaha-hi-lo','seven-card-stud','seven-card-stud-hi-lo','five-card-stud'];
+                  : [...ALL_VARIANTS];
                 const isMeDealer = dealerId && dealerId === playerId;
-                const labelMap: Record<string, string> = {
-                  'texas-holdem': "Texas Hold'em",
-                  'omaha': 'Omaha',
-                  'omaha-hi-lo': 'Omaha Hi-Lo',
-                  'seven-card-stud': 'Seven-Card Stud',
-                  'seven-card-stud-hi-lo': 'Seven-Card Stud Hi-Lo',
-                  'five-card-stud': 'Five-Card Stud',
-                };
+                const labelMap: Record<string, string> = VARIANT_LABELS;
                 if (isMeDealer) {
                   return (
                     <div>
@@ -2634,7 +2666,7 @@ export default function GamePage() {
           {/* Poker Table - Green Felt Design */}
           <div className="lg:col-span-2 relative">
             {/* Green felt table surface */}
-            <div className="relative bg-gradient-to-br from-green-700 via-green-800 to-green-900 rounded-full mx-auto shadow-2xl border-8 border-amber-800" 
+            <div className="relative bg-gradient-to-br from-green-700 via-green-800 to-green-900 rounded-full mx-auto shadow-2xl border-8 border-amber-800 max-sm:mt-12 max-sm:mb-20" 
                  style={{
                    width: '100%',
                    maxWidth: '800px',
@@ -2671,7 +2703,7 @@ export default function GamePage() {
                       <div key={`run-${run}`} className="flex items-center gap-1">
                         <span className="text-[10px] uppercase tracking-wide text-amber-200 font-semibold drop-shadow w-10 text-right">Run {run + 1}</span>
                         {board.map((card: any, index: number) => (
-                          <div key={index} className="bg-white rounded border text-[10px] p-0.5 w-7 h-10 flex flex-col items-center justify-center text-black font-bold">
+                          <div key={index} className="table-card-flip bg-white rounded border text-[10px] p-0.5 w-7 h-10 flex flex-col items-center justify-center text-black font-bold">
                             <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                             <div className={suitColorClass(card.suit)}>
                               {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
@@ -2688,7 +2720,7 @@ export default function GamePage() {
                 ) : pokerGameState?.communityCards && pokerGameState.communityCards.length > 0 && (
                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-8 flex gap-1">
                     {pokerGameState.communityCards.map((card: any, index: number) => (
-                      <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold">
+                      <div key={index} className="table-card-flip bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold" style={{ animationDelay: `${index < 3 ? index * 90 : 0}ms` }}>
                         <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                         <div className={suitColorClass(card.suit)}>
                           {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
@@ -2719,9 +2751,9 @@ export default function GamePage() {
                     // Show ALL of my cards face-up (no face-down backs for the current player)
                     const all = [...down, ...up];
                     return (
-                      <div className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
+                      <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
                         {all.map((card: any, i: number) => (
-                          <div key={`me-card-${i}`} className="bg-white rounded border text-xs p-1 w-10 h-14 flex flex-col items-center justify-center text-black font-bold shadow-lg">
+                          <div key={`me-card-${i}`} style={{ animationDelay: `${Math.min(i, 2) * 80}ms` }} className="table-card-deal bg-white rounded border text-xs p-1 w-10 h-14 flex flex-col items-center justify-center text-black font-bold shadow-lg">
                             <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                             <div className={suitColorClass(card.suit)}>
                               {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
@@ -2736,9 +2768,9 @@ export default function GamePage() {
                   const holes = getCurrentPlayerCards();
                   if (!holes || holes.length === 0) return null;
                   return (
-                    <div className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
+                    <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
                       {holes.map((card: any, index: number) => (
-                        <div key={index} className="bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-lg">
+                        <div key={index} style={{ animationDelay: `${index * 80}ms` }} className="table-card-deal bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-lg">
                           <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
                           <div className={suitColorClass(card.suit)}>
                             {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
@@ -2749,14 +2781,39 @@ export default function GamePage() {
                   );
                 })()}
                 
+                <TableChipAnimations anchors={seatAnchors} gameState={gameStarted ? pokerGameState : null} />
+                <SeatReactionBubbles anchors={seatAnchors} bubbles={reactions.bubbles} nameOf={(pid) => getPlayerLabel(pid) || 'A player'} />
               </div>
             </div>
+            {playerId && (isSeated || amInGame) && (
+              <ReactionPicker
+                onReact={reactions.send}
+                coolingDown={reactions.coolingDown}
+                muted={reactions.muted}
+                onToggleMuted={reactions.setMuted}
+              />
+            )}
           </div>
 
           {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && (
-            <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Your Turn</h3>
+            <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Your Turn</h3>
+                <button
+                  type="button"
+                  onClick={() => shortcuts.setHelpOpen(true)}
+                  className="hidden sm:inline text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  title="Show keyboard shortcuts"
+                >
+                  Keyboard: <kbd className="font-mono">?</kbd>
+                </button>
+              </div>
+              {shortcuts.allInArmed && (
+                <div className="mb-2 rounded bg-yellow-100 px-2 py-1 text-sm font-semibold text-yellow-900 dark:bg-yellow-900/40 dark:text-yellow-100" role="status">
+                  Press A again to go all-in, or Esc to cancel.
+                </div>
+              )}
               <TurnClockBar clock={turnClock} />
               {(() => {
                 const summary = getMyHandSummary();
@@ -2783,7 +2840,7 @@ export default function GamePage() {
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={handleFold}
-                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition-colors"
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
                 >
                   Fold
                 </button>
@@ -2791,14 +2848,14 @@ export default function GamePage() {
                 {(pokerGameState.currentBet || 0) === 0 ? (
                   <button
                     onClick={handleCheck}
-                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors"
+                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
                   >
                     Check
                   </button>
                 ) : (
                   <button
                     onClick={handleCall}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors"
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
                   >
                     Call {showStackInBB ? formatChips(pokerGameState.currentBet, pokerGameState?.bigBlind || null, true) : `$${pokerGameState.currentBet}`}
                   </button>
@@ -2826,7 +2883,7 @@ export default function GamePage() {
                             {showStackInBB && bb > 0 && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(betInput, min, max), bb, true)}</div>
                             )}
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <input
                                 type="number"
                                 min={min}
@@ -2835,14 +2892,20 @@ export default function GamePage() {
                                 value={Number(clamp(betInput, min, max)).toFixed(2)}
                                 onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                                 className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                                data-shortcut-amount="true"
                               />
-                              <div className="flex flex-wrap gap-2">
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(min)}>Min</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(betInput + bb, min, max))}>+BB</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(pot / 2, min, max))}>1/2 Pot</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(pot, min, max))}>Pot</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(max)}>All-in</button>
-                              </div>
+                              <BetPresetButtons
+                                kind="bet"
+                                bettingMode={pokerGameState?.bettingMode}
+                                pot={pot}
+                                currentBet={Number(pokerGameState.currentBet || 0) || 0}
+                                myBet={Number(getMe()?.currentBet || 0)}
+                                min={min}
+                                max={max}
+                                bigBlind={bb}
+                                value={clamp(betInput, min, max)}
+                                onChange={setBetInput}
+                              />
                               {(() => {
                                 const me = getMe();
                                 const prev = Number(me?.currentBet || 0);
@@ -2854,7 +2917,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
                                   </button>
                                 );
@@ -2885,7 +2948,7 @@ export default function GamePage() {
                             {showStackInBB && bb > 0 && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(raiseInput, min, max), bb, true)}</div>
                             )}
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <input
                                 type="number"
                                 min={min}
@@ -2894,14 +2957,20 @@ export default function GamePage() {
                                 value={Number(clamp(raiseInput, min, max)).toFixed(2)}
                                 onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                                 className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                                data-shortcut-amount="true"
                               />
-                              <div className="flex flex-wrap gap-2">
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp((curr + (pokerGameState.minRaise || bb)), min, max))}>+MinRaise</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(curr + (bb * 2), min, max))}>+2BB</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(curr + (bb * 3), min, max))}>+3BB</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(pot, min, max))}>Pot</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(max)}>All-in</button>
-                              </div>
+                              <BetPresetButtons
+                                kind="raise"
+                                bettingMode={pokerGameState?.bettingMode}
+                                pot={pot}
+                                currentBet={curr}
+                                myBet={Number(getMe()?.currentBet || 0)}
+                                min={min}
+                                max={max}
+                                bigBlind={bb}
+                                value={clamp(raiseInput, min, max)}
+                                onChange={setRaiseInput}
+                              />
                               {(() => {
                                 const me = getMe();
                                 const prev = Number(me?.currentBet || 0);
@@ -2913,7 +2982,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
                                   </button>
                                 );
@@ -2924,6 +2993,10 @@ export default function GamePage() {
                       })()}
                     </div>
                   )
+                )}
+
+                {pokerGameState?.bettingMode === 'fixed-limit' && playerId && (
+                  <FixedLimitControls state={pokerGameState} playerId={playerId} onBet={handleBet} onRaise={handleRaise} showStackInBB={showStackInBB} />
                 )}
 
                 {/* Pot-Limit betting controls */}
@@ -2948,7 +3021,7 @@ export default function GamePage() {
                             {showStackInBB && bb > 0 && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(betInput, min, max), bb, true)}</div>
                             )}
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <input
                                 type="number"
                                 min={min}
@@ -2957,13 +3030,20 @@ export default function GamePage() {
                                 value={Number(clamp(betInput, min, max)).toFixed(2)}
                                 onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                                 className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                                data-shortcut-amount="true"
                               />
-                              <div className="flex flex-wrap gap-2">
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(min)}>Min</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(betInput + bb, min, max))}>+BB</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(clamp(pot / 2, min, max))}>1/2 Pot</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setBetInput(max)}>Pot</button>
-                              </div>
+                              <BetPresetButtons
+                                kind="bet"
+                                bettingMode={pokerGameState?.bettingMode}
+                                pot={pot}
+                                currentBet={Number(pokerGameState.currentBet || 0) || 0}
+                                myBet={Number(getMe()?.currentBet || 0)}
+                                min={min}
+                                max={max}
+                                bigBlind={bb}
+                                value={clamp(betInput, min, max)}
+                                onChange={setBetInput}
+                              />
                               {(() => {
                                 const me = getMe();
                                 const prev = Number(me?.currentBet || 0);
@@ -2973,7 +3053,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} className="ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
                                   </button>
                                 );
@@ -3004,7 +3084,7 @@ export default function GamePage() {
                             {showStackInBB && bb > 0 && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(raiseInput, min, max), bb, true)}</div>
                             )}
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <input
                                 type="number"
                                 min={min}
@@ -3013,13 +3093,20 @@ export default function GamePage() {
                                 value={Number(clamp(raiseInput, min, max)).toFixed(2)}
                                 onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
                                 className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                                data-shortcut-amount="true"
                               />
-                              <div className="flex flex-wrap gap-2">
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp((curr + (pokerGameState.minRaise || bb)), min, max))}>+MinRaise</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(curr + (bb * 2), min, max))}>+2BB</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(clamp(curr + (bb * 3), min, max))}>+3BB</button>
-                                <button className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 rounded" onClick={() => setRaiseInput(max)}>Pot</button>
-                              </div>
+                              <BetPresetButtons
+                                kind="raise"
+                                bettingMode={pokerGameState?.bettingMode}
+                                pot={pot}
+                                currentBet={curr}
+                                myBet={Number(getMe()?.currentBet || 0)}
+                                min={min}
+                                max={max}
+                                bigBlind={bb}
+                                value={clamp(raiseInput, min, max)}
+                                onChange={setRaiseInput}
+                              />
                               {(() => {
                                 const me = getMe();
                                 const prev = Number(me?.currentBet || 0);
@@ -3029,7 +3116,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
                                     {label}
                                   </button>
                                 );
@@ -3365,15 +3452,30 @@ export default function GamePage() {
                   const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
 
                   type EvalRes = { playerId: string; name: string; hand: any; label: string };
+                  if (variant === 'razz') {
+                    // Razz: the lowest hand wins, so name the server's winners with their lows
+                    const lows: Array<{ name: string; label: string }> = contenders.map((p: any) => {
+                      const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
+                      const all = [...(Array.isArray(st?.downCards) ? st.downCards : []), ...(Array.isArray(st?.upCards) ? st.upCards : [])];
+                      return { name: p.name || p.id, label: all.length >= 5 ? HandEvaluator.evaluateRazzLow(all).description : '' };
+                    });
+                    return (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold">{lows.map(l => l.name).join(', ')}</span>
+                        <span>{lows.length > 1 ? 'split the pot' : 'wins the pot'}</span>
+                        {lows[0]?.label ? <span className="opacity-80">({lows[0].label})</span> : null}
+                      </div>
+                    );
+                  }
                   const evals: EvalRes[] = contenders.map((p: any) => {
-                    if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+                    if (isStudGame(variant)) {
                       const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
                       const down = Array.isArray(st?.downCards) ? st.downCards : [];
                       const up = Array.isArray(st?.upCards) ? st.upCards : [];
                       const { hand } = HandEvaluator.evaluateHand([...down, ...up], []);
                       return { playerId: p.id, name: p.name || p.id, hand, label: String((hand as any)?.description || '') };
                     }
-                    if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+                    if (isOmahaVariant(variant)) {
                       const { hand } = HandEvaluator.evaluateOmahaHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
                       return { playerId: p.id, name: p.name || p.id, hand, label: String((hand as any)?.description || '') };
                     }
@@ -3420,7 +3522,7 @@ export default function GamePage() {
             <EquityPanel
               players={getActiveNonFoldedPlayers()}
               board={Array.isArray(pokerGameState.communityCards) ? pokerGameState.communityCards : []}
-              omaha={pokerGameState.variant === 'omaha' || pokerGameState.variant === 'omaha-hi-lo'}
+              omaha={isOmahaVariant(pokerGameState.variant)}
             />
           )}
 
@@ -3439,14 +3541,14 @@ export default function GamePage() {
               const board = pokerGameState.communityCards;
               
               // Early return: Don't show outs for stud variants, as outs calculation is not supported
-              if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+              if (isStudGame(variant)) {
                 return null;
               }
               
               type PlayerEval = { playerId: string; name: string; hand: HandInterface; holeCards: Card[] };
               const evals: PlayerEval[] = activePlayers.map((p: Player) => {
                 let hand;
-                if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+                if (isOmahaVariant(variant)) {
                   hand = HandEvaluator.evaluateOmahaHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
                 } else {
                   hand = HandEvaluator.evaluateHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
@@ -3532,18 +3634,27 @@ export default function GamePage() {
               onRefresh={refreshTableExtras}
             />
           )}
+          {gameStarted && pokerGameState && (
+            <HandActionLog actions={pokerGameState.handActions} players={pokerGameState.players || []} handNumber={pokerGameState.handNumber} />
+          )}
           {playerId && (isSeated || amInGame) && (
+            <MobileCollapsible title="Session">
             <SessionLedgerPanel tableId={tableId} refreshKey={`${pokerGameState?.handNumber ?? 0}:${pokerGameState?.stage === 'showdown'}`} />
+            </MobileCollapsible>
           )}
           {playerId && (
+            <MobileCollapsible title="Player notes">
             <PlayerNotesPanel players={otherSeated} notes={playerNotes} onNotesChange={setPlayerNotes} />
+            </MobileCollapsible>
           )}
           </div>
 
           {/* Less critical component in viewport */}
-          <div ref={chatPanelRef} className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6">
+          <MobileCollapsible title="Chat" className="lg:col-span-2">
+          <div ref={chatPanelRef} className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6 max-sm:mt-0">
             <ChatPanel gameId={String(id)} playerId={playerId} isAdmin={userRole === 'admin'} />
           </div>
+          </MobileCollapsible>
 
           {/* Settings panel moved next to stats above; bottom button removed */}
         </div>

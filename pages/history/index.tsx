@@ -3,6 +3,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { authHeaders } from '../../src/utils/auth-headers';
+import { downloadHandHistory } from '../../src/utils/download-hand-history';
 import MiniCard from '../../src/components/MiniCard';
 import type { HandSummary } from '../../src/types/hand-record';
 
@@ -13,6 +14,8 @@ const VARIANT_LABEL: Record<string, string> = {
   'seven-card-stud': '7-Card Stud',
   'seven-card-stud-hi-lo': 'Stud Hi-Lo',
   'five-card-stud': '5-Card Stud',
+  razz: 'Razz',
+  'omaha-5': '5-Card Omaha',
 };
 
 function variantLabel(v?: string) {
@@ -28,6 +31,19 @@ export default function HandHistoryPage() {
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
+
+  // PokerStars-format download: one hand by id, or every hand at this table (all tables when none)
+  const exportHands = async (key: string, query: Record<string, string>) => {
+    setExporting(key);
+    try {
+      await downloadHandHistory(query);
+    } catch (e: any) {
+      setError(e?.message || 'Could not export hands');
+    } finally {
+      setExporting(null);
+    }
+  };
 
   const load = useCallback(async (before: string | null) => {
     setLoading(true);
@@ -61,7 +77,18 @@ export default function HandHistoryPage() {
           <div className="flex gap-3 text-sm">
             {roomId && <Link href={`/game/${roomId}`} className="text-blue-600 dark:text-blue-400 hover:underline">Back to table</Link>}
             {roomId && <Link href="/history" className="text-blue-600 dark:text-blue-400 hover:underline">All tables</Link>}
+            <Link href="/stats" className="text-blue-600 dark:text-blue-400 hover:underline">My results</Link>
             <Link href="/dashboard" className="text-blue-600 dark:text-blue-400 hover:underline">Dashboard</Link>
+            {hands.length > 0 && (
+              <button
+                onClick={() => exportHands('all', roomId ? { roomId } : {})}
+                disabled={exporting === 'all'}
+                className="text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-60"
+                title={`Download ${roomId ? 'hands at this table' : 'your latest 1000 hands'} in PokerStars hand-history format`}
+              >
+                {exporting === 'all' ? 'Exporting…' : 'Export .txt'}
+              </button>
+            )}
           </div>
         </div>
         {roomId && <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Showing hands from table {roomId}.</p>}
@@ -86,6 +113,7 @@ export default function HandHistoryPage() {
                   <th className="px-3 py-2">Winner</th>
                   <th className="px-3 py-2 text-right">Pot</th>
                   <th className="px-3 py-2 text-right">You</th>
+                  <th className="px-3 py-2"><span className="sr-only">Export</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -111,6 +139,16 @@ export default function HandHistoryPage() {
                       <td className="px-3 py-2 text-right tabular-nums">${h.pot}</td>
                       <td className={`px-3 py-2 text-right tabular-nums font-semibold ${h.myNet > 0 ? 'text-emerald-600 dark:text-emerald-400' : h.myNet < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>
                         {h.myNet > 0 ? '+' : ''}{h.myNet}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          onClick={e => { e.stopPropagation(); exportHands(h.id, { handId: h.id }); }}
+                          disabled={exporting === h.id}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-60"
+                          aria-label={`Export hand #${h.handNumber}`}
+                        >
+                          .txt
+                        </button>
                       </td>
                     </tr>
                   );

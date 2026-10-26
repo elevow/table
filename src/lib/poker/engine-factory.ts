@@ -1,6 +1,7 @@
 import { PokerEngine } from './poker-engine';
 import { Player, TableState } from '../../types/poker';
 import { RunItTwiceOutcomeInput } from '../../types/game-history';
+import { isOmahaVariant } from './variant-rules';
 
 export interface EngineFactoryOptions {
   tableId: string;
@@ -19,7 +20,7 @@ export interface EngineFactoryOptions {
  */
 export function createPokerEngine(opts: EngineFactoryOptions): PokerEngine {
   const variant = opts.state?.variant;
-  const mode = opts.state?.bettingMode ?? (variant === 'omaha' || variant === 'omaha-hi-lo' ? 'pot-limit' : 'no-limit');
+  const mode = opts.state?.bettingMode ?? (isOmahaVariant(variant) ? 'pot-limit' : variant === 'razz' ? 'fixed-limit' : 'no-limit');
   const requireRit = !!opts.state?.requireRunItTwiceUnanimous;
   const persistence = opts.runItTwicePersistence
     ? { handId: opts.runItTwicePersistence.handId, onOutcome: opts.runItTwicePersistence.onOutcome }

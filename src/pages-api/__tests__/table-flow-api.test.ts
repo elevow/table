@@ -17,6 +17,7 @@ jest.mock('../../../src/lib/poker/supabase-auto-runout', () => ({
 jest.mock('../../../src/lib/server/hand-records', () => ({
   finishHand: jest.fn().mockResolvedValue(undefined),
   markCardsShown: jest.fn().mockResolvedValue(undefined),
+  recordLateSevenDeuceBounty: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../../src/lib/server/run-it-twice-decision', () => ({
   resolveRunItTwiceDecision: jest.fn(async (opts: any) => ({ status: 'ok', state: opts.engine.getState() })),
@@ -33,6 +34,7 @@ import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
 import { publishGameStateUpdate } from '../../../src/lib/realtime/publisher';
 import { resolveRunItTwiceDecision } from '../../../src/lib/server/run-it-twice-decision';
 import { PokerEngine } from '../../../src/lib/poker/poker-engine';
+import { recordLateSevenDeuceBounty } from '../../../src/lib/server/hand-records';
 
 const mk = (id: string, position: number): any => ({
   id, name: id, position, stack: 1000, currentBet: 0, hasActed: false, isFolded: false, isAllIn: false, timeBank: 30,
@@ -136,5 +138,25 @@ describe('/api/games/show-cards', () => {
     expect(out.status).toBe(200);
     const sent = (publishGameStateUpdate as jest.Mock).mock.calls[0][1];
     expect(sent.gameState.players.find((p: any) => p.id === winner).holeCards).toHaveLength(2);
+    expect(recordLateSevenDeuceBounty).not.toHaveBeenCalled();
+  });
+
+  it('collects the 7-2 bounty when an uncontested winner shows 7-2, and records it once', async () => {
+    engine.setSevenDeuceBounty(5);
+    const s = engine.getState();
+    const folder = s.activePlayer;
+    const winner = folder === 'a' ? 'b' : 'a';
+    s.players.find(p => p.id === winner)!.holeCards = [{ rank: '7', suit: 'clubs' }, { rank: '2', suit: 'hearts' }];
+    engine.handleAction({ type: 'fold', playerId: folder, tableId: 't', timestamp: now } as any);
+    const before = engine.getState().players.find(p => p.id === winner)!.stack;
+    const out = await call(showCardsHandler, { tableId: 't', playerId: winner });
+    expect(out.status).toBe(200);
+    expect(engine.getState().sevenDeuceResult).toMatchObject({ playerId: winner, total: 5 });
+    expect(engine.getState().players.find(p => p.id === winner)!.stack).toBe(before + 5);
+    expect(recordLateSevenDeuceBounty).toHaveBeenCalledTimes(1);
+    expect(out.body.gameState.sevenDeuceResult.total).toBe(5);
+    // Showing again does not pay or record it twice
+    await call(showCardsHandler, { tableId: 't', playerId: winner });
+    expect(recordLateSevenDeuceBounty).toHaveBeenCalledTimes(1);
   });
 });

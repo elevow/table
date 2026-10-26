@@ -1,4 +1,5 @@
 import { randomInt } from 'crypto';
+import { isOmahaVariant, isStudVariant } from './poker/variant-rules';
 import type { Broadcaster } from './broadcaster';
 import { PlayerAction, TableState, Player, DisconnectionState, RunItTwicePrompt, Card } from '../types/poker';
 import { ActionValidator } from './action-validator';
@@ -332,7 +333,7 @@ export class ActionManager {
     try {
       // Only for Hold'em/Omaha style (no stud runout automation)
       const variant = (state as any).variant as string | undefined;
-      if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+      if (isStudVariant(variant)) {
         console.debug('[auto-runout] skip scheduling: variant not supported', { tableId, variant });
         return;
       }
@@ -472,8 +473,8 @@ export class ActionManager {
     try {
       const board = Array.isArray(state.communityCards) ? state.communityCards : [];
       const variant = state.variant;
-      const minHoleCards = (variant === 'omaha' || variant === 'omaha-hi-lo') ? 4 : 2;
-      const evaluator = (variant === 'omaha' || variant === 'omaha-hi-lo')
+      const minHoleCards = isOmahaVariant(variant) ? 4 : 2;
+      const evaluator = isOmahaVariant(variant)
         ? HandEvaluator.evaluateOmahaHand.bind(HandEvaluator)
         : HandEvaluator.evaluateHand.bind(HandEvaluator);
       const contenders = state.players

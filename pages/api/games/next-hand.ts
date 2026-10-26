@@ -18,12 +18,13 @@ import { getDealerChoiceChooserId } from '../../../src/lib/poker/dealer-choice';
 import { getPool } from '../../../src/lib/database/pool';
 import { GameService } from '../../../src/lib/services/game-service';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
-import type { GameVariant } from '../../../src/types/poker';
+import type { BettingMode, GameVariant } from '../../../src/types/poker';
+import { ALL_VARIANTS } from '../../../src/lib/poker/variant-rules';
 
 // Type definitions for room configuration from database
 interface RoomConfiguration {
   variant?: string;
-  bettingMode?: 'no-limit' | 'pot-limit';
+  bettingMode?: BettingMode;
   chosenVariant?: string;
 }
 
@@ -45,7 +46,7 @@ function extractBlindValue(blinds: BlindLevels, ...keys: (keyof BlindLevels)[]):
   return 0;
 }
 
-const DEFAULT_DEALERS_CHOICE_VARIANTS: GameVariant[] = ['texas-holdem', 'omaha', 'omaha-hi-lo', 'seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'];
+const DEFAULT_DEALERS_CHOICE_VARIANTS: GameVariant[] = [...ALL_VARIANTS];
 
 const NEXT_HAND_LOCK_KEY = '__NEXT_HAND_LOCKS__';
 
@@ -228,7 +229,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (typeof engine.setVariant === 'function') {
             engine.setVariant(chosenVariant);
           }
-          const nextMode = (chosenVariant === 'omaha' || chosenVariant === 'omaha-hi-lo') ? 'pot-limit' : (roomConfig.bettingMode || 'no-limit');
+          // Omaha games play pot limit and razz fixed limit; other games keep the room's betting mode
+          const variantDefault = defaultBettingModeForVariant(chosenVariant);
+          const nextMode = variantDefault !== 'no-limit' ? variantDefault : (roomConfig.bettingMode || 'no-limit');
           if (typeof engine.setBettingMode === 'function') {
             engine.setBettingMode(nextMode);
           }

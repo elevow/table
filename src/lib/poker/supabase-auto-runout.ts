@@ -1,4 +1,5 @@
 import { TableState, Card } from '../../types/poker';
+import { isStudVariant } from './variant-rules';
 import { isAutoRunoutEligible } from './run-it-twice-manager';
 
 type BroadcastFn = (state: TableState, lastAction: { action: string; [key: string]: any }) => Promise<void>;
@@ -151,7 +152,7 @@ export const runSupabaseAutoRunoutSync = async (
       return true;
     }
     const variant = state.variant;
-    if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+    if (isStudVariant(variant)) {
       // Deal one street at a time so each card is seen before the next, then settle the hand
       if (typeof engine.runStudAllInStreet !== 'function') return false;
       for (let streets = 0; engine.getState().stage !== 'showdown' && streets < 6; streets++) {
@@ -245,7 +246,7 @@ export const scheduleSupabaseAutoRunout = (
     if (!isAutoRunoutEligible(state)) return false;
     if (state.runItTwicePrompt) return false;
     const variant = state.variant;
-    if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+    if (isStudVariant(variant)) {
       return false;
     }
     const communityLen = Array.isArray(state.communityCards) ? state.communityCards.length : 0;

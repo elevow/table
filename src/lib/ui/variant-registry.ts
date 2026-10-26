@@ -107,6 +107,31 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'razz': {
+    variant: 'razz',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [
+      { type: 'hand-info' },
+      { type: 'stud-exposed-cards' },
+    ],
+    helpContent: {
+      title: 'Razz',
+      summary: 'Seven‑card stud where the lowest hand wins the whole pot. Best hand: 5‑4‑3‑2‑A.',
+      bullets: ['Aces are low; straights and flushes do not count', 'Pairs count against you; no qualifier', 'Highest up card brings it in; lowest showing hand acts first after that', 'Fixed limit by default'],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
+  'omaha-5': {
+    variant: 'omaha-5',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }, { type: 'pot-split' }],
+    helpContent: {
+      title: '5‑Card Omaha',
+      summary: 'Omaha with five hole cards: use exactly 2 of them with 3 community cards.',
+      bullets: ['Pot-limit by default', 'Four betting rounds', 'Exactly two hole cards must be used'],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
 };
 
 export function getVariantUI(variant: GameVariant): VariantUI {

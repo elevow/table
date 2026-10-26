@@ -37,6 +37,9 @@ import BetPresetButtons from '../../src/components/BetPresetButtons';
 import ShortcutHelpOverlay from '../../src/components/ShortcutHelpOverlay';
 import { useTableShortcuts } from '../../src/hooks/useTableShortcuts';
 import TableAnnouncer from '../../src/components/TableAnnouncer';
+import ReactionPicker from '../../src/components/ReactionPicker';
+import SeatReactionBubbles from '../../src/components/SeatReactionBubbles';
+import { useTableReactions } from '../../src/hooks/useTableReactions';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -436,7 +439,8 @@ export default function GamePage() {
         setRebuyPrompt({ baseChips, rebuysUsed, rebuyLimit, remaining });
       },
       onTableEvent: (payload: any) => {
-        refreshTableExtras();
+        // Reactions come often and change nothing the extras panel shows
+        if (payload?.type !== 'reaction') refreshTableExtras();
         if (payload?.type === 'kicked' && payload.playerId === playerId) {
           setSeatNotice('The host removed you from the table.');
         }
@@ -1483,6 +1487,9 @@ export default function GamePage() {
     onCheckOrCall: () => (myOwed > 0 ? handlePokerAction('call', myOwed) : handleCheck()),
   });
 
+  // Emote reactions shown over seats
+  const reactions = useTableReactions(tableId || undefined, playerId);
+
   // Sit out from the next hand, or back in
   const [sitOutPending, setSitOutPending] = useState(false);
   const toggleSitOut = useCallback(async () => {
@@ -2391,6 +2398,11 @@ export default function GamePage() {
     }
   };
   
+  // Where each seated player sits on the felt, for overlays drawn over the seats
+  const seatAnchors = getRotatedSeatPositions()
+    .map(s => ({ playerId: seatAssignments[s.seatNumber]?.playerId || '', left: String(s.style.left), top: String(s.style.top) }))
+    .filter(a => a.playerId);
+
   return (
     <div className="game-page bg-gray-100 dark:bg-gray-900 min-h-screen">
       <ShortcutHelpOverlay open={shortcuts.helpOpen} onClose={() => shortcuts.setHelpOpen(false)} />
@@ -2769,8 +2781,17 @@ export default function GamePage() {
                   );
                 })()}
                 
+                <SeatReactionBubbles anchors={seatAnchors} bubbles={reactions.bubbles} nameOf={(pid) => getPlayerLabel(pid) || 'A player'} />
               </div>
             </div>
+            {playerId && (isSeated || amInGame) && (
+              <ReactionPicker
+                onReact={reactions.send}
+                coolingDown={reactions.coolingDown}
+                muted={reactions.muted}
+                onToggleMuted={reactions.setMuted}
+              />
+            )}
           </div>
 
           {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}

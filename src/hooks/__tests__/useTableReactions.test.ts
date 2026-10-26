@@ -85,4 +85,12 @@ describe('useTableReactions', () => {
     const again = renderHook(() => useTableReactions('t1', 'me'));
     expect(again.result.current.muted).toBe(true);
   });
+
+  it('clears reactions already showing when reactions are hidden', () => {
+    const { result } = renderHook(() => useTableReactions('t1', 'me'));
+    receive({ type: 'reaction', playerId: 'bob', emote: '🔥' });
+    expect(result.current.bubbles.bob).toBeDefined();
+    act(() => { result.current.setMuted(true); });
+    expect(result.current.bubbles).toEqual({});
+  });
 });

@@ -13,6 +13,8 @@ const VARIANT_LABEL: Record<string, string> = {
   'seven-card-stud': '7-Card Stud',
   'seven-card-stud-hi-lo': 'Stud Hi-Lo',
   'five-card-stud': '5-Card Stud',
+  razz: 'Razz',
+  'omaha-5': '5-Card Omaha',
 };
 
 function variantLabel(v?: string) {

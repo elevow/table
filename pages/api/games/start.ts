@@ -10,7 +10,8 @@ import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/ru
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getLastActionAt, getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
-import type { TableState } from '../../../src/types/poker';
+import type { MixedGameEntry, TableState } from '../../../src/types/poker';
+import { ALL_VARIANTS, HORSE_GAMES, parseHandsPerGame, parseMixedGames } from '../../../src/lib/poker/variant-rules';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -38,7 +39,20 @@ type RoomGameSettings = {
   bigBlind: number;
   allowRunItTwice: boolean;
   allowStraddle: boolean;
+  // Chips each player antes in Hold'em and Omaha hands; 0 = no antes
+  ante: number;
+  // 7-2 bounty in chips (Hold'em only); 0 = off
+  sevenDeuceBounty: number;
+  // Mixed games: the games played in turn and how many hands each lasts
+  mixedGames: MixedGameEntry[] | null;
+  handsPerGame: number;
 };
+
+/** A non-negative chip amount from configuration; anything else counts as 0 (off). */
+function chipAmount(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
 
 function positiveNumber(...values: unknown[]): number | undefined {
   for (const v of values) {
@@ -62,6 +76,10 @@ async function loadRoomGameSettings(tableId: string): Promise<RoomGameSettings |
     bigBlind: positiveNumber(blinds.bb, blinds.bigBlind) ?? 2,
     allowRunItTwice: config.allowRunItTwice === true,
     allowStraddle: config.allowStraddle === true,
+    ante: chipAmount(config.ante),
+    sevenDeuceBounty: chipAmount(config.sevenDeuceBounty),
+    mixedGames: parseMixedGames(config.mixedGames, defaultBettingModeForVariant),
+    handsPerGame: parseHandsPerGame(config.handsPerGame),
   };
 }
 
@@ -170,6 +188,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       bettingMode: roomSettings.bettingMode,
     });
   const isDealersChoice = resolvedVariant === 'dealers-choice';
+    // Mixed games start with the first game of the list (HORSE if the room's list is unusable)
+    const mixedGames = resolvedVariant === 'mixed' ? (roomSettings.mixedGames || HORSE_GAMES) : null;
+    const engineVariant = mixedGames ? mixedGames[0].variant : resolvedVariant;
+    const engineMode = mixedGames ? mixedGames[0].bettingMode : resolvedMode;
 
     // Build engine players in seat order
     const engPlayers = seatedPlayers.map((p) => ({
@@ -191,9 +213,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!g.roomConfigs) g.roomConfigs = new Map<string, any>();
 
     // Create new engine for table (replace any existing)
-    const engine = new PokerEngine(tableId, engPlayers as any, smallBlind, bigBlind, { variant: resolvedVariant as any, bettingMode: resolvedMode });
+    const engine = new PokerEngine(tableId, engPlayers as any, smallBlind, bigBlind, { variant: engineVariant as any, bettingMode: engineMode });
     engine.setAllowRunItTwice(roomSettings.allowRunItTwice);
     engine.setAllowStraddle(roomSettings.allowStraddle);
+    engine.setAnte(roomSettings.ante);
+    engine.setSevenDeuceBounty(roomSettings.sevenDeuceBounty);
+    if (mixedGames) engine.setMixedGame(mixedGames, roomSettings.handsPerGame);
     let gameState: any;
     if (isDealersChoice) {
       if (typeof (engine as any)?.pauseForDealerChoice === 'function') {
@@ -225,7 +250,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     clearRunItState(tableId);
     
     // Store room configuration for next-hand API
-    const allowedDcVariants = ['texas-holdem','omaha','omaha-hi-lo','seven-card-stud','seven-card-stud-hi-lo','five-card-stud'];
+    const allowedDcVariants = [...ALL_VARIANTS];
     const roomConfigPayload: any = {
       variant: resolvedVariant,
       bettingMode: resolvedMode,

@@ -1,16 +1,17 @@
 jest.mock('pg', () => ({ Pool: jest.fn() }));
 jest.mock('../../database/pool', () => ({ getPool: jest.fn() }));
-jest.mock('../../utils/post-hand-result', () => ({ postHandResultToChat: jest.fn() }));
+jest.mock('../../utils/post-hand-result', () => ({ postHandResultToChat: jest.fn(), postSystemChatMessage: jest.fn() }));
 jest.mock('../../database/player-statistics-manager', () => ({ PlayerStatisticsManager: jest.fn() }));
 
 import { getPool } from '../../database/pool';
-import { postHandResultToChat } from '../../utils/post-hand-result';
+import { postHandResultToChat, postSystemChatMessage } from '../../utils/post-hand-result';
 import { PlayerStatisticsManager } from '../../database/player-statistics-manager';
 import {
   applyHandToStatistics,
   buildHandRecord,
   finishHand,
   markCardsShown,
+  recordLateSevenDeuceBounty,
   redactHandRecord,
   rowToHandRecord,
   saveHandRecord,
@@ -233,6 +234,55 @@ describe('hand records storage', () => {
   it('markCardsShown updates the stored hand', async () => {
     await markCardsShown('hand-1', 'b');
     expect(query).toHaveBeenCalledWith(expect.stringContaining('UPDATE hand_records'), ['hand-1', 'b']);
+  });
+
+  describe('recordLateSevenDeuceBounty', () => {
+    const bountyState = () => showdownState({
+      handId: 'hand-1',
+      players: [
+        { id: 'a', name: 'A', position: 1, stack: 1015, holeCards: [c('7', 'hearts'), c('2', 'clubs')], isFolded: false },
+        { id: 'b', name: 'B', position: 2, stack: 985, holeCards: [c('K', 'hearts'), c('K', 'diamonds')], isFolded: true },
+      ],
+      handActions: [
+        { playerId: 'b', action: 'fold', put: 0, stage: 'preflop' },
+        { playerId: 'b', action: 'bounty', put: 5, stage: 'showdown', toPlayerId: 'a' },
+      ],
+      sevenDeuceResult: { playerId: 'a', total: 5, payments: { b: 5 } },
+    });
+
+    it('adds the bounty to the stored hand and announces it', async () => {
+      query.mockResolvedValueOnce({
+        rows: [{
+          players: JSON.stringify([
+            player({ endStack: 1010, net: 10, revealed: false }),
+            player({ id: 'b', name: 'B', startStack: 1000, endStack: 990, net: -10, revealed: false }),
+          ]),
+          actions: [{ playerId: 'b', action: 'fold', put: 0, stage: 'preflop' }],
+        }],
+      });
+      await recordLateSevenDeuceBounty('room-1', bountyState());
+      const [sql, params] = query.mock.calls[1];
+      expect(sql).toContain('UPDATE hand_records');
+      const players = JSON.parse(params[1]);
+      expect(players[0]).toMatchObject({ id: 'a', endStack: 1015, net: 15, revealed: true });
+      expect(players[1]).toMatchObject({ id: 'b', endStack: 985, net: -15, revealed: false });
+      expect(JSON.parse(params[2]).map((x: any) => x.action)).toEqual(['fold', 'bounty']);
+      expect(postSystemChatMessage).toHaveBeenCalledWith('room-1', '💰 7-2 bounty: A collects $5');
+    });
+
+    it('does not add the bounty twice', async () => {
+      query.mockResolvedValueOnce({ rows: [{ players: [], actions: [{ playerId: 'b', action: 'bounty', put: 5, stage: 'showdown' }] }] });
+      await recordLateSevenDeuceBounty('room-1', bountyState());
+      expect(query).toHaveBeenCalledTimes(1);
+    });
+
+    it('still announces it when the database is unavailable, and does nothing without a bounty', async () => {
+      query.mockRejectedValueOnce(new Error('no db'));
+      await recordLateSevenDeuceBounty('room-1', bountyState());
+      expect(postSystemChatMessage).toHaveBeenCalledTimes(1);
+      await recordLateSevenDeuceBounty('room-1', showdownState());
+      expect(postSystemChatMessage).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('rowToHandRecord', () => {

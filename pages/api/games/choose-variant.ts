@@ -8,15 +8,9 @@ import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapp
 import type { GameVariant } from '../../../src/types/poker';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { getDealerChoiceChooserId } from '../../../src/lib/poker/dealer-choice';
+import { ALL_VARIANTS } from '../../../src/lib/poker/variant-rules';
 
-const ALLOWED_VARIANTS: GameVariant[] = [
-  'texas-holdem',
-  'omaha',
-  'omaha-hi-lo',
-  'seven-card-stud',
-  'seven-card-stud-hi-lo',
-  'five-card-stud',
-];
+const ALLOWED_VARIANTS: GameVariant[] = [...ALL_VARIANTS];
 
 function isValidVariant(v: unknown): v is GameVariant {
   return typeof v === 'string' && ALLOWED_VARIANTS.includes(v as GameVariant);

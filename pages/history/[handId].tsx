@@ -166,7 +166,7 @@ export default function HandReplayPage() {
                           onClick={() => { setPlaying(false); setFrameIndex(i + 1); }}
                           className={`text-left w-full px-2 py-0.5 rounded ${frame.step === i ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-900 dark:text-blue-100' : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
                         >
-                          {describeAction(a, names.get(a.playerId) || 'Player', money)}
+                          {describeAction(a, names.get(a.playerId) || 'Player', money, pid => names.get(pid))}
                         </button>
                       </li>
                     </React.Fragment>

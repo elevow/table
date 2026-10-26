@@ -3,7 +3,8 @@ import { getPool } from '../database/pool';
 import { PlayerStatisticsManager } from '../database/player-statistics-manager';
 import { HandEvaluator } from '../poker/hand-evaluator';
 import { revealedPlayerIds } from '../poker/state-sanitizer';
-import { postHandResultToChat } from '../utils/post-hand-result';
+import { postHandResultToChat, postSystemChatMessage } from '../utils/post-hand-result';
+import { formatSevenDeuceBounty } from '../utils/hand-result-formatter';
 import type { TableState } from '../../types/poker';
 import { HandRank } from '../../types/poker';
 import type { HandRecord, HandRecordCards, HandRecordPlayer, HandSummary } from '../../types/hand-record';
@@ -195,6 +196,51 @@ export async function markCardsShown(handId: string, playerId: string): Promise<
      WHERE id = $1`,
     [handId, playerId]
   );
+}
+
+/**
+ * A 7-2 bounty paid after the hand was stored (the winner showed their cards once it was over):
+ * add the bounty to the stored hand's actions and end stacks, and announce it in chat. A bounty
+ * paid at showdown is already part of the record and of the hand result message.
+ */
+export async function recordLateSevenDeuceBounty(tableId: string, state: TableState): Promise<void> {
+  const bounty = state.sevenDeuceResult;
+  if (!bounty || !state.handId) return;
+  try {
+    const pool = getPool();
+    const found = await pool.query('SELECT players, actions FROM hand_records WHERE id = $1', [state.handId]);
+    const row = found.rows?.[0];
+    if (row) {
+      const players = parseJson<HandRecordPlayer[]>(row.players, []);
+      const actions = parseJson<TableState['handActions']>(row.actions, []) || [];
+      // Saved once per hand: skip if this bounty is already in the record
+      if (!actions.some(a => a.action === 'bounty')) {
+        const bountyActions = (state.handActions || []).filter(a => a.action === 'bounty');
+        const updated = players.map(p => {
+          const live = state.players.find(sp => sp.id === p.id);
+          // The winner's cards were just shown; set it here too so this write can't undo
+          // markCardsShown running at the same time
+          const revealed = p.id === bounty.playerId ? true : p.revealed;
+          return live ? { ...p, revealed, endStack: live.stack, net: live.stack - p.startStack } : p;
+        });
+        await pool.query('UPDATE hand_records SET players = $2, actions = $3 WHERE id = $1', [
+          state.handId,
+          JSON.stringify(updated),
+          JSON.stringify([...actions, ...bountyActions]),
+        ]);
+      }
+    }
+  } catch (err) {
+    console.warn('[hand-records] Could not add the 7-2 bounty to the stored hand:', err);
+  }
+  const line = formatSevenDeuceBounty(state);
+  if (line) {
+    try {
+      await postSystemChatMessage(tableId, line);
+    } catch (err) {
+      console.warn('Failed to post the 7-2 bounty to chat:', err);
+    }
+  }
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {

@@ -19,7 +19,7 @@ export default function TurnClockBar({ clock, compact = false }: Props) {
   const low = remaining <= LOW_TIME_WARNING_MS;
   const fraction = clock.inTimeBank
     ? 1
-    : Math.max(0, Math.min(1, clock.baseRemainingMs / BASE_TURN_MS));
+    : Math.max(0, Math.min(1, clock.baseRemainingMs / (clock.baseMs || BASE_TURN_MS)));
   const barColor = low ? 'bg-red-500' : clock.inTimeBank ? 'bg-amber-500' : 'bg-emerald-500';
   const label = remaining === 0
     ? 'Time’s up'

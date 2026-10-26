@@ -1,4 +1,10 @@
 import { useMemo, useState, useEffect } from 'react';
+import {
+  BASE_TURN_MS, DEFAULT_TIME_BANKS, DEFAULT_TIME_BANK_SECONDS, MAX_TIME_BANKS, MAX_TIME_BANK_SECONDS,
+  MAX_TURN_SECONDS, MIN_TIME_BANK_SECONDS, MIN_TURN_SECONDS, clampSetting,
+} from '../../src/lib/shared/turn-clock';
+
+const DEFAULT_TURN_SECONDS = BASE_TURN_MS / 1000;
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { tournamentPresets } from '../../src/lib/tournament/tournament-utils';
@@ -23,6 +29,9 @@ export default function CreateGameRoomPage() {
   const [rebuyAmount, setRebuyAmount] = useState(20);
   const [buyIn, setBuyIn] = useState(1000);
   const [allowRunItTwice, setAllowRunItTwice] = useState(false);
+  const [turnTimeSeconds, setTurnTimeSeconds] = useState(DEFAULT_TURN_SECONDS);
+  const [timeBanks, setTimeBanks] = useState(DEFAULT_TIME_BANKS);
+  const [timeBankSeconds, setTimeBankSeconds] = useState(DEFAULT_TIME_BANK_SECONDS);
   // Table options that are off unless set: antes and the 7-2 bounty, in chips
   const [ante, setAnte] = useState(0);
   const [sevenDeuceBounty, setSevenDeuceBounty] = useState(0);
@@ -97,6 +106,9 @@ export default function CreateGameRoomPage() {
             rebuyAmount: numberOfRebuys !== 0 ? rebuyAmount : undefined,
             buyIn,
             allowRunItTwice,
+            turnTimeSeconds: clampSetting(turnTimeSeconds, MIN_TURN_SECONDS, MAX_TURN_SECONDS, DEFAULT_TURN_SECONDS),
+            timeBanks: clampSetting(timeBanks, 0, MAX_TIME_BANKS, DEFAULT_TIME_BANKS),
+            timeBankSeconds: clampSetting(timeBankSeconds, MIN_TIME_BANK_SECONDS, MAX_TIME_BANK_SECONDS, DEFAULT_TIME_BANK_SECONDS),
             ante: ante > 0 ? ante : undefined,
             sevenDeuceBounty: sevenDeuceBounty > 0 ? sevenDeuceBounty : undefined,
             mixedGames: variant === 'mixed' ? mixedGames : undefined,
@@ -325,6 +337,47 @@ export default function CreateGameRoomPage() {
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
               After an all-in, the player with the weakest hand can choose to deal the rest of the board more than once and split the pot between the runs. Hold&apos;em and Omaha only.
             </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium" htmlFor="turn-time">Turn time (seconds)</label>
+            <input
+              id="turn-time"
+              type="number"
+              min={MIN_TURN_SECONDS}
+              max={MAX_TURN_SECONDS}
+              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={turnTimeSeconds}
+              onChange={e => setTurnTimeSeconds(Number(e.target.value))}
+            />
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">How long each player has to act ({MIN_TURN_SECONDS}-{MAX_TURN_SECONDS}s).</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium" htmlFor="time-banks">Time banks per player</label>
+            <input
+              id="time-banks"
+              type="number"
+              min={0}
+              max={MAX_TIME_BANKS}
+              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={timeBanks}
+              onChange={e => setTimeBanks(Number(e.target.value))}
+            />
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Extra time a player can use once their turn time runs out; each one is used up.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium" htmlFor="time-bank-seconds">Time bank length (seconds)</label>
+            <input
+              id="time-bank-seconds"
+              type="number"
+              min={MIN_TIME_BANK_SECONDS}
+              max={MAX_TIME_BANK_SECONDS}
+              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={timeBankSeconds}
+              onChange={e => setTimeBankSeconds(Number(e.target.value))}
+            />
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">How much extra time each time bank gives.</p>
           </div>
         </div>
         {variant === 'mixed' && (

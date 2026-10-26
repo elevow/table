@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { BASE_TURN_MS, DEFAULT_TIME_BANKS, DEFAULT_TIME_BANK_SECONDS } from '../../../src/lib/shared/turn-clock';
 import { PokerEngine } from '../../../src/lib/poker/poker-engine';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { publishGameStateUpdate, publishAwaitingDealerChoice } from '../../../src/lib/realtime/publisher';
@@ -32,6 +33,8 @@ async function hasLiveHand(tableId: string, existingState: TableState | undefine
   return !lastActionAt || Date.now() - lastActionAt.getTime() < ABANDONED_HAND_MS;
 }
 
+const DEFAULT_TURN_SECONDS = BASE_TURN_MS / 1000;
+
 type RoomGameSettings = {
   variant?: string;
   bettingMode?: string;
@@ -46,6 +49,10 @@ type RoomGameSettings = {
   // Mixed games: the games played in turn and how many hands each lasts
   mixedGames: MixedGameEntry[] | null;
   handsPerGame: number;
+  // Clock: base time per decision, time banks per player and the length of each
+  turnTimeSeconds?: number;
+  timeBanks?: number;
+  timeBankSeconds?: number;
 };
 
 /** A non-negative chip amount from configuration; anything else counts as 0 (off). */
@@ -80,6 +87,9 @@ async function loadRoomGameSettings(tableId: string): Promise<RoomGameSettings |
     sevenDeuceBounty: chipAmount(config.sevenDeuceBounty),
     mixedGames: parseMixedGames(config.mixedGames, defaultBettingModeForVariant),
     handsPerGame: parseHandsPerGame(config.handsPerGame),
+    turnTimeSeconds: positiveNumber(config.turnTimeSeconds),
+    timeBanks: Number.isFinite(Number(config.timeBanks)) ? Number(config.timeBanks) : undefined,
+    timeBankSeconds: positiveNumber(config.timeBankSeconds),
   };
 }
 
@@ -216,6 +226,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const engine = new PokerEngine(tableId, engPlayers as any, smallBlind, bigBlind, { variant: engineVariant as any, bettingMode: engineMode });
     engine.setAllowRunItTwice(roomSettings.allowRunItTwice);
     engine.setAllowStraddle(roomSettings.allowStraddle);
+    // Rooms created before these settings existed get the defaults
+    engine.configureClock({
+      turnSeconds: roomSettings.turnTimeSeconds ?? DEFAULT_TURN_SECONDS,
+      timeBanks: roomSettings.timeBanks ?? DEFAULT_TIME_BANKS,
+      timeBankSeconds: roomSettings.timeBankSeconds ?? DEFAULT_TIME_BANK_SECONDS,
+    });
     engine.setAnte(roomSettings.ante);
     engine.setSevenDeuceBounty(roomSettings.sevenDeuceBounty);
     if (mixedGames) engine.setMixedGame(mixedGames, roomSettings.handsPerGame);

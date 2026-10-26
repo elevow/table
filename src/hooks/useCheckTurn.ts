@@ -6,6 +6,8 @@ interface TurnStatus {
   activePlayer: string;
   tableState: string;
   handNumber: number;
+  paused?: boolean;
+  turnSeq?: number;
 }
 
 interface UseCheckTurnOptions {
@@ -80,7 +82,9 @@ export function useCheckTurn(
           isMyTurn: data.isMyTurn,
           activePlayer: data.activePlayer,
           tableState: data.tableState,
-          handNumber: data.handNumber
+          handNumber: data.handNumber,
+          ...(typeof data.paused === 'boolean' ? { paused: data.paused } : {}),
+          ...(typeof data.turnSeq === 'number' ? { turnSeq: data.turnSeq } : {}),
         };
         
         setTurnStatus(newStatus);
@@ -91,7 +95,9 @@ export function useCheckTurn(
           prev.isMyTurn !== newStatus.isMyTurn ||
           prev.activePlayer !== newStatus.activePlayer ||
           prev.tableState !== newStatus.tableState ||
-          prev.handNumber !== newStatus.handNumber
+          prev.handNumber !== newStatus.handNumber ||
+          prev.paused !== newStatus.paused ||
+          prev.turnSeq !== newStatus.turnSeq
         )) {
           onTurnChange?.(newStatus);
         }

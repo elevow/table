@@ -1,4 +1,6 @@
 import { TableState, GameStage, Player } from '../../types/poker';
+import { isSevenCardStudVariant, isStudVariant } from './variant-rules';
+import { HandEvaluator } from './hand-evaluator';
 
 export class GameStateManager {
   constructor(
@@ -28,12 +30,14 @@ export class GameStateManager {
         player.currentBet = 0;
         player.hasActed = false;
       });
+      // Fixed limit: each street starts with no bets towards the cap
+      if (this.state.bettingMode === 'fixed-limit') this.state.limitBets = 0;
     }
     
     // Determine who acts first
     // Default legacy mapping (fallback): preflop -> position 1; postflop -> position 2
     let activePlayer: Player | undefined;
-    if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
+    if (isStudVariant(this.state.variant)) {
       // Stud rules: on third street, the player after the bring-in (lowest upcard) acts first; on later streets, highest showing upcards acts first.
   const isActive = (p: Player) => !(p as any).folded && !p.isFolded && !p.isAllIn;
   const actives = this.state.players.filter(isActive);
@@ -74,6 +78,17 @@ export class GameStateManager {
             console.log(`[DEBUG] Stud third street firstToAct=computed ${activePlayer.id} up=${up?.rank}${up?.suit?.[0]}`);
           }
         }
+      } else if (this.state.variant === 'razz') {
+        // Razz: the lowest showing hand acts first (aces low, pairs count against you); ties go
+        // to the first such player in seat order
+        let chosen: Player | undefined;
+        for (const p of actives) {
+          const ups = this.state.studState?.playerCards[p.id]?.upCards || [];
+          if (!chosen) { chosen = p; continue; }
+          const chosenUps = this.state.studState?.playerCards[chosen.id]?.upCards || [];
+          if (HandEvaluator.compareRazzLow(HandEvaluator.razzLowKey(ups), HandEvaluator.razzLowKey(chosenUps)) < 0) chosen = p;
+        }
+        activePlayer = chosen || actives[0];
       } else {
         // Later streets: choose highest upcard among active players; tie-breaker by lowest position
         let chosen: Player | undefined;
@@ -148,7 +163,7 @@ export class GameStateManager {
       this.state.stage = 'showdown';
       return 'showdown';
     }
-  const stages: GameStage[] = (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo')
+  const stages: GameStage[] = isSevenCardStudVariant(this.state.variant)
     ? ['third', 'fourth', 'fifth', 'sixth', 'seventh', 'showdown']
     : (this.state.variant === 'five-card-stud')
     ? ['third', 'fourth', 'fifth', 'sixth', 'showdown']
@@ -179,7 +194,7 @@ export class GameStateManager {
     this.state.runItTwice = undefined;
     this.state.runItTwicePrompt = null;
     this.state.runItTwicePromptDisabled = false;
-  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
+  if (isStudVariant(this.state.variant)) {
       this.state.studState = { playerCards: {} };
     } else {
       this.state.studState = undefined;

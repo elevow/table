@@ -216,6 +216,22 @@ describe('/api/games/choose-variant', () => {
     expect(res.json).toHaveBeenCalledWith({ success: true, gameState: PREFLOP_STATE });
   });
 
+  it('accepts the new variants (razz, 5-card Omaha)', async () => {
+    for (const variant of ['razz', 'omaha-5']) {
+      const engine = {
+        getState: jest.fn().mockReturnValueOnce(AWAITING_STATE).mockReturnValue(PREFLOP_STATE),
+        setVariant: jest.fn(),
+        setBettingMode: jest.fn(),
+        startNewHand: jest.fn(),
+      };
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      const res = createRes();
+      await handler(createReq('POST', { tableId: 'table-1', playerId: 'p1', variant }) as NextApiRequest, res as NextApiResponse);
+      expect(engine.setVariant).toHaveBeenCalledWith(variant);
+      expect(res.status).toHaveBeenCalledWith(200);
+    }
+  });
+
   it('should succeed even when Supabase publish fails', async () => {
     const engine = {
       getState: jest.fn()

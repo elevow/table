@@ -32,9 +32,19 @@ const VERB: Record<HandActionEntry['action'], string> = {
   call: 'calls',
   bet: 'bets',
   raise: 'raises to',
+  bounty: 'pays a 7-2 bounty of',
 };
 
-export function describeAction(a: HandActionEntry, name: string, money: (n: number) => string): string {
+export function describeAction(
+  a: HandActionEntry,
+  name: string,
+  money: (n: number) => string,
+  nameOf?: (playerId: string) => string | undefined
+): string {
+  if (a.action === 'bounty') {
+    const to = a.toPlayerId ? nameOf?.(a.toPlayerId) : undefined;
+    return `${name} ${VERB.bounty} ${money(a.put)}${to ? ` to ${to}` : ''}`;
+  }
   const amount = a.action === 'raise' || a.action === 'bet' ? a.amount ?? a.put : a.put;
   const showAmount = a.action !== 'fold' && a.action !== 'check' && amount > 0;
   return `${name} ${VERB[a.action]}${showAmount ? ` ${money(amount)}` : ''}${a.auto ? ' (timed out)' : ''}`;
@@ -70,7 +80,30 @@ export function buildReplayFrames(hand: HandRecord, money: (n: number) => string
     caption: `Hand #${hand.handNumber} is dealt${hand.kind === 'bomb-pot' ? ' (bomb pot)' : ''}`,
   }];
 
+  const nameOf = (id: string) => names.get(id);
+  const bounties = new Map<string, number>();
   hand.actions.forEach((a, i) => {
+    if (a.action === 'bounty') {
+      // Paid after the hand straight from one player to another, so the pot is unchanged and the
+      // whole board is showing
+      stacks[a.playerId] = (stacks[a.playerId] ?? 0) - a.put;
+      if (a.toPlayerId) {
+        stacks[a.toPlayerId] = (stacks[a.toPlayerId] ?? 0) + a.put;
+        bounties.set(a.toPlayerId, (bounties.get(a.toPlayerId) || 0) + a.put);
+      }
+      frames.push({
+        step: i,
+        stage: 'showdown',
+        pot,
+        stacks: { ...stacks },
+        lastAction,
+        folded: new Set(folded),
+        boardCount: hand.board.length,
+        upCount: 4,
+        caption: describeAction(a, names.get(a.playerId) || 'Player', money, nameOf),
+      });
+      return;
+    }
     if (a.stage !== stage) {
       stage = a.stage;
       lastAction = {};
@@ -92,9 +125,14 @@ export function buildReplayFrames(hand: HandRecord, money: (n: number) => string
   });
 
   const winners = hand.winners.filter(w => w.amount > 0);
-  const caption = winners.length
-    ? winners.map(w => `${names.get(w.playerId) || 'Player'} wins ${money(w.amount)}`).join(', ')
-    : 'Hand complete';
+  const bountyText = Array.from(bounties.entries())
+    .map(([id, amount]) => `${names.get(id) || 'Player'} collects a ${money(amount)} 7-2 bounty`);
+  const caption = [
+    winners.length
+      ? winners.map(w => `${names.get(w.playerId) || 'Player'} wins ${money(w.amount)}`).join(', ')
+      : 'Hand complete',
+    ...bountyText,
+  ].join('; ');
   frames.push({
     step: hand.actions.length,
     stage: 'showdown',

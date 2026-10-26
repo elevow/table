@@ -21,13 +21,26 @@ export async function postHandResultToChat(
     if (!result || !result.message) {
       return null;
     }
+    return await postSystemChatMessage(tableId, result.message);
+  } catch (error) {
+    // Log the error but don't throw - posting to chat should not break the game flow
+    console.warn('Failed to post hand result to chat:', error);
+    return null;
+  }
+}
 
+/**
+ * Broadcast a system message (such as a hand result or a 7-2 bounty) to the room's chat.
+ * Not stored in the database.
+ */
+export async function postSystemChatMessage(tableId: string, text: string): Promise<any | null> {
+  try {
     // Create a system message object (not persisted to database)
     const message = {
       id: randomUUID(),
       roomId: tableId,
       senderId: SYSTEM_SENDER_ID,
-      message: result.message,
+      message: text,
       isPrivate: false,
       recipientId: null,
       sentAt: new Date().toISOString(),

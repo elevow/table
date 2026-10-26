@@ -182,6 +182,33 @@ describe('/api/games/next-hand', () => {
     expect(engine.startNewHand).toHaveBeenCalled();
   });
 
+  it("plays a dealer's-choice razz hand with fixed-limit betting and 5-card Omaha with pot limit", async () => {
+    for (const [variant, mode] of [['razz', 'fixed-limit'], ['omaha-5', 'pot-limit'], ['seven-card-stud', 'no-limit']] as const) {
+      jest.clearAllMocks();
+      (global as any).__NEXT_HAND_LOCKS__ = undefined;
+      const engine = createEngine('awaiting-dealer-choice');
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      const res = createRes();
+      await handler(createReq({ tableId: 't1', playerId: 'b', variant }), res);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(engine.setVariant).toHaveBeenCalledWith(variant);
+      expect(engine.setBettingMode).toHaveBeenCalledWith(mode);
+    }
+  });
+
+  it('a mixed-game room just starts the next hand; the engine moves the rotation on', async () => {
+    const engine = createEngine('showdown');
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    setRoomConfig({ variant: 'mixed', mode: 'fixed' });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(engine.startNewHand).toHaveBeenCalled();
+    expect(engine.setVariant).not.toHaveBeenCalled();
+    expect(engine.pauseForDealerChoice).not.toHaveBeenCalled();
+  });
+
   it('starts another hand of the chosen game until the round is complete', async () => {
     // Two players: a round is three hands
     const engine = createEngine('showdown', 2);

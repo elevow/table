@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking, GameVariant, RunItTwicePrompt, HandActionEntry } from '../../types/poker';
+import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking, GameVariant, RunItTwicePrompt, HandActionEntry, BettingMode, MixedGameEntry } from '../../types/poker';
 import { RunItTwiceOutcomeInput } from '../../types/game-history';
 import { HandEvaluator } from './hand-evaluator';
 import { PotCalculator, SidePot } from './pot-calculator';
@@ -8,6 +8,9 @@ import { BettingManager } from './betting-manager';
 import { generateRngSecurity, verifyRngSecurity, RNGSecurity } from './rng-security';
 import { GameStateManager } from './game-state-manager';
 import { BASE_TURN_MS, TIMEOUTS_BEFORE_SIT_OUT } from '../shared/turn-clock';
+import { holeCardCount, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
+import { fixedLimitBetSize } from './fixed-limit';
+import { revealedPlayerIds } from './state-sanitizer';
 
 export class PokerEngine {
   private state: TableState;
@@ -27,10 +30,10 @@ export class PokerEngine {
   
   // Optional engine options to configure behavior such as betting mode
   public static defaultOptions = {
-    bettingMode: 'no-limit' as 'no-limit' | 'pot-limit',
+    bettingMode: 'no-limit' as BettingMode,
     runItTwicePersistence: undefined as | { handId?: string; onOutcome?: (input: RunItTwiceOutcomeInput) => Promise<void> } | undefined,
   requireRunItTwiceUnanimous: false as boolean,
-  variant: undefined as undefined | 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud',
+  variant: undefined as undefined | GameVariant,
   };
 
   constructor(tableId: string, players: Player[], smallBlind: number, bigBlind: number, options?: Partial<typeof PokerEngine.defaultOptions>) {
@@ -204,10 +207,7 @@ export class PokerEngine {
 
   /** Deal the next stud street with no betting (all-in runout), or settle the hand after the last one. */
   public runStudAllInStreet(): void {
-    const studVariant = this.state.variant === 'seven-card-stud'
-      || this.state.variant === 'seven-card-stud-hi-lo'
-      || this.state.variant === 'five-card-stud';
-    if (!studVariant) throw new Error('Stud runout requires a stud variant');
+    if (!isStudVariant(this.state.variant)) throw new Error('Stud runout requires a stud variant');
     if (this.state.stage === 'showdown') return;
 
     const nextStage = this.gameStateManager.moveToNextStage();
@@ -244,6 +244,8 @@ export class PokerEngine {
       throw new Error('Need at least two players sitting in to start a hand');
     }
     this.applyPendingBlinds();
+    // A mixed game moves on to its next game between hands, before anything is dealt
+    this.advanceMixedGame();
     this.deckManager.resetDeck();
     this.gameStateManager.resetPlayerStates();
     this.gameStateManager.rotateDealerButton();
@@ -258,6 +260,7 @@ export class PokerEngine {
     delete this.state.shownCards;
     delete this.state.handResult;
     delete this.state.straddle;
+    delete this.state.sevenDeuceResult;
     this.state.handId = randomUUID();
     this.state.handNumber = (this.state.handNumber || 0) + 1;
     this.state.handStartedAt = Date.now();
@@ -271,7 +274,8 @@ export class PokerEngine {
   this.ritConsents.clear();
   // Reset rabbit preview tracking for new hand
   this.rabbitPreviewed = 0;
-  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
+  if (isStudVariant(this.state.variant)) {
+      if (this.state.bettingMode === 'fixed-limit') this.state.limitBets = 0;
       this.dealStudInitial();
       // Stud uses bring-in instead of blinds
       this.computeStudBringIn();
@@ -280,9 +284,11 @@ export class PokerEngine {
       this.startBombPot(this.state.bombPotNext.anteBB);
     } else {
       this.dealHoleCards();
+      this.postAntes();
   this.postBlinds();
       this.gameStateManager.startBettingRound('preflop');
       this.postStraddle();
+      this.settleIfNobodyCanBet();
     }
     this.state.players.forEach(p => { delete p.wantsStraddle; });
     this.startTurnClock(Date.now());
@@ -358,6 +364,112 @@ export class PokerEngine {
     if (!allow) this.state.players.forEach(p => { delete p.wantsStraddle; });
   }
 
+  /** Room option: the ante every player posts in Hold'em and Omaha hands (0 turns antes off). */
+  public setAnte(amount: number): void {
+    if (Number.isFinite(amount) && amount > 0) this.state.ante = amount;
+    else delete this.state.ante;
+  }
+
+  /** Room option: the 7-2 bounty each other player pays a Hold'em pot winner who shows 7-2 (0 = off). */
+  public setSevenDeuceBounty(amount: number): void {
+    if (Number.isFinite(amount) && amount > 0) this.state.sevenDeuceBounty = amount;
+    else delete this.state.sevenDeuceBounty;
+  }
+
+  /**
+   * Room option: play these games in turn, handsPerGame hands each, starting with the first.
+   * The switch happens as each hand starts, so it needs no chooser and no extra request.
+   */
+  public setMixedGame(games: MixedGameEntry[], handsPerGame: number): void {
+    if (!Array.isArray(games) || games.length === 0) {
+      delete this.state.mixedGame;
+      return;
+    }
+    this.state.mixedGame = { games: games.map(g => ({ ...g })), handsPerGame: Math.max(1, Math.floor(handsPerGame) || 1), index: 0, handsInGame: 0 };
+    this.setVariant(games[0].variant);
+    this.setBettingMode(games[0].bettingMode);
+  }
+
+  /** Move a mixed game on to its next game once the current one has had its hands. */
+  private advanceMixedGame(): void {
+    const mixed = this.state.mixedGame;
+    if (!mixed || !Array.isArray(mixed.games) || mixed.games.length === 0) return;
+    const n = mixed.games.length;
+    if (mixed.handsInGame >= mixed.handsPerGame) {
+      mixed.index = (mixed.index + 1) % n;
+      mixed.handsInGame = 0;
+    }
+    const game = mixed.games[((mixed.index % n) + n) % n];
+    this.setVariant(game.variant);
+    this.setBettingMode(game.bettingMode);
+    mixed.handsInGame += 1;
+  }
+
+  /**
+   * Antes (Hold'em and Omaha, a room option): every player dealt in posts the ante before the
+   * blinds. Antes are dead money: they go into the pot but are not part of anyone's bet, so they
+   * don't count towards calling or raising. Side pots still include them, since those are sized
+   * from what each player put in over the whole hand.
+   */
+  private postAntes(): void {
+    const ante = this.state.ante || 0;
+    if (!(ante > 0) || isStudVariant(this.state.variant)) return;
+    for (const p of this.gameStateManager.dealtInPlayers()) {
+      const pay = this.postForced(p, ante, false);
+      if (pay > 0) this.logAction({ playerId: p.id, action: 'ante', put: pay, stage: 'preflop' });
+    }
+  }
+
+  /**
+   * After the forced bets, if every player in the hand is already all-in nobody can bet: deal the
+   * rest of the board and settle, instead of waiting for a decision nobody can make.
+   */
+  private settleIfNobodyCanBet(): void {
+    if (this.state.stage === 'showdown') return;
+    const canAct = this.getActivePlayers().filter(p => !p.isAllIn);
+    if (canAct.length > 0) return;
+    this.dealCommunityCards(Math.max(0, 5 - this.state.communityCards.length));
+    this.determineWinner();
+  }
+
+  /**
+   * 7-2 bounty (Hold'em only, a room option). A player who wins chips in a hand holding 7-2
+   * offsuit (the traditional rule: 7-2 suited does not count), and whose cards are shown, collects
+   * the bounty from every other player who was dealt into the hand, each paying at most what is
+   * left in their stack. The cards count as shown when they are turned up as a winner at a
+   * contested showdown or all-in, or when the player clicks "Show my cards" after winning
+   * uncontested. Paid at most once per hand.
+   */
+  private maybeAwardSevenDeuceBounty(): void {
+    const bounty = this.state.sevenDeuceBounty || 0;
+    if (!(bounty > 0) || this.state.sevenDeuceResult || this.state.stage !== 'showdown') return;
+    if (!isHoldemVariant(this.state.variant)) return;
+    const winners = this.state.handWinners || [];
+    const revealed = revealedPlayerIds(this.state);
+    const winner = this.state.players.find(p => winners.includes(p.id) && revealed.has(p.id) && PokerEngine.isSevenDeuceOffsuit(p.holeCards));
+    if (!winner) return;
+    const payments: Record<string, number> = {};
+    let total = 0;
+    for (const p of this.state.players) {
+      if (p.id === winner.id || (p.holeCards?.length || 0) === 0) continue;
+      const pay = Math.max(0, Math.min(bounty, p.stack));
+      if (pay <= 0) continue;
+      p.stack -= pay;
+      payments[p.id] = pay;
+      total += pay;
+      this.logAction({ playerId: p.id, action: 'bounty', put: pay, stage: 'showdown', toPlayerId: winner.id });
+    }
+    winner.stack += total;
+    this.state.sevenDeuceResult = { playerId: winner.id, total, payments };
+  }
+
+  /** Exactly a seven and a deuce of different suits. */
+  public static isSevenDeuceOffsuit(cards?: Card[]): boolean {
+    if (!Array.isArray(cards) || cards.length !== 2) return false;
+    const ranks = cards.map(c => c?.rank).sort().join(',');
+    return ranks === '2,7' && cards[0].suit !== cards[1].suit;
+  }
+
   /** A player asks to straddle next hand (posted only if they are under the gun). */
   public setWantsStraddle(playerId: string, wants: boolean): void {
     if (!this.state.allowStraddle && wants) throw new Error('Straddles are not allowed at this table');
@@ -381,7 +493,8 @@ export class PokerEngine {
    * preflop. Only with three or more players in the hand.
    */
   private postStraddle(): void {
-    if (!this.state.allowStraddle) return;
+    // A straddle would be a raise out of turn, which fixed-limit betting has no place for
+    if (!this.state.allowStraddle || this.state.bettingMode === 'fixed-limit') return;
     const dealtIn = this.gameStateManager.dealtInPlayers();
     const n = dealtIn.length;
     if (n < 3) return;
@@ -414,6 +527,7 @@ export class PokerEngine {
     }
     this.state.currentBet = 0;
     this.state.minRaise = this.state.bigBlind;
+    if (this.state.bettingMode === 'fixed-limit') this.state.limitBets = 0;
     this.dealCommunityCards(3);
     this.gameStateManager.startBettingRound('flop');
     const canAct = this.getActivePlayers().filter(p => !p.isAllIn);
@@ -451,6 +565,8 @@ export class PokerEngine {
     const shown = new Set(this.state.shownCards || []);
     shown.add(playerId);
     this.state.shownCards = Array.from(shown);
+    // Showing 7-2 after winning uncontested collects the bounty
+    this.maybeAwardSevenDeuceBounty();
   }
 
   /**
@@ -531,8 +647,8 @@ export class PokerEngine {
   }
 
   private dealHoleCards(): void {
-  // Deal 2 cards for Hold'em, 4 for Omaha (including Omaha Hi-Lo)
-  const rounds = (this.state.variant === 'omaha' || this.state.variant === 'omaha-hi-lo') ? 4 : 2;
+  // Deal 2 cards for Hold'em, 4 for Omaha (including Omaha Hi-Lo), 5 for 5-card Omaha
+  const rounds = holeCardCount(this.state.variant);
   for (let round = 0; round < rounds; round++) {
       for (let i = 0; i < this.state.players.length; i++) {
         const playerPosition = (this.state.dealerPosition + 1 + i) % this.state.players.length;
@@ -579,6 +695,8 @@ export class PokerEngine {
     }
     this.state.currentBet = currentBet;
     this.state.minRaise = currentBet;
+    // Fixed limit: the big blind is the first bet of the preflop round
+    if (this.state.bettingMode === 'fixed-limit') this.state.limitBets = 1;
     
     this.log(`After blinds:`, this.state.players.map(p => ({
       id: p.id,
@@ -589,7 +707,7 @@ export class PokerEngine {
   }
 
   // Allow changing betting mode at runtime (e.g., by room configuration update)
-  public setBettingMode(mode: 'no-limit' | 'pot-limit'): void {
+  public setBettingMode(mode: BettingMode): void {
     if (mode === 'no-limit') {
       // Remove the optional property to avoid breaking strict equality snapshots
       delete (this.state as any).bettingMode;
@@ -662,12 +780,18 @@ export class PokerEngine {
     }
     
     // Process the action
-    const { pot, currentBet, minRaise } = this.bettingManager.processAction(
+    const { pot, currentBet, minRaise, limitBets } = this.bettingManager.processAction(
       player,
       action,
       this.state.currentBet,
       this.state.minRaise,
-      { currentPot: this.state.pot, players: this.state.players }
+      {
+        currentPot: this.state.pot,
+        players: this.state.players,
+        fixedLimit: this.state.bettingMode === 'fixed-limit'
+          ? { unit: fixedLimitBetSize(this.state.stage, this.state.bigBlind), bets: this.state.limitBets || 0 }
+          : undefined,
+      }
     );
 
     // Update state and add new contribution to pot if any
@@ -687,6 +811,7 @@ export class PokerEngine {
 
     this.state.currentBet = currentBet;
     this.state.minRaise = minRaise;
+    if (typeof limitBets === 'number') this.state.limitBets = limitBets;
 
     // If folding leaves only one player, end hand immediately with win by fold
     const remainingAfterAction = this.getActivePlayers();
@@ -726,7 +851,7 @@ export class PokerEngine {
       this.log(`Moving to next stage from ${this.state.stage}`);
       const nextStage = this.gameStateManager.moveToNextStage();
 
-  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
+  if (isStudVariant(this.state.variant)) {
         switch (nextStage) {
           case 'fourth':
           case 'fifth':
@@ -760,7 +885,7 @@ export class PokerEngine {
                 this.gameStateManager.startBettingRound('sixth');
                 return;
               }
-              if ((this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') && minCount < 7) {
+              if (isSevenCardStudVariant(this.state.variant) && minCount < 7) {
                 // Owe the seventh card (down); deal and keep betting
                 this.dealStudDownCards(1);
                 this.gameStateManager.startBettingRound('seventh');
@@ -885,6 +1010,12 @@ export class PokerEngine {
       'A': 14,'K': 13,'Q': 12,'J': 11,'10': 10,'9': 9,'8': 8,'7': 7,'6': 6,'5': 5,'4': 4,'3': 3,'2': 2,
     };
     const suitWeight: Record<Card['suit'], number> = { clubs: 1, diamonds: 2, hearts: 3, spades: 4 };
+    // Razz turns this around: the highest up card brings it in (aces are low), and on a tie the
+    // highest suit does. Negating both lets the same "lowest brings in" search below find it.
+    if (this.state.variant === 'razz') {
+      (Object.keys(weight) as Card['rank'][]).forEach(r => { weight[r] = -(r === 'A' ? 1 : weight[r]); });
+      (Object.keys(suitWeight) as Card['suit'][]).forEach(st => { suitWeight[st] = -suitWeight[st]; });
+    }
     let chosen: { id: string; val: number } | null = null;
     const debug: Array<{ id: string; up?: Card; rankW?: number; suitW?: number }> = [];
     for (const p of this.state.players) {
@@ -941,6 +1072,8 @@ export class PokerEngine {
         if (won > 0) winnings[p.id] = won;
       });
       this.state.handResult = { pot: potBefore, winnings };
+      // A winner turned face up with 7-2 collects the bounty now
+      this.maybeAwardSevenDeuceBounty();
       this.startTurnClock(Date.now());
     }
   }
@@ -997,7 +1130,7 @@ export class PokerEngine {
     }
     // Defensive: for Stud variants, exclude players who do not have enough stud cards
     // This can occur if a player joined mid-hand or had no cards dealt due to an edge case.
-    if (this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo' || this.state.variant === 'five-card-stud') {
+    if (isStudVariant(this.state.variant)) {
       const eligible = activePlayers.filter(p => {
         const st = this.state.studState?.playerCards[p.id];
         const down = st?.downCards?.length || 0;
@@ -1011,7 +1144,7 @@ export class PokerEngine {
     }
     
     // Defensive: for stud variants, if somehow we reached here prematurely without enough cards, correct the flow
-    if (this.state.variant === 'five-card-stud' || this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') {
+    if (isStudVariant(this.state.variant)) {
       try {
         const counts = activePlayers.map(p => {
           const st = this.state.studState?.playerCards[p.id];
@@ -1024,7 +1157,7 @@ export class PokerEngine {
           this.gameStateManager.startBettingRound('sixth');
           return;
         }
-        if ((this.state.variant === 'seven-card-stud' || this.state.variant === 'seven-card-stud-hi-lo') && minCount < 7) {
+        if (isSevenCardStudVariant(this.state.variant) && minCount < 7) {
           this.log(`[STUD] Premature showdown guard (7-card): minCount=${minCount} < 7; dealing seventh down card and resuming betting.`);
           this.dealStudDownCards(1);
           this.gameStateManager.startBettingRound('seventh');
@@ -1260,7 +1393,7 @@ export class PokerEngine {
     }
 
   // Stud showdown path: evaluate with stud cards (best 5 from available)
-  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'five-card-stud') {
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'five-card-stud' || this.state.variant === 'razz') {
       const rankWeight: Record<Card['rank'], number> = {
         '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14,
       };
@@ -1276,6 +1409,13 @@ export class PokerEngine {
       activePlayers.forEach(p => {
         const st = this.state.studState?.playerCards[p.id];
         const all = st ? [...(st.downCards || []), ...(st.upCards || [])] : [];
+        if (this.state.variant === 'razz') {
+          // Razz: the best ace-to-five low takes the whole pot
+          const low = HandEvaluator.evaluateRazzLow(all);
+          strengths.set(p.id, HandEvaluator.razzStrength(all));
+          handViews.set(p.id, { cards: low.lowCards, description: low.description });
+          return;
+        }
         const { hand, cards } = HandEvaluator.evaluateHand(all, []);
         const hr = HandEvaluator.getHandRanking(all, []);
         strengths.set(p.id, computeScore(cards, hr.rank));
@@ -1333,7 +1473,7 @@ export class PokerEngine {
     const strengths = new Map<string, number>();
     const handViews = new Map<string, { cards: Card[]; description: string }>();
     activePlayers.forEach(p => {
-  const hr = ((this.state.variant === 'omaha' || this.state.variant === 'omaha-hi-lo')
+  const hr = (isOmahaVariant(this.state.variant)
         ? HandEvaluator.getOmahaHandRanking
         : HandEvaluator.getHandRanking
       ).call(HandEvaluator, p.holeCards || [], this.state.communityCards);
@@ -1453,7 +1593,7 @@ export class PokerEngine {
     this.dealRunItTwiceBoards();
     const boards = rit.boards;
     const hiLo = this.state.variant === 'omaha-hi-lo';
-    const omaha = this.state.variant === 'omaha' || hiLo;
+    const omaha = isOmahaVariant(this.state.variant);
 
     // Each pot (main and side) is split evenly across the runs; odd chips go to the earliest runs.
     // On each run, a pot goes to the best hand among the players eligible for it.

@@ -30,6 +30,9 @@ import { useTableExtras } from '../../src/hooks/useTableExtras';
 import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
 import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
+import FixedLimitControls from '../../src/components/FixedLimitControls';
+import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
+import { ALL_VARIANTS, VARIANT_LABELS, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
 import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/components/PlayerNotesPanel';
 import HostControlsPanel from '../../src/components/HostControlsPanel';
 import WaitlistPanel from '../../src/components/WaitlistPanel';
@@ -574,14 +577,7 @@ export default function GamePage() {
   // Track if the dealer has manually changed the selection to avoid overwriting with stale prompts
   const userChangedVariantRef = useRef<boolean>(false);
   const lastAwaitingDealerIdRef = useRef<string | undefined>(undefined);
-  const allowedDealerChoiceVariants = useRef([
-    'texas-holdem',
-    'omaha',
-    'omaha-hi-lo',
-    'seven-card-stud',
-    'seven-card-stud-hi-lo',
-    'five-card-stud',
-  ]);
+  const allowedDealerChoiceVariants = useRef<string[]>([...ALL_VARIANTS]);
 
   const applyDealerChoicePrompt = useCallback((prompt: { dealerId?: string; allowedVariants?: string[]; current?: string } | null) => {
     if (!prompt) {
@@ -1024,10 +1020,7 @@ export default function GamePage() {
   };
 
   // Variant helpers
-  const isStudVariant = () => {
-    const v = pokerGameState?.variant;
-    return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud';
-  };
+  const isStudVariant = () => isStudGame(pokerGameState?.variant);
 
   const getStudCardsForPlayer = useCallback((pid: string) => {
     const st = (pokerGameState as any)?.studState?.playerCards?.[pid];
@@ -1110,10 +1103,12 @@ export default function GamePage() {
       };
 
       const computeHighLabel = (): string | null => {
-        if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+        if (isStudGame(variant)) {
           const { down, up } = getStudCardsForPlayer(playerId);
           const all = [...(down || []), ...(up || [])];
           if (!all || all.length === 0) return null;
+          // Razz is played for the lowest hand
+          if (variant === 'razz') return HandEvaluator.evaluateRazzLow(all).description;
           if (all.length < 5) return partialLabel(all);
           const ranking = HandEvaluator.getHandRanking(all, []);
           return formatWithKickers(ranking) || null;
@@ -1125,7 +1120,7 @@ export default function GamePage() {
         const known = [...holes, ...board];
         if (known.length < 5) return partialLabel(known);
 
-        if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+        if (isOmahaVariant(variant)) {
           const ranking = HandEvaluator.getOmahaHandRanking(holes, board);
           return formatWithKickers(ranking) || null;
         }
@@ -2467,6 +2462,7 @@ export default function GamePage() {
                 Run it twice
               </span>
             )}
+            <GameRulesBadges state={pokerGameState} />
             {/* Removed seated info banner at user request */}
             {/* Removed game started banner at user request */}
           </div>
@@ -2591,6 +2587,7 @@ export default function GamePage() {
                 : `Next hand is a bomb pot (${pokerGameState.bombPotNext.anteBB} big blind ante).`}
             </div>
           )}
+          {gameStarted && <SevenDeuceBountyBanner state={pokerGameState} />}
           {/* Dealer's Choice selection banner */}
           {gameStarted && awaitingDealerChoice && (
             <div className="lg:col-span-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 rounded-lg shadow-md p-4">
@@ -2598,16 +2595,9 @@ export default function GamePage() {
                 const dealerId = awaitingDealerChoice?.dealerId;
                 const allowed = Array.isArray(awaitingDealerChoice?.allowedVariants)
                   ? awaitingDealerChoice!.allowedVariants!
-                  : ['texas-holdem','omaha','omaha-hi-lo','seven-card-stud','seven-card-stud-hi-lo','five-card-stud'];
+                  : [...ALL_VARIANTS];
                 const isMeDealer = dealerId && dealerId === playerId;
-                const labelMap: Record<string, string> = {
-                  'texas-holdem': "Texas Hold'em",
-                  'omaha': 'Omaha',
-                  'omaha-hi-lo': 'Omaha Hi-Lo',
-                  'seven-card-stud': 'Seven-Card Stud',
-                  'seven-card-stud-hi-lo': 'Seven-Card Stud Hi-Lo',
-                  'five-card-stud': 'Five-Card Stud',
-                };
+                const labelMap: Record<string, string> = VARIANT_LABELS;
                 if (isMeDealer) {
                   return (
                     <div>
@@ -3003,6 +2993,10 @@ export default function GamePage() {
                       })()}
                     </div>
                   )
+                )}
+
+                {pokerGameState?.bettingMode === 'fixed-limit' && playerId && (
+                  <FixedLimitControls state={pokerGameState} playerId={playerId} onBet={handleBet} onRaise={handleRaise} showStackInBB={showStackInBB} />
                 )}
 
                 {/* Pot-Limit betting controls */}
@@ -3458,15 +3452,30 @@ export default function GamePage() {
                   const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
 
                   type EvalRes = { playerId: string; name: string; hand: any; label: string };
+                  if (variant === 'razz') {
+                    // Razz: the lowest hand wins, so name the server's winners with their lows
+                    const lows: Array<{ name: string; label: string }> = contenders.map((p: any) => {
+                      const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
+                      const all = [...(Array.isArray(st?.downCards) ? st.downCards : []), ...(Array.isArray(st?.upCards) ? st.upCards : [])];
+                      return { name: p.name || p.id, label: all.length >= 5 ? HandEvaluator.evaluateRazzLow(all).description : '' };
+                    });
+                    return (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold">{lows.map(l => l.name).join(', ')}</span>
+                        <span>{lows.length > 1 ? 'split the pot' : 'wins the pot'}</span>
+                        {lows[0]?.label ? <span className="opacity-80">({lows[0].label})</span> : null}
+                      </div>
+                    );
+                  }
                   const evals: EvalRes[] = contenders.map((p: any) => {
-                    if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+                    if (isStudGame(variant)) {
                       const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
                       const down = Array.isArray(st?.downCards) ? st.downCards : [];
                       const up = Array.isArray(st?.upCards) ? st.upCards : [];
                       const { hand } = HandEvaluator.evaluateHand([...down, ...up], []);
                       return { playerId: p.id, name: p.name || p.id, hand, label: String((hand as any)?.description || '') };
                     }
-                    if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+                    if (isOmahaVariant(variant)) {
                       const { hand } = HandEvaluator.evaluateOmahaHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
                       return { playerId: p.id, name: p.name || p.id, hand, label: String((hand as any)?.description || '') };
                     }
@@ -3513,7 +3522,7 @@ export default function GamePage() {
             <EquityPanel
               players={getActiveNonFoldedPlayers()}
               board={Array.isArray(pokerGameState.communityCards) ? pokerGameState.communityCards : []}
-              omaha={pokerGameState.variant === 'omaha' || pokerGameState.variant === 'omaha-hi-lo'}
+              omaha={isOmahaVariant(pokerGameState.variant)}
             />
           )}
 
@@ -3532,14 +3541,14 @@ export default function GamePage() {
               const board = pokerGameState.communityCards;
               
               // Early return: Don't show outs for stud variants, as outs calculation is not supported
-              if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+              if (isStudGame(variant)) {
                 return null;
               }
               
               type PlayerEval = { playerId: string; name: string; hand: HandInterface; holeCards: Card[] };
               const evals: PlayerEval[] = activePlayers.map((p: Player) => {
                 let hand;
-                if (variant === 'omaha' || variant === 'omaha-hi-lo') {
+                if (isOmahaVariant(variant)) {
                   hand = HandEvaluator.evaluateOmahaHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);
                 } else {
                   hand = HandEvaluator.evaluateHand(Array.isArray(p?.holeCards) ? p.holeCards : [], board);

@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import { broadcastGameState } from '../../../src/lib/server/game-action-pipeline';
-import { markCardsShown } from '../../../src/lib/server/hand-records';
+import { markCardsShown, recordLateSevenDeuceBounty } from '../../../src/lib/server/hand-records';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 /**
@@ -26,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'No active game found for this table' });
     }
 
+    const bountyBefore = engine.getState().sevenDeuceResult;
     try {
       engine.showCards(playerId);
     } catch (e: any) {
@@ -39,6 +40,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (handId) {
       // Hand history shows the cards to the others in the hand from now on
       markCardsShown(handId, playerId).catch(err => console.warn('Failed to mark shown cards in history:', err));
+    }
+    if (!bountyBefore && engine.getState().sevenDeuceResult) {
+      // Showing 7-2 after winning uncontested just collected the bounty
+      await recordLateSevenDeuceBounty(tableId, engine.getState());
     }
     const state = await broadcastGameState(tableId, res, engine.getState(), { action: 'show_cards', playerId });
     return res.status(200).json({ success: true, gameState: sanitizeStateForPlayer(state, playerId) });

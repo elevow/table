@@ -1,6 +1,7 @@
 import type { TableState, Card, Player } from '../../types/poker';
 import { HandEvaluator } from '../poker/hand-evaluator';
 import type { HandInterface } from '../../types/poker-engine';
+import { isOmahaVariant as isOmahaGame, isStudVariant } from '../poker/variant-rules';
 
 /**
  * System sender ID used for hand result messages
@@ -46,7 +47,7 @@ function isHiLoVariant(variant?: string): boolean {
  * Checks if the variant is an Omaha variant
  */
 function isOmahaVariant(variant?: string): boolean {
-  return variant === 'omaha' || variant === 'omaha-hi-lo';
+  return isOmahaGame(variant);
 }
 
 /**
@@ -80,7 +81,7 @@ function getHandDescription(
   try {
     const holeCards = player.holeCards || [];
     
-    if (variant === 'seven-card-stud' || variant === 'seven-card-stud-hi-lo' || variant === 'five-card-stud') {
+    if (isStudVariant(variant)) {
       // For stud variants, we'd need studState which isn't passed here
       // Return empty - caller should handle stud separately
       return '';
@@ -106,9 +107,52 @@ function getHandDescription(
 }
 
 /**
+ * The 7-2 bounty paid this hand, as a chat line, or null when none was paid.
+ */
+export function formatSevenDeuceBounty(state: TableState): string | null {
+  const bounty = state.sevenDeuceResult;
+  if (!bounty || !(bounty.total > 0)) return null;
+  const winner = (state.players || []).find(p => p.id === bounty.playerId);
+  const name = winner ? getPlayerName(winner) : bounty.playerId.slice(0, 6);
+  return `💰 7-2 bounty: ${name} collects $${bounty.total}`;
+}
+
+/**
  * Formats a hand result from the game state into a chat-friendly message
  */
 export function formatHandResult(state: TableState): FormattedHandResult | null {
+  const result = formatHandResultBase(state);
+  const bountyLine = formatSevenDeuceBounty(state);
+  if (!result || !bountyLine) return result;
+  return { ...result, message: `${result.message} | ${bountyLine}` };
+}
+
+/**
+ * Razz: the lowest hand wins. The winners come from the engine; their hands are described from
+ * their stud cards.
+ */
+function formatRazzResult(state: TableState): FormattedHandResult | null {
+  const winnerIds = Array.isArray(state.handWinners) ? state.handWinners : [];
+  const winners: HandWinner[] = winnerIds.map(id => {
+    const player = (state.players || []).find(p => p.id === id);
+    const st = state.studState?.playerCards?.[id];
+    const all = st ? [...(st.downCards || []), ...(st.upCards || [])] : [];
+    return {
+      playerId: id,
+      playerName: player ? getPlayerName(player) : id.slice(0, 6),
+      amount: state.handResult?.winnings?.[id] || 0,
+      handDescription: all.length >= 5 ? HandEvaluator.evaluateRazzLow(all).description : undefined,
+    };
+  });
+  if (winners.length === 0) return null;
+  const handDesc = winners[0].handDescription ? ` with ${winners[0].handDescription}` : '';
+  const message = winners.length === 1
+    ? `🏆 ${winners[0].playerName} wins${handDesc}`
+    : `🏆 ${winners.map(w => w.playerName).join(', ')} split the pot${handDesc}`;
+  return { message, winners, isWinByFold: false };
+}
+
+function formatHandResultBase(state: TableState): FormattedHandResult | null {
   // Only format if we're at showdown
   if (state.stage !== 'showdown') {
     return null;
@@ -136,6 +180,10 @@ export function formatHandResult(state: TableState): FormattedHandResult | null 
       }],
       isWinByFold: true,
     };
+  }
+
+  if (variant === 'razz') {
+    return formatRazzResult(state);
   }
 
   // Handle Hi-Lo variants with split pots

@@ -61,6 +61,41 @@ describe('buildReplayFrames', () => {
   });
 });
 
+describe('buildReplayFrames with antes and a 7-2 bounty', () => {
+  const bountyHand: HandRecord = {
+    ...hand,
+    players: [
+      { ...hand.players[0], endStack: 135, net: 35 },
+      { ...hand.players[1], endStack: 65, net: -35 },
+    ],
+    actions: [
+      { playerId: 'a', action: 'ante', put: 1, stage: 'preflop' },
+      { playerId: 'b', action: 'ante', put: 1, stage: 'preflop' },
+      ...hand.actions,
+      { playerId: 'b', action: 'bounty', put: 5, stage: 'showdown', toPlayerId: 'a' },
+    ],
+  };
+  const frames = buildReplayFrames(bountyHand);
+
+  it('antes go into the pot', () => {
+    expect(frames[2].pot).toBe(2);
+    expect(frames[2].caption).toBe('Bob antes $1');
+  });
+
+  it('a bounty moves chips between players, not into the pot, with the whole board showing', () => {
+    const bounty = frames[frames.length - 2];
+    expect(bounty.caption).toBe('Bob pays a 7-2 bounty of $5 to Ann');
+    expect(bounty.pot).toBe(frames[frames.length - 3].pot);
+    expect(bounty.stacks.a - frames[frames.length - 3].stacks.a).toBe(5);
+    expect(bounty.boardCount).toBe(5);
+    expect(frames[frames.length - 1].caption).toBe('Ann wins $60; Ann collects a $5 7-2 bounty');
+  });
+
+  it('describes a bounty without a recipient name', () => {
+    expect(describeAction({ playerId: 'b', action: 'bounty', put: 5, stage: 'showdown' }, 'Bob', n => `$${n}`)).toBe('Bob pays a 7-2 bounty of $5');
+  });
+});
+
 describe('describeAction', () => {
   it('describes raises by their total and marks timed-out actions', () => {
     const money = (n: number) => `$${n}`;

@@ -34,6 +34,8 @@ import HostControlsPanel from '../../src/components/HostControlsPanel';
 import WaitlistPanel from '../../src/components/WaitlistPanel';
 import { NOTE_COLOR_CLASSES, type NoteColor } from '../../src/lib/shared/note-colors';
 import BetPresetButtons from '../../src/components/BetPresetButtons';
+import ShortcutHelpOverlay from '../../src/components/ShortcutHelpOverlay';
+import { useTableShortcuts } from '../../src/hooks/useTableShortcuts';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -1472,6 +1474,14 @@ export default function GamePage() {
     else handlePokerAction(result.action);
   }, [preAction, isMyTurn, me, myOwed, pokerGameState?.runItTwicePrompt, handlePokerAction]);
 
+  // Keyboard shortcuts work only while the Your Turn panel is showing (same conditions as the panel)
+  const actionPanelOpen = !!(gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt);
+  const shortcuts = useTableShortcuts({
+    enabled: actionPanelOpen,
+    onFold: handleFold,
+    onCheckOrCall: () => (myOwed > 0 ? handlePokerAction('call', myOwed) : handleCheck()),
+  });
+
   // Sit out from the next hand, or back in
   const [sitOutPending, setSitOutPending] = useState(false);
   const toggleSitOut = useCallback(async () => {
@@ -2382,6 +2392,7 @@ export default function GamePage() {
   
   return (
     <div className="game-page bg-gray-100 dark:bg-gray-900 min-h-screen">
+      <ShortcutHelpOverlay open={shortcuts.helpOpen} onClose={() => shortcuts.setHelpOpen(false)} />
       {rebuyPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900">
@@ -2757,7 +2768,22 @@ export default function GamePage() {
           {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && (
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Your Turn</h3>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Your Turn</h3>
+                <button
+                  type="button"
+                  onClick={() => shortcuts.setHelpOpen(true)}
+                  className="hidden sm:inline text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  title="Show keyboard shortcuts"
+                >
+                  Keyboard: <kbd className="font-mono">?</kbd>
+                </button>
+              </div>
+              {shortcuts.allInArmed && (
+                <div className="mb-2 rounded bg-yellow-100 px-2 py-1 text-sm font-semibold text-yellow-900 dark:bg-yellow-900/40 dark:text-yellow-100" role="status">
+                  Press A again to go all-in, or Esc to cancel.
+                </div>
+              )}
               <TurnClockBar clock={turnClock} />
               {(() => {
                 const summary = getMyHandSummary();

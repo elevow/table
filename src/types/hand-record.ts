@@ -1,4 +1,4 @@
-import type { Card, GameVariant, HandActionEntry } from './poker';
+import type { BettingMode, Card, GameVariant, HandActionEntry } from './poker';
 
 export interface HandRecordCards {
   // Hold'em / Omaha
@@ -40,7 +40,7 @@ export interface HandRecord {
   winners: Array<{ playerId: string; amount: number }>;
   pot: number;
   // Betting structure and the dealer button's seat, for hand-history export; missing on older hands
-  bettingMode?: 'no-limit' | 'pot-limit';
+  bettingMode?: BettingMode;
   buttonSeat?: number;
 }
 

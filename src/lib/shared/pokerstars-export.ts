@@ -1,4 +1,5 @@
 import type { Card, GameStage, HandActionEntry } from '../../types/poker';
+import { isStudVariant } from '../poker/variant-rules';
 import type { HandRecord, HandRecordPlayer } from '../../types/hand-record';
 
 /**
@@ -36,9 +37,16 @@ const GAME_NAME: Record<string, string> = {
   'seven-card-stud': '7 Card Stud',
   'seven-card-stud-hi-lo': '7 Card Stud Hi/Lo',
   'five-card-stud': '5 Card Stud',
+  razz: 'Razz',
+  'omaha-5': '5 Card Omaha',
 };
 
-const isStudVariant = (variant?: string) => String(variant || '').includes('stud');
+const LIMIT_NAME: Record<string, string> = {
+  'no-limit': 'No Limit',
+  'pot-limit': 'Pot Limit',
+  'fixed-limit': 'Limit',
+};
+
 
 const pad2 = (n: number | string) => String(n).padStart(2, '0');
 
@@ -117,7 +125,7 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
   const name = (id: string) => byId.get(id)?.name || id;
 
   const lines: string[] = [];
-  const game = `${GAME_NAME[String(hand.variant)] || String(hand.variant || "Hold'em")} ${hand.bettingMode === 'pot-limit' ? 'Pot Limit' : 'No Limit'}`;
+  const game = `${GAME_NAME[String(hand.variant)] || String(hand.variant || "Hold'em")} ${LIMIT_NAME[hand.bettingMode || 'no-limit'] || 'No Limit'}`;
   lines.push(`PokerStars Hand #${pokerStarsHandNumber(hand)}: ${game} (${money(hand.smallBlind)}/${money(hand.bigBlind)} USD) - ${dateText(hand.endedAt)}`.trimEnd());
 
   // Button: recorded seat, else the seat before the small blind (the small blind itself heads-up)
@@ -226,6 +234,8 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
   };
 
   for (const a of hand.actions) {
+    // A 7-2 bounty is paid outside the pot after the hand; the format has no line for it
+    if (a.action === 'bounty') continue;
     if (a.stage === 'showdown') continue;
     if (!dealt && preDeal(a)) {
       // Antes are dead money, so they don't count toward the bet to call

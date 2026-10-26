@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { authHeaders } from '../utils/auth-headers';
 import type { TableExtras } from '../hooks/useTableExtras';
+import { isStudVariant } from '../lib/poker/variant-rules';
 
 interface Props {
   tableId: string;
@@ -48,7 +49,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
   const paused = !!gameState?.paused;
   const pending = gameState?.pendingBlinds;
   const bomb = gameState?.bombPotNext;
-  const stud = String(gameState?.variant || '').includes('stud');
+  const stud = isStudVariant(gameState?.variant);
   const button = 'px-3 py-1 rounded text-xs font-medium disabled:opacity-60';
 
   return (

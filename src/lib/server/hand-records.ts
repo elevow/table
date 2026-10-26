@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { isBettingMode } from '../poker/variant-rules';
 import { getPool } from '../database/pool';
 import { PlayerStatisticsManager } from '../database/player-statistics-manager';
 import { HandEvaluator } from '../poker/hand-evaluator';
@@ -281,7 +282,7 @@ export function rowToHandRecord(row: any): HandRecord {
     actions: parseJson(row.actions, []),
     winners: parseJson(row.winners, []),
     pot: Number(row.pot),
-    bettingMode: row.betting_mode === 'pot-limit' ? 'pot-limit' : row.betting_mode === 'no-limit' ? 'no-limit' : undefined,
+    bettingMode: isBettingMode(row.betting_mode) ? row.betting_mode : undefined,
     buttonSeat: row.button_seat == null ? undefined : Number(row.button_seat),
   };
 }

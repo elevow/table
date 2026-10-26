@@ -1,4 +1,5 @@
 import type { GameStage, HandActionEntry } from '../../types/poker';
+import { isStudVariant } from '../poker/variant-rules';
 
 /**
  * What the HUD needs from a stored hand. Only the public action list is used, never cards, so
@@ -37,7 +38,7 @@ const FORCED: ReadonlySet<HandActionEntry['action']> = new Set(['small-blind', '
 
 /** First street with voluntary betting: third street in stud games, preflop otherwise. */
 export function firstBettingStreet(variant?: string | null): GameStage {
-  return String(variant || '').includes('stud') ? 'third' : 'preflop';
+  return isStudVariant(variant) ? 'third' : 'preflop';
 }
 
 export function emptyHudCounts(): HudCounts {

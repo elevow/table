@@ -33,6 +33,8 @@ export default function FixedLimitControls({ state, playerId, onBet, onRaise, sh
         {opts.betTo !== null && (
           <button
             onClick={() => onBet(opts.betTo as number)}
+            // Enter presses it, as the submit button does in the other betting modes
+            data-shortcut-submit
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors"
           >
             {allIn(opts.betTo) ? `All-in ${money(opts.betTo)}` : `Bet ${money(opts.betTo)}`}
@@ -41,6 +43,8 @@ export default function FixedLimitControls({ state, playerId, onBet, onRaise, sh
         {opts.raiseTo !== null && (
           <button
             onClick={() => onRaise(opts.raiseTo as number)}
+            // Enter presses it, as the submit button does in the other betting modes
+            data-shortcut-submit
             className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors"
           >
             {allIn(opts.raiseTo) ? `All-in ${money(opts.raiseTo)}` : `Raise to ${money(opts.raiseTo)}`}

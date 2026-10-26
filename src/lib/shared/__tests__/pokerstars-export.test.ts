@@ -113,6 +113,26 @@ describe('formatPokerStarsHand (Hold\'em)', () => {
   });
 });
 
+describe('formatPokerStarsHand with the newer game rules', () => {
+  it('leaves 7-2 bounty payments out of the betting, since they are paid outside the pot', () => {
+    const withBounty: HandRecord = {
+      ...holdem,
+      actions: [...holdem.actions, { playerId: 'b', action: 'bounty', put: 10, stage: 'showdown', toPlayerId: 'a' } as any],
+    };
+    const text = formatPokerStarsHand(redactHandRecord(withBounty, 'b'), { viewerId: 'b' });
+    expect(text).not.toContain('posts $10');
+    expect(text).toContain('Ann collected $80 from pot');
+    expect(text).toContain('Total pot $80');
+  });
+
+  it('names fixed-limit and the new variants', () => {
+    const limitRazz = formatPokerStarsHand({ ...holdem, variant: 'razz', bettingMode: 'fixed-limit', board: [], actions: [], winners: [] }, { viewerId: 'a' });
+    expect(limitRazz.split('\n')[0]).toContain('Razz Limit');
+    const plo5 = formatPokerStarsHand({ ...holdem, variant: 'omaha-5', bettingMode: 'pot-limit' }, { viewerId: 'a' });
+    expect(plo5.split('\n')[0]).toContain('5 Card Omaha Pot Limit');
+  });
+});
+
 describe('formatPokerStarsHand edge cases', () => {
   it('returns an uncalled bet and handles a hand won without a showdown', () => {
     const hand: HandRecord = {

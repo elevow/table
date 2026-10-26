@@ -68,6 +68,87 @@ export class HandEvaluator {
     return best;
   }
 
+  /**
+   * Razz (ace-to-five lowball, no qualifier): the key of the best low hand that can be made from
+   * up to five of these cards. Lower keys are better hands. Aces are low and straights and
+   * flushes don't count, but pairs do: any hand without a pair beats any hand with one.
+   * The key is [category, ranks...]: category 0 no pair, 1 one pair, 2 two pair, 3 trips,
+   * 4 full house, 5 quads; then the ranks with the paired ones first, highest first within each
+   * group, so comparing keys left to right compares the hands. Works on fewer than five cards
+   * too, which is how the showing up cards are compared to decide who acts first.
+   */
+  static razzLowKey(cards: Card[]): number[] {
+    const valid = (cards || []).filter((c: any) => c && c.rank && c.suit);
+    if (valid.length <= 5) return this.razzKeyOf(valid);
+    let best: number[] | null = null;
+    for (const five of this.combinations(valid, 5)) {
+      const key = this.razzKeyOf(five);
+      if (!best || this.compareRazzLow(key, best) < 0) best = key;
+    }
+    return best || [];
+  }
+
+  /** Compare two razz keys: negative when a is the better (lower) hand, 0 when they tie. */
+  static compareRazzLow(a: number[], b: number[]): number {
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) if (a[i] !== b[i]) return a[i] - b[i];
+    return a.length - b.length;
+  }
+
+  /** The best razz hand from these cards: its five cards, key and a description such as "7-5-4-2-A low". */
+  static evaluateRazzLow(cards: Card[]): { lowCards: Card[]; key: number[]; description: string } {
+    const valid = (cards || []).filter((c: any) => c && c.rank && c.suit);
+    let best: { cards: Card[]; key: number[] } = { cards: valid.slice(0, 5), key: this.razzKeyOf(valid.slice(0, 5)) };
+    if (valid.length > 5) {
+      for (const five of this.combinations(valid, 5)) {
+        const key = this.razzKeyOf(five);
+        if (this.compareRazzLow(key, best.key) < 0) best = { cards: five, key };
+      }
+    }
+    const label = (v: number) => (v === 1 ? 'A' : v === 11 ? 'J' : v === 12 ? 'Q' : v === 13 ? 'K' : String(v));
+    const names = ['', 'Pair', 'Two Pair', 'Three of a Kind', 'Full House', 'Four of a Kind'];
+    const [category, ...ranks] = best.key;
+    const ranksText = ranks.map(label).join('-');
+    const description = category === 0 ? `${ranksText} low` : `${names[category]} (${ranksText})`;
+    return { lowCards: best.cards, key: best.key, description };
+  }
+
+  /** A razz hand as one number where higher is better, for splitting pots by strength. */
+  static razzStrength(cards: Card[]): number {
+    const [category = 0, ...ranks] = this.razzLowKey(cards);
+    const slots = [...ranks, 0, 0, 0, 0, 0].slice(0, 5);
+    const packed = category * 1e10 + slots[0] * 1e8 + slots[1] * 1e6 + slots[2] * 1e4 + slots[3] * 1e2 + slots[4];
+    return 1e11 - packed;
+  }
+
+  private static razzKeyOf(cards: Card[]): number[] {
+    const low: Record<Card['rank'], number> = {
+      'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13,
+    };
+    const counts = new Map<number, number>();
+    cards.forEach(c => counts.set(low[c.rank], (counts.get(low[c.rank]) || 0) + 1));
+    const groups = Array.from(counts.entries()).sort((a, b) => (b[1] - a[1]) || (b[0] - a[0]));
+    const sizes = groups.map(g => g[1]);
+    const pairs = sizes.filter(s => s === 2).length;
+    let category = 0;
+    if (sizes[0] >= 4) category = 5;
+    else if (sizes[0] === 3 && pairs > 0) category = 4;
+    else if (sizes[0] === 3) category = 3;
+    else if (pairs >= 2) category = 2;
+    else if (pairs === 1) category = 1;
+    return [category, ...groups.map(g => g[0])];
+  }
+
+  private static combinations<T>(arr: T[], k: number): T[][] {
+    const res: T[][] = [];
+    const backtrack = (start: number, path: T[]) => {
+      if (path.length === k) { res.push([...path]); return; }
+      for (let i = start; i < arr.length; i++) { path.push(arr[i]); backtrack(i + 1, path); path.pop(); }
+    };
+    backtrack(0, []);
+    return res;
+  }
+
   static evaluateHand(holeCards: Card[], communityCards: Card[]): { hand: HandInterface; cards: Card[] } {
     // Filter out any invalid/undefined cards defensively
     const allCardsRaw = [...(holeCards || []), ...(communityCards || [])];
@@ -159,7 +240,8 @@ export class HandEvaluator {
     };
   }
 
-  // Omaha: exactly 2 from hole and 3 from board
+  // Omaha: exactly 2 from hole and 3 from board. Works for any number of hole cards (4-card
+  // Omaha, 5-card Omaha) since it tries every pair of hole cards with every three board cards.
   static evaluateOmahaHand(holeCards: Card[], communityCards: Card[]): { hand: HandInterface; cards: Card[] } {
     // Defensive: require at least 4 hole and 3 community to form a hand
     const holes = holeCards || [];

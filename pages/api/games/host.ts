@@ -8,6 +8,7 @@ import { leaveTable, performSeatClaim, syncWaitlist } from '../../../src/lib/ser
 import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../src/lib/server/room-config';
 import { publishTableEvent } from '../../../src/lib/realtime/publisher';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
+import { MIN_TURN_SECONDS, MAX_TURN_SECONDS } from '../../../src/lib/shared/turn-clock';
 import { isStudVariant } from '../../../src/lib/poker/variant-rules';
 
 type HostAction =
@@ -16,6 +17,8 @@ type HostAction =
   | { action: 'set-blinds'; smallBlind: number; bigBlind: number }
   | { action: 'allow-straddle'; allow: boolean }
   | { action: 'allow-run-it-twice'; allow: boolean }
+  | { action: 'set-turn-time'; seconds: number }
+  | { action: 'adjust-time-banks'; targetId: string; delta: number }
   | { action: 'bomb-pot'; anteBB: number | null }
   | { action: 'kick'; targetId: string }
   | { action: 'require-approval'; required: boolean }
@@ -108,6 +111,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (cached) Object.assign(cached, { smallBlind: sb, bigBlind: bb });
         break;
       }
+      case 'set-turn-time': {
+        const seconds = Number(body.seconds);
+        if (!Number.isFinite(seconds) || seconds < MIN_TURN_SECONDS || seconds > MAX_TURN_SECONDS) {
+          return res.status(400).json({ error: `Turn time must be ${MIN_TURN_SECONDS}-${MAX_TURN_SECONDS} seconds` });
+        }
+        // New games at this table use it too
+        await updateRoomConfig(tableId, { turnTimeSeconds: Math.round(seconds) });
+        break;
+      }
+      case 'adjust-time-banks':
+        if (!body.targetId || !Number.isFinite(Number(body.delta)) || Number(body.delta) === 0) {
+          return res.status(400).json({ error: 'Choose a player and how many time banks to add or remove' });
+        }
+        break;
       case 'pause':
       case 'resume':
       case 'bomb-pot':
@@ -119,7 +136,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Changes to the running game
     const engine = await getOrRestoreEngine(tableId);
     if (!engine) {
-      if (body.action === 'allow-straddle' || body.action === 'allow-run-it-twice' || body.action === 'set-blinds') {
+      if (body.action === 'allow-straddle' || body.action === 'allow-run-it-twice' || body.action === 'set-blinds' || body.action === 'set-turn-time') {
         return res.status(200).json({ ok: true });
       }
       return res.status(404).json({ error: 'No active game found for this table' });
@@ -130,6 +147,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       else if (body.action === 'set-blinds') engine.setPendingBlinds(Number(body.smallBlind), Number(body.bigBlind));
       else if (body.action === 'allow-straddle') engine.setAllowStraddle(!!body.allow);
       else if (body.action === 'allow-run-it-twice') engine.setAllowRunItTwice(!!body.allow);
+      else if (body.action === 'set-turn-time') engine.setTurnTime(Number(body.seconds));
+      else if (body.action === 'adjust-time-banks') engine.adjustTimeBanks(body.targetId, Number(body.delta));
       else if (body.action === 'bomb-pot') {
         const variant = engine.getState().variant;
         if (body.anteBB !== null && isStudVariant(variant)) {

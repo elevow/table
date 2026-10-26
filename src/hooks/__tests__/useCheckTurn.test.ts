@@ -185,6 +185,22 @@ describe('useCheckTurn', () => {
     });
   });
 
+  it('calls onTurnChange when the game is paused even though the turn did not change', async () => {
+    const onTurnChange = jest.fn();
+    const base = { success: true, isMyTurn: false, activePlayer: 'player2', tableState: 'flop', handNumber: 1, turnSeq: 7 };
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...base, paused: false }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...base, paused: true }) });
+
+    renderHook(() => useCheckTurn('table1', 'player1', { onTurnChange }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    jest.advanceTimersByTime(10000);
+
+    await waitFor(() => {
+      expect(onTurnChange).toHaveBeenCalledWith(expect.objectContaining({ paused: true, activePlayer: 'player2' }));
+    });
+  });
+
   it('should handle fetch errors gracefully', async () => {
     (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
 

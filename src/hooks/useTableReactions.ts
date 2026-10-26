@@ -17,7 +17,7 @@ export interface ReactionBubble {
 
 /**
  * Reactions shown over seats: listens for other players' reactions on the table channel,
- * sends our own, and remembers whether the player muted other people's reactions.
+ * sends our own, and remembers whether the player has hidden reactions at the table.
  */
 export function useTableReactions(tableId: string | undefined, playerId: string) {
   const [bubbles, setBubbles] = useState<Record<string, ReactionBubble>>({});
@@ -38,6 +38,12 @@ export function useTableReactions(tableId: string | undefined, playerId: string)
   const setMuted = useCallback((value: boolean) => {
     setMutedState(value);
     try { localStorage.setItem(REACTIONS_MUTED_KEY, String(value)); } catch {}
+    if (value) {
+      // Hiding takes effect at once: clear the bubbles already showing
+      Object.values(timersRef.current).forEach(clearTimeout);
+      timersRef.current = {};
+      setBubbles({});
+    }
   }, []);
 
   const show = useCallback((who: string, emote: TableReaction) => {

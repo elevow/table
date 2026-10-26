@@ -7,7 +7,10 @@ import { DeckManager } from './deck-manager';
 import { BettingManager } from './betting-manager';
 import { generateRngSecurity, verifyRngSecurity, RNGSecurity } from './rng-security';
 import { GameStateManager } from './game-state-manager';
-import { BASE_TURN_MS, TIMEOUTS_BEFORE_SIT_OUT } from '../shared/turn-clock';
+import {
+  TIMEOUTS_BEFORE_SIT_OUT, MAX_TIME_BANKS, MIN_TURN_SECONDS, MAX_TURN_SECONDS, MIN_TIME_BANK_SECONDS,
+  MAX_TIME_BANK_SECONDS, bankTimeMs, clampSetting, timeBankMs, turnTimeMs,
+} from '../shared/turn-clock';
 import { holeCardCount, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { fixedLimitBetSize } from './fixed-limit';
 import { revealedPlayerIds } from './state-sanitizer';
@@ -347,13 +350,53 @@ export class PokerEngine {
       // Resume where the clock stopped; the start time moves so the time bank is charged only for
       // time actually spent deciding
       this.state.turnDeadline = now + remaining;
-      this.state.turnStartedAt = this.state.turnDeadline - (BASE_TURN_MS + Math.max(0, player.timeBank || 0) * 1000);
+      this.state.turnStartedAt = this.state.turnDeadline - (turnTimeMs(this.state) + bankTimeMs(player, this.state));
     } else {
       this.startTurnClock(now);
     }
   }
 
   /** Host allows or disallows straddles at this table. */
+  /** Table settings for the clock: base time per decision and each player's time banks. */
+  public configureClock(opts: { turnSeconds?: number; timeBanks?: number; timeBankSeconds?: number }): void {
+    if (opts.turnSeconds !== undefined) this.setTurnTime(opts.turnSeconds);
+    if (opts.timeBankSeconds !== undefined) {
+      this.state.timeBankSeconds = clampSetting(opts.timeBankSeconds, MIN_TIME_BANK_SECONDS, MAX_TIME_BANK_SECONDS, 30);
+    }
+    if (opts.timeBanks !== undefined) {
+      const count = clampSetting(opts.timeBanks, 0, MAX_TIME_BANKS, 0);
+      this.state.players.forEach(p => { p.timeBanks = count; });
+    }
+  }
+
+  /** Host changes the base time per decision; it applies from the next decision. */
+  public setTurnTime(seconds: number): void {
+    this.state.turnTimeMs = clampSetting(seconds, MIN_TURN_SECONDS, MAX_TURN_SECONDS, 30) * 1000;
+  }
+
+  /**
+   * Host gives a player more time banks or takes some away. If it is that player's turn, the
+   * clock they are on moves by the same amount.
+   */
+  public adjustTimeBanks(playerId: string, delta: number, now: number = Date.now()): number {
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player) throw new Error('Player not found');
+    // Games saved before time banks were counted: start from the seconds they had
+    const current = typeof player.timeBanks === 'number'
+      ? player.timeBanks
+      : Math.floor(Math.max(0, player.timeBank || 0) * 1000 / timeBankMs(this.state));
+    const next = Math.min(MAX_TIME_BANKS, Math.max(0, current + Math.round(delta)));
+    player.timeBanks = next;
+    const change = next - current;
+    if (change !== 0 && this.state.activePlayer === playerId && typeof this.state.turnDeadline === 'number') {
+      this.state.turnDeadline = Math.max(now, this.state.turnDeadline + change * timeBankMs(this.state));
+    }
+    if (change !== 0 && this.state.paused && this.state.activePlayer === playerId && typeof this.state.pausedTurnRemainingMs === 'number') {
+      this.state.pausedTurnRemainingMs = Math.max(0, this.state.pausedTurnRemainingMs + change * timeBankMs(this.state));
+    }
+    return next;
+  }
+
   /** Whether this table offers run it twice after an all-in. */
   public setAllowRunItTwice(allow: boolean): void {
     this.state.allowRunItTwice = allow;
@@ -584,14 +627,18 @@ export class PokerEngine {
       return;
     }
     this.state.turnStartedAt = now;
-    this.state.turnDeadline = now + BASE_TURN_MS + Math.max(0, player.timeBank || 0) * 1000;
+    this.state.turnDeadline = now + turnTimeMs(this.state) + bankTimeMs(player, this.state);
   }
 
   /** Charge the time a player took beyond the base turn time to their time bank. */
   private chargeTimeBank(player: Player, now: number): void {
     if (typeof this.state.turnStartedAt !== 'number') return;
-    const overMs = now - this.state.turnStartedAt - BASE_TURN_MS;
-    if (overMs > 0) {
+    const overMs = now - this.state.turnStartedAt - turnTimeMs(this.state);
+    if (overMs <= 0) return;
+    if (typeof player.timeBanks === 'number') {
+      // Each time bank started counts as used
+      player.timeBanks = Math.max(0, player.timeBanks - Math.ceil(overMs / timeBankMs(this.state)));
+    } else {
       player.timeBank = Math.max(0, (player.timeBank || 0) - Math.ceil(overMs / 1000));
     }
   }
@@ -611,6 +658,7 @@ export class PokerEngine {
     const action: 'check' | 'fold' = player.currentBet < this.state.currentBet ? 'fold' : 'check';
     this.applyDecision({ type: action, playerId, tableId: this.state.tableId, timestamp: now }, 'timeout', now);
     player.timeBank = 0;
+    if (typeof player.timeBanks === 'number') player.timeBanks = 0;
     player.consecutiveTimeouts = (player.consecutiveTimeouts || 0) + 1;
     const satOut = player.consecutiveTimeouts >= TIMEOUTS_BEFORE_SIT_OUT;
     if (satOut) player.isSittingOut = true;

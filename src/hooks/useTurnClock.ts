@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { authHeaders } from '../utils/auth-headers';
-import { TIMEOUT_GRACE_MS } from '../lib/shared/turn-clock';
+import { TIMEOUT_GRACE_MS, bankTimeMs, turnTimeMs } from '../lib/shared/turn-clock';
 
 export interface TurnClock {
   /** Player whose turn is on the clock, or null when nobody is to act. */
@@ -11,6 +11,8 @@ export interface TurnClock {
   baseRemainingMs: number | null;
   /** True once the base time is gone and the player is using their time bank. */
   inTimeBank: boolean;
+  /** This table's base time per decision, for drawing the countdown. */
+  baseMs: number;
 }
 
 interface ClockState {
@@ -18,10 +20,12 @@ interface ClockState {
   activePlayer?: string;
   stage?: string;
   turnTimeRemainingMs?: number;
-  players?: Array<{ id: string; timeBank?: number }>;
+  turnTimeMs?: number;
+  timeBankSeconds?: number;
+  players?: Array<{ id: string; timeBank?: number; timeBanks?: number }>;
 }
 
-const NO_CLOCK: TurnClock = { activePlayer: null, remainingMs: null, baseRemainingMs: null, inTimeBank: false };
+const NO_CLOCK: TurnClock = { activePlayer: null, remainingMs: null, baseRemainingMs: null, inTimeBank: false, baseMs: 0 };
 
 /**
  * Counts down the current turn from the time left the server reported when it sent the state, so
@@ -50,7 +54,7 @@ export function useTurnClock(opts: {
     turnRef.current = null;
   } else if (turnRef.current?.key !== turnKey) {
     const deadline = Date.now() + (state!.turnTimeRemainingMs as number);
-    const bankMs = Math.max(0, Number(state!.players?.find(p => p.id === state!.activePlayer)?.timeBank) || 0) * 1000;
+    const bankMs = bankTimeMs(state!.players?.find(p => p.id === state!.activePlayer), state!);
     turnRef.current = { key: turnKey, deadline, baseEnd: deadline - bankMs };
   }
 
@@ -122,5 +126,6 @@ export function useTurnClock(opts: {
     remainingMs,
     baseRemainingMs,
     inTimeBank: baseRemainingMs === 0 && (remainingMs ?? 0) > 0,
+    baseMs: turnTimeMs(state),
   };
 }

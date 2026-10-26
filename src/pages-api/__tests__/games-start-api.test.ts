@@ -50,6 +50,7 @@ jest.mock('../../../src/lib/poker/poker-engine', () => ({
     startNewHand: jest.fn(),
     setAllowRunItTwice: jest.fn(),
     setAllowStraddle: jest.fn(),
+    configureClock: jest.fn(),
     setAnte: jest.fn(),
     setSevenDeuceBounty: jest.fn(),
     setMixedGame: jest.fn(),
@@ -187,6 +188,17 @@ describe('/api/games/start', () => {
     const engine = MockPokerEngine.mock.results[0].value;
     expect(engine.setAllowRunItTwice).toHaveBeenCalledWith(true);
     expect(engine.setAllowStraddle).toHaveBeenCalledWith(false);
+  });
+
+  it('applies the room clock settings, with defaults for rooms that never set them', async () => {
+    mockGetRoomById.mockResolvedValue({ id: 't1', configuration: { turnTimeSeconds: 45, timeBanks: 4, timeBankSeconds: 20 }, blindLevels: {} });
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());
+    expect(MockPokerEngine.mock.results[0].value.configureClock).toHaveBeenCalledWith({ turnSeconds: 45, timeBanks: 4, timeBankSeconds: 20 });
+
+    MockPokerEngine.mockClear();
+    mockGetRoomById.mockResolvedValue({ id: 't1', configuration: {}, blindLevels: {} });
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());
+    expect(MockPokerEngine.mock.results[0].value.configureClock).toHaveBeenCalledWith({ turnSeconds: 30, timeBanks: 2, timeBankSeconds: 30 });
   });
 
   it('leaves run it twice off for rooms that never chose it', async () => {

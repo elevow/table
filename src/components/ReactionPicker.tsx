@@ -8,8 +8,26 @@ interface Props {
   onToggleMuted: (muted: boolean) => void;
 }
 
-/** Row of quick reactions for seated players, with a switch to hide other people's. */
+/**
+ * Row of quick reactions for seated players. Hiding reactions removes the row and everyone's
+ * reaction bubbles, leaving a single button to bring them back.
+ */
 export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMuted }: Props) {
+  if (muted) {
+    return (
+      <div className="mt-10 max-sm:mt-2 flex justify-center">
+        <button
+          type="button"
+          onClick={() => onToggleMuted(false)}
+          aria-pressed={false}
+          title="Show reactions at this table"
+          className="min-h-[40px] rounded-lg border border-gray-300 bg-white px-3 text-xs text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+        >
+          Show reactions
+        </button>
+      </div>
+    );
+  }
   return (
     // The top margin clears our own seat, which hangs below the felt on wide screens
     <div className="mt-10 max-sm:mt-2 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Table reactions">
@@ -28,12 +46,12 @@ export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMu
       ))}
       <button
         type="button"
-        onClick={() => onToggleMuted(!muted)}
-        aria-pressed={muted}
-        title={muted ? "Show other players' reactions" : "Hide other players' reactions"}
+        onClick={() => onToggleMuted(true)}
+        aria-pressed={true}
+        title="Hide reactions at this table"
         className="min-h-[40px] rounded-lg border border-gray-300 bg-white px-3 text-xs text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
       >
-        {muted ? 'Reactions hidden' : 'Hide reactions'}
+        Hide reactions
       </button>
     </div>
   );

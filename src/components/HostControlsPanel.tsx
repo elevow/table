@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { authHeaders } from '../utils/auth-headers';
 import type { TableExtras } from '../hooks/useTableExtras';
 import { isStudVariant } from '../lib/poker/variant-rules';
+import { MIN_TURN_SECONDS, MAX_TURN_SECONDS, turnTimeMs } from '../lib/shared/turn-clock';
 
 interface Props {
   tableId: string;
@@ -15,7 +16,8 @@ interface Props {
 }
 
 /**
- * The host's controls: pause, blinds for the next hand, bomb pots, straddles, who may sit down,
+ * The host's controls: pause, blinds for the next hand, bomb pots, straddles, turn time and time
+ * banks, who may sit down,
  * and removing a player.
  */
 export default function HostControlsPanel({ tableId, playerId, extras, gameState, players, onState, onRefresh }: Props) {
@@ -25,6 +27,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
   const [bb, setBb] = useState<string>('');
   const [anteBB, setAnteBB] = useState<string>('2');
   const [kickId, setKickId] = useState<string>('');
+  const [turnSeconds, setTurnSeconds] = useState<string>('');
 
   const send = async (label: string, body: Record<string, unknown>) => {
     setBusy(label);
@@ -133,6 +136,61 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
               onChange={e => send('rit', { action: 'allow-run-it-twice', allow: e.target.checked })}
             />
           </label>
+        )}
+        {gameState && (
+          <div>
+            <div className="mb-1">Turn time {Math.round(turnTimeMs(gameState) / 1000)}s</div>
+            <div className="flex items-center gap-1">
+              <input
+                aria-label="Turn time in seconds"
+                type="number"
+                min={MIN_TURN_SECONDS}
+                max={MAX_TURN_SECONDS}
+                value={turnSeconds}
+                onChange={e => setTurnSeconds(e.target.value)}
+                placeholder="secs"
+                className="w-16 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"
+              />
+              <button
+                className={`${button} bg-blue-600 hover:bg-blue-700 text-white`}
+                disabled={!!busy || !(Number(turnSeconds) >= MIN_TURN_SECONDS && Number(turnSeconds) <= MAX_TURN_SECONDS)}
+                onClick={() => send('turn', { action: 'set-turn-time', seconds: Number(turnSeconds) }).then(() => setTurnSeconds(''))}
+              >
+                Set turn time
+              </button>
+            </div>
+          </div>
+        )}
+        {gameState && Array.isArray(gameState.players) && gameState.players.length > 0 && (
+          <div>
+            <div className="mb-1">Time banks</div>
+            <ul className="space-y-1">
+              {gameState.players.map((p: any) => {
+                const who = p.name || 'player';
+                const count = typeof p.timeBanks === 'number' ? p.timeBanks : 0;
+                return (
+                  <li key={p.id} className="flex items-center justify-between gap-2">
+                    <span className="truncate">{p.name || 'Player'}</span>
+                    <span className="flex items-center gap-1">
+                      <button
+                        className={`${button} bg-gray-500 hover:bg-gray-600 text-white`}
+                        disabled={!!busy || count <= 0}
+                        aria-label={`Remove a time bank from ${who}`}
+                        onClick={() => send('banks', { action: 'adjust-time-banks', targetId: p.id, delta: -1 })}
+                      >−</button>
+                      <span className="w-8 text-center tabular-nums" aria-label={`${count} time banks`}>{count}</span>
+                      <button
+                        className={`${button} bg-sky-600 hover:bg-sky-700 text-white`}
+                        disabled={!!busy}
+                        aria-label={`Give ${who} a time bank`}
+                        onClick={() => send('banks', { action: 'adjust-time-banks', targetId: p.id, delta: 1 })}
+                      >+</button>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
         <label className="flex items-center justify-between gap-2">
           <span>Approve players before they sit</span>

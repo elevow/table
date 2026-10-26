@@ -42,8 +42,11 @@ export interface Player {
   hasActed: boolean;
   isFolded: boolean;
   isAllIn: boolean;
-  // Seconds of extra thinking time left once the base turn clock runs out; used up across the game
+  // Seconds of extra thinking time left once the base turn clock runs out; used up across the game.
+  // Only read for games saved before time banks were counted (see timeBanks).
   timeBank: number;
+  // Time banks left; each adds the table's timeBankSeconds once the base turn time runs out
+  timeBanks?: number;
   // Not dealt in, posts no blinds and is skipped by the button until they sit back in
   isSittingOut?: boolean;
   // Turns in a row the clock ran out on; reset when the player acts
@@ -88,6 +91,10 @@ export interface TableState {
   // when it times out, base time plus that player's time bank
   turnStartedAt?: number;
   turnDeadline?: number;
+  // Base time for each decision at this table (ms); unset means the default
+  turnTimeMs?: number;
+  // Length of one time bank at this table (seconds)
+  timeBankSeconds?: number;
   // Added when the state is sent to a client: ms left on the clock at that moment, so clients
   // count down without depending on their own clock matching the server's
   turnTimeRemainingMs?: number;

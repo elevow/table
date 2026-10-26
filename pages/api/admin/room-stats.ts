@@ -31,7 +31,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { roomId } = req.query;
 
     if (roomId && typeof roomId === 'string') {
-      // Get stats for a specific room
+      // Get stats for a specific room, from its saved seats (this server's memory may be stale)
+      await GameSeats.loadPersistedRoomSeats(roomId);
       const roomStats = GameSeats.getRoomStats(roomId);
       const rebuyStats = getRoomRebuySnapshot(roomId);
       return res.status(200).json({ ...roomStats, rebuyStats });

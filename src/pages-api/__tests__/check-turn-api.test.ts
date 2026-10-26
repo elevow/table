@@ -123,7 +123,9 @@ describe('/api/games/check-turn', () => {
       isMyTurn: true,
       activePlayer: 'player1',
       tableState: 'preflop',
-      handNumber: 5
+      handNumber: 5,
+      paused: false,
+      turnSeq: 0,
     });
   });
 
@@ -146,7 +148,9 @@ describe('/api/games/check-turn', () => {
       isMyTurn: false,
       activePlayer: 'player1',
       tableState: 'flop',
-      handNumber: 3
+      handNumber: 3,
+      paused: false,
+      turnSeq: 0,
     });
   });
 
@@ -167,8 +171,22 @@ describe('/api/games/check-turn', () => {
       isMyTurn: true,
       activePlayer: 'player1',
       tableState: 'waiting',
-      handNumber: 0
+      handNumber: 0,
+      paused: false,
+      turnSeq: 0,
     });
+  });
+
+  it('reports a pause and the turn number so a client that missed them refreshes', async () => {
+    req.query = { tableId: 'table1', playerId: 'player2' };
+    const mockEngine = {
+      getState: jest.fn().mockReturnValue({ activePlayer: 'player1', stage: 'turn', paused: true, turnSeq: 12 }),
+    };
+    (enginePersistence.getOrRestoreEngine as jest.Mock).mockResolvedValue(mockEngine);
+
+    await handler(req as NextApiRequest, res as NextApiResponse);
+
+    expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ paused: true, turnSeq: 12 }));
   });
 
   it('should handle errors gracefully', async () => {

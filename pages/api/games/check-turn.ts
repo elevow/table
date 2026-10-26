@@ -43,7 +43,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       isMyTurn: gameState.activePlayer === playerId,
       activePlayer: gameState.activePlayer,
       tableState: gameState.stage || 'waiting',
-      handNumber: (gameState as any).handNumber || 0
+      handNumber: (gameState as any).handNumber || 0,
+      // Lets a client that missed an update (e.g. a pause) notice and refresh
+      paused: !!gameState.paused,
+      turnSeq: gameState.turnSeq || 0,
     });
   } catch (e: unknown) {
     console.error('Error checking turn status:', e);

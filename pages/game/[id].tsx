@@ -27,6 +27,7 @@ import PreActionBar from '../../src/components/PreActionBar';
 import { resolvePreAction } from '../../src/lib/shared/pre-action';
 import type { PreAction } from '../../src/lib/shared/pre-action';
 import { useTableExtras } from '../../src/hooks/useTableExtras';
+import TimeBankBadge from '../../src/components/TimeBankBadge';
 import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
 import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
@@ -537,7 +538,10 @@ export default function GamePage() {
       onTurnChange: (status) => {
         console.log('🔔 Turn status changed via polling:', status);
         if (
-          (status.activePlayer !== pokerGameState?.activePlayer || status.tableState !== pokerGameState?.stage) &&
+          // Also refresh when a pause or any other change happened that this view missed
+          (status.activePlayer !== pokerGameState?.activePlayer || status.tableState !== pokerGameState?.stage
+            || (status.paused ?? false) !== !!pokerGameState?.paused
+            || (typeof status.turnSeq === 'number' && status.turnSeq !== pokerGameState?.turnSeq)) &&
           typeof id === 'string' &&
           playerId
         ) {
@@ -1745,6 +1749,7 @@ export default function GamePage() {
                         }
                       </span>
                     )}
+                    <span className="ml-1"><TimeBankBadge count={gamePlayer.timeBanks} seconds={pokerGameState?.timeBankSeconds} compact /></span>
                     {turnClock.activePlayer === gamePlayer.id && <TurnClockBar clock={turnClock} compact />}
                   </div>
                 );
@@ -1757,7 +1762,11 @@ export default function GamePage() {
         {gameStarted && pokerGameState && !isEmpty && assignment && !isCurrentPlayer && (() => {
           const gamePlayer = pokerGameState.players?.find((p: any) => p.id === assignment.playerId);
           const hasFolded = !!(gamePlayer?.folded || gamePlayer?.isFolded);
-          if (!gamePlayer || hasFolded) return null;
+          // A folded player can still show their cards once the hand is over
+          const studShown = (pokerGameState?.studState?.playerCards?.[assignment.playerId]?.downCards?.length || 0) > 0;
+          const shownAfterFold = hasFolded && pokerGameState?.stage === 'showdown'
+            && ((Array.isArray(gamePlayer?.holeCards) && gamePlayer.holeCards.length > 0) || studShown);
+          if (!gamePlayer || (hasFolded && !shownAfterFold)) return null;
 
           // Compute position offset based on seat location (push cards slightly further from table center)
           let cardStyle: React.CSSProperties | undefined = undefined;
@@ -2799,7 +2808,10 @@ export default function GamePage() {
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && (
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
               <div className="flex items-center justify-between gap-2 mb-2">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Your Turn</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  Your Turn
+                  <TimeBankBadge count={me?.timeBanks} seconds={pokerGameState?.timeBankSeconds} />
+                </h3>
                 <button
                   type="button"
                   onClick={() => shortcuts.setHelpOpen(true)}

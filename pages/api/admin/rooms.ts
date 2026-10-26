@@ -60,13 +60,12 @@ export default async function handler(
         LIMIT $1 OFFSET $2
       `, [limit, offset]);
 
-      // Get real-time player counts from shared game seats module
-      const { getCurrentPlayerCount } = await import('../../../src/lib/shared/game-seats');
-      
-      // Enhance rooms with real-time player count
+      // Count seated players from the seats saved with each room. The in-memory seat map belongs
+      // to whichever server instance answers, and misses players who stood up on another one.
+      const { countSeatedInConfig } = await import('../../../src/lib/shared/game-seats');
+
       const enhancedRooms = roomsResult.rows.map(room => {
-        const roomId = room.id;
-        const currentPlayers = getCurrentPlayerCount(roomId);
+        const currentPlayers = countSeatedInConfig(room.configuration, Number(room.max_players) || 9);
 
         return {
           ...room,

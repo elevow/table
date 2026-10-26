@@ -47,6 +47,16 @@ const normalizeRoomSeats = (value: unknown): GameSeats => {
   return seats;
 };
 
+/**
+ * Players seated according to a room's saved configuration (the seats every server instance
+ * shares), counting only seats within the room's size.
+ */
+export function countSeatedInConfig(configuration: unknown, maxPlayers = 9): number {
+  const config = configuration && typeof configuration === 'object' ? configuration as Record<string, unknown> : {};
+  const seats = normalizeRoomSeats(config.seats);
+  return Object.entries(seats).filter(([n, a]) => Number(n) <= maxPlayers && !!a).length;
+}
+
 export async function loadPersistedRoomSeats(roomId: string): Promise<GameSeats | null> {
   try {
     const { getPool } = await import('../database/pool');

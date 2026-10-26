@@ -69,6 +69,7 @@ export default function LeaderboardPage() {
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Leaderboard</h1>
           <div className="flex gap-3 text-sm">
             <Link href="/history" className="text-blue-600 dark:text-blue-400 hover:underline">Hand history</Link>
+            <Link href="/stats" className="text-blue-600 dark:text-blue-400 hover:underline">My results</Link>
             <Link href="/dashboard" className="text-blue-600 dark:text-blue-400 hover:underline">Dashboard</Link>
           </div>
         </div>

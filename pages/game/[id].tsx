@@ -28,6 +28,7 @@ import { resolvePreAction } from '../../src/lib/shared/pre-action';
 import type { PreAction } from '../../src/lib/shared/pre-action';
 import { useTableExtras } from '../../src/hooks/useTableExtras';
 import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
+import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
 import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/components/PlayerNotesPanel';
 import HostControlsPanel from '../../src/components/HostControlsPanel';
@@ -3531,6 +3532,9 @@ export default function GamePage() {
               onState={setPokerGameState}
               onRefresh={refreshTableExtras}
             />
+          )}
+          {gameStarted && pokerGameState && (
+            <HandActionLog actions={pokerGameState.handActions} players={pokerGameState.players || []} handNumber={pokerGameState.handNumber} />
           )}
           {playerId && (isSeated || amInGame) && (
             <SessionLedgerPanel tableId={tableId} refreshKey={`${pokerGameState?.handNumber ?? 0}:${pokerGameState?.stage === 'showdown'}`} />

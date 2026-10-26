@@ -59,35 +59,48 @@ export function buildHandRecord(tableId: string, state: TableState): HandRecord 
     actions: state.handActions || [],
     winners: Object.entries(winnings).map(([playerId, amount]) => ({ playerId, amount })),
     pot: state.handResult?.pot ?? players.reduce((sum, p) => sum + Math.max(0, p.startStack - (p.endStack - p.won)), 0),
+    bettingMode: state.bettingMode || 'no-limit',
+    buttonSeat: state.players[state.dealerPosition]?.position,
   };
 }
 
 /** Store a hand. Returns false when it was already stored (another request finished it first). */
 export async function saveHandRecord(pool: Pool, record: HandRecord): Promise<boolean> {
-  const result = await pool.query(
+  const params = [
+    record.id,
+    record.roomId,
+    record.handNumber,
+    record.variant,
+    record.kind || 'normal',
+    record.smallBlind,
+    record.bigBlind,
+    record.startedAt,
+    record.endedAt,
+    JSON.stringify(record.board),
+    JSON.stringify(record.players),
+    JSON.stringify(record.actions),
+    JSON.stringify(record.winners),
+    record.pot,
+    record.players.map(p => p.id),
+    record.runBoards ? JSON.stringify(record.runBoards) : null,
+    record.bettingMode ?? null,
+    typeof record.buttonSeat === 'number' ? record.buttonSeat : null,
+  ];
+  const insert = (columns: string, values: unknown[]) => pool.query(
     `INSERT INTO hand_records (id, room_id, hand_number, variant, kind, small_blind, big_blind, started_at, ended_at,
-       board, players, actions, winners, pot, player_ids, run_boards)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       board, players, actions, winners, pot, player_ids, run_boards${columns})
+     VALUES (${values.map((_, i) => `$${i + 1}`).join(', ')})
      ON CONFLICT (id) DO NOTHING`,
-    [
-      record.id,
-      record.roomId,
-      record.handNumber,
-      record.variant,
-      record.kind || 'normal',
-      record.smallBlind,
-      record.bigBlind,
-      record.startedAt,
-      record.endedAt,
-      JSON.stringify(record.board),
-      JSON.stringify(record.players),
-      JSON.stringify(record.actions),
-      JSON.stringify(record.winners),
-      record.pot,
-      record.players.map(p => p.id),
-      record.runBoards ? JSON.stringify(record.runBoards) : null,
-    ]
+    values
   );
+  let result;
+  try {
+    result = await insert(', betting_mode, button_seat', params);
+  } catch (err: any) {
+    // Database not yet migrated with the export columns: still keep the hand
+    if (err?.code !== '42703') throw err;
+    result = await insert('', params.slice(0, 16));
+  }
   return (result.rowCount ?? 0) > 0;
 }
 
@@ -222,6 +235,8 @@ export function rowToHandRecord(row: any): HandRecord {
     actions: parseJson(row.actions, []),
     winners: parseJson(row.winners, []),
     pot: Number(row.pot),
+    bettingMode: row.betting_mode === 'pot-limit' ? 'pot-limit' : row.betting_mode === 'no-limit' ? 'no-limit' : undefined,
+    buttonSeat: row.button_seat == null ? undefined : Number(row.button_seat),
   };
 }
 

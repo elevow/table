@@ -39,6 +39,9 @@ export interface HandRecord {
   actions: HandActionEntry[];
   winners: Array<{ playerId: string; amount: number }>;
   pot: number;
+  // Betting structure and the dealer button's seat, for hand-history export; missing on older hands
+  bettingMode?: 'no-limit' | 'pot-limit';
+  buttonSeat?: number;
 }
 
 /** A row in a list of hands, from the viewer's point of view. */

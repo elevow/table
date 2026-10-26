@@ -3,6 +3,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { authHeaders } from '../../src/utils/auth-headers';
+import { downloadHandHistory } from '../../src/utils/download-hand-history';
 import MiniCard from '../../src/components/MiniCard';
 import { buildReplayFrames, describeAction } from '../../src/lib/shared/hand-replay';
 import type { HandRecord } from '../../src/types/hand-record';
@@ -69,6 +70,15 @@ export default function HandReplayPage() {
           <div className="flex gap-3 text-sm">
             {hand && <Link href={`/history?room=${encodeURIComponent(hand.roomId)}`} className="text-blue-600 dark:text-blue-400 hover:underline">Hands at this table</Link>}
             <Link href="/history" className="text-blue-600 dark:text-blue-400 hover:underline">All hands</Link>
+            {hand && (
+              <button
+                onClick={() => downloadHandHistory({ handId: hand.id }).catch(e => setError(e?.message || 'Could not export hand'))}
+                className="text-blue-600 dark:text-blue-400 hover:underline"
+                title="Download in PokerStars hand-history format"
+              >
+                Export .txt
+              </button>
+            )}
           </div>
         </div>
         {error && <div className="p-3 rounded bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-200 text-sm">{error}</div>}

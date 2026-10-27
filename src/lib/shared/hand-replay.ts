@@ -33,6 +33,7 @@ const VERB: Record<HandActionEntry['action'], string> = {
   bet: 'bets',
   raise: 'raises to',
   bounty: 'pays a 7-2 bounty of',
+  uncalled: 'gets back an uncalled',
 };
 
 export function describeAction(
@@ -41,6 +42,9 @@ export function describeAction(
   money: (n: number) => string,
   nameOf?: (playerId: string) => string | undefined
 ): string {
+  if (a.action === 'uncalled') {
+    return `Uncalled ${money(-a.put)} returned to ${name}`;
+  }
   if (a.action === 'bounty') {
     const to = a.toPlayerId ? nameOf?.(a.toPlayerId) : undefined;
     return `${name} ${VERB.bounty} ${money(a.put)}${to ? ` to ${to}` : ''}`;

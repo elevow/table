@@ -65,9 +65,15 @@ export function snapshotFromState(state: any, viewerId: string): AnnounceSnapsho
     board: Array.isArray(state.communityCards) ? state.communityCards : [],
     actions: Array.isArray(state.handActions) ? state.handActions : [],
     result: winnings && typeof winnings === 'object' ? winnings : null,
-    toCall: me ? Math.max(0, Number(state.currentBet || 0) - Number(me.currentBet || 0)) : 0,
+    // What a call costs this player; a short stack calls all-in for less
+    toCall: me ? callCost(Math.max(0, Number(state.currentBet || 0) - Number(me.currentBet || 0)), me.stack) : 0,
     myCards: holeCards.length ? holeCards : studCards,
   };
+}
+
+/** What calling costs: the amount owed, or the whole stack when that is less (all-in). */
+function callCost(owed: number, stack: unknown): number {
+  return typeof stack === 'number' && Number.isFinite(stack) ? Math.min(owed, Math.max(0, stack)) : owed;
 }
 
 export function describeAction(entry: ActionLike, name: string, fmt: (n: number) => string): string | null {
@@ -85,6 +91,7 @@ export function describeAction(entry: ActionLike, name: string, fmt: (n: number)
     case 'straddle': text = `${name} straddles ${fmt(put)}`; break;
     case 'ante': text = `${name} antes ${fmt(put)}`; break;
     case 'bring-in': text = `${name} brings in for ${fmt(put)}`; break;
+    case 'uncalled': text = `Uncalled ${fmt(-put)} returned to ${name}`; break;
     default: text = null;
   }
   if (text && entry.auto) text += ' (out of time)';

@@ -178,6 +178,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Check for busted players and issue rebuy prompts
+      // Busted players the table is waiting on, with what their rebuy prompt shows
+      const waitingFor: Array<Record<string, unknown>> = [];
       const handleBustedPlayers = async (): Promise<boolean> => {
         const players = Array.isArray(currentState.players) ? currentState.players : [];
         const busted = players.filter((p: any) => (Number(p.stack) || 0) <= 0);
@@ -189,7 +191,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         let promptsIssued = 0;
         for (const player of busted) {
           if (!player?.id) continue;
-          if (hasPendingRebuy(tableId, player.id)) continue;
           const record = getPlayerRebuyInfo(tableId, player.id);
           const rebuysUsed = record?.rebuys ?? 0;
           const numericLimit = rebuyLimit === 'unlimited' ? Number.POSITIVE_INFINITY : rebuyLimit;
@@ -198,11 +199,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             clearPendingRebuy(tableId, player.id);
             continue;
           }
-          setPendingRebuy(tableId, player.id, {
-            issuedAt: Date.now(),
-            rebuysUsed,
-            rebuyLimit,
-          });
           const payload = {
             tableId,
             playerId: player.id,
@@ -212,6 +208,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             baseChips: rebuyChips,
             remaining: rebuyLimit === 'unlimited' ? 'unlimited' : Math.max((rebuyLimit as number) - rebuysUsed, 0),
           };
+          // Every caller learns who the table waits for; the busted player's own client can show
+          // the prompt even if it missed the broadcast below
+          waitingFor.push(payload);
+          if (hasPendingRebuy(tableId, player.id)) continue;
+          setPendingRebuy(tableId, player.id, {
+            issuedAt: Date.now(),
+            rebuysUsed,
+            rebuyLimit,
+          });
           await publishRebuyPrompt(tableId, payload);
           promptsIssued += 1;
         }
@@ -220,7 +225,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const rebuyReady = await handleBustedPlayers();
       if (!rebuyReady) {
-        return res.status(200).json({ success: true, awaitingRebuyDecisions: true, pending: pendingRebuyCount(tableId) });
+        return res.status(200).json({ success: true, awaitingRebuyDecisions: true, pending: pendingRebuyCount(tableId), waitingFor });
       }
 
       const applyVariantAndStart = async ({ chosenVariant }: { chosenVariant?: GameVariant } = {}) => {

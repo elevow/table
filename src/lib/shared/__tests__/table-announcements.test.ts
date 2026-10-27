@@ -100,6 +100,20 @@ describe('buildAnnouncements', () => {
     expect(run(next, { ...next }).messages).toEqual([]);
   });
 
+  it('tells a short stack what calling all-in actually costs', () => {
+    const prev = state();
+    const next = state({
+      activePlayer: 'me',
+      turnSeq: 2,
+      currentBet: 200,
+      players: [
+        { id: 'me', currentBet: 0, stack: 50, holeCards: [{ rank: 'A', suit: 'spades' }, { rank: 'K', suit: 'hearts' }] },
+        { id: 'bob', currentBet: 200 },
+      ],
+    });
+    expect(run(prev, next).messages).toContain('Your turn. $50 to call');
+  });
+
   it('offers a check when nothing is owed', () => {
     const prev = state({ stage: 'flop', currentBet: 0, communityCards: [{ rank: '2', suit: 'clubs' }, { rank: '7', suit: 'hearts' }, { rank: 'J', suit: 'spades' }] });
     const next = { ...prev, activePlayer: 'me', turnSeq: 5 };

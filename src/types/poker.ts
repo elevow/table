@@ -60,7 +60,9 @@ export interface HandActionEntry {
   playerId: string;
   action: 'small-blind' | 'big-blind' | 'straddle' | 'ante' | 'bring-in' | 'fold' | 'check' | 'call' | 'bet' | 'raise'
     // Paid after the hand, straight to the player in toPlayerId rather than into the pot
-    | 'bounty';
+    | 'bounty'
+    // The part of a bet nobody could call, handed back when the betting round ends (put is negative)
+    | 'uncalled';
   // The player's total bet on this street after the action, where that applies
   amount?: number;
   // Chips this action moved from the player's stack into the pot (for a bounty, to toPlayerId)

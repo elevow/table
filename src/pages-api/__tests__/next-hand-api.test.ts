@@ -129,6 +129,46 @@ describe('/api/games/next-hand', () => {
     expect(engine.startNewHand).not.toHaveBeenCalled();
   });
 
+  it('says who the table is waiting on to rebuy, with what their prompt shows', async () => {
+    const engine = createEngine('showdown');
+    engine.getState.mockReturnValue({
+      stage: 'showdown',
+      dealerPosition: 0,
+      players: [{ id: 'a', name: 'A', stack: 200 }, { id: 'b', name: 'B', stack: 0 }],
+    });
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      awaitingRebuyDecisions: true,
+      waitingFor: [expect.objectContaining({ playerId: 'b', playerName: 'B', baseChips: 100, remaining: 'unlimited' })],
+    }));
+    expect(publisher.publishRebuyPrompt).toHaveBeenCalledTimes(1);
+    expect(engine.startNewHand).not.toHaveBeenCalled();
+  });
+
+  it('keeps listing a player who was already prompted, without prompting again', async () => {
+    const rebuyState = jest.requireMock('../../../src/lib/server/rebuy-state');
+    rebuyState.hasPendingRebuy.mockReturnValueOnce(true);
+    rebuyState.pendingRebuyCount.mockReturnValueOnce(1).mockReturnValueOnce(1);
+    const engine = createEngine('showdown');
+    engine.getState.mockReturnValue({
+      stage: 'showdown',
+      dealerPosition: 0,
+      players: [{ id: 'a', name: 'A', stack: 200 }, { id: 'b', name: 'B', stack: 0 }],
+    });
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'b' }), res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      awaitingRebuyDecisions: true,
+      waitingFor: [expect.objectContaining({ playerId: 'b' })],
+    }));
+    expect(publisher.publishRebuyPrompt).not.toHaveBeenCalled();
+  });
+
   it('starts the next hand for a player at the table', async () => {
     const engine = createEngine('showdown');
     mockGetOrRestoreEngine.mockResolvedValue(engine);

@@ -7,6 +7,8 @@ interface Props {
   selected: PreAction | null;
   onSelect: (pre: PreAction | null) => void;
   formatAmount: (amount: number) => string;
+  /** The player's stack; a call costs at most this (all-in for less). */
+  stack?: number;
 }
 
 const isSame = (a: PreAction | null, b: PreAction) =>
@@ -15,11 +17,11 @@ const isSame = (a: PreAction | null, b: PreAction) =>
 /**
  * Buttons to queue a decision before your turn. Clicking the selected one again clears it.
  */
-export default function PreActionBar({ owed, selected, onSelect, formatAmount }: Props) {
+export default function PreActionBar({ owed, selected, onSelect, formatAmount, stack }: Props) {
   const options: Array<{ pre: PreAction; label: string; title: string }> = owed > 0
     ? [
         { pre: { type: 'check-fold' }, label: 'Fold', title: 'Fold when it is your turn (check instead if the bet is withdrawn)' },
-        { pre: { type: 'call', amount: owed }, label: `Call ${formatAmount(owed)}`, title: 'Call this amount; cancelled if someone raises' },
+        { pre: { type: 'call', amount: owed }, label: `Call ${formatAmount(typeof stack === 'number' ? Math.min(owed, stack) : owed)}`, title: 'Call this amount; cancelled if someone raises' },
         { pre: { type: 'call-any' }, label: 'Call Any', title: 'Call whatever it costs when it is your turn' },
       ]
     : [

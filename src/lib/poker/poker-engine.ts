@@ -397,6 +397,25 @@ export class PokerEngine {
     return next;
   }
 
+  /**
+   * When a betting round ends with one player's bet higher than anyone else's (the others are
+   * all-in for less or folded), the excess can never be won: return it to that player now, so
+   * the pot shows only what is being played for.
+   */
+  private returnUncalledBet(): void {
+    const byBet = [...this.state.players].sort((a, b) => b.currentBet - a.currentBet);
+    const top = byBet[0];
+    if (!top || top.isFolded || byBet.length < 2) return;
+    const excess = top.currentBet - byBet[1].currentBet;
+    if (excess <= 0) return;
+    top.currentBet -= excess;
+    top.stack += excess;
+    if (top.stack > 0) top.isAllIn = false;
+    this.state.pot = Math.max(0, this.state.pot - excess);
+    this.state.currentBet = top.currentBet;
+    this.logAction({ playerId: top.id, action: 'uncalled', put: -excess, stage: this.state.stage });
+  }
+
   /** Whether this table offers run it twice after an all-in. */
   public setAllowRunItTwice(allow: boolean): void {
     this.state.allowRunItTwice = allow;
@@ -896,6 +915,8 @@ export class PokerEngine {
         return;
       }
 
+      // Hand back any part of a bet nobody could match before the next cards come
+      this.returnUncalledBet();
       this.log(`Moving to next stage from ${this.state.stage}`);
       const nextStage = this.gameStateManager.moveToNextStage();
 

@@ -242,6 +242,8 @@ export default function GamePage() {
   const [playerChips, setPlayerChips] = useState<number>(0);
   const [rebuyPrompt, setRebuyPrompt] = useState<RebuyPromptState | null>(null);
   const [rebuySubmitting, setRebuySubmitting] = useState<boolean>(false);
+  // Why the table has not moved on to the next hand, when it is waiting on someone
+  const [tableWaitNotice, setTableWaitNotice] = useState<string | null>(null);
   
   // Supabase is now the only supported transport
   const socketsDisabled = true;
@@ -569,8 +571,6 @@ export default function GamePage() {
   // Prevent duplicate action submissions
   const pendingActionRef = useRef<boolean>(false);
   // Auto next-hand fallback timer ref
-  const autoNextHandTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const autoNextHandScheduledRef = useRef<boolean>(false);
   // Visual accessibility options
   const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
   const [showPotOdds, setShowPotOdds] = useState<boolean>(true);
@@ -695,59 +695,64 @@ export default function GamePage() {
     });
   }, [seatAssignments, playerId, loadPlayerAvatar]);
 
-  // Client-side fallback: after showdown, request next hand after 5s if server didn't start it
+  // After a showdown, ask for the next hand, and keep asking while the table is still at showdown:
+  // one failed request (or a rebuy prompt someone never saw) used to leave the table stuck.
+  const rebuyPromptRef = useRef(rebuyPrompt);
+  rebuyPromptRef.current = rebuyPrompt;
   useEffect(() => {
-    // Guard: need table id and a valid game state
     if (!id || typeof id !== 'string') return;
-
-    const stage = pokerGameState?.stage;
-    if (stage !== 'showdown') {
-      if (autoNextHandTimerRef.current) {
-        clearTimeout(autoNextHandTimerRef.current);
-        autoNextHandTimerRef.current = null;
-      }
-      autoNextHandScheduledRef.current = false;
+    if (pokerGameState?.stage !== 'showdown') {
+      setTableWaitNotice(null);
       return;
     }
-
-    if (autoNextHandTimerRef.current || autoNextHandScheduledRef.current) {
-      return;
-    }
-
-    autoNextHandScheduledRef.current = true;
-    autoNextHandTimerRef.current = setTimeout(async () => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+    const attempt = async () => {
+      if (cancelled || pokerStageRef.current !== 'showdown') return;
+      attempts += 1;
       try {
-        if (pokerStageRef.current === 'showdown') {
-          console.log('[client auto] Requesting next hand after 5s');
-          const response = await fetch('/api/games/next-hand', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...authHeaders() },
-            body: JSON.stringify({ tableId: id, playerId }),
-          });
-          if (!response.ok) {
-            console.warn('Next hand request failed:', await response.text());
+        const response = await fetch('/api/games/next-hand', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ tableId: id, playerId }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        if (response.ok && data?.awaitingRebuyDecisions) {
+          const waiting: Array<{ playerId: string; playerName?: string; baseChips: number; rebuysUsed: number; rebuyLimit: any; remaining: any }> =
+            Array.isArray(data.waitingFor) ? data.waitingFor : [];
+          // Show our own rebuy choice even if we missed the prompt broadcast
+          const mine = waiting.find(w => w.playerId === playerId);
+          if (mine && !rebuyPromptRef.current) {
+            setRebuyPrompt({ baseChips: mine.baseChips, rebuysUsed: mine.rebuysUsed, rebuyLimit: mine.rebuyLimit, remaining: mine.remaining });
           }
+          const others = waiting.filter(w => w.playerId !== playerId).map(w => w.playerName || 'a player');
+          setTableWaitNotice(others.length ? `Waiting for ${others.join(', ')} to decide whether to rebuy.` : null);
+        } else if (response.ok) {
+          // The next hand started, or dealer's choice is waiting on the dealer
+          setTableWaitNotice(null);
+          return;
+        } else if (data?.code === 'NOT_ENOUGH_PLAYERS_SITTING_IN') {
+          setTableWaitNotice('Waiting for at least two players to sit in.');
+        } else if (data?.code === 'PAUSED') {
+          setTableWaitNotice(null);
+        } else {
+          console.warn('Next hand request failed:', data?.error || response.status);
         }
       } catch (e) {
         console.warn('Auto next-hand request failed:', e);
-      } finally {
-        if (autoNextHandTimerRef.current) {
-          clearTimeout(autoNextHandTimerRef.current);
-          autoNextHandTimerRef.current = null;
-        }
-        autoNextHandScheduledRef.current = false;
       }
-    }, 5000);
-
-    return () => {
-      if (autoNextHandTimerRef.current) {
-        clearTimeout(autoNextHandTimerRef.current);
-        autoNextHandTimerRef.current = null;
-      }
-      autoNextHandScheduledRef.current = false;
+      // Still at showdown: try again, less often after the first minute
+      if (!cancelled && attempts < 120) timer = setTimeout(attempt, attempts < 12 ? 5000 : 15000);
     };
-    // Re-run when players sit in or out, so a table waiting for players starts once enough return
-  }, [pokerGameState?.stage, id, playerId, sittingInCount]);
+    timer = setTimeout(attempt, 5000);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+    // Re-run for each new hand, and when players sit in or out
+  }, [pokerGameState?.stage, pokerGameState?.handNumber, id, playerId, sittingInCount]);
 
   // Periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {
@@ -1009,7 +1014,8 @@ export default function GamePage() {
   const handleCall = useCallback(() => {
     if (pokerGameState?.currentBet) {
       const playerInGame = pokerGameState.players.find((p: any) => p.id === playerId);
-      const callAmount = pokerGameState.currentBet - (playerInGame?.currentBet || 0);
+      // A short stack calls all-in for what it has
+      const callAmount = Math.min(pokerGameState.currentBet - (playerInGame?.currentBet || 0), Number(playerInGame?.stack) || 0);
       handlePokerAction('call', callAmount);
     }
   }, [pokerGameState, playerId, handlePokerAction]);
@@ -1457,6 +1463,9 @@ export default function GamePage() {
   // Pre-action queued for when it becomes our turn (current betting round only)
   const [preAction, setPreAction] = useState<PreAction | null>(null);
   const myOwed = me ? Math.max(0, Number(pokerGameState?.currentBet || 0) - Number(me.currentBet || 0)) : 0;
+  // What a call actually costs: a short stack calls all-in for less
+  const myCallAmount = me ? Math.min(myOwed, Math.max(0, Number(me.stack) || 0)) : 0;
+  const myCallIsAllIn = myOwed > 0 && (Number(me?.stack) || 0) <= myOwed;
 
   // A pre-action applies to one betting round
   useEffect(() => {
@@ -2584,6 +2593,11 @@ export default function GamePage() {
               onTakeSeat={(n) => claimSeat(n)}
             />
           )}
+          {gameStarted && tableWaitNotice && pokerGameState?.stage === 'showdown' && (
+            <div className="lg:col-span-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-lg p-3 text-sm text-amber-900 dark:text-amber-100" role="status">
+              {tableWaitNotice}
+            </div>
+          )}
           {gameStarted && pokerGameState?.paused && (
             <div className="lg:col-span-3 bg-gray-800 text-white rounded-lg p-3 text-center font-semibold" role="status">
               The host has paused the game.
@@ -2857,7 +2871,7 @@ export default function GamePage() {
                   Fold
                 </button>
                 
-                {(pokerGameState.currentBet || 0) === 0 ? (
+                {myOwed === 0 ? (
                   <button
                     onClick={handleCheck}
                     className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
@@ -2869,7 +2883,7 @@ export default function GamePage() {
                     onClick={handleCall}
                     className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
                   >
-                    Call {showStackInBB ? formatChips(pokerGameState.currentBet, pokerGameState?.bigBlind || null, true) : `$${pokerGameState.currentBet}`}
+                    Call {showStackInBB ? formatChips(myCallAmount, pokerGameState?.bigBlind || null, true) : `$${myCallAmount}`}{myCallIsAllIn ? ' (all-in)' : ''}
                   </button>
                 )}
                 
@@ -3257,6 +3271,7 @@ export default function GamePage() {
                 <div className="mb-3">
                   <PreActionBar
                     owed={myOwed}
+                    stack={Number(me?.stack) || 0}
                     selected={preAction}
                     onSelect={setPreAction}
                     formatAmount={(amount) => showStackInBB ? formatChips(amount, pokerGameState?.bigBlind || null, true) : `$${amount}`}
@@ -3356,11 +3371,6 @@ export default function GamePage() {
                   );
                 })}
               </div>
-              {pokerGameState.runItTwice.rngSecurity && (
-                <div className="mt-4 text-[11px] text-purple-700 dark:text-purple-300">
-                  RNG seeds secured (VRF). Verification available via API.
-                </div>
-              )}
             </div>
           )}
 

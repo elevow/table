@@ -506,6 +506,8 @@ export default function GamePage() {
   const myTurnKey = isMyTurn ? `${pokerGameState?.turnSeq ?? ''}:${playerId}:${pokerGameState?.stage ?? ''}` : null;
   const turnAlerts = useTurnAlerts(isMyTurn, turnClock.remainingMs, myTurnKey);
   const me = amInGame ? pokerGameState.players.find((p: any) => p.id === playerId) : null;
+  // Someone sitting down between hands joins the next one, so a new seat is worth another try
+  const seatedCount = getSeatedPlayersCount();
   const sittingInCount = Array.isArray(pokerGameState?.players)
     ? pokerGameState.players.filter((p: any) => !p.isSittingOut).length
     : 0;
@@ -752,7 +754,7 @@ export default function GamePage() {
       if (timer) clearTimeout(timer);
     };
     // Re-run for each new hand, and when players sit in or out
-  }, [pokerGameState?.stage, pokerGameState?.handNumber, id, playerId, sittingInCount]);
+  }, [pokerGameState?.stage, pokerGameState?.handNumber, id, playerId, sittingInCount, seatedCount]);
 
   // Periodic seat polling to reflect other players (only when game is NOT active)
   useEffect(() => {

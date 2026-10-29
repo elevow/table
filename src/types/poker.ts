@@ -97,6 +97,8 @@ export interface TableState {
   turnTimeMs?: number;
   // Length of one time bank at this table (seconds)
   timeBankSeconds?: number;
+  // Time banks a player starts with, for players who sit down after the game started
+  startingTimeBanks?: number;
   // Added when the state is sent to a client: ms left on the clock at that moment, so clients
   // count down without depending on their own clock matching the server's
   turnTimeRemainingMs?: number;

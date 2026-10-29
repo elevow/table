@@ -14,6 +14,7 @@ import {
 } from '../../../src/lib/server/rebuy-state';
 import { autoStandPlayer } from '../../../src/lib/server/rebuy-actions';
 import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
+import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { getDealerChoiceChooserId } from '../../../src/lib/poker/dealer-choice';
 import { getPool } from '../../../src/lib/database/pool';
 import { GameService } from '../../../src/lib/services/game-service';
@@ -147,6 +148,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     locks.add(tableId);
     try {
+      // Players who sat down since the game started, or stood up and came back, join from this hand
+      if (typeof engine.syncSeatedPlayers === 'function') {
+        try {
+          const seats = await GameSeats.loadPersistedRoomSeats(tableId) || GameSeats.getRoomSeats(tableId);
+          engine.syncSeatedPlayers(Object.entries(seats || {})
+            .filter(([, a]) => !!a?.playerId)
+            .map(([seatNumber, a]) => ({ id: a!.playerId, name: a!.playerName, seatNumber: Number(seatNumber), chips: Number(a!.chips) || 0 })));
+        } catch (err) {
+          console.warn('[next-hand] Could not bring seated players into the game:', err);
+        }
+      }
       const currentState = typeof engine.getState === 'function' ? engine.getState() : undefined;
       const awaitingDealerChoiceStage = currentState?.stage === 'awaiting-dealer-choice';
       const showdownStage = currentState?.stage === 'showdown';

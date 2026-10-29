@@ -229,15 +229,17 @@ export class PokerEngine {
   public startNewHand(): void {
     // Before starting, drop any players flagged for removal and re-index positions
     if (this.removedPlayers.size > 0) {
-      const remaining = this.state.players.filter(p => !this.removedPlayers.has(p.id));
-      // Re-index positions contiguously starting at 1
-      this.state.players = remaining.map((p, i) => ({ ...p, position: i + 1 }));
-      // Normalize dealer position to current players length
-      if (this.state.players.length > 0) {
-        this.state.dealerPosition = ((this.state.dealerPosition % this.state.players.length) + this.state.players.length) % this.state.players.length;
-      } else {
-        this.state.dealerPosition = 0;
-      }
+      const before = this.state.players;
+      const oldDealer = this.state.dealerPosition;
+      // Positions are seat numbers, so the players who stay keep theirs
+      const remaining = before.filter(p => !this.removedPlayers.has(p.id));
+      this.state.players = remaining;
+      // Keep the button on the same player; if the button player left, the next player in seat
+      // order gets it when it moves at the start of this hand
+      const keptBefore = before.slice(0, Math.max(0, oldDealer)).filter(p => !this.removedPlayers.has(p.id)).length;
+      const dealerStays = !!before[oldDealer] && !this.removedPlayers.has(before[oldDealer].id);
+      const n = remaining.length;
+      this.state.dealerPosition = n === 0 ? 0 : ((dealerStays ? keptBefore : keptBefore - 1) + n) % n;
       // Do not clear removedPlayers here in case multiple successive starts need pruning
     }
     if (this.state.paused) {
@@ -365,6 +367,7 @@ export class PokerEngine {
     }
     if (opts.timeBanks !== undefined) {
       const count = clampSetting(opts.timeBanks, 0, MAX_TIME_BANKS, 0);
+      this.state.startingTimeBanks = count;
       this.state.players.forEach(p => { p.timeBanks = count; });
     }
   }
@@ -601,6 +604,55 @@ export class PokerEngine {
   }
 
   /** Whether at least two players (not leaving) are sitting in, as a new hand needs. */
+  /**
+   * Between hands, bring the game in line with who is seated: a player who sat down after the
+   * game started joins it, and one who stood up and sat back down returns with the chips they
+   * bought in for this time. Returns whether anything changed.
+   */
+  public syncSeatedPlayers(seated: Array<{ id: string; name: string; seatNumber: number; chips: number }>): boolean {
+    if (this.state.stage !== 'showdown' && this.state.stage !== 'awaiting-dealer-choice') return false;
+    const dealerId = this.state.players[this.state.dealerPosition]?.id;
+    let changed = false;
+    for (const s of seated) {
+      if (!s.id || !(s.chips > 0)) continue;
+      const fresh = {
+        name: s.name || s.id,
+        position: s.seatNumber,
+        stack: s.chips,
+        currentBet: 0,
+        hasActed: false,
+        isFolded: false,
+        isAllIn: false,
+        isSittingOut: false,
+        consecutiveTimeouts: 0,
+        timeBank: 30,
+        ...(typeof this.state.startingTimeBanks === 'number' ? { timeBanks: this.state.startingTimeBanks } : {}),
+      };
+      const existing = this.state.players.find(p => p.id === s.id);
+      if (existing && !this.removedPlayers.has(s.id)) continue;
+      changed = true;
+      if (existing) {
+        // Left and came back: they cashed out, so their stack is the new buy-in
+        this.removedPlayers.delete(s.id);
+        Object.assign(existing, fresh);
+        delete existing.holeCards;
+      } else {
+        this.state.players.push({ id: s.id, ...fresh } as Player);
+      }
+    }
+    if (changed) {
+      this.state.players.sort((a, b) => a.position - b.position);
+      const idx = dealerId ? this.state.players.findIndex(p => p.id === dealerId) : -1;
+      if (idx >= 0) this.state.dealerPosition = idx;
+    }
+    return changed;
+  }
+
+  /** Whether a player has left and is dropped from the game at the next hand. */
+  public isRemoved(playerId: string): boolean {
+    return this.removedPlayers.has(playerId);
+  }
+
   public canStartNewHand(): boolean {
     return this.state.players.filter(p => !p.isSittingOut && !this.removedPlayers.has(p.id)).length >= 2;
   }

@@ -46,6 +46,13 @@ jest.mock('../../../src/lib/poker/engine-persistence', () => ({
   persistEngineState: jest.fn().mockResolvedValue('saved'),
 }));
 
+// Saved seats, which the route brings into the game before each hand
+const mockLoadSeats = jest.fn().mockResolvedValue(null);
+jest.mock('../../../src/lib/shared/game-seats', () => ({
+  loadPersistedRoomSeats: (...args: any[]) => mockLoadSeats(...args),
+  getRoomSeats: jest.fn(() => ({})),
+}));
+
 jest.mock('../../../src/lib/database/pool', () => ({
   getPool: jest.fn(() => ({})),
 }));
@@ -127,6 +134,25 @@ describe('/api/games/next-hand', () => {
     await handler(createReq({ tableId: 't1', playerId: 'outsider' }), res);
     expect(res.status).toHaveBeenCalledWith(403);
     expect(engine.startNewHand).not.toHaveBeenCalled();
+  });
+
+  it('brings players who sat down between hands into the game before starting it', async () => {
+    const engine: any = createEngine('showdown');
+    engine.syncSeatedPlayers = jest.fn();
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    mockLoadSeats.mockResolvedValueOnce({
+      1: { playerId: 'a', playerName: 'A', chips: 100 },
+      2: null,
+      4: { playerId: 'b', playerName: 'B', chips: 200 },
+    });
+    setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(engine.syncSeatedPlayers).toHaveBeenCalledWith([
+      { id: 'a', name: 'A', seatNumber: 1, chips: 100 },
+      { id: 'b', name: 'B', seatNumber: 4, chips: 200 },
+    ]);
+    expect(engine.syncSeatedPlayers.mock.invocationCallOrder[0]).toBeLessThan(engine.startNewHand.mock.invocationCallOrder[0]);
   });
 
   it('says who the table is waiting on to rebuy, with what their prompt shows', async () => {

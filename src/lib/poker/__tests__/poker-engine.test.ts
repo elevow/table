@@ -80,9 +80,10 @@ describe('PokerEngine', () => {
         expect(player.holeCards?.length).toBe(2);
       });
 
-      // Get players by position
-      const smallBlindPlayer = players.find(p => p.position === 1);
-      const bigBlindPlayer = players.find(p => p.position === 2);
+      // The blinds are the two players after the button
+      const d = state.dealerPosition;
+      const smallBlindPlayer = state.players[(d + 1) % 3];
+      const bigBlindPlayer = state.players[(d + 2) % 3];
       expect(smallBlindPlayer).toBeDefined();
       expect(bigBlindPlayer).toBeDefined();
       
@@ -247,11 +248,12 @@ describe('PokerEngine', () => {
       engine.startNewHand();
       let state = engine.getState();
 
-      // Only first player calls, others fold
+      // The first player to act calls, the blinds fold
+      const caller = state.activePlayer;
       let guard2 = 50; // Safety guard to prevent infinite loops
       while (state.stage === 'preflop' && guard2-- > 0) {
         if (state.activePlayer) {
-          const action = state.activePlayer === players[0].id ? 'call' : 'fold';
+          const action = state.activePlayer === caller ? 'call' : 'fold';
           engine.handleAction(createAction(action, state.activePlayer, state.currentBet));
         }
         state = engine.getState();

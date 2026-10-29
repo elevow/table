@@ -58,12 +58,13 @@ describe('run it twice, through the real runout', () => {
     expect(revealSteps).toEqual(['3,0', '4,0', '5,0', '5,3', '5,4', '5,5']);
 
     // Winners and the pot are recorded, and no chips appear or vanish
-    expect(final.handResult!.pot).toBe(202);
+    // The player who folded was under the gun and had put nothing in
+    expect(final.handResult!.pot).toBe(200);
     expect(final.handWinners!.length).toBeGreaterThan(0);
     const endTotal = final.players.reduce((sum, p) => sum + p.stack, 0);
     expect(endTotal).toBe(startTotal);
     const paid = rit.potDistribution.reduce((sum, d) => sum + d.amount, 0);
-    expect(paid).toBe(202);
+    expect(paid).toBe(200);
   });
 
   it('keeps the cards already shown when the all-in happened on the flop', async () => {

@@ -53,6 +53,14 @@ export interface Player {
   consecutiveTimeouts?: number;
   // Asked to straddle (post twice the big blind under the gun) next hand
   wantsStraddle?: boolean;
+  // Joined (or came back owing a big blind) and is not dealt in until the big blind reaches them
+  waitingForBigBlind?: boolean;
+  // While waiting: post a big blind to be dealt in at the next hand instead
+  postBigBlindNow?: boolean;
+  // Sat out while the big blind passed them, so they owe one when they sit back in
+  missedBigBlind?: boolean;
+  // Stand up as soon as the current hand ends
+  leaveAfterHand?: boolean;
 }
 
 /** One entry in a hand's action log, kept for hand history and the replayer. */

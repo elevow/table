@@ -22,6 +22,20 @@ const playPassively = (engine: any) => {
   }
 };
 
+describe('stud antes', () => {
+  test('a tenth of the big blind by default, or the table ante', () => {
+    const ante = (bigBlind: number, tableAnte?: number) => {
+      const engine = createPokerEngine({ tableId: 'ante', players: [P('a', 0, 500), P('b', 1, 500)], smallBlind: bigBlind / 2, bigBlind, state: { variant: 'seven-card-stud' } });
+      if (tableAnte) engine.setAnte(tableAnte);
+      engine.startNewHand();
+      return engine.getState().handActions!.find(a => a.action === 'ante')!.put;
+    };
+    expect(ante(2)).toBe(1);
+    expect(ante(50)).toBe(5);
+    expect(ante(50, 8)).toBe(8);
+  });
+});
+
 describe.each(['seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'] as const)('Stud bring-in (%s)', (variant) => {
   const start = (tableId: string, mode?: 'fixed-limit') => {
     const engine = createPokerEngine({ tableId, players: [P('a', 0), P('b', 1), P('c', 2)], smallBlind: 1, bigBlind: 2, state: { variant, ...(mode ? { bettingMode: mode } : {}) } });
@@ -35,7 +49,9 @@ describe.each(['seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'] as 
     const bringIn = s.studState!.bringIn!;
     expect(bringIn.pending).toBe(true);
     expect(s.activePlayer).toBe(bringIn.player);
-    expect(s.pot).toBe(0);
+    // Only the antes are in: a tenth of the big blind, at least 1
+    expect(s.pot).toBe(3);
+    expect(s.handActions!.filter(a => a.action === 'ante')).toHaveLength(3);
     expect(s.currentBet).toBe(0);
     // A forced bet: no checking or folding out of it
     expect(() => act(engine, 'check')).toThrow('Bring it in or complete the bet');
@@ -50,7 +66,7 @@ describe.each(['seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'] as 
     const bringIn = s.studState!.bringIn!;
     expect(bringIn.pending).toBeUndefined();
     expect(s.currentBet).toBe(1);
-    expect(s.pot).toBe(1);
+    expect(s.pot).toBe(4);
     expect(s.handActions!.at(-1)).toMatchObject({ playerId: bringInPlayer, action: 'bring-in', put: 1 });
     // Action moves to the next player, who cannot check
     expect(s.activePlayer).not.toBe(bringInPlayer);
@@ -66,7 +82,7 @@ describe.each(['seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'] as 
     const s = engine.getState();
     expect(s.studState!.bringIn!.pending).toBeUndefined();
     expect(s.currentBet).toBe(2);
-    expect(s.pot).toBe(2);
+    expect(s.pot).toBe(5);
     expect(s.handActions!.at(-1)).toMatchObject({ playerId: bringInPlayer, action: 'bet', put: 2 });
     expect(s.activePlayer).not.toBe(bringInPlayer);
   });
@@ -85,7 +101,7 @@ describe.each(['seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'] as 
     const out = engine.handleTimeout(s0.turnDeadline!);
     expect(out).toMatchObject({ playerId: s0.activePlayer, action: 'bring-in' });
     const s = engine.getState();
-    expect(s.pot).toBe(1);
+    expect(s.pot).toBe(4);
     expect(s.handActions!.at(-1)).toMatchObject({ action: 'bring-in', auto: true });
   });
 
@@ -94,7 +110,7 @@ describe.each(['seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'] as 
     const bringInPlayer = engine.getState().activePlayer;
     engine.forceFold(bringInPlayer);
     const s = engine.getState();
-    expect(s.pot).toBe(1);
+    expect(s.pot).toBe(4);
     expect(s.players.find(p => p.id === bringInPlayer)!.isFolded).toBe(true);
     expect(s.activePlayer).not.toBe(bringInPlayer);
   });
@@ -110,8 +126,8 @@ describe.each(['seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'] as 
     }
     const s = engine.getState();
     expect(s.stage).toBe('fourth');
-    expect(s.pot).toBe(3);
-    s.players.forEach(p => expect(p.stack).toBe(19));
+    expect(s.pot).toBe(6);
+    s.players.forEach(p => expect(p.stack).toBe(18));
   });
 
   test('a checked-down hand ends with no chips refunded to the bring-in as a side pot', () => {
@@ -120,8 +136,8 @@ describe.each(['seven-card-stud', 'seven-card-stud-hi-lo', 'five-card-stud'] as 
     const s = engine.getState();
     expect(s.stage).toBe('showdown');
     expect(s.players.reduce((sum, p) => sum + p.stack, 0)).toBe(60);
-    // Every player paid 1, so a player who won nothing finishes on 19
-    s.players.filter(p => p.stack <= 20).forEach(p => expect([19, 20]).toContain(p.stack));
+    // Every player paid the ante and the bring-in, so a player who won nothing finishes on 18
+    s.players.filter(p => p.stack <= 20).forEach(p => expect([18, 20]).toContain(p.stack));
     if (variant === 'seven-card-stud-hi-lo' && s.lastHiLoResult && !s.lastHiLoResult.low) {
       const amounts = s.lastHiLoResult.high.map(h => h.amount);
       expect(Math.max(...amounts) - Math.min(...amounts)).toBeLessThanOrEqual(1);

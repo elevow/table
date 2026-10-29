@@ -41,15 +41,24 @@ describe('bringing seated players into the game between hands', () => {
     expect(a.stack + a.currentBet).toBeLessThan(999);
   });
 
-  it('a player who sat down after the game started joins at the next hand, in seat order', () => {
+  it('a player who sat down after the game started joins in seat order once the big blind reaches them', () => {
     const engine = new PokerEngine('t', [mk('a', 1), mk('c', 6)], 1, 2);
     engine.startNewHand();
     foldOut(engine);
     expect(engine.syncSeatedPlayers([seat('a', 1), seat('b', 3, 80), seat('c', 6)])).toBe(true);
-    engine.startNewHand();
-    const s = engine.getState();
-    expect(s.players.map(p => p.id)).toEqual(['a', 'b', 'c']);
-    expect(s.players.every(p => (p.holeCards || []).length === 2)).toBe(true);
+    expect(engine.getState().players.map(p => p.id)).toEqual(['a', 'b', 'c']);
+    // Within a round the button puts b in the big blind, and b is dealt in on that hand
+    let joined = false;
+    for (let i = 0; i < 3 && !joined; i++) {
+      engine.startNewHand();
+      const b = engine.getState().players.find(p => p.id === 'b')!;
+      joined = (b.holeCards || []).length === 2;
+      if (joined) expect(b.currentBet).toBe(2);
+      else expect(b.waitingForBigBlind).toBe(true);
+      let guard = 5;
+      while (engine.getState().stage !== 'showdown' && guard-- > 0) engine.forceFold(engine.getState().activePlayer);
+    }
+    expect(joined).toBe(true);
   });
 
   it('changes nothing during a hand, or when everyone seated is already playing', () => {

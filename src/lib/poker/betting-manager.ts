@@ -46,10 +46,8 @@ export class BettingManager {
       const n = players.length;
       smallBlindPlayer = players[dealerPosition];
       bigBlindPlayer = players[(dealerPosition + 1) % n];
-    } else if (
-      typeof dealerPosition === 'number' && players.length >= 3 && process.env.ENABLE_DEALER_RELATIVE_BLINDS_RING === 'true'
-    ) {
-      // Ring games (opt-in): assign blinds relative to dealer
+    } else if (typeof dealerPosition === 'number' && players.length >= 3) {
+      // Ring games: the blinds are the two players after the button, so they move round the table
       const n = players.length;
       const sbIndex = (dealerPosition + 1) % n;
       const bbIndex = (dealerPosition + 2) % n;

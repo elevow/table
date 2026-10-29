@@ -2,6 +2,11 @@ import { TableState, GameStage, Player } from '../../types/poker';
 import { isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { HandEvaluator } from './hand-evaluator';
 
+/** Not dealt into hands: sitting out, or waiting for the big blind to reach them. */
+export function sitsOutOfHand(p: Player): boolean {
+  return !!p.isSittingOut || !!p.waitingForBigBlind;
+}
+
 export class GameStateManager {
   constructor(
     private readonly state: TableState,
@@ -204,16 +209,16 @@ export class GameStateManager {
     }
   }
 
-  /** Players taking part in the current hand: everyone not sitting out. */
+  /** Players taking part in the current hand: everyone not sitting out or waiting for the big blind. */
   public dealtInPlayers(): Player[] {
-    return this.state.players.filter(p => !p.isSittingOut);
+    return this.state.players.filter(p => !sitsOutOfHand(p));
   }
 
   public rotateDealerButton(): number {
     // The button moves to the next player who is sitting in
     const n = this.state.players.length;
     let next = (this.state.dealerPosition + 1) % n;
-    for (let i = 0; i < n && this.state.players[next]?.isSittingOut; i++) {
+    for (let i = 0; i < n && this.state.players[next] && sitsOutOfHand(this.state.players[next]); i++) {
       next = (next + 1) % n;
     }
     this.state.dealerPosition = next;

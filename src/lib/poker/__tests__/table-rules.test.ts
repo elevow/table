@@ -105,7 +105,7 @@ describe('antes', () => {
     expect(total(s)).toBe(2);
   });
 
-  test('bomb pots keep their own ante and stud has no room ante', () => {
+  test('bomb pots keep their own ante, and stud antes the room ante before the bring-in', () => {
     const bomb = holdem([P('a', 0), P('b', 1), P('c', 2)], 1);
     bomb.setBombPotNext(1);
     bomb.startNewHand();
@@ -114,9 +114,9 @@ describe('antes', () => {
 
     const stud = holdem([P('a', 0), P('b', 1), P('c', 2)], 1, 'seven-card-stud');
     stud.startNewHand();
-    expect(stud.getState().handActions!.some(a => a.action === 'ante')).toBe(false);
+    expect(stud.getState().handActions!.filter(a => a.action === 'ante')).toHaveLength(3);
     act(stud, 'bring-in');
-    expect(stud.getState().pot).toBe(1);
+    expect(stud.getState().pot).toBe(4);
   });
 
   test('ante 0 turns antes off', () => {

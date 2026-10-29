@@ -171,7 +171,8 @@ export interface TableState {
   // US-053: Seven-card Stud per-player cards and bring-in tracking
   studState?: {
     playerCards: Record<string, { downCards: Card[]; upCards: Card[] }>;
-    bringIn?: { amount: number; player: string };
+    // pending: the bring-in player has yet to choose between bringing it in and completing
+    bringIn?: { amount: number; player: string; pending?: boolean };
   };
 }
 
@@ -185,7 +186,8 @@ export interface BettingRound {
 }
 
 export interface PlayerAction {
-  type: 'bet' | 'call' | 'raise' | 'fold' | 'check';
+  // bring-in: the stud bring-in player posting the bring-in rather than completing
+  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in';
   playerId: string;
   tableId: string;
   amount?: number;

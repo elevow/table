@@ -45,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Build PlayerAction object
     const playerAction = {
-      type: action.toLowerCase() as 'bet' | 'call' | 'raise' | 'fold' | 'check',
+      type: action.toLowerCase() as 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in',
       playerId,
       tableId,
       amount,
@@ -53,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     };
 
     // Validate action type
-    const validActions = ['fold', 'check', 'call', 'bet', 'raise'];
+    const validActions = ['fold', 'check', 'call', 'bet', 'raise', 'bring-in'];
     if (!validActions.includes(playerAction.type)) {
       return res.status(400).json({ error: `Unknown action: ${action}` });
     }

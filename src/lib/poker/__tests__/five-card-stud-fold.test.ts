@@ -26,6 +26,8 @@ describe('Five-Card Stud - fold ends hand immediately', () => {
     const players = [mkPlayer('A', 0), mkPlayer('B', 1)];
     const engine = new PokerEngine('t', players, 1, 2, { variant: 'five-card-stud', bettingMode: 'no-limit' });
     engine.startNewHand();
+    // The bring-in player cannot fold, so they bring it in and the next player folds
+    engine.handleAction(act('bring-in', engine.getState().activePlayer, 0));
     let s = engine.getState();
 
     expect(s.variant).toBe('five-card-stud');

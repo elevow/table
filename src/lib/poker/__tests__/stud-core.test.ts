@@ -36,7 +36,7 @@ describe('US-053 Seven-card Stud Core Mechanics', () => {
           const st = engine.getState();
           const active = st.activePlayer;
           const me = st.players.find(p => p.id === active)!;
-          const type = st.currentBet > me.currentBet ? 'call' : 'check';
+          const type = st.studState?.bringIn?.pending ? 'bring-in' : st.currentBet > me.currentBet ? 'call' : 'check';
           engine.handleAction({ type, playerId: active, tableId: st.tableId, timestamp: Date.now() });
         }
       }

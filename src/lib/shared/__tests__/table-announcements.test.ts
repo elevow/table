@@ -114,6 +114,12 @@ describe('buildAnnouncements', () => {
     expect(run(prev, next).messages).toContain('Your turn. $50 to call');
   });
 
+  it('tells the stud bring-in player their choice', () => {
+    const prev = state({ stage: 'third', activePlayer: '' });
+    const next = state({ stage: 'third', activePlayer: 'me', turnSeq: 2, currentBet: 0, studState: { bringIn: { player: 'me', amount: 1, pending: true }, playerCards: {} } });
+    expect(run(prev, next).messages).toContain('Your turn. Bring it in for $1, or complete');
+  });
+
   it('offers a check when nothing is owed', () => {
     const prev = state({ stage: 'flop', currentBet: 0, communityCards: [{ rank: '2', suit: 'clubs' }, { rank: '7', suit: 'hearts' }, { rank: 'J', suit: 'spades' }] });
     const next = { ...prev, activePlayer: 'me', turnSeq: 5 };

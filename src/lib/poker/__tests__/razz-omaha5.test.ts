@@ -25,12 +25,13 @@ const stackDeck = (order: string) => {
   });
 };
 
-const act = (engine: PokerEngine, type: 'call' | 'check' | 'fold' | 'bet' | 'raise') => {
+const act = (engine: PokerEngine, type: 'call' | 'check' | 'fold' | 'bet' | 'raise' | 'bring-in') => {
   const s = engine.getState();
   engine.handleAction({ type, playerId: s.activePlayer, tableId: s.tableId, timestamp: Date.now() });
 };
 const passive = (engine: PokerEngine) => {
   const s = engine.getState();
+  if (s.studState?.bringIn?.pending) return act(engine, 'bring-in');
   const me = s.players.find(p => p.id === s.activePlayer)!;
   act(engine, s.currentBet > me.currentBet ? 'call' : 'check');
 };
@@ -105,6 +106,8 @@ describe('razz hands', () => {
     stackDeck('2c 3c 4c 5c 6c 7c Kc Ks 3d');
     const engine = engine3();
     engine.startNewHand();
+    expect(engine.getState().activePlayer).toBe('b');
+    act(engine, 'bring-in');
     const s = engine.getState();
     expect(s.studState!.bringIn!.player).toBe('b');
     expect(s.currentBet).toBe(1);

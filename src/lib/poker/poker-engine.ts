@@ -666,7 +666,7 @@ export class PokerEngine {
    * Act for the player whose clock has run out: check when that is free, otherwise fold.
    * The time bank is used up, and enough timeouts in a row sit the player out from the next hand.
    */
-  public handleTimeout(now: number = Date.now()): { playerId: string; action: 'check' | 'fold'; satOut: boolean } {
+  public handleTimeout(now: number = Date.now()): { playerId: string; action: 'check' | 'fold' | 'bring-in'; satOut: boolean } {
     const playerId = this.state.activePlayer;
     const deadline = this.state.turnDeadline;
     if (!playerId || typeof deadline !== 'number' || now < deadline) {
@@ -674,7 +674,10 @@ export class PokerEngine {
     }
     const player = this.state.players.find(p => p.id === playerId);
     if (!player) throw new Error('Player not found');
-    const action: 'check' | 'fold' = player.currentBet < this.state.currentBet ? 'fold' : 'check';
+    // The bring-in cannot fold or check: running out of time brings it in
+    const action: 'check' | 'fold' | 'bring-in' = this.pendingBringIn()?.player === playerId
+      ? 'bring-in'
+      : player.currentBet < this.state.currentBet ? 'fold' : 'check';
     this.applyDecision({ type: action, playerId, tableId: this.state.tableId, timestamp: now }, 'timeout', now);
     player.timeBank = 0;
     if (typeof player.timeBanks === 'number') player.timeBanks = 0;
@@ -689,6 +692,12 @@ export class PokerEngine {
     const player = this.state.players.find(p => p.id === playerId);
     if (!player) return;
     if (player.isFolded) return;
+    // A bring-in player who leaves still owes the forced bet; post it, then fold out of turn
+    if (this.pendingBringIn()?.player === playerId) {
+      this.postBringIn();
+      this.state.turnSeq = (this.state.turnSeq || 0) + 1;
+      this.startTurnClock(Date.now());
+    }
     // If it's their turn, use normal action path for proper sequencing
     if (this.state.activePlayer === playerId) {
       const action: PlayerAction = { type: 'fold', playerId, tableId: this.state.tableId, timestamp: Date.now() } as any;
@@ -794,7 +803,26 @@ export class PokerEngine {
     const stage = this.state.stage;
     const stackBefore = actor?.stack ?? 0;
     const betBefore = actor?.currentBet ?? 0;
+    // Stud third street opens with the bring-in player choosing: bring it in, or complete to a
+    // full bet. Folding or checking is not allowed.
+    const bringIn = this.pendingBringIn();
+    if (action.type === 'bring-in' && !bringIn) throw new Error('There is no bring-in to post');
+    if (bringIn && action.playerId === this.state.activePlayer) {
+      if (action.type === 'raise') action = { ...action, type: 'bet' };
+      if (action.type === 'bring-in' || action.type === 'call') {
+        this.postBringIn();
+        if (actor && source === 'timeout') {
+          const entry = this.state.handActions?.[this.state.handActions.length - 1];
+          if (entry?.action === 'bring-in') entry.auto = true;
+        }
+        this.finishDecision(actor, source, now);
+        return;
+      }
+      if (action.type !== 'bet') throw new Error('Bring it in or complete the bet');
+    }
     this.applyAction(action);
+    // Completing straight away settles the bring-in
+    if (bringIn && action.playerId === bringIn.player) delete bringIn.pending;
     if (actor) {
       const put = Math.max(0, stackBefore - actor.stack);
       const entry: HandActionEntry = { playerId: actor.id, action: action.type, put, stage };
@@ -802,7 +830,11 @@ export class PokerEngine {
       if (source === 'timeout') entry.auto = true;
       this.logAction(entry);
     }
-    // Only reached when the action was accepted
+    this.finishDecision(actor, source, now);
+  }
+
+  /** Bookkeeping once a decision was accepted: the time bank, the turn counter and the clock. */
+  private finishDecision(actor: Player | undefined, source: 'player' | 'timeout', now: number): void {
     if (actor && source === 'player') {
       this.chargeTimeBank(actor, now);
       actor.consecutiveTimeouts = 0;
@@ -849,7 +881,8 @@ export class PokerEngine {
     // Process the action
     const { pot, currentBet, minRaise, limitBets } = this.bettingManager.processAction(
       player,
-      action,
+      // A bring-in is posted before this point (see applyDecision); only betting actions get here
+      action as Parameters<BettingManager['processAction']>[1],
       this.state.currentBet,
       this.state.minRaise,
       {
@@ -1105,22 +1138,43 @@ export class PokerEngine {
     const amount = Math.max(1, Math.floor(this.state.smallBlind));
     if (chosen) {
       const player = this.state.players.find(pl => pl.id === chosen!.id)!;
-      const pay = Math.min(amount, player.stack);
-      player.stack -= pay;
-      player.currentBet += pay;
-      if (player.stack === 0) player.isAllIn = true;
-      this.state.pot += pay;
-      // The bring-in is a forced bet: the others must call, raise or fold. The bring-in player
-      // only acts again on third street if someone raises.
-      this.state.currentBet = Math.max(this.state.currentBet, player.currentBet);
-      player.hasActed = true;
-      this.state.studState!.bringIn = { amount: pay, player: player.id };
-      this.logAction({ playerId: player.id, action: 'bring-in', amount: player.currentBet, put: pay, stage: this.state.stage });
+      // Nothing is posted yet: the bring-in player acts first and chooses to bring it in for
+      // this amount or complete to a full bet (see decideBringIn)
+      this.state.studState!.bringIn = { amount: Math.min(amount, player.stack), player: player.id, pending: true };
       if (process.env.DEBUG_POKER === 'true') {
         // eslint-disable-next-line no-console
-        console.log(`[DEBUG] Stud bring-in computed: player=${player.id} amount=${pay} upcards=`, debug);
+        console.log(`[DEBUG] Stud bring-in computed: player=${player.id} amount=${amount} upcards=`, debug);
       }
     }
+  }
+
+  /** The bring-in still waiting for its player to choose, if any. */
+  private pendingBringIn(): { amount: number; player: string; pending?: boolean } | undefined {
+    const bringIn = this.state.studState?.bringIn;
+    return bringIn?.pending && this.state.stage === 'third' ? bringIn : undefined;
+  }
+
+  /**
+   * Post the bring-in: a forced bet the others must call, complete or fold. The bring-in player
+   * only acts again on third street if someone completes or raises.
+   */
+  private postBringIn(): void {
+    const bringIn = this.pendingBringIn();
+    if (!bringIn) return;
+    const player = this.state.players.find(p => p.id === bringIn.player);
+    delete bringIn.pending;
+    if (!player) return;
+    const pay = Math.min(bringIn.amount, player.stack);
+    bringIn.amount = pay;
+    player.stack -= pay;
+    player.currentBet += pay;
+    if (player.stack === 0) player.isAllIn = true;
+    this.state.pot += pay;
+    this.state.currentBet = Math.max(this.state.currentBet, player.currentBet);
+    player.hasActed = true;
+    this.logAction({ playerId: player.id, action: 'bring-in', amount: player.currentBet, put: pay, stage: this.state.stage });
+    const next = this.gameStateManager.findNextActivePlayer(player.position);
+    if (next) this.state.activePlayer = next.id;
   }
 
   /** Settle the hand and record who won chips, which decides whose cards are shown. */

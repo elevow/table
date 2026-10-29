@@ -16,7 +16,7 @@ const c = (s: string): Card => {
 };
 const cards = (s: string) => s.split(' ').map(c);
 
-const act = (engine: PokerEngine, type: 'bet' | 'raise' | 'call' | 'check' | 'fold', amount?: number) => {
+const act = (engine: PokerEngine, type: 'bet' | 'raise' | 'call' | 'check' | 'fold' | 'bring-in', amount?: number) => {
   const s = engine.getState();
   engine.handleAction({ type, playerId: s.activePlayer, tableId: s.tableId, amount, timestamp: Date.now() });
 };
@@ -115,6 +115,7 @@ describe('antes', () => {
     const stud = holdem([P('a', 0), P('b', 1), P('c', 2)], 1, 'seven-card-stud');
     stud.startNewHand();
     expect(stud.getState().handActions!.some(a => a.action === 'ante')).toBe(false);
+    act(stud, 'bring-in');
     expect(stud.getState().pot).toBe(1);
   });
 
@@ -240,6 +241,7 @@ describe('mixed-game rotation', () => {
     let guard = 20;
     while (engine.getState().stage !== 'showdown' && guard-- > 0) {
       const s = engine.getState();
+      if (s.studState?.bringIn?.pending) { act(engine, 'bring-in'); continue; }
       const me = s.players.find(p => p.id === s.activePlayer)!;
       act(engine, s.currentBet > me.currentBet ? 'fold' : 'check');
     }

@@ -1466,6 +1466,11 @@ export default function GamePage() {
   // What a call actually costs: a short stack calls all-in for less
   const myCallAmount = me ? Math.min(myOwed, Math.max(0, Number(me.stack) || 0)) : 0;
   const myCallIsAllIn = myOwed > 0 && (Number(me?.stack) || 0) <= myOwed;
+  // Stud: the lowest up card opens third street by bringing it in or completing to a full bet
+  const studBringIn = pokerGameState?.studState?.bringIn;
+  const myBringInPending = !!(isMyTurn && pokerGameState?.stage === 'third' && studBringIn?.pending && studBringIn.player === playerId);
+  const bringInAmount = Number(studBringIn?.amount) || 0;
+  const completeAmount = Math.min(Number(pokerGameState?.bigBlind) || 0, Math.max(0, Number(me?.stack) || 0));
 
   // A pre-action applies to one betting round
   useEffect(() => {
@@ -1485,19 +1490,22 @@ export default function GamePage() {
     if (!preAction || !isMyTurn || !me || me.isFolded) return;
     // A Run It Twice decision is not a betting turn
     if (pokerGameState?.runItTwicePrompt) return;
+    // Nor is the stud bring-in: that choice is the player's to make
+    if (myBringInPending) { setPreAction(null); return; }
     const result = resolvePreAction(preAction, myOwed);
     setPreAction(null);
     if (result.action === 'cancel') return;
     if (result.action === 'call') handlePokerAction('call', result.amount);
     else handlePokerAction(result.action);
-  }, [preAction, isMyTurn, me, myOwed, pokerGameState?.runItTwicePrompt, handlePokerAction]);
+  }, [preAction, isMyTurn, me, myOwed, pokerGameState?.runItTwicePrompt, myBringInPending, handlePokerAction]);
 
   // Keyboard shortcuts work only while the Your Turn panel is showing (same conditions as the panel)
   const actionPanelOpen = !!(gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt);
   const shortcuts = useTableShortcuts({
     enabled: actionPanelOpen,
-    onFold: handleFold,
-    onCheckOrCall: () => (myOwed > 0 ? handlePokerAction('call', myOwed) : handleCheck()),
+    // The bring-in cannot fold; check/call posts the bring-in
+    onFold: () => { if (!myBringInPending) handleFold(); },
+    onCheckOrCall: () => (myBringInPending ? handlePokerAction('bring-in') : myOwed > 0 ? handlePokerAction('call', myOwed) : handleCheck()),
   });
 
   // Emote reactions shown over seats
@@ -2863,6 +2871,29 @@ export default function GamePage() {
               })()}
               {/* Pot Odds Display */}
               {renderPotOdds()}
+              {myBringInPending ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    You have the {pokerGameState?.variant === 'razz' ? 'highest' : 'lowest'} up card, so you open the betting. Bring it in, or complete to a full bet.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handlePokerAction('bring-in')}
+                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                    >
+                      Bring in {showStackInBB ? formatChips(bringInAmount, pokerGameState?.bigBlind || null, true) : `$${bringInAmount}`}
+                    </button>
+                    {completeAmount > bringInAmount && (
+                      <button
+                        onClick={() => handlePokerAction('bet', completeAmount)}
+                        className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                      >
+                        Complete to {showStackInBB ? formatChips(completeAmount, pokerGameState?.bigBlind || null, true) : `$${completeAmount}`}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={handleFold}
@@ -3156,7 +3187,8 @@ export default function GamePage() {
                 )}
 
               </div>
-              
+              )}
+
               <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
                 <p>
                   Current Bet: {showStackInBB 

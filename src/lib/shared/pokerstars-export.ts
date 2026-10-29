@@ -281,8 +281,9 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
         break;
       case 'bet': {
         const total = a.amount ?? before + a.put;
-        // In stud the first full bet over the bring-in "completes" it
-        const completes = stud && streetMax > 0;
+        // In stud the first full bet over the bring-in "completes" it, as does the bring-in
+        // player betting a full bet instead of bringing it in
+        const completes = stud && (streetMax > 0 || a.stage === 'third');
         streetMax = Math.max(streetMax, total);
         lines.push(completes ? `${who}: completes it to ${money(total)}${allIn}` : `${who}: bets ${money(a.put)}${allIn}`);
         break;

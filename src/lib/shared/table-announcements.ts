@@ -27,6 +27,8 @@ export interface AnnounceSnapshot {
   result: Record<string, number> | null;
   /** Chips the viewer needs to put in to call. */
   toCall: number;
+  /** Stud: the viewer opens third street by bringing it in for this amount, or completing. */
+  bringIn?: number;
   /** The viewer's own cards (hole cards, or stud down and up cards). */
   myCards: CardLike[];
 }
@@ -68,6 +70,9 @@ export function snapshotFromState(state: any, viewerId: string): AnnounceSnapsho
     // What a call costs this player; a short stack calls all-in for less
     toCall: me ? callCost(Math.max(0, Number(state.currentBet || 0) - Number(me.currentBet || 0)), me.stack) : 0,
     myCards: holeCards.length ? holeCards : studCards,
+    ...(state.studState?.bringIn?.pending && state.studState.bringIn.player === viewerId
+      ? { bringIn: Number(state.studState.bringIn.amount) || 0 }
+      : {}),
   };
 }
 
@@ -160,7 +165,9 @@ export function buildAnnouncements(
   const myTurn = next.activePlayer === ctx.viewerId && next.stage !== 'showdown';
   const wasMyTurn = sameHand && prev.activePlayer === ctx.viewerId && prev.stage !== 'showdown' && prev.turnSeq === next.turnSeq;
   if (myTurn && !wasMyTurn) {
-    messages.push(next.toCall > 0 ? `Your turn. ${ctx.formatAmount(next.toCall)} to call` : 'Your turn. You can check');
+    messages.push(typeof next.bringIn === 'number'
+      ? `Your turn. Bring it in for ${ctx.formatAmount(next.bringIn)}, or complete`
+      : next.toCall > 0 ? `Your turn. ${ctx.formatAmount(next.toCall)} to call` : 'Your turn. You can check');
   }
 
   return { messages, baseline };

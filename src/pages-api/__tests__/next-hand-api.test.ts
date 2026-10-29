@@ -46,6 +46,13 @@ jest.mock('../../../src/lib/poker/engine-persistence', () => ({
   persistEngineState: jest.fn().mockResolvedValue('saved'),
 }));
 
+// Saved seats, which the route brings into the game before each hand
+const mockLoadSeats = jest.fn().mockResolvedValue(null);
+jest.mock('../../../src/lib/shared/game-seats', () => ({
+  loadPersistedRoomSeats: (...args: any[]) => mockLoadSeats(...args),
+  getRoomSeats: jest.fn(() => ({})),
+}));
+
 jest.mock('../../../src/lib/database/pool', () => ({
   getPool: jest.fn(() => ({})),
 }));
@@ -127,6 +134,65 @@ describe('/api/games/next-hand', () => {
     await handler(createReq({ tableId: 't1', playerId: 'outsider' }), res);
     expect(res.status).toHaveBeenCalledWith(403);
     expect(engine.startNewHand).not.toHaveBeenCalled();
+  });
+
+  it('brings players who sat down between hands into the game before starting it', async () => {
+    const engine: any = createEngine('showdown');
+    engine.syncSeatedPlayers = jest.fn();
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    mockLoadSeats.mockResolvedValueOnce({
+      1: { playerId: 'a', playerName: 'A', chips: 100 },
+      2: null,
+      4: { playerId: 'b', playerName: 'B', chips: 200 },
+    });
+    setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(engine.syncSeatedPlayers).toHaveBeenCalledWith([
+      { id: 'a', name: 'A', seatNumber: 1, chips: 100 },
+      { id: 'b', name: 'B', seatNumber: 4, chips: 200 },
+    ]);
+    expect(engine.syncSeatedPlayers.mock.invocationCallOrder[0]).toBeLessThan(engine.startNewHand.mock.invocationCallOrder[0]);
+  });
+
+  it('says who the table is waiting on to rebuy, with what their prompt shows', async () => {
+    const engine = createEngine('showdown');
+    engine.getState.mockReturnValue({
+      stage: 'showdown',
+      dealerPosition: 0,
+      players: [{ id: 'a', name: 'A', stack: 200 }, { id: 'b', name: 'B', stack: 0 }],
+    });
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      awaitingRebuyDecisions: true,
+      waitingFor: [expect.objectContaining({ playerId: 'b', playerName: 'B', baseChips: 100, remaining: 'unlimited' })],
+    }));
+    expect(publisher.publishRebuyPrompt).toHaveBeenCalledTimes(1);
+    expect(engine.startNewHand).not.toHaveBeenCalled();
+  });
+
+  it('keeps listing a player who was already prompted, without prompting again', async () => {
+    const rebuyState = jest.requireMock('../../../src/lib/server/rebuy-state');
+    rebuyState.hasPendingRebuy.mockReturnValueOnce(true);
+    rebuyState.pendingRebuyCount.mockReturnValueOnce(1).mockReturnValueOnce(1);
+    const engine = createEngine('showdown');
+    engine.getState.mockReturnValue({
+      stage: 'showdown',
+      dealerPosition: 0,
+      players: [{ id: 'a', name: 'A', stack: 200 }, { id: 'b', name: 'B', stack: 0 }],
+    });
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'b' }), res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      awaitingRebuyDecisions: true,
+      waitingFor: [expect.objectContaining({ playerId: 'b' })],
+    }));
+    expect(publisher.publishRebuyPrompt).not.toHaveBeenCalled();
   });
 
   it('starts the next hand for a player at the table', async () => {

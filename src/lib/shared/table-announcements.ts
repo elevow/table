@@ -27,6 +27,8 @@ export interface AnnounceSnapshot {
   result: Record<string, number> | null;
   /** Chips the viewer needs to put in to call. */
   toCall: number;
+  /** Stud: the viewer opens third street by bringing it in for this amount, or completing. */
+  bringIn?: number;
   /** The viewer's own cards (hole cards, or stud down and up cards). */
   myCards: CardLike[];
 }
@@ -65,9 +67,18 @@ export function snapshotFromState(state: any, viewerId: string): AnnounceSnapsho
     board: Array.isArray(state.communityCards) ? state.communityCards : [],
     actions: Array.isArray(state.handActions) ? state.handActions : [],
     result: winnings && typeof winnings === 'object' ? winnings : null,
-    toCall: me ? Math.max(0, Number(state.currentBet || 0) - Number(me.currentBet || 0)) : 0,
+    // What a call costs this player; a short stack calls all-in for less
+    toCall: me ? callCost(Math.max(0, Number(state.currentBet || 0) - Number(me.currentBet || 0)), me.stack) : 0,
     myCards: holeCards.length ? holeCards : studCards,
+    ...(state.studState?.bringIn?.pending && state.studState.bringIn.player === viewerId
+      ? { bringIn: Number(state.studState.bringIn.amount) || 0 }
+      : {}),
   };
+}
+
+/** What calling costs: the amount owed, or the whole stack when that is less (all-in). */
+function callCost(owed: number, stack: unknown): number {
+  return typeof stack === 'number' && Number.isFinite(stack) ? Math.min(owed, Math.max(0, stack)) : owed;
 }
 
 export function describeAction(entry: ActionLike, name: string, fmt: (n: number) => string): string | null {
@@ -85,6 +96,7 @@ export function describeAction(entry: ActionLike, name: string, fmt: (n: number)
     case 'straddle': text = `${name} straddles ${fmt(put)}`; break;
     case 'ante': text = `${name} antes ${fmt(put)}`; break;
     case 'bring-in': text = `${name} brings in for ${fmt(put)}`; break;
+    case 'uncalled': text = `Uncalled ${fmt(-put)} returned to ${name}`; break;
     default: text = null;
   }
   if (text && entry.auto) text += ' (out of time)';
@@ -153,7 +165,9 @@ export function buildAnnouncements(
   const myTurn = next.activePlayer === ctx.viewerId && next.stage !== 'showdown';
   const wasMyTurn = sameHand && prev.activePlayer === ctx.viewerId && prev.stage !== 'showdown' && prev.turnSeq === next.turnSeq;
   if (myTurn && !wasMyTurn) {
-    messages.push(next.toCall > 0 ? `Your turn. ${ctx.formatAmount(next.toCall)} to call` : 'Your turn. You can check');
+    messages.push(typeof next.bringIn === 'number'
+      ? `Your turn. Bring it in for ${ctx.formatAmount(next.bringIn)}, or complete`
+      : next.toCall > 0 ? `Your turn. ${ctx.formatAmount(next.toCall)} to call` : 'Your turn. You can check');
   }
 
   return { messages, baseline };

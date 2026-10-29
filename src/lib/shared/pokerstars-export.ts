@@ -236,6 +236,8 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
   for (const a of hand.actions) {
     // A 7-2 bounty is paid outside the pot after the hand; the format has no line for it
     if (a.action === 'bounty') continue;
+    // The export works out returned uncalled bets from the street's bets itself
+    if (a.action === 'uncalled') continue;
     if (a.stage === 'showdown') continue;
     if (!dealt && preDeal(a)) {
       // Antes are dead money, so they don't count toward the bet to call
@@ -279,8 +281,9 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
         break;
       case 'bet': {
         const total = a.amount ?? before + a.put;
-        // In stud the first full bet over the bring-in "completes" it
-        const completes = stud && streetMax > 0;
+        // In stud the first full bet over the bring-in "completes" it, as does the bring-in
+        // player betting a full bet instead of bringing it in
+        const completes = stud && (streetMax > 0 || a.stage === 'third');
         streetMax = Math.max(streetMax, total);
         lines.push(completes ? `${who}: completes it to ${money(total)}${allIn}` : `${who}: bets ${money(a.put)}${allIn}`);
         break;

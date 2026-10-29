@@ -240,6 +240,16 @@ describe('formatPokerStarsHand edge cases', () => {
     expect(text).toContain('*** 4th STREET ***\nDealt to Ann [Ah Ac Ks] [2h]\nDealt to Bob [3c] [4d]\nAnn: bets $5\nBob: folds');
     expect(text).not.toContain('9h');
     expect(text).toContain('Seat 2: Bob folded on the 4th Street');
+
+    // The bring-in player may complete straight away instead of bringing it in
+    const completed = formatPokerStarsHand(redactHandRecord({
+      ...hand,
+      actions: [
+        { playerId: 'b', action: 'bet', amount: 4, put: 4, stage: 'third' },
+        { playerId: 'a', action: 'call', amount: 4, put: 4, stage: 'third' },
+      ],
+    }, 'a'), { viewerId: 'a' });
+    expect(completed).toContain('Bob: completes it to $4\nAnn: calls $4');
   });
 });
 

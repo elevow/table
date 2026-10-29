@@ -9,7 +9,7 @@ const P = (id: string, pos: number, stack = 100): Player => ({
   hasActed: false, isFolded: false, isAllIn: false, timeBank: 30,
 });
 
-const act = (engine: PokerEngine, type: 'bet' | 'raise' | 'call' | 'check' | 'fold', amount?: number) => {
+const act = (engine: PokerEngine, type: 'bet' | 'raise' | 'call' | 'check' | 'fold' | 'bring-in', amount?: number) => {
   const s = engine.getState();
   engine.handleAction({ type, playerId: s.activePlayer, tableId: s.tableId, amount, timestamp: Date.now() });
 };
@@ -210,6 +210,7 @@ describe('fixed-limit stud', () => {
   test('the bring-in can be completed to the small bet; big bets from fifth street', () => {
     const engine = fixedEngine('seven-card-stud');
     engine.startNewHand();
+    act(engine, 'bring-in');
     let s = engine.getState();
     expect(s.currentBet).toBe(1);
     expect(s.limitBets).toBe(0);

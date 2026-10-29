@@ -73,7 +73,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!timedOut) {
       return res.status(409).json({ error: 'The turn has not timed out', code: 'NOT_TIMED_OUT', remainingMs: null });
     }
-    const action = timedOut.currentBet < state.currentBet ? 'fold' : 'check';
+    // A stud bring-in cannot fold or check: the clock brings it in
+    const bringIn = state.studState?.bringIn;
+    const action = bringIn?.pending && bringIn.player === timedOut.id && state.stage === 'third'
+      ? 'bring-in'
+      : timedOut.currentBet < state.currentBet ? 'fold' : 'check';
     const satOut = (timedOut.consecutiveTimeouts || 0) + 1 >= TIMEOUTS_BEFORE_SIT_OUT;
 
     const result = await runGameAction({

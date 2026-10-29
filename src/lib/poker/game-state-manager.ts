@@ -48,7 +48,10 @@ export class GameStateManager {
         // Prefer computed bring-in
         const bringInId = this.state.studState?.bringIn?.player;
         const bringInPlayer = bringInId ? this.state.players.find(p => p.id === bringInId && !p.isFolded) : undefined;
-        if (bringInPlayer) {
+        if (bringInPlayer && this.state.studState?.bringIn?.pending) {
+          // The bring-in player opens by choosing to bring it in or complete
+          activePlayer = bringInPlayer;
+        } else if (bringInPlayer) {
           activePlayer = this.findNextActivePlayer(bringInPlayer.position) || (isActive(bringInPlayer) ? bringInPlayer : actives[0]);
           if (process.env.DEBUG_POKER === 'true') {
             const up = this.state.studState?.playerCards[activePlayer.id]?.upCards?.[0];

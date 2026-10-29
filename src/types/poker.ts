@@ -60,7 +60,9 @@ export interface HandActionEntry {
   playerId: string;
   action: 'small-blind' | 'big-blind' | 'straddle' | 'ante' | 'bring-in' | 'fold' | 'check' | 'call' | 'bet' | 'raise'
     // Paid after the hand, straight to the player in toPlayerId rather than into the pot
-    | 'bounty';
+    | 'bounty'
+    // The part of a bet nobody could call, handed back when the betting round ends (put is negative)
+    | 'uncalled';
   // The player's total bet on this street after the action, where that applies
   amount?: number;
   // Chips this action moved from the player's stack into the pot (for a bounty, to toPlayerId)
@@ -95,6 +97,8 @@ export interface TableState {
   turnTimeMs?: number;
   // Length of one time bank at this table (seconds)
   timeBankSeconds?: number;
+  // Time banks a player starts with, for players who sit down after the game started
+  startingTimeBanks?: number;
   // Added when the state is sent to a client: ms left on the clock at that moment, so clients
   // count down without depending on their own clock matching the server's
   turnTimeRemainingMs?: number;
@@ -169,7 +173,8 @@ export interface TableState {
   // US-053: Seven-card Stud per-player cards and bring-in tracking
   studState?: {
     playerCards: Record<string, { downCards: Card[]; upCards: Card[] }>;
-    bringIn?: { amount: number; player: string };
+    // pending: the bring-in player has yet to choose between bringing it in and completing
+    bringIn?: { amount: number; player: string; pending?: boolean };
   };
 }
 
@@ -183,7 +188,8 @@ export interface BettingRound {
 }
 
 export interface PlayerAction {
-  type: 'bet' | 'call' | 'raise' | 'fold' | 'check';
+  // bring-in: the stud bring-in player posting the bring-in rather than completing
+  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in';
   playerId: string;
   tableId: string;
   amount?: number;

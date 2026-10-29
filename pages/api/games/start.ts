@@ -181,8 +181,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Seat chips are the buy-in and are not updated during play, so players already in the
     // current game keep their engine stacks; otherwise a restart would reset everyone's chips.
+    // A player who stood up cashed out; if they sat back down, their seat holds the new buy-in
     const existingStacks = new Map<string, number>(
-      (existingState?.players ?? []).map(p => [p.id, Number(p.stack) || 0])
+      (existingState?.players ?? [])
+        .filter(p => !existingEngine?.isRemoved?.(p.id))
+        .map(p => [p.id, Number(p.stack) || 0])
     );
     seatedPlayers = seatedPlayers.map(p =>
       existingStacks.has(p.playerId) ? { ...p, chips: existingStacks.get(p.playerId) as number } : p

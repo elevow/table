@@ -1385,13 +1385,13 @@ export default function GamePage() {
       const gs = pokerGameState;
       if (!gs || !Array.isArray(gs.players) || gs.players.length < 2) return null;
 
-      const allPlayers = gs.players as Array<{ id: string; position?: number; isSittingOut?: boolean }>;
+      const allPlayers = gs.players as Array<{ id: string; position?: number; isSittingOut?: boolean; waitingForBigBlind?: boolean }>;
       const dealerIdxAll = Number(gs.dealerPosition);
       if (!Number.isFinite(dealerIdxAll)) return null;
       const dealerId = allPlayers[dealerIdxAll]?.id;
       if (!dealerId) return null;
       // Blinds go round the players sitting in, as on the server
-      const players = allPlayers.filter(p => !p.isSittingOut);
+      const players = allPlayers.filter(p => !p.isSittingOut && !p.waitingForBigBlind);
       const dealerIdx = Math.max(0, players.findIndex(p => p.id === dealerId));
       const n = players.length;
       if (n < 2) return null;
@@ -1515,6 +1515,30 @@ export default function GamePage() {
 
   // Phones in portrait get compact seats with their info boxes next to the seat
   const isNarrowScreen = useMediaQuery(NARROW_SCREEN_QUERY);
+
+  // Post a big blind now instead of waiting, or stand up once this hand ends
+  const [seatOptionPending, setSeatOptionPending] = useState(false);
+  const setSeatOption = useCallback(async (option: 'post-big-blind-now' | 'leave-after-hand', value: boolean) => {
+    if (!tableId || !playerId) return;
+    setSeatOptionPending(true);
+    try {
+      const resp = await fetch('/api/games/seat-options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ tableId, playerId, option, value }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && data?.gameState) setPokerGameState(data.gameState);
+      else console.warn('Seat option request failed:', data);
+    } catch (err) {
+      console.warn('Seat option request failed:', err);
+    } finally {
+      setSeatOptionPending(false);
+    }
+  }, [tableId, playerId]);
+  // In a hand still being played: standing up now would fold, so offer to leave once it ends
+  const myHandLive = !!(gameStarted && me && !me.isFolded && !me.isSittingOut && !me.waitingForBigBlind
+    && pokerGameState?.stage && pokerGameState.stage !== 'showdown' && pokerGameState.stage !== 'awaiting-dealer-choice');
 
   // Sit out from the next hand, or back in
   const [sitOutPending, setSitOutPending] = useState(false);
@@ -1758,6 +1782,10 @@ export default function GamePage() {
                 return gamePlayer && (
                   <div className="text-xs mt-1">
                     {gamePlayer.isSittingOut && <span className="text-gray-500 dark:text-gray-400 italic">Sitting out</span>}
+                    {gamePlayer.waitingForBigBlind && !gamePlayer.isSittingOut && (
+                      <span className="text-gray-500 dark:text-gray-400 italic">{gamePlayer.postBigBlindNow ? 'Posting big blind' : 'Waiting for big blind'}</span>
+                    )}
+                    {gamePlayer.leaveAfterHand && <span className="text-gray-500 dark:text-gray-400 italic"> Leaving after hand</span>}
                     {(gamePlayer.folded || gamePlayer.isFolded) && !gamePlayer.isSittingOut && <span className="text-red-500">Folded</span>}
                     {gamePlayer.isAllIn && <span className="text-yellow-500">All-in</span>}
                     {gamePlayer.currentBet > 0 && !gamePlayer.folded && (
@@ -2524,6 +2552,17 @@ export default function GamePage() {
                 {me.wantsStraddle ? 'Straddling next hand' : 'Straddle next hand'}
               </button>
             )}
+            {(myHandLive || me?.leaveAfterHand) && (
+              <button
+                onClick={() => setSeatOption('leave-after-hand', !me.leaveAfterHand)}
+                disabled={seatOptionPending}
+                className={`${me.leaveAfterHand ? 'bg-orange-600 hover:bg-orange-700' : 'bg-gray-600 hover:bg-gray-700'} disabled:opacity-60 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 w-full sm:w-auto whitespace-nowrap`}
+                title={me.leaveAfterHand ? 'You will stand up when this hand ends; click to stay' : 'Finish this hand, then stand up'}
+                aria-pressed={!!me.leaveAfterHand}
+              >
+                {me.leaveAfterHand ? 'Leaving after this hand' : 'Leave after this hand'}
+              </button>
+            )}
             {gameStarted && me && (
               <button
                 onClick={toggleSitOut}
@@ -2602,6 +2641,23 @@ export default function GamePage() {
               onToggleWaitlist={toggleWaitlist}
               onTakeSeat={(n) => claimSeat(n)}
             />
+          )}
+          {gameStarted && me?.waitingForBigBlind && !me.isSittingOut && (
+            <div className="lg:col-span-3 bg-sky-50 dark:bg-sky-900/30 border border-sky-300 dark:border-sky-700 rounded-lg p-3 text-sm text-sky-900 dark:text-sky-100 flex flex-col sm:flex-row sm:items-center gap-2" role="status">
+              <span className="flex-1">
+                {me.postBigBlindNow
+                  ? `You will post a big blind (${showStackInBB ? '1 BB' : `$${pokerGameState?.bigBlind}`}) and be dealt in next hand.`
+                  : 'You will be dealt in when the big blind reaches your seat, or post a big blind to play the next hand.'}
+              </span>
+              <button
+                onClick={() => setSeatOption('post-big-blind-now', !me.postBigBlindNow)}
+                disabled={seatOptionPending}
+                className="bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white font-medium px-3 py-1.5 rounded-lg whitespace-nowrap"
+                aria-pressed={!!me.postBigBlindNow}
+              >
+                {me.postBigBlindNow ? 'Wait for the big blind instead' : 'Post big blind now'}
+              </button>
+            </div>
           )}
           {gameStarted && tableWaitNotice && pokerGameState?.stage === 'showdown' && (
             <div className="lg:col-span-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-lg p-3 text-sm text-amber-900 dark:text-amber-100" role="status">

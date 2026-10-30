@@ -15,6 +15,7 @@ import {
 import { autoStandPlayer } from '../../../src/lib/server/rebuy-actions';
 import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
+import { standUpPlayersLeavingAfterHand } from '../../../src/lib/server/seat-actions';
 import { getDealerChoiceChooserId } from '../../../src/lib/poker/dealer-choice';
 import { getPool } from '../../../src/lib/database/pool';
 import { GameService } from '../../../src/lib/services/game-service';
@@ -81,6 +82,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Get the active game engine from memory or restore from database
     const g: any = global as any;
+    // Players who chose to leave after the hand stand up now that it is over
+    try {
+      await standUpPlayersLeavingAfterHand(tableId, res);
+    } catch (err) {
+      console.warn('[next-hand] Could not stand up players leaving after the hand:', err);
+    }
     const engine = await getOrRestoreEngine(tableId);
     
     // First check in-memory cache for roomConfig

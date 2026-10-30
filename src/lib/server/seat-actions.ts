@@ -152,3 +152,17 @@ export async function leaveTable(opts: {
   await syncWaitlist(roomId);
   return { seatNumber, cashedOut };
 }
+
+/**
+ * Once a hand is over, stand up everyone who chose to leave after it. Returns who left.
+ */
+export async function standUpPlayersLeavingAfterHand(roomId: string, res: NextApiResponse): Promise<string[]> {
+  const engine = await getOrRestoreEngine(roomId);
+  const state = engine?.getState();
+  if (!state || (state.stage !== 'showdown' && state.stage !== 'awaiting-dealer-choice')) return [];
+  const leaving = state.players.filter(p => p.leaveAfterHand && !engine!.isRemoved(p.id)).map(p => p.id);
+  for (const playerId of leaving) {
+    await leaveTable({ roomId, playerId, reason: 'left_after_hand', res });
+  }
+  return leaving;
+}

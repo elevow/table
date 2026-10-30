@@ -46,6 +46,12 @@ jest.mock('../../../src/lib/poker/engine-persistence', () => ({
   persistEngineState: jest.fn().mockResolvedValue('saved'),
 }));
 
+// Players who chose to leave after the hand
+const mockStandUpLeavers = jest.fn().mockResolvedValue([]);
+jest.mock('../../../src/lib/server/seat-actions', () => ({
+  standUpPlayersLeavingAfterHand: (...args: any[]) => mockStandUpLeavers(...args),
+}));
+
 // Saved seats, which the route brings into the game before each hand
 const mockLoadSeats = jest.fn().mockResolvedValue(null);
 jest.mock('../../../src/lib/shared/game-seats', () => ({
@@ -153,6 +159,15 @@ describe('/api/games/next-hand', () => {
       { id: 'b', name: 'B', seatNumber: 4, chips: 200 },
     ]);
     expect(engine.syncSeatedPlayers.mock.invocationCallOrder[0]).toBeLessThan(engine.startNewHand.mock.invocationCallOrder[0]);
+  });
+
+  it('stands up players leaving after the hand before loading the game for the next one', async () => {
+    const engine: any = createEngine('showdown');
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());
+    expect(mockStandUpLeavers).toHaveBeenCalledWith('t1', expect.anything());
+    expect(mockStandUpLeavers.mock.invocationCallOrder[0]).toBeLessThan(mockGetOrRestoreEngine.mock.invocationCallOrder[0]);
   });
 
   it('says who the table is waiting on to rebuy, with what their prompt shows', async () => {

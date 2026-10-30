@@ -6,7 +6,7 @@ import { PotCalculator, SidePot } from './pot-calculator';
 import { DeckManager } from './deck-manager';
 import { BettingManager } from './betting-manager';
 import { generateRngSecurity, verifyRngSecurity, RNGSecurity } from './rng-security';
-import { GameStateManager } from './game-state-manager';
+import { GameStateManager, sitsOutOfHand } from './game-state-manager';
 import {
   TIMEOUTS_BEFORE_SIT_OUT, MAX_TIME_BANKS, MIN_TURN_SECONDS, MAX_TURN_SECONDS, MIN_TIME_BANK_SECONDS,
   MAX_TIME_BANK_SECONDS, bankTimeMs, clampSetting, timeBankMs, turnTimeMs,
@@ -254,9 +254,10 @@ export class PokerEngine {
     this.deckManager.resetDeck();
     this.gameStateManager.resetPlayerStates();
     this.gameStateManager.rotateDealerButton();
-    // Sitting-out players keep their seat and stack but take no part in the hand
+    this.dealInWaitingPlayers();
+    // Sitting-out (and still waiting) players keep their seat and stack but take no part in the hand
     this.state.players.forEach(p => {
-      if (p.isSittingOut) {
+      if (sitsOutOfHand(p)) {
         p.isFolded = true;
         p.hasActed = true;
       }
@@ -282,6 +283,7 @@ export class PokerEngine {
   if (isStudVariant(this.state.variant)) {
       if (this.state.bettingMode === 'fixed-limit') this.state.limitBets = 0;
       this.dealStudInitial();
+      this.postStudAntes();
       // Stud uses bring-in instead of blinds
       this.computeStudBringIn();
       this.gameStateManager.startBettingRound('third');
@@ -291,6 +293,7 @@ export class PokerEngine {
       this.dealHoleCards();
       this.postAntes();
   this.postBlinds();
+      this.postReturningBigBlinds();
       this.gameStateManager.startBettingRound('preflop');
       this.postStraddle();
       this.settleIfNobodyCanBet();
@@ -486,6 +489,95 @@ export class PokerEngine {
   }
 
   /**
+   * Stud: everyone dealt in antes before the bring-in. The table's ante is used, or a tenth of the
+   * big blind (at least 1) when the table has none.
+   */
+  private postStudAntes(): void {
+    const ante = this.state.ante && this.state.ante > 0
+      ? this.state.ante
+      : Math.max(1, Math.round(this.state.bigBlind / 10));
+    for (const p of this.gameStateManager.dealtInPlayers()) {
+      const pay = this.postForced(p, ante, false);
+      if (pay > 0) this.logAction({ playerId: p.id, action: 'ante', put: pay, stage: 'third' });
+    }
+  }
+
+  /**
+   * Seat order index of the player who posts the big blind, if these players were dealt in with
+   * the button on dealerId. Heads-up the button posts the small blind and the other player the big.
+   */
+  private bigBlindIndexAmong(players: Player[], dealerId: string | undefined): number {
+    const n = players.length;
+    const d = players.findIndex(p => p.id === dealerId);
+    if (n < 2 || d < 0) return -1;
+    return n === 2 ? (d + 1) % n : (d + 2) % n;
+  }
+
+  /**
+   * At the start of a hand, after the button moves: deal in players who were waiting for the big
+   * blind once it reaches them (or who chose to post it now), and note a missed big blind for
+   * anyone sitting out whom it passed. Games without blinds (stud) deal everyone in straight away,
+   * as does a table that could not otherwise start.
+   */
+  private dealInWaitingPlayers(): void {
+    const players = this.state.players;
+    const dealerId = players[this.state.dealerPosition]?.id;
+    const active = players.filter(p => !sitsOutOfHand(p));
+    const waiting = players.filter(p => p.waitingForBigBlind && !p.isSittingOut);
+    const hasBlinds = !isStudVariant(this.state.variant) && !this.state.bombPotNext;
+    const dealIn = (p: Player) => {
+      delete p.waitingForBigBlind;
+      delete p.missedBigBlind;
+    };
+    if (!hasBlinds || active.length < 2) {
+      waiting.forEach(p => {
+        dealIn(p);
+        delete p.postBigBlindNow;
+      });
+      // The button may have skipped them; keep it on a player who is in the hand
+      const onButton = players[this.state.dealerPosition];
+      if (!onButton || sitsOutOfHand(onButton)) {
+        const first = players.findIndex(p => !sitsOutOfHand(p));
+        if (first >= 0) this.state.dealerPosition = first;
+      }
+      return;
+    }
+    // Would this player post the big blind if they were dealt in with the players already in?
+    const wouldBeBigBlind = (p: Player) => {
+      const withP = players.filter(x => x === p || active.includes(x));
+      return withP[this.bigBlindIndexAmong(withP, dealerId)] === p;
+    };
+    let bigBlindTaken = false;
+    for (const p of waiting) {
+      if (p.postBigBlindNow) {
+        dealIn(p);
+      } else if (!bigBlindTaken && wouldBeBigBlind(p)) {
+        dealIn(p);
+        bigBlindTaken = true;
+      }
+    }
+    for (const p of players) {
+      if (p.isSittingOut && !this.removedPlayers.has(p.id) && wouldBeBigBlind(p)) p.missedBigBlind = true;
+    }
+  }
+
+  /**
+   * Players who chose to post rather than wait for the big blind put one in now, out of turn. It
+   * is a live bet: if nobody raises they may still check when the action reaches them.
+   */
+  private postReturningBigBlinds(): void {
+    for (const p of this.state.players) {
+      if (!p.postBigBlindNow) continue;
+      delete p.postBigBlindNow;
+      if (p.isFolded || sitsOutOfHand(p)) continue;
+      const owe = this.state.bigBlind - p.currentBet;
+      if (owe <= 0) continue;
+      const pay = this.postForced(p, owe, true);
+      if (pay > 0) this.logAction({ playerId: p.id, action: 'big-blind', amount: p.currentBet, put: pay, stage: 'preflop' });
+    }
+  }
+
+  /**
    * After the forced bets, if every player in the hand is already all-in nobody can bet: deal the
    * rest of the board and settle, instead of waiting for a decision nobody can make.
    */
@@ -625,6 +717,8 @@ export class PokerEngine {
         isAllIn: false,
         isSittingOut: false,
         consecutiveTimeouts: 0,
+        // Dealt in once the big blind reaches them (see dealInWaitingPlayers)
+        waitingForBigBlind: true,
         timeBank: 30,
         ...(typeof this.state.startingTimeBanks === 'number' ? { timeBanks: this.state.startingTimeBanks } : {}),
       };
@@ -636,6 +730,9 @@ export class PokerEngine {
         this.removedPlayers.delete(s.id);
         Object.assign(existing, fresh);
         delete existing.holeCards;
+        delete existing.leaveAfterHand;
+        delete existing.postBigBlindNow;
+        delete existing.missedBigBlind;
       } else {
         this.state.players.push({ id: s.id, ...fresh } as Player);
       }
@@ -664,8 +761,36 @@ export class PokerEngine {
   public setSittingOut(playerId: string, sittingOut: boolean): void {
     const player = this.state.players.find(p => p.id === playerId);
     if (!player) throw new Error('Player not found');
+    if (sittingOut && player.waitingForBigBlind) {
+      // Still owes the big blind they were waiting for
+      player.missedBigBlind = true;
+      delete player.waitingForBigBlind;
+      delete player.postBigBlindNow;
+    }
     player.isSittingOut = sittingOut;
-    if (!sittingOut) player.consecutiveTimeouts = 0;
+    if (!sittingOut) {
+      player.consecutiveTimeouts = 0;
+      // Back in after missing the big blind: wait for it, or post one to play straight away
+      if (player.missedBigBlind) player.waitingForBigBlind = true;
+    }
+  }
+
+  /**
+   * A player's choices about the next hands: post a big blind now rather than wait for it, or
+   * stand up as soon as the current hand ends.
+   */
+  public setSeatOption(playerId: string, option: 'post-big-blind-now' | 'leave-after-hand', value: boolean): void {
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player) throw new Error('Player not found');
+    if (option === 'post-big-blind-now') {
+      if (value && !player.waitingForBigBlind) throw new Error('You are not waiting for the big blind');
+      if (value) player.postBigBlindNow = true;
+      else delete player.postBigBlindNow;
+    } else if (value) {
+      player.leaveAfterHand = true;
+    } else {
+      delete player.leaveAfterHand;
+    }
   }
 
   /** After a hand ends, a player who was dealt in may show their cards to the table. */
@@ -781,7 +906,7 @@ export class PokerEngine {
       for (let i = 0; i < this.state.players.length; i++) {
         const playerPosition = (this.state.dealerPosition + 1 + i) % this.state.players.length;
         const player = this.state.players[playerPosition];
-        if (player.isSittingOut) continue;
+        if (sitsOutOfHand(player)) continue;
         
         if (!player.holeCards) {
           player.holeCards = [];
@@ -1091,13 +1216,13 @@ export class PokerEngine {
     if (this.state.variant === 'five-card-stud') {
       // Five-card stud: 1 down, then one up to start (total 2 cards initially)
       for (const p of this.state.players) {
-        if (p.isSittingOut) continue;
+        if (sitsOutOfHand(p)) continue;
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].downCards.push(c);
       }
       for (const p of this.state.players) {
-        if (p.isSittingOut) continue;
+        if (sitsOutOfHand(p)) continue;
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
@@ -1106,14 +1231,14 @@ export class PokerEngine {
       // Seven-card stud: 2 down, 1 up initially
       for (let r = 0; r < 2; r++) {
         for (const p of this.state.players) {
-          if (p.isSittingOut) continue;
+          if (sitsOutOfHand(p)) continue;
           const c = this.deckManager.dealCard();
           if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
           if (c) this.state.studState!.playerCards[p.id].downCards.push(c);
         }
       }
       for (const p of this.state.players) {
-        if (p.isSittingOut) continue;
+        if (sitsOutOfHand(p)) continue;
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
@@ -1131,7 +1256,7 @@ export class PokerEngine {
     }
     for (let k = 0; k < count; k++) {
       for (const p of this.state.players) {
-        if (p.isSittingOut) continue;
+        if (sitsOutOfHand(p)) continue;
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
@@ -1149,7 +1274,7 @@ export class PokerEngine {
     }
     for (let k = 0; k < count; k++) {
       for (const p of this.state.players) {
-        if (p.isSittingOut) continue;
+        if (sitsOutOfHand(p)) continue;
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].downCards.push(c);

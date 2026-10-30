@@ -29,6 +29,7 @@ jest.mock('../../../src/lib/auth/auth-utils', () => ({
 
 import timeoutHandler from '../../../pages/api/games/timeout';
 import sitOutHandler from '../../../pages/api/games/sit-out';
+import seatOptionsHandler from '../../../pages/api/games/seat-options';
 import showCardsHandler from '../../../pages/api/games/show-cards';
 import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
 import { publishGameStateUpdate } from '../../../src/lib/realtime/publisher';
@@ -121,6 +122,28 @@ describe('/api/games/sit-out', () => {
   it('rejects a missing flag and callers not in the game', async () => {
     expect((await call(sitOutHandler, { tableId: 't', playerId: 'b' })).status).toBe(400);
     expect((await call(sitOutHandler, { tableId: 't', playerId: 'stranger', sittingOut: true })).status).toBe(403);
+  });
+});
+
+describe('/api/games/seat-options', () => {
+  it('records that the player will leave after this hand, and lets them take it back', async () => {
+    const on = await call(seatOptionsHandler, { tableId: 't', playerId: 'a', option: 'leave-after-hand', value: true });
+    expect(on.status).toBe(200);
+    expect(engine.getState().players.find(p => p.id === 'a')!.leaveAfterHand).toBe(true);
+    expect(publishGameStateUpdate).toHaveBeenCalled();
+    await call(seatOptionsHandler, { tableId: 't', playerId: 'a', option: 'leave-after-hand', value: false });
+    expect(engine.getState().players.find(p => p.id === 'a')!.leaveAfterHand).toBeUndefined();
+  });
+
+  it('refuses posting a big blind when the player is not waiting for one', async () => {
+    const out = await call(seatOptionsHandler, { tableId: 't', playerId: 'a', option: 'post-big-blind-now', value: true });
+    expect(out.status).toBe(400);
+    expect(out.body.error).toBe('You are not waiting for the big blind');
+  });
+
+  it('rejects unknown options and players not in the game', async () => {
+    expect((await call(seatOptionsHandler, { tableId: 't', playerId: 'a', option: 'fold-everything', value: true })).status).toBe(400);
+    expect((await call(seatOptionsHandler, { tableId: 't', playerId: 'z', option: 'leave-after-hand', value: true })).status).toBe(403);
   });
 });
 

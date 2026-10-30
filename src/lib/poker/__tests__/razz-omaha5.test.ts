@@ -145,7 +145,7 @@ describe('razz hands', () => {
     while (engine.getState().stage !== 'showdown' && guard-- > 0) passive(engine);
     s = engine.getState();
     expect(s.handWinners).toEqual(['a']);
-    expect(s.players.find(p => p.id === 'a')!.stack).toBe(102);
+    expect(s.players.find(p => p.id === 'a')!.stack).toBe(104);
     expect(s.players.reduce((sum, p) => sum + p.stack, 0)).toBe(300);
   });
 

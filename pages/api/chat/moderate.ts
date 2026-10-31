@@ -3,15 +3,16 @@ import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { ChatService } from '../../../src/lib/services/chat-service';
 import { publishChatModerated } from '../../../src/lib/realtime/publisher';
 import { getPool } from '../../../src/lib/database/pool';
-import { requireAdminSession } from '../../../src/lib/auth/auth-utils';
+import { requirePermission } from '../../../src/lib/auth/access-control';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const rl = rateLimit(req, { limit: 120, windowMs: 60_000 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
-  // The moderator is the signed-in admin, never a client-supplied ID
-  const moderatorId = await requireAdminSession(req, res);
-  if (!moderatorId) return;
+  // The moderator is the signed-in user, never a client-supplied ID
+  const moderator = await requirePermission(req, res, 'chat.moderate');
+  if (!moderator) return;
+  const moderatorId = moderator.userId;
   try {
     const { messageId, hide } = req.body || {};
     const pool = getPool();

@@ -86,7 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { tableId, playerId: claimedPlayerId, decision } = req.body;
 
-    const playerId = await requirePlayer(req, res, claimedPlayerId);
+    const playerId = await requirePlayer(req, res, claimedPlayerId, decision === 'yes' ? 'game.rebuy' : undefined);
     if (!playerId) return;
 
     if (!tableId || (decision !== 'yes' && decision !== 'no')) {

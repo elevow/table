@@ -2,8 +2,12 @@ import { NextApiRequest, NextApiResponse } from 'next';
 
 // Simulate a signed-in caller whose session matches the playerId they send
 const mockRequirePlayer = jest.fn(async (_req: any, _res: any, claimed?: unknown) => (claimed ? String(claimed) : 'player1'));
-jest.mock('../../../auth/auth-utils', () => ({
-  requirePlayer: (...args: any[]) => mockRequirePlayer(...args),
+jest.mock('../../../auth/access-control', () => ({
+  ...jest.requireActual('../../../auth/access-control'),
+  requirePlayerAccess: async (...args: any[]) => {
+    const userId = await mockRequirePlayer(...args);
+    return userId ? { userId, permissions: new Set(['table.join']), limits: {}, sanction: null } : null;
+  },
 }));
 
 jest.mock('../../../realtime/publisher', () => ({

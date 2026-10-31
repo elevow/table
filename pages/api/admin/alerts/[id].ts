@@ -1,13 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { adminAlertStore } from '../../../../src/lib/security/admin-alert-store';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
-import { requireAdminSession } from '../../../../src/lib/auth/auth-utils';
+import { requirePermission } from '../../../../src/lib/auth/access-control';
 import { adminAlertRepository } from '../../../../src/lib/security/admin-alert-repository';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const rl = rateLimit(req, { limit: 120, windowMs: 60_000 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
-  if (!(await requireAdminSession(req, res))) return;
+  if (!(await requirePermission(req, res, req.method === 'PATCH' ? 'admin.alerts.resolve' : 'admin.alerts.view'))) return;
   const { id } = req.query;
   if (typeof id !== 'string') return res.status(400).json({ error: 'id required' });
   if (req.method === 'GET') {

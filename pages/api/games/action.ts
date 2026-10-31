@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     expectedTurnSeq?: number;
   };
 
-  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.play');
   if (!playerId) return;
 
   if (!tableId || !action) {

@@ -1,21 +1,33 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
-import { getAuthenticatedUserId } from '../../../src/lib/auth/auth-utils';
+import { getSessionUser } from '../../../src/lib/auth/auth-utils';
+import { getUserAccess } from '../../../src/lib/auth/access-control';
+import { canOnTable } from '../../../src/lib/auth/table-access';
 import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
 import { ledgerToCsv, loadLedger, settlementPayments, summarizeLedger } from '../../../src/lib/server/chip-ledger';
-import { isRoomHost } from '../../../src/lib/server/room-config';
+import { loadRoom } from '../../../src/lib/server/room-config';
 
 /**
  * GET /api/games/ledger?tableId=&format=csv
  *
  * The table's chip ledger (who bought in for what, who left with what, who is up or down, and
  * the payments that settle it) plus the caller's session stats. Open to anyone who has played at
- * the table and to the host. format=csv downloads the ledger as a spreadsheet.
+ * the table, to the host (with room.view_ledger) and to staff who can see all rooms.
+ * format=csv downloads the ledger as a spreadsheet.
  */
+// The host with room.view_ledger, or staff who can see every room
+async function canSeeAsStaffOrHost(tableId: string, user: { id: string; email: string | null }): Promise<boolean> {
+  const access = await getUserAccess(user);
+  if (access.permissions.has('admin.rooms.view')) return true;
+  const room = await loadRoom(tableId);
+  return !!room && canOnTable(access, room, 'room.view_ledger').allowed;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const userId = await getAuthenticatedUserId(req);
-  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  const user = await getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  const userId = user.id;
   const tableId = typeof req.query.tableId === 'string' ? req.query.tableId : '';
   if (!tableId) return res.status(400).json({ error: 'Missing tableId' });
 
@@ -25,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const players = engine?.getState().players || [];
     const onTable = new Map(players.map(p => [p.id, { name: p.name, stack: p.stack }]));
 
-    const allowed = entries.some(e => e.playerId === userId) || onTable.has(userId) || await isRoomHost(tableId, userId);
+    const allowed = entries.some(e => e.playerId === userId) || onTable.has(userId) || await canSeeAsStaffOrHost(tableId, user);
     if (!allowed) return res.status(403).json({ error: 'Only players at this table can see its ledger' });
 
     const lines = summarizeLedger(entries, onTable);

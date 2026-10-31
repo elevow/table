@@ -13,7 +13,15 @@ jest.mock('../../lib/database/pool', () => ({
       },
       release: () => {},
     }),
-    query: async () => ({ rows: persistedSeats ? [{ configuration: { seats: persistedSeats } }] : [] }),
+    query: async (sql: string, params: string[]) => {
+      // Session lookup and role grants for the game.react permission check
+      if (sql.includes('auth_tokens')) {
+        const userId = sessions.get(params[0]);
+        return { rows: userId ? [{ id: userId, email: null }] : [] };
+      }
+      if (sql.includes('access_roles')) return { rows: [{ kind: 'role', key: 'player', rank: 10, item: 'game.react' }] };
+      return { rows: persistedSeats ? [{ configuration: { seats: persistedSeats } }] : [] };
+    },
   }),
 }));
 jest.mock('../../lib/realtime/publisher', () => ({

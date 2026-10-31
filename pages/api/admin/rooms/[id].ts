@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
-import { requireAdminSession } from '../../../../src/lib/auth/auth-utils';
+import { requirePermission } from '../../../../src/lib/auth/access-control';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Rate limiting
@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // Check admin privileges
-  if (!(await requireAdminSession(req, res))) return;
+  if (!(await requirePermission(req, res, req.method === 'DELETE' ? 'admin.rooms.manage' : 'admin.rooms.view'))) return;
 
   const { id } = req.query;
   

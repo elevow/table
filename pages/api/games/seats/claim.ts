@@ -1,7 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { publishTableEvent } from '../../../../src/lib/realtime/publisher';
-import { requirePlayer } from '../../../../src/lib/auth/auth-utils';
+import {
+  getLimit, hasPermission, requirePlayerAccess, sendLimitReached, sendPermissionDenied,
+} from '../../../../src/lib/auth/access-control';
 import { performSeatClaim } from '../../../../src/lib/server/seat-actions';
+import { tablesSeatedAt } from '../../../../src/lib/shared/game-seats';
 import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../../src/lib/server/room-config';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -18,14 +21,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       playerName?: string;
     };
 
-    const playerId = await requirePlayer(req, res, claimedPlayerId);
-    if (!playerId) return;
+    const access = await requirePlayerAccess(req, res, claimedPlayerId);
+    if (!access) return;
+    if (!hasPermission(access, 'table.join')) return sendPermissionDenied(res, 'table.join', access);
+    const playerId = access.userId;
 
     if (!tableId || !seatNumber || !playerName) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
     const roomId = String(tableId);
+
+    const maxTables = getLimit(access, 'tables.max_seated');
+    if (maxTables !== null) {
+      const elsewhere = await tablesSeatedAt(playerId, roomId);
+      if (elsewhere.length >= maxTables) {
+        return sendLimitReached(res, 'tables.max_seated', maxTables, `You're seated at: ${elsewhere.join(', ')}`);
+      }
+    }
     const room = await loadRoom(roomId).catch(() => null);
     const config = (room?.configuration || {}) as TableExtrasConfig;
     const isHost = !!room?.createdBy && room.createdBy === playerId;

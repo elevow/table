@@ -26,8 +26,16 @@ jest.mock('../../../src/lib/services/game-service', () => ({
 
 // Mock auth to always return a valid user id
 jest.mock('../../../src/lib/auth/auth-utils', () => ({
-  requireAuth: jest.fn().mockResolvedValue('test-user-id'),
+  requirePlayer: jest.fn().mockResolvedValue('test-user-id'),
   getAuthenticatedUserId: jest.fn().mockResolvedValue(null)
+}));
+// Room creation reads the caller's access; this user may create rooms
+jest.mock('../../../src/lib/auth/access-control', () => ({
+  requirePlayerAccess: jest.fn().mockResolvedValue({ userId: 'test-user-id', permissions: new Set(['room.create']) }),
+  hasPermission: (access: { permissions: Set<string> }, permission: string) => access.permissions.has(permission),
+  sendPermissionDenied: (res: any) => res.status(403).json({ code: 'PERMISSION_DENIED' }),
+  getLimit: () => null,
+  sendLimitReached: jest.fn(),
 }));
 
 function createRes() {

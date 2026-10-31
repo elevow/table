@@ -15,11 +15,13 @@ import addOnHandler from '../../../pages/api/tournaments/add-on';
 
 import { createDefaultFreezeoutConfig } from '../../../src/lib/tournament/tournament-utils';
 
-// Signed-in admin for organizer actions; players act as the userId they send
-const mockRequireAdminSession = jest.fn(async () => 'admin-1');
+// Signed-in organizer for organizer actions; players act as the userId they send
+const mockRequirePermission = jest.fn(async (_req: any, _res: any, _permission: string): Promise<any> => ({ userId: 'admin-1' }));
+jest.mock('../../../src/lib/auth/access-control', () => ({
+  requirePermission: (...args: [any, any, string]) => mockRequirePermission(...args),
+}));
 const mockRequirePlayer = jest.fn(async (_req: any, _res: any, claimed?: unknown) => (claimed ? String(claimed) : 'u1'));
 jest.mock('../../../src/lib/auth/auth-utils', () => ({
-  requireAdminSession: (...args: any[]) => mockRequireAdminSession(...args),
   requirePlayer: (...args: any[]) => mockRequirePlayer(...args),
 }));
 
@@ -155,8 +157,8 @@ describe('Tournaments API routes (US-058)', () => {
   });
 
   test('organizer actions are rejected for non-admins', async () => {
-    mockRequireAdminSession.mockImplementationOnce(async (_req: any, res: any) => {
-      res.status(403).json({ error: 'Admin access required' });
+    mockRequirePermission.mockImplementationOnce(async (_req: any, res: any) => {
+      res.status(403).json({ error: 'Permission required' });
       return null;
     });
     const res = createRes();

@@ -7,6 +7,7 @@ import { useUserAvatar } from '../src/hooks/useUserAvatar';
 import Avatar from '../src/components/Avatar';
 import AdminRoomsPanel from '../src/components/AdminRoomsPanel';
 import CombinedPlayerStats from '../src/components/CombinedPlayerStats';
+import { authHeaders } from '../src/utils/auth-headers';
 
 const Dashboard: NextPage = () => {
   const router = useRouter();
@@ -22,7 +23,23 @@ const Dashboard: NextPage = () => {
   const [userId, setUserId] = useState<string>('me');
   const { avatarData, loading: avatarLoading } = useUserAvatar(userId);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  
+  const [canViewRoles, setCanViewRoles] = useState(false);
+  const [restriction, setRestriction] = useState<{ kind: 'ban' | 'suspend'; until: string | null; reason: string | null } | null>(null);
+
+  // Show the roles link to staff who can see roles or users, and any suspension; the API checks again on every request
+  useEffect(() => {
+    const headers = authHeaders();
+    if (!headers.Authorization) return;
+    fetch('/api/auth/check-admin', { headers })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        const permissions: string[] = data?.permissions || [];
+        setCanViewRoles(permissions.includes('roles.view') || permissions.includes('admin.users.view'));
+        setRestriction(data?.sanction ?? null);
+      })
+      .catch(() => {});
+  }, []);
+
   // Get authenticated user ID on component mount
   useEffect(() => {
     const getAuthenticatedUserId = async () => {
@@ -185,6 +202,14 @@ const Dashboard: NextPage = () => {
         </h2>
         
         <div className="flex flex-col items-center space-y-6 mb-8">
+          {restriction && (
+            <div role="alert" className="w-full max-w-md p-3 rounded bg-red-100 border border-red-400 text-red-800 text-sm">
+              Your account is {restriction.kind === 'ban' ? 'banned' : 'suspended'}
+              {restriction.until ? ` until ${new Date(restriction.until).toLocaleString()}` : ''}.
+              {restriction.reason ? ` Reason: ${restriction.reason}.` : ''} You can watch tables but not play or chat.
+            </div>
+          )}
+
           {/* Game action buttons */}
           <div className="flex justify-center">
             <button
@@ -207,6 +232,11 @@ const Dashboard: NextPage = () => {
             <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/leaderboard')}>
               Leaderboard &amp; achievements
             </button>
+            {canViewRoles && (
+              <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/admin/roles')}>
+                Roles &amp; permissions
+              </button>
+            )}
           </div>
           
           {/* Room code join section */}

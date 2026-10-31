@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { tableId, playerId: claimedPlayerId } = (req.body || {}) as { tableId?: string; playerId?: string };
 
-  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.show_cards');
   if (!playerId) return;
   if (!tableId) return res.status(400).json({ error: 'Missing tableId' });
 

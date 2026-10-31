@@ -3,17 +3,13 @@ import { getPool } from '../../../../src/lib/database/pool';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { GameService } from '../../../../src/lib/services/game-service';
 import { createSafeAudit } from '../../../../src/lib/api/audit';
-import { requireAuth } from '../../../../src/lib/auth/auth-utils';
+import {
+  getLimit, hasPermission, requirePlayerAccess, sendLimitReached, sendPermissionDenied,
+} from '../../../../src/lib/auth/access-control';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
   return (fwd.split(',').map(s => s.trim())[0]) || (req.socket.remoteAddress || 'unknown');
-}
-
-function getCallerUserId(req: NextApiRequest): string | null {
-  const fromHeader = (req.headers['x-user-id'] as string) || '';
-  const fromQuery = (req.query && (req.query as any).userId as string) || '';
-  return (fromHeader || fromQuery) || null;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -22,13 +18,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const rl = rateLimit(req, { limit: 60, windowMs: 60_000 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
 
+  // Signed-out visitors (including guests without a session) and users without room.create can't create rooms
+  const access = await requirePlayerAccess(req, res);
+  if (!access) return;
+  if (!hasPermission(access, 'room.create')) return sendPermissionDenied(res, 'room.create', access);
+  // Dealer's choice and mixed games rotate variants, which is its own host permission
+  const variant = req.body?.configuration?.variant;
+  if ((variant === 'dealers-choice' || variant === 'mixed') && !hasPermission(access, 'room.choose_variant')) {
+    return sendPermissionDenied(res, 'room.choose_variant', access);
+  }
+  const userId = access.userId;
+
   const pool = getPool();
   const safeLog = createSafeAudit(pool);
 
-  try {
-    // Require authentication; unauthenticated (including guests without a session) cannot create rooms
-    const userId = await requireAuth(req);
+  const perDay = getLimit(access, 'rooms.per_day');
+  if (perDay !== null) {
+    const recent = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM game_rooms WHERE created_by = $1 AND created_at > NOW() - INTERVAL '24 hours'`,
+      [userId]
+    ).then(r => Number(r.rows[0]?.n) || 0, () => 0);
+    if (recent >= perDay) return sendLimitReached(res, 'rooms.per_day', perDay);
+  }
 
+  try {
     const service = new GameService(pool);
     // Sanitize/force createdBy to authenticated user
     const payload = { ...req.body, createdBy: userId };
@@ -41,7 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Room creation failed:', err.message);
     console.error('Error stack:', err.stack);
     await safeLog(
-      getCallerUserId(req) || '00000000-0000-0000-0000-000000000000',
+      userId,
       'games',
       'create',
       false,

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
-import { requirePlayer } from '../../../src/lib/auth/auth-utils';
+import { logAdminAction, requirePlayerAccess, sendPermissionDenied } from '../../../src/lib/auth/access-control';
+import { canOnTable, isTableOwner } from '../../../src/lib/auth/table-access';
 import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
 import { broadcastGameState } from '../../../src/lib/server/game-action-pipeline';
@@ -25,24 +26,52 @@ type HostAction =
   | { action: 'approve'; targetId: string }
   | { action: 'deny'; targetId: string };
 
+// The host permission each action needs
+const ACTION_PERMISSIONS: Record<HostAction['action'], string> = {
+  'pause': 'room.start',
+  'resume': 'room.start',
+  'set-blinds': 'room.configure',
+  'allow-straddle': 'room.configure',
+  'allow-run-it-twice': 'room.configure',
+  'set-turn-time': 'room.configure',
+  'adjust-time-banks': 'room.configure',
+  'bomb-pot': 'room.configure',
+  'kick': 'room.kick_player',
+  'require-approval': 'room.approve_seat',
+  'approve': 'room.approve_seat',
+  'deny': 'room.approve_seat',
+};
+
 /**
  * POST /api/games/host { tableId, action, ... }
  *
  * Controls for the room's host (its creator): pause and resume, change blinds for the next hand,
  * allow straddles and run it twice, schedule a bomb pot, remove a player, and approve who sits down.
+ * Each needs its host permission; staff with admin.rooms.manage can use them on any table.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const body = (req.body || {}) as { tableId?: string; playerId?: string } & HostAction;
-  const hostId = await requirePlayer(req, res, body.playerId);
-  if (!hostId) return;
+  const access = await requirePlayerAccess(req, res, body.playerId);
+  if (!access) return;
+  const hostId = access.userId;
   const tableId = body.tableId;
   if (!tableId) return res.status(400).json({ error: 'Missing tableId' });
+  const permission = ACTION_PERMISSIONS[body.action];
+  if (!permission) return res.status(400).json({ error: 'Unknown host action' });
 
   try {
     const room = await loadRoom(tableId);
     if (!room) return res.status(404).json({ error: 'Room not found' });
-    if (room.createdBy !== hostId) return res.status(403).json({ error: 'Only the host can do that' });
+    const auth = canOnTable(access, room, permission);
+    if (!auth.allowed) {
+      if (isTableOwner(access, room)) return sendPermissionDenied(res, permission, access);
+      return res.status(403).json({ error: 'Only the host can do that' });
+    }
+    if (auth.asAdmin) {
+      const { tableId: _t, playerId: _p, ...details } = body;
+      await logAdminAction(hostId, `table.${body.action}`, 'room', tableId, details);
+    }
     const config = room.configuration as TableExtrasConfig;
 
     // Settings that live on the room rather than in a running game

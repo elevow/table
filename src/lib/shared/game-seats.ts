@@ -81,6 +81,32 @@ export async function loadPersistedRoomSeats(roomId: string): Promise<GameSeats 
   }
 }
 
+/**
+ * Names of the other tables where a player holds a seat, from the saved seats.
+ * Returns an empty list if the lookup fails, so a database hiccup never keeps anyone from sitting.
+ */
+export async function tablesSeatedAt(playerId: string, exceptRoomId: string): Promise<string[]> {
+  try {
+    const { getPool } = await import('../database/pool');
+    const result = await getPool().query(
+      `SELECT name FROM game_rooms
+       WHERE id::text <> $2
+         AND EXISTS (
+           SELECT 1 FROM jsonb_each(CASE WHEN jsonb_typeof(configuration->'seats') = 'object'
+                                         THEN configuration->'seats' ELSE '{}'::jsonb END) s
+           WHERE s.value->>'playerId' = $1
+         )
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [playerId, exceptRoomId],
+    );
+    return (result.rows || []).map((r: { name: string }) => r.name);
+  } catch (error) {
+    console.warn('[game-seats] Failed to count seated tables:', error);
+    return [];
+  }
+}
+
 export async function persistRoomSeats(roomId: string, seats: GameSeats): Promise<boolean> {
   try {
     const { getPool } = await import('../database/pool');

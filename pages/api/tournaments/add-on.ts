@@ -9,7 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
   try {
     const { tournamentId, userId: claimedUserId } = req.body || {};
-    const userId = await requirePlayer(req, res, claimedUserId);
+    const userId = await requirePlayer(req, res, claimedUserId, 'game.rebuy');
     if (!userId) return;
     if (!tournamentId) return res.status(400).json({ error: 'Missing tournamentId' });
     const t = tournamentManager.addOn({ tournamentId, userId });

@@ -24,9 +24,12 @@ const Dashboard: NextPage = () => {
   const { avatarData, loading: avatarLoading } = useUserAvatar(userId);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [canViewRoles, setCanViewRoles] = useState(false);
+  // Shown until permissions load (or if they can't), since the API refuses room.create anyway
+  const [canCreateRoom, setCanCreateRoom] = useState(true);
   const [restriction, setRestriction] = useState<{ kind: 'ban' | 'suspend'; until: string | null; reason: string | null } | null>(null);
 
-  // Show the roles link to staff who can see roles or users, and any suspension; the API checks again on every request
+  // Show the roles link to staff who can see roles or users, hide Create Room without room.create, and show any
+  // suspension; the API checks again on every request
   useEffect(() => {
     const headers = authHeaders();
     if (!headers.Authorization) return;
@@ -35,6 +38,7 @@ const Dashboard: NextPage = () => {
       .then(data => {
         const permissions: string[] = data?.permissions || [];
         setCanViewRoles(permissions.includes('roles.view') || permissions.includes('admin.users.view'));
+        if (data) setCanCreateRoom(permissions.includes('room.create'));
         setRestriction(data?.sanction ?? null);
       })
       .catch(() => {});
@@ -211,6 +215,7 @@ const Dashboard: NextPage = () => {
           )}
 
           {/* Game action buttons */}
+          {canCreateRoom && (
           <div className="flex justify-center">
             <button
               className={`px-6 py-2 rounded-md text-white ${isAuthenticated ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-gray-400 cursor-not-allowed'}`}
@@ -222,6 +227,7 @@ const Dashboard: NextPage = () => {
               Create Room (choose variant)
             </button>
           </div>
+          )}
           <div className="flex gap-4 text-sm">
             <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/history')}>
               Hand history

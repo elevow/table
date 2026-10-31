@@ -9,7 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const rl = rateLimit(req, { limit: 120, windowMs: 60_000 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
   // Reveals and cooldowns are recorded for the signed-in user only
-  const userId = await requirePlayer(req, res, req.body?.userId);
+  const userId = await requirePlayer(req, res, req.body?.userId, 'game.rabbit_hunt');
   if (!userId) return;
   try {
     const pool = new Pool();

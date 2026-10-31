@@ -10,7 +10,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const rl = rateLimit(req, { limit: 300, windowMs: 60_000 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
   // Reactions belong to the signed-in user; a userId in the body must match the session
-  const userId = await requirePlayer(req, res, req.body?.userId);
+  const userId = await requirePlayer(req, res, req.body?.userId, 'chat.send');
   if (!userId) return;
   try {
     const { messageId, emoji } = req.body || {};

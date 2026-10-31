@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     join?: boolean;
     playerName?: string;
   };
-  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  const playerId = await requirePlayer(req, res, claimedPlayerId, join === true ? 'table.waitlist' : undefined);
   if (!playerId) return;
   if (!tableId || typeof join !== 'boolean') return res.status(400).json({ error: 'Missing tableId or join' });
 

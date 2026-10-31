@@ -71,6 +71,7 @@ describe('admin API session auth', () => {
     const res = makeRes();
     await checkAdminHandler(makeReq({ authorization: 'Bearer tok' }), res);
     expect(mockQuery.mock.calls[0][0]).toContain("at.type = 'session'");
-    expect(res.json).toHaveBeenCalledWith({ isAdmin: true, email: 'admin@example.com' });
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: true, email: 'admin@example.com' }));
+    expect(res.json.mock.calls[0][0].permissions).toContain('roles.edit');
   });
 });

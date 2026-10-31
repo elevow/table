@@ -47,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { tableId, playerId: claimedPlayerId, variant: rawVariant } = req.body ?? {};
 
-  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.play');
   if (!playerId) return;
 
   if (!tableId) {

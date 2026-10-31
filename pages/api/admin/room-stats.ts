@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { requireAdminSession } from '../../../src/lib/auth/auth-utils';
+import { requirePermission } from '../../../src/lib/auth/access-control';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { getRoomRebuySnapshot } from '../../../src/lib/shared/rebuy-tracker';
 
@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!(await requireAdminSession(req, res))) return;
+  if (!(await requirePermission(req, res, 'admin.rooms.view'))) return;
 
   try {
     const { roomId } = req.query;

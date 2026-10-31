@@ -112,7 +112,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     playerId?: string;
     seatedPlayers?: Array<{ seatNumber: number; playerId: string; playerName: string; chips: number }>;
   };
-  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.play');
   if (!playerId) return;
   if (!tableId) return res.status(400).json({ error: 'Missing tableId' });
 

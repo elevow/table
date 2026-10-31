@@ -8,8 +8,6 @@ import deleteHandler from '../../../pages/api/chat/delete';
 import addReactionHandler from '../../../pages/api/chat/reactions/add';
 import removeReactionHandler from '../../../pages/api/chat/reactions/remove';
 
-// The connect/release mock is needed for isUserAdminBySession, which uses client.query for admin authentication.
-// The connect/release mock is needed for isUserAdminBySession, which uses client.query for admin authentication.
 jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({ query: jest.fn().mockResolvedValue({ rows: [] }), connect: jest.fn().mockResolvedValue({ query: jest.fn().mockResolvedValue({ rows: [] }), release: jest.fn() }) })) }));
 jest.mock('../../../src/lib/api/rate-limit', () => ({ rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 }) }));
 jest.mock('../../../src/lib/realtime/publisher', () => ({
@@ -22,11 +20,24 @@ jest.mock('../../../src/lib/realtime/publisher', () => ({
 jest.mock('../../../src/lib/database/pool', () => ({
   getPool: jest.fn().mockReturnValue({ query: jest.fn().mockResolvedValue({ rows: [] }), connect: jest.fn().mockResolvedValue({ query: jest.fn().mockResolvedValue({ rows: [] }), release: jest.fn() }) }),
 }));
-jest.mock('../../../src/lib/api/admin-auth', () => ({
-  isUserAdminBySession: jest.fn().mockResolvedValue(false),
+// The signed-in moderator for moderate; canDeleteAny decides whether delete treats the caller as a moderator
+const mockRequirePermission = jest.fn(async (_req: any, _res: any, _permission: string): Promise<any> => ({ userId: 'admin-1' }));
+const mockAccess = { canDeleteAny: false, canDeleteOwn: true };
+jest.mock('../../../src/lib/auth/access-control', () => ({
+  requirePermission: (...args: [any, any, string]) => mockRequirePermission(...args),
+  getRequestAccess: jest.fn(async () => ({})),
+  requirePlayerAccess: async (...args: any[]) => {
+    const userId = await mockRequirePlayer(...args);
+    return userId ? { userId } : null;
+  },
+  hasPermission: (_access: unknown, permission: string) =>
+    permission === 'chat.delete_any' ? mockAccess.canDeleteAny
+      : permission === 'chat.delete_own' ? mockAccess.canDeleteOwn
+      : true,
+  getLimit: () => null,
+  sendLimitReached: jest.fn(),
+  sendPermissionDenied: (res: any, permission: string) => res.status(403).json({ code: 'PERMISSION_DENIED', permission }),
 }));
-
-const mockRequireAdminSession = jest.fn(async () => 'admin-1');
 // Behaves like the real requirePlayer: 401 without a session, 403 when a claimed ID differs
 const mockSession: { userId: string | null } = { userId: 'u1' };
 const mockRequirePlayer = jest.fn(async (_req: any, res: any, claimed?: unknown) => {
@@ -41,7 +52,6 @@ const mockRequirePlayer = jest.fn(async (_req: any, res: any, claimed?: unknown)
   return mockSession.userId;
 });
 jest.mock('../../../src/lib/auth/auth-utils', () => ({
-  requireAdminSession: (...args: any[]) => mockRequireAdminSession(...args),
   requirePlayer: (...args: any[]) => mockRequirePlayer(...args),
 }));
 
@@ -104,6 +114,8 @@ describe('Chat API (US-023)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSession.userId = 'u1';
+    mockAccess.canDeleteAny = false;
+    mockAccess.canDeleteOwn = true;
   });
 
   it('POST /api/chat/send returns created message', async () => {
@@ -185,11 +197,12 @@ describe('Chat API (US-023)', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ id: 'm3', isModerated: true });
     expect(mockService.moderate).toHaveBeenCalledWith('m3', 'admin-1', true);
+    expect(mockRequirePermission.mock.calls[0][2]).toBe('chat.moderate');
   });
 
   it('POST /api/chat/moderate rejects non-admins', async () => {
-    mockRequireAdminSession.mockImplementationOnce(async (_req: any, res: any) => {
-      res.status(403).json({ error: 'Admin access required' });
+    mockRequirePermission.mockImplementationOnce(async (_req: any, res: any) => {
+      res.status(403).json({ error: 'Permission required' });
       return null;
     });
     const req = reqHelper('POST', { messageId: 'm3', hide: true });
@@ -217,6 +230,29 @@ describe('Chat API (US-023)', () => {
     await deleteHandler(req as NextApiRequest, res as NextApiResponse);
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({ error: 'not authorized to delete this message' });
+  });
+
+  it('POST /api/chat/delete lets a user with chat.delete_any remove another user message', async () => {
+    mockSession.userId = 'u2';
+    mockAccess.canDeleteAny = true;
+    mockService.getMessage.mockResolvedValue({ id: 'm5', senderId: 'u1', roomId: 'r1' });
+    mockService.deleteMessage.mockResolvedValue({ deleted: true });
+    const req = reqHelper('POST', { messageId: 'm5', userId: 'u2' });
+    const res = resHelper();
+    await deleteHandler(req as NextApiRequest, res as NextApiResponse);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockService.deleteMessage).toHaveBeenCalledWith('m5', 'u2', true);
+  });
+
+  it('POST /api/chat/delete refuses own messages without chat.delete_own', async () => {
+    mockAccess.canDeleteOwn = false;
+    mockService.getMessage.mockResolvedValue({ id: 'm4', senderId: 'u1', roomId: 'r1' });
+    const req = reqHelper('POST', { messageId: 'm4', userId: 'u1' });
+    const res = resHelper();
+    await deleteHandler(req as NextApiRequest, res as NextApiResponse);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ code: 'PERMISSION_DENIED', permission: 'chat.delete_own' });
+    expect(mockService.deleteMessage).not.toHaveBeenCalled();
   });
 
   it('POST /api/chat/delete returns 404 when message not found', async () => {

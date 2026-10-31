@@ -839,7 +839,7 @@ export default function GamePage() {
       if (!resp.ok) {
         const e = await resp.json().catch(() => ({}));
         console.warn('Seat claim failed:', e);
-        if (e?.code === 'SEAT_HELD') setSeatNotice(e.error);
+        if (e?.code === 'SEAT_HELD' || e?.code === 'PERMISSION_DENIED' || e?.code === 'LIMIT_REACHED') setSeatNotice(e.error);
         setClaimingSeat(null);
         return;
       }
@@ -980,6 +980,7 @@ export default function GamePage() {
       if (!response.ok) {
         const err = await response.json();
         console.error('Poker action failed:', err);
+        if (err?.code === 'PERMISSION_DENIED') setSeatNotice(err.error);
         if (err?.code === 'STALE_GAME_STATE') {
           // This view was behind the server; refresh it so the next action uses the current state
           try {
@@ -1442,11 +1443,15 @@ export default function GamePage() {
     if (!tableId || !playerId) return;
     let name = 'Player';
     try { name = localStorage.getItem('playerName') || name; } catch {}
-    await fetch('/api/games/waitlist', {
+    const resp = await fetch('/api/games/waitlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ tableId, playerId, join, playerName: name }),
-    }).catch(() => {});
+    }).catch(() => null);
+    if (resp?.status === 403) {
+      const e = await resp.json().catch(() => ({}));
+      if (e?.code === 'PERMISSION_DENIED') setSeatNotice(e.error);
+    }
     refreshTableExtras();
   }, [tableId, playerId, refreshTableExtras]);
 
@@ -3735,7 +3740,7 @@ export default function GamePage() {
               </div>
             )}
           </div>
-          {tableExtras?.isHost && (
+          {tableExtras && (tableExtras.hostPermissions || []).some(p => p !== 'room.view_ledger') && (
             <HostControlsPanel
               tableId={tableId}
               playerId={playerId}

@@ -3,7 +3,7 @@ import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { ChatService } from '../../../src/lib/services/chat-service';
 import { publishChatDeleted } from '../../../src/lib/realtime/publisher';
 import { getPool } from '../../../src/lib/database/pool';
-import { isUserAdminBySession } from '../../../src/lib/api/admin-auth';
+import { getRequestAccess, hasPermission, sendPermissionDenied } from '../../../src/lib/auth/access-control';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -27,18 +27,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const pool = getPool();
     const svc = new ChatService(pool);
     
-    // Check if user is admin
-    const isAdmin = await isUserAdminBySession(req, getPool);
-    
+    // Moderators and admins can delete anyone's message
+    const access = await getRequestAccess(req);
+    const isAdmin = hasPermission(access, 'chat.delete_any');
+
     // Get the message before deletion to get roomId for broadcast
     const message = await svc.getMessage(messageId);
     if (!message) {
       return res.status(404).json({ error: 'message not found' });
     }
-    
+
     // Check authorization: user must be sender or admin
     if (message.senderId !== userId && !isAdmin) {
       return res.status(403).json({ error: 'not authorized to delete this message' });
+    }
+    if (!isAdmin && !hasPermission(access, 'chat.delete_own')) {
+      return sendPermissionDenied(res, 'chat.delete_own', access);
     }
     
     const roomId = message.roomId;

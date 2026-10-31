@@ -4,6 +4,8 @@ import { authHeaders } from '../utils/auth-headers';
 export interface TableExtras {
   hostId: string | null;
   isHost: boolean;
+  /** Host controls the viewer may use here: their own table's, or any table's for staff */
+  hostPermissions?: string[];
   requireSeatApproval: boolean;
   allowStraddle: boolean;
   allowRunItTwice: boolean;

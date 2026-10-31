@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     runs?: number;
   };
 
-  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  const playerId = await requirePlayer(req, res, claimedPlayerId, typeof runs === 'number' && runs > 1 ? 'game.run_it_twice' : undefined);
   if (!playerId) return;
 
   if (!tableId || typeof runs !== 'number') {

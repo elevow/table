@@ -60,12 +60,6 @@ export async function updateRoomConfig(roomId: string, patch: Partial<TableExtra
   );
 }
 
-/** Whether the caller is the room's host (its creator). */
-export async function isRoomHost(roomId: string, userId: string): Promise<boolean> {
-  const room = await loadRoom(roomId);
-  return !!room?.createdBy && room.createdBy === userId;
-}
-
 /**
  * Move the waitlist along: a player who let their offer expire is dropped from the waitlist, and
  * a free seat is offered to whoever is next in line. Returns the updated values; the caller saves

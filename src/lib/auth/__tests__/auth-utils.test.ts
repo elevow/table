@@ -1,7 +1,6 @@
 import type { NextApiRequest } from 'next';
 import type { NextApiResponse } from 'next';
-import { getAuthToken, getAuthenticatedUserId, requireAuth, requirePlayer, requireAdminSession } from '../auth-utils';
-import { isAdminEmail } from '../../../utils/roleUtils';
+import { getAuthToken, getAuthenticatedUserId, requireAuth, requirePlayer } from '../auth-utils';
 import { hashSessionToken } from '../session-token';
 
 // Mock shared getPool used by auth-utils
@@ -11,10 +10,13 @@ jest.mock('../../database/pool', () => ({
   getPool: jest.fn(() => mockPool)
 }));
 
-jest.mock('../../../utils/roleUtils', () => ({
-  isAdminEmail: jest.fn(),
+// requirePlayer's permission check; each test sets the permissions the user holds
+const mockGetUserAccess = jest.fn();
+jest.mock('../access-control', () => ({
+  getUserAccess: (...args: any[]) => mockGetUserAccess(...args),
+  sendPermissionDenied: (res: any, permission: string) => res.status(403).json({ code: 'PERMISSION_DENIED', permission }),
 }));
-const mockIsAdminEmail = isAdminEmail as jest.Mock;
+
 
 // Mock console.error to avoid noise in tests
 const mockConsoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -343,74 +345,43 @@ describe('auth-utils', () => {
       await expect(requirePlayer(mockRequest as NextApiRequest, res, 'user-2')).resolves.toBeNull();
       expect(res.status).toHaveBeenCalledWith(403);
     });
-  });
 
-  describe('requireAdminSession', () => {
-    const createRes = () => {
-      const res: any = { status: jest.fn().mockReturnThis(), json: jest.fn().mockReturnThis() };
-      return res as NextApiResponse & { status: jest.Mock; json: jest.Mock };
-    };
-
-    beforeEach(() => {
-      mockRequest.headers = { authorization: 'Bearer session-token' };
-    });
-
-    it('returns the admin user ID for an admin session using one session-only query', async () => {
-      mockPool.query.mockResolvedValue({ rows: [{ id: 'admin-1', email: 'admin@example.com' }] });
-      mockIsAdminEmail.mockReturnValue(true);
+    it('checks a permission against the signed-in user, email included', async () => {
+      mockPool.query.mockResolvedValue({ rows: [{ id: 'user-1', email: 'p@example.com' }] });
+      mockGetUserAccess.mockResolvedValue({ permissions: new Set(['table.join']) });
       const res = createRes();
 
-      await expect(requireAdminSession(mockRequest as NextApiRequest, res)).resolves.toBe('admin-1');
+      await expect(requirePlayer(mockRequest as NextApiRequest, res, 'user-1', 'table.join')).resolves.toBe('user-1');
+      expect(mockGetUserAccess).toHaveBeenCalledWith({ id: 'user-1', email: 'p@example.com' });
       expect(res.status).not.toHaveBeenCalled();
-      expect(mockPool.query).toHaveBeenCalledTimes(1);
-      const [sql, params] = mockPool.query.mock.calls[0];
-      expect(sql).toContain("at.type = 'session'");
-      expect(params).toEqual([hashSessionToken('session-token')]);
-      expect(mockIsAdminEmail).toHaveBeenCalledWith('admin@example.com');
     });
 
-    it('responds 401 when there is no valid session', async () => {
+    it('responds 403 when the user lacks the permission', async () => {
+      mockPool.query.mockResolvedValue({ rows: [{ id: 'user-1', email: 'p@example.com' }] });
+      mockGetUserAccess.mockResolvedValue({ permissions: new Set(['chat.send']) });
+      const res = createRes();
+
+      await expect(requirePlayer(mockRequest as NextApiRequest, res, undefined, 'table.join')).resolves.toBeNull();
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ code: 'PERMISSION_DENIED', permission: 'table.join' });
+    });
+
+    it('checks the claimed playerId before the permission', async () => {
+      mockPool.query.mockResolvedValue({ rows: [{ id: 'user-1', email: null }] });
+      const res = createRes();
+
+      await expect(requirePlayer(mockRequest as NextApiRequest, res, 'user-2', 'table.join')).resolves.toBeNull();
+      expect(res.json).toHaveBeenCalledWith({ error: 'playerId does not match the authenticated user' });
+      expect(mockGetUserAccess).not.toHaveBeenCalled();
+    });
+
+    it('responds 401 before any permission check when signed out', async () => {
       mockPool.query.mockResolvedValue({ rows: [] });
       const res = createRes();
 
-      await expect(requireAdminSession(mockRequest as NextApiRequest, res)).resolves.toBeNull();
+      await expect(requirePlayer(mockRequest as NextApiRequest, res, undefined, 'table.join')).resolves.toBeNull();
       expect(res.status).toHaveBeenCalledWith(401);
-      expect(mockIsAdminEmail).not.toHaveBeenCalled();
-    });
-
-    it('responds 401 without querying when no token is sent', async () => {
-      mockRequest.headers = {};
-      const res = createRes();
-
-      await expect(requireAdminSession(mockRequest as NextApiRequest, res)).resolves.toBeNull();
-      expect(res.status).toHaveBeenCalledWith(401);
-      expect(mockPool.query).not.toHaveBeenCalled();
-    });
-
-    it('responds 401 when the session lookup fails', async () => {
-      mockPool.query.mockRejectedValue(new Error('db down'));
-      const res = createRes();
-
-      await expect(requireAdminSession(mockRequest as NextApiRequest, res)).resolves.toBeNull();
-      expect(res.status).toHaveBeenCalledWith(401);
-    });
-
-    it('responds 403 when the signed-in user is not an admin', async () => {
-      mockPool.query.mockResolvedValue({ rows: [{ id: 'user-1', email: 'user@example.com' }] });
-      mockIsAdminEmail.mockReturnValue(false);
-      const res = createRes();
-
-      await expect(requireAdminSession(mockRequest as NextApiRequest, res)).resolves.toBeNull();
-      expect(res.status).toHaveBeenCalledWith(403);
-    });
-
-    it('responds 403 when the signed-in user has no email', async () => {
-      mockPool.query.mockResolvedValue({ rows: [{ id: 'guest-1', email: null }] });
-      const res = createRes();
-
-      await expect(requireAdminSession(mockRequest as NextApiRequest, res)).resolves.toBeNull();
-      expect(res.status).toHaveBeenCalledWith(403);
-      expect(mockIsAdminEmail).not.toHaveBeenCalled();
+      expect(mockGetUserAccess).not.toHaveBeenCalled();
     });
   });
 

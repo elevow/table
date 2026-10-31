@@ -7,6 +7,7 @@ import { createUserService } from '../../../src/lib/services/user-service';
 import { createSafeAudit } from '../../../src/lib/api/audit';
 import { v4 as uuidv4 } from 'uuid';
 import { generateSessionToken, hashSessionToken } from '../../../src/lib/auth/session-token';
+import { describeSanction, getUserAccess } from '../../../src/lib/auth/access-control';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -105,6 +106,19 @@ export default async function handler(
         email: email.toLowerCase(),
       });
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Banned users can't sign in; checked after the password so it reveals nothing to others
+    const { sanction } = await getUserAccess({ id: user.id, email: user.email ?? null });
+    if (sanction?.kind === 'ban') {
+      await safeLog(user.id, 'auth', 'login_attempt', false, {
+        ip,
+        userAgent,
+        endpoint: '/api/auth/login',
+        reason: 'banned',
+        email: email.toLowerCase(),
+      });
+      return res.status(403).json({ error: describeSanction(sanction) });
     }
 
     // Update last login time

@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
-import { requireAdminSession } from '../../../src/lib/auth/auth-utils';
+import { requirePermission } from '../../../src/lib/auth/access-control';
 
 interface AdminRoomsResponse {
   success: boolean;
@@ -26,7 +26,7 @@ export default async function handler(
   }
 
   // Check admin privileges
-  if (!(await requireAdminSession(req, res))) return;
+  if (!(await requirePermission(req, res, 'admin.rooms.view'))) return;
 
   try {
     const pool = getPool();

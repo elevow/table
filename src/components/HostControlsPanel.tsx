@@ -18,7 +18,8 @@ interface Props {
 /**
  * The host's controls: pause, blinds for the next hand, bomb pots, straddles, turn time and time
  * banks, who may sit down,
- * and removing a player.
+ * and removing a player. Each shows only with its permission (extras.hostPermissions); staff
+ * with admin.rooms.manage see them on any table.
  */
 export default function HostControlsPanel({ tableId, playerId, extras, gameState, players, onState, onRefresh }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -54,14 +55,17 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
   const bomb = gameState?.bombPotNext;
   const stud = isStudVariant(gameState?.variant);
   const button = 'px-3 py-1 rounded text-xs font-medium disabled:opacity-60';
+  const can = (permission: string) => (extras.hostPermissions || []).includes(permission);
+  const canConfigure = can('room.configure');
 
   return (
     <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg shadow-md p-4 text-sm text-gray-900 dark:text-gray-100">
-      <h3 className="font-semibold mb-3">Host controls</h3>
+      <h3 className="font-semibold mb-3">{extras.isHost ? 'Host controls' : 'Host controls (staff)'}</h3>
       {error && <div className="mb-2 text-xs text-red-700 dark:text-red-300">{error}</div>}
 
       {gameState && (
         <div className="space-y-3">
+          {can('room.start') && (
           <div className="flex items-center justify-between">
             <span>{paused ? 'Game is paused' : 'Game is running'}</span>
             <button
@@ -72,7 +76,9 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
               {paused ? 'Resume' : 'Pause'}
             </button>
           </div>
+          )}
 
+          {canConfigure && (
           <div>
             <div className="mb-1">Blinds ${gameState.smallBlind}/${gameState.bigBlind}{pending ? ` → $${pending.smallBlind}/$${pending.bigBlind} next hand` : ''}</div>
             <div className="flex items-center gap-1">
@@ -88,8 +94,9 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
               </button>
             </div>
           </div>
+          )}
 
-          {!stud && (
+          {canConfigure && !stud && (
             <div>
               <div className="mb-1">{bomb ? `Bomb pot next hand (${bomb.anteBB} BB ante)` : 'Bomb pot: everyone antes, betting starts on the flop'}</div>
               <div className="flex items-center gap-1">
@@ -113,7 +120,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
       )}
 
       <div className="mt-3 space-y-2">
-        {!stud && (
+        {canConfigure && !stud && (
           <label className="flex items-center justify-between gap-2">
             <span>Allow straddles</span>
             <input
@@ -125,7 +132,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             />
           </label>
         )}
-        {!stud && (
+        {canConfigure && !stud && (
           <label className="flex items-center justify-between gap-2">
             <span>Allow run it twice</span>
             <input
@@ -137,7 +144,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             />
           </label>
         )}
-        {gameState && (
+        {canConfigure && gameState && (
           <div>
             <div className="mb-1">Turn time {Math.round(turnTimeMs(gameState) / 1000)}s</div>
             <div className="flex items-center gap-1">
@@ -161,7 +168,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             </div>
           </div>
         )}
-        {gameState && Array.isArray(gameState.players) && gameState.players.length > 0 && (
+        {canConfigure && gameState && Array.isArray(gameState.players) && gameState.players.length > 0 && (
           <div>
             <div className="mb-1">Time banks</div>
             <ul className="space-y-1">
@@ -192,6 +199,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             </ul>
           </div>
         )}
+        {can('room.approve_seat') && (
         <label className="flex items-center justify-between gap-2">
           <span>Approve players before they sit</span>
           <input
@@ -202,7 +210,8 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             onChange={e => send('approval', { action: 'require-approval', required: e.target.checked })}
           />
         </label>
-        {(extras.seatRequests || []).length > 0 && (
+        )}
+        {can('room.approve_seat') && (extras.seatRequests || []).length > 0 && (
           <ul className="space-y-1">
             {extras.seatRequests!.map(r => (
               <li key={r.playerId} className="flex items-center justify-between gap-2 bg-white/70 dark:bg-gray-800/70 rounded px-2 py-1">
@@ -217,7 +226,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
         )}
       </div>
 
-      {players.length > 0 && (
+      {can('room.kick_player') && players.length > 0 && (
         <div className="mt-3 flex items-center gap-1">
           <select
             aria-label="Player to remove"

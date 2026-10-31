@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../database/pool';
-import { isAdminEmail } from '../../utils/roleUtils';
 import { hashSessionToken } from './session-token';
+import { getUserAccess, sendPermissionDenied } from './access-control';
 
 /**
  * Extract session token from request headers or cookies
@@ -72,13 +72,17 @@ export async function requireAuth(req: NextApiRequest): Promise<string> {
  * Authenticate the caller of a game route and confirm they are acting as themselves.
  * Returns the authenticated user ID, or sends 401/403 and returns null.
  * A claimedPlayerId from the request is optional; when present it must match the session.
+ * With a permission (see src/lib/auth/permissions.ts), the caller must also hold it.
  */
 export async function requirePlayer(
   req: NextApiRequest,
   res: NextApiResponse,
-  claimedPlayerId?: unknown
+  claimedPlayerId?: unknown,
+  permission?: string
 ): Promise<string | null> {
-  const userId = await getAuthenticatedUserId(req);
+  // The permission check needs the user's email (for ADMIN_EMAILS), so look up the whole user
+  const user = permission ? await getSessionUser(req) : null;
+  const userId = permission ? user?.id ?? null : await getAuthenticatedUserId(req);
 
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' });
@@ -88,6 +92,14 @@ export async function requirePlayer(
   if (claimedPlayerId != null && claimedPlayerId !== '' && String(claimedPlayerId) !== userId) {
     res.status(403).json({ error: 'playerId does not match the authenticated user' });
     return null;
+  }
+
+  if (permission && user) {
+    const access = await getUserAccess(user);
+    if (!access.permissions.has(permission)) {
+      sendPermissionDenied(res, permission, access);
+      return null;
+    }
   }
 
   return userId;
@@ -113,27 +125,4 @@ export async function getSessionUser(
     console.error('Error verifying session:', error);
     return null;
   }
-}
-
-/**
- * Require an authenticated admin session (email listed in ADMIN_EMAILS).
- * Returns the admin's user ID, or sends 401/403 and returns null.
- */
-export async function requireAdminSession(
-  req: NextApiRequest,
-  res: NextApiResponse
-): Promise<string | null> {
-  const user = await getSessionUser(req);
-
-  if (!user) {
-    res.status(401).json({ error: 'Authentication required' });
-    return null;
-  }
-
-  if (!user.email || !isAdminEmail(user.email)) {
-    res.status(403).json({ error: 'Admin access required' });
-    return null;
-  }
-
-  return user.id;
 }

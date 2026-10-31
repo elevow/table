@@ -23,6 +23,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [reacting, setReacting] = useState<string | null>(null); // messageId currently reacting to
   const [deleting, setDeleting] = useState<string | null>(null); // messageId currently being deleted
   const [reactions, setReactions] = useState<Record<string, Record<string, number>>>({});
@@ -160,9 +161,12 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
       });
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
+        // A missing permission (for example chat turned off for this user) is shown, not just logged
+        if (e?.code === 'PERMISSION_DENIED' || e?.code === 'LIMIT_REACHED') setSendError(e.error);
         throw new Error(e?.error || 'Failed to send');
       }
       const created = await res.json();
+      setSendError(null);
       setInput('');
       // Optimistic append
       setMessages(prev => [...prev, created as ChatMessage]);
@@ -375,6 +379,9 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
           Send
         </button>
       </div>
+      {sendError && (
+        <div className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{sendError}</div>
+      )}
     </div>
   );
 }

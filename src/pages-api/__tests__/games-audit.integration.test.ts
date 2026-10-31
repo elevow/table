@@ -28,8 +28,16 @@ jest.mock('../../../src/lib/services/game-service', () => ({
 // Mock auth to always return a valid user id for create route; by-room reads the session user
 const mockGetAuthenticatedUserId = jest.fn().mockResolvedValue(null);
 jest.mock('../../../src/lib/auth/auth-utils', () => ({
-  requireAuth: jest.fn().mockResolvedValue('u100'),
+  requirePlayer: jest.fn().mockResolvedValue('u100'),
   getAuthenticatedUserId: (...args: any[]) => mockGetAuthenticatedUserId(...args)
+}));
+// Room creation reads the caller's access; this user may create rooms
+jest.mock('../../../src/lib/auth/access-control', () => ({
+  requirePlayerAccess: jest.fn().mockResolvedValue({ userId: 'u100', permissions: new Set(['room.create']) }),
+  hasPermission: (access: { permissions: Set<string> }, permission: string) => access.permissions.has(permission),
+  sendPermissionDenied: (res: any) => res.status(403).json({ code: 'PERMISSION_DENIED' }),
+  getLimit: () => null,
+  sendLimitReached: jest.fn(),
 }));
 
 // Mock the audit helper and capture calls end-to-end
@@ -114,8 +122,9 @@ describe('Games API audit integration (by-room)', () => {
     expect(mockCreateSafeAudit).toHaveBeenCalledTimes(1);
     expect(mockCreateSafeAudit).toHaveBeenCalledWith(poolInstance);
     expect(mockSafeLog).toHaveBeenCalledTimes(1);
+    // Attributed to the signed-in user, not the x-user-id header the client sent
     expect(mockSafeLog).toHaveBeenCalledWith(
-      'u99',
+      'u100',
       'games',
       'create',
       false,

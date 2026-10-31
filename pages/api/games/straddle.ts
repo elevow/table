@@ -12,7 +12,7 @@ import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const { tableId, playerId: claimedPlayerId, wants } = (req.body || {}) as { tableId?: string; playerId?: string; wants?: boolean };
-  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  const playerId = await requirePlayer(req, res, claimedPlayerId, wants === true ? 'game.straddle' : undefined);
   if (!playerId) return;
   if (!tableId || typeof wants !== 'boolean') return res.status(400).json({ error: 'Missing tableId or wants' });
 

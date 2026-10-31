@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
   const { tableId, playerId: claimedPlayerId, emote } = (req.body || {}) as { tableId?: unknown; playerId?: string; emote?: unknown };
-  const playerId = await requirePlayer(req, res, claimedPlayerId);
+  const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.react');
   if (!playerId) return;
   if (typeof tableId !== 'string' || !tableId) return res.status(400).json({ error: 'Missing tableId' });
   if (!isTableReaction(emote)) return res.status(400).json({ error: 'Unknown reaction' });

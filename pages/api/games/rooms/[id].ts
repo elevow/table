@@ -1,6 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
 import { GameService } from '../../../../src/lib/services/game-service';
+import { getSessionUser } from '../../../../src/lib/auth/auth-utils';
+import { getUserAccess } from '../../../../src/lib/auth/access-control';
+import {
+  PRIVATE_TABLE_RESPONSE, canEnterRoom, isPrivateRoom, withoutPrivateFields,
+} from '../../../../src/lib/server/room-privacy';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -22,6 +27,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'Room not found' });
     }
 
+    // Private rooms: only the host, members and staff with table.view_private; only the host sees the invite code
+    let isHost = false;
+    if (isPrivateRoom(room.configuration)) {
+      const user = await getSessionUser(req);
+      const access = user ? await getUserAccess(user) : null;
+      if (!canEnterRoom(access, room)) return res.status(403).json(PRIVATE_TABLE_RESPONSE);
+      isHost = !!user && room.createdBy === user.id;
+    }
+
     // Expose configuration and blind levels so clients can initialize correct variant/betting mode/blinds
     return res.status(200).json({
       id: room.id,
@@ -32,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       createdAt: room.createdAt,
       // The host, who has the table controls
       createdBy: room.createdBy,
-      configuration: room.configuration || null,
+      configuration: isHost ? room.configuration || null : withoutPrivateFields(room.configuration || null),
       blindLevels: room.blindLevels || null,
     });
   } catch (error) {

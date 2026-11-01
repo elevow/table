@@ -8,6 +8,7 @@ import Avatar from '../src/components/Avatar';
 import AdminRoomsPanel from '../src/components/AdminRoomsPanel';
 import CombinedPlayerStats from '../src/components/CombinedPlayerStats';
 import { authHeaders } from '../src/utils/auth-headers';
+import LobbyTables from '../src/components/LobbyTables';
 
 const Dashboard: NextPage = () => {
   const router = useRouter();
@@ -91,8 +92,28 @@ const Dashboard: NextPage = () => {
     
     setIsValidating(true);
     setValidationMessage('');
-    
+
     try {
+      // A private table's invite code (10 characters, dash optional) joins the table; room codes are 8
+      if (roomCode.replace(/[^A-Za-z0-9]/g, '').length === 10) {
+        if (!authHeaders().Authorization) {
+          setValidationMessage('Sign in to join a private table');
+          return;
+        }
+        const joinResp = await fetch('/api/games/rooms/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ code: roomCode.trim() }),
+        });
+        const joined = await joinResp.json().catch(() => ({}));
+        if (joinResp.ok) {
+          router.push(`/game/${joined.roomId}`);
+        } else {
+          setValidationMessage(joined.error || 'Invite code not found');
+        }
+        return;
+      }
+
       console.log('Attempting to validate room code:', roomCode.trim());
       const response = await fetch('/api/games/validate-room', {
         method: 'POST',
@@ -256,10 +277,10 @@ const Dashboard: NextPage = () => {
                   type="text"
                   value={roomCode}
                   onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                  placeholder="Enter room code (e.g. ABC123)"
+                  placeholder="Room code or private invite code"
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   disabled={isValidating}
-                  maxLength={10}
+                  maxLength={12}
                 />
               </div>
               <button
@@ -280,8 +301,10 @@ const Dashboard: NextPage = () => {
               )}
             </form>
           </div>
+
+          <LobbyTables />
         </div>
-        
+
         {/* Combined Player Statistics */}
         <div className="mb-8">
           <CombinedPlayerStats />

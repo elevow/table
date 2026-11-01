@@ -19,6 +19,9 @@ type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 's
 
 export default function CreateGameRoomPage() {
   const router = useRouter();
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+  // Assumed until permissions load; the API refuses a private table without room.create_private anyway
+  const [canCreatePrivate, setCanCreatePrivate] = useState(true);
   const [maxPlayers, setMaxPlayers] = useState(6);
   const [smallBlind, setSmallBlind] = useState(1);
   const [bigBlind, setBigBlind] = useState(2);
@@ -58,7 +61,17 @@ export default function CreateGameRoomPage() {
       setIsAuthenticated(!!token);
       if (!token) {
         setError('You must sign in to create a room.');
+        return;
       }
+      fetch('/api/auth/check-admin', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => {
+          if (!data) return;
+          const allowed = (data.permissions || []).includes('room.create_private');
+          setCanCreatePrivate(allowed);
+          if (!allowed) setVisibility('public');
+        })
+        .catch(() => {});
     } catch {}
   }, []);
 
@@ -96,6 +109,7 @@ export default function CreateGameRoomPage() {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
           name: 'New Table',
+          visibility,
           gameType: 'poker',
           maxPlayers,
           blindLevels: { sb: smallBlind, bb: bigBlind },
@@ -206,6 +220,30 @@ export default function CreateGameRoomPage() {
       </Head>
       <h1 className="text-2xl font-semibold mb-4">Create Game Room</h1>
       <form className="space-y-4" onSubmit={onSubmit}>
+        <div>
+          <fieldset>
+            <legend className="block text-sm font-medium">Who can join</legend>
+            <div className="mt-2 flex flex-wrap gap-4 text-sm">
+              <label className="inline-flex items-center gap-2">
+                <input type="radio" name="visibility" checked={visibility === 'public'} onChange={() => setVisibility('public')} />
+                Public: listed on the dashboard
+              </label>
+              <label className={`inline-flex items-center gap-2 ${canCreatePrivate ? '' : 'opacity-50'}`}>
+                <input
+                  type="radio"
+                  name="visibility"
+                  checked={visibility === 'private'}
+                  disabled={!canCreatePrivate}
+                  onChange={() => setVisibility('private')}
+                />
+                Private: only people with the invite link
+              </label>
+            </div>
+            {!canCreatePrivate && (
+              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Your account can&apos;t create private tables.</p>
+            )}
+          </fieldset>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium">Max players</label>

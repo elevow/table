@@ -4,6 +4,7 @@ import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../src/lib/server/room-config';
 import { syncWaitlist } from '../../../src/lib/server/seat-actions';
 import { publishTableEvent } from '../../../src/lib/realtime/publisher';
+import { PRIVATE_TABLE_RESPONSE, isPrivateRoom, isRoomMember } from '../../../src/lib/server/room-privacy';
 
 /**
  * POST /api/games/waitlist { tableId, join, playerName }
@@ -30,6 +31,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let waitlist = (config.waitlist || []).filter(w => w.playerId !== playerId);
 
     if (join) {
+      // Private tables: the host and players who joined through the invite link
+      if (isPrivateRoom(config) && room.createdBy !== playerId && !isRoomMember(config, playerId)) {
+        return res.status(403).json(PRIVATE_TABLE_RESPONSE);
+      }
       const seats = await GameSeats.loadPersistedRoomSeats(tableId) || GameSeats.getRoomSeats(tableId);
       if (Object.values(seats).some(a => a?.playerId === playerId)) {
         return res.status(409).json({ error: 'You already have a seat' });

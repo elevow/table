@@ -1,0 +1,36 @@
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { rateLimit } from '../../../../src/lib/api/rate-limit';
+import { getSessionUser } from '../../../../src/lib/auth/auth-utils';
+import { addRoomMember, findRoomByInviteCode, normalizeInviteCode } from '../../../../src/lib/server/room-privacy';
+
+/**
+ * POST /api/games/rooms/join { code }
+ *
+ * Redeem a private table's invite code (from its link, or typed on the dashboard): the signed-in
+ * user becomes a member and may watch, chat and sit there from then on. Returns the room to open.
+ * 404 when the code doesn't open any table, including one the host has since replaced.
+ */
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  // Low, since every request is a guess at a code
+  const rl = rateLimit(req, { limit: 20, windowMs: 60_000 });
+  if (!rl.allowed) return res.status(429).json({ error: 'Too many attempts. Try again in a minute.' });
+
+  const user = await getSessionUser(req);
+  if (!user) return res.status(401).json({ error: 'Sign in to join this table', code: 'SIGN_IN_REQUIRED' });
+
+  const code = normalizeInviteCode(req.body?.code);
+  if (!code) return res.status(404).json({ error: 'That invite code isn\'t valid', code: 'INVITE_NOT_FOUND' });
+
+  try {
+    const room = await findRoomByInviteCode(code);
+    if (!room) {
+      return res.status(404).json({ error: 'That invite link has expired or isn\'t valid. Ask the host for a new one.', code: 'INVITE_NOT_FOUND' });
+    }
+    await addRoomMember(room.id, user.id);
+    return res.status(200).json({ roomId: room.id, name: room.name });
+  } catch (err) {
+    console.error('Error joining by invite code:', err);
+    return res.status(500).json({ error: 'Unable to join the table' });
+  }
+}

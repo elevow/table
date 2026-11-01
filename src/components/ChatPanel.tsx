@@ -36,7 +36,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
   const fetchMessages = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/chat/room/list?roomId=${encodeURIComponent(gameId)}&limit=50`);
+      const res = await fetch(`/api/chat/room/list?roomId=${encodeURIComponent(gameId)}&limit=50`, { headers: authHeaders() });
       const json = await res.json();
       const items = Array.isArray(json.items) ? (json.items as ChatMessage[]) : [];
       // messages come newest-first; show oldest-first for chat readability

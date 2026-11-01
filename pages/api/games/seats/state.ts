@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
+import { guardRoomEntry } from '../../../../src/lib/server/room-privacy';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -13,6 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Missing tableId' });
     }
 
+    if (!(await guardRoomEntry(req, res, tableId))) return;
     // Ensure seats exist and return current state
     const seats = await GameSeats.loadPersistedRoomSeats(tableId) || GameSeats.initializeRoomSeats(tableId);
     return res.status(200).json({ ok: true, seats });

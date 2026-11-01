@@ -4,6 +4,7 @@ import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { GameService } from '../../../../src/lib/services/game-service';
 import { createSafeAudit } from '../../../../src/lib/api/audit';
 import { getAuthenticatedUserId } from '../../../../src/lib/auth/auth-utils';
+import { guardRoomEntry } from '../../../../src/lib/server/room-privacy';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -25,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     callerUserId = await getAuthenticatedUserId(req);
     const service = new GameService(pool);
     const roomId = String(req.query.roomId || '');
+    if (!(await guardRoomEntry(req, res, roomId))) return;
     const game = callerUserId
       ? await service.getActiveGameByRoom(roomId, callerUserId)
       : await service.getActiveGameByRoom(roomId);

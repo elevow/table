@@ -4,6 +4,18 @@ import { requireAnyPermission } from '../../../../src/lib/auth/access-control';
 import { PERMISSION_KEYS, isLimitKey } from '../../../../src/lib/auth/permissions';
 import { getAdminEmails, isAdminEmail } from '../../../../src/utils/roleUtils';
 
+export const USER_SEARCH_LIMIT = 200;
+
+/**
+ * The ILIKE pattern for a search. Plain text matches anywhere in the email or username; with a *
+ * the search is a wildcard pattern over the whole value ("gene*" starts with gene, "*@gmail.com"
+ * ends with it), and * alone is everyone.
+ */
+export function userSearchPattern(q: string): string {
+  const escaped = q.replace(/[\\%_]/g, c => `\\${c}`);
+  return q.includes('*') ? escaped.replace(/\*+/g, '%') : `%${escaped}%`;
+}
+
 // GET ?q=: users matching an email or username, with their extra roles, overrides, own limits
 // and active ban or suspension. With no q, lists everyone who has any of those or is in ADMIN_EMAILS.
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -13,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!actor) return;
 
   const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
-  const pattern = `%${q.replace(/[\\%_]/g, c => `\\${c}`)}%`;
+  const pattern = userSearchPattern(q);
   try {
     const { rows } = await getPool().query(
       `SELECT u.id, u.email, u.username,
@@ -39,14 +51,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
            OR EXISTS (SELECT 1 FROM access_user_sanctions
                       WHERE user_id = u.id AND lifted_at IS NULL AND (until IS NULL OR until > NOW()))
            OR lower(u.email) = ANY($3::text[])
+         WHEN $2 = '%' THEN TRUE
          ELSE u.email ILIKE $2 OR u.username ILIKE $2
        END
        ORDER BY u.username
-       LIMIT 50`,
-      [q, pattern, getAdminEmails()]
+       LIMIT $4`,
+      // One extra row says whether there are more than the limit
+      [q, pattern, getAdminEmails(), USER_SEARCH_LIMIT + 1]
     );
     return res.status(200).json({
-      users: rows.map(u => ({
+      more: rows.length > USER_SEARCH_LIMIT,
+      users: rows.slice(0, USER_SEARCH_LIMIT).map(u => ({
         ...u,
         // Overrides of permissions since removed from the catalog are dropped, so saving clears them
         overrides: u.overrides.filter((o: { permission: string }) => PERMISSION_KEYS.includes(o.permission)),

@@ -7,6 +7,9 @@ import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
 import { broadcastGameState } from '../../../src/lib/server/game-action-pipeline';
 import { leaveTable, performSeatClaim, syncWaitlist } from '../../../src/lib/server/seat-actions';
 import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../src/lib/server/room-config';
+import {
+  addRoomMember, formatInviteCode, isPrivateRoom, newInviteCode, removeRoomMember, type RoomPrivacyConfig,
+} from '../../../src/lib/server/room-privacy';
 import { publishTableEvent } from '../../../src/lib/realtime/publisher';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { MIN_TURN_SECONDS, MAX_TURN_SECONDS } from '../../../src/lib/shared/turn-clock';
@@ -22,6 +25,8 @@ type HostAction =
   | { action: 'adjust-time-banks'; targetId: string; delta: number }
   | { action: 'bomb-pot'; anteBB: number | null }
   | { action: 'kick'; targetId: string }
+  | { action: 'set-visibility'; private: boolean }
+  | { action: 'new-invite-code' }
   | { action: 'require-approval'; required: boolean }
   | { action: 'approve'; targetId: string }
   | { action: 'deny'; targetId: string };
@@ -37,6 +42,8 @@ const ACTION_PERMISSIONS: Record<HostAction['action'], string> = {
   'adjust-time-banks': 'room.configure',
   'bomb-pot': 'room.configure',
   'kick': 'room.kick_player',
+  'set-visibility': 'room.configure',
+  'new-invite-code': 'room.configure',
   'require-approval': 'room.approve_seat',
   'approve': 'room.approve_seat',
   'deny': 'room.approve_seat',
@@ -46,7 +53,8 @@ const ACTION_PERMISSIONS: Record<HostAction['action'], string> = {
  * POST /api/games/host { tableId, action, ... }
  *
  * Controls for the room's host (its creator): pause and resume, change blinds for the next hand,
- * allow straddles and run it twice, schedule a bomb pot, remove a player, and approve who sits down.
+ * allow straddles and run it twice, schedule a bomb pot, remove a player, approve who sits down,
+ * make the table public or private, and replace a private table's invite link.
  * Each needs its host permission; staff with admin.rooms.manage can use them on any table.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -72,10 +80,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { tableId: _t, playerId: _p, ...details } = body;
       await logAdminAction(hostId, `table.${body.action}`, 'room', tableId, details);
     }
-    const config = room.configuration as TableExtrasConfig;
+    const config = room.configuration as TableExtrasConfig & RoomPrivacyConfig;
 
     // Settings that live on the room rather than in a running game
     switch (body.action) {
+      case 'set-visibility': {
+        const makePrivate = !!body.private;
+        // Hosts need room.create_private to hide a table; staff acting through admin.rooms.manage don't
+        if (makePrivate && !auth.asAdmin && !access.permissions.has('room.create_private')) {
+          return sendPermissionDenied(res, 'room.create_private', access);
+        }
+        await updateRoomConfig(tableId, {
+          visibility: makePrivate ? 'private' : 'public',
+          ...(makePrivate && !config.inviteCode ? { inviteCode: newInviteCode() } : {}),
+        });
+        // Nobody already at the table gets shut out
+        if (makePrivate) {
+          const seats = await GameSeats.loadPersistedRoomSeats(tableId) || GameSeats.getRoomSeats(tableId);
+          const present = new Set([
+            ...Object.values(seats).filter(Boolean).map(s => s!.playerId),
+            ...(config.waitlist || []).map(w => w.playerId),
+            ...(config.seatRequests || []).map(r => r.playerId),
+          ]);
+          present.delete(room.createdBy || '');
+          for (const playerId of present) await addRoomMember(tableId, playerId);
+        }
+        await publishTableEvent(tableId, { type: 'settings' }).catch(() => {});
+        return res.status(200).json({ ok: true });
+      }
+      case 'new-invite-code': {
+        if (!isPrivateRoom(config)) return res.status(409).json({ error: 'Only private tables have an invite link' });
+        const inviteCode = newInviteCode();
+        await updateRoomConfig(tableId, { inviteCode });
+        return res.status(200).json({ ok: true, inviteCode: formatInviteCode(inviteCode) });
+      }
       case 'require-approval': {
         await updateRoomConfig(tableId, { requireSeatApproval: !!body.required });
         await publishTableEvent(tableId, { type: 'settings' }).catch(() => {});
@@ -113,6 +151,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           waitlist: (config.waitlist || []).filter(w => w.playerId !== body.targetId),
           seatRequests: (config.seatRequests || []).filter(r => r.playerId !== body.targetId),
         });
+        // At a private table they also lose their place; the invite link lets them back in until it's replaced
+        if (isPrivateRoom(config)) await removeRoomMember(tableId, body.targetId);
         await publishTableEvent(tableId, { type: 'kicked', playerId: body.targetId }).catch(() => {});
         await syncWaitlist(tableId);
         return res.status(200).json({ ok: true, seatNumber, cashedOut });

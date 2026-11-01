@@ -3,6 +3,7 @@ import { enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manage
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
 import { getAuthenticatedUserId } from '../../../src/lib/auth/auth-utils';
+import { guardRoomEntry } from '../../../src/lib/server/room-privacy';
 
 /**
  * GET /api/games/state?tableId=xxx
@@ -27,6 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const playerId = await getAuthenticatedUserId(req);
 
   try {
+    if (!(await guardRoomEntry(req, res, tableId))) return;
     // Get the active game engine from memory or restore from database
     const engine = await getOrRestoreEngine(tableId);
     

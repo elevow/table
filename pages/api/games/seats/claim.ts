@@ -6,6 +6,7 @@ import {
 import { performSeatClaim } from '../../../../src/lib/server/seat-actions';
 import { tablesSeatedAt } from '../../../../src/lib/shared/game-seats';
 import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../../src/lib/server/room-config';
+import { PRIVATE_TABLE_RESPONSE, canEnterRoom, isPrivateRoom } from '../../../../src/lib/server/room-privacy';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -42,6 +43,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const room = await loadRoom(roomId).catch(() => null);
     const config = (room?.configuration || {}) as TableExtrasConfig;
     const isHost = !!room?.createdBy && room.createdBy === playerId;
+
+    // Private tables: members only, and sitting at one is its own permission
+    if (room && isPrivateRoom(config)) {
+      if (!canEnterRoom(access, room)) return res.status(403).json(PRIVATE_TABLE_RESPONSE);
+      if (!isHost && !hasPermission(access, 'table.join_private')) return sendPermissionDenied(res, 'table.join_private', access);
+    }
 
     // A seat offered to the next player on the waitlist is theirs until the offer runs out
     const offer = config.seatOffer;

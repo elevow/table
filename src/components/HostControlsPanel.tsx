@@ -17,7 +17,7 @@ interface Props {
 
 /**
  * The host's controls: pause, blinds for the next hand, bomb pots, straddles, turn time and time
- * banks, who may sit down,
+ * banks, who may sit down, public or private and the private invite link,
  * and removing a player. Each shows only with its permission (extras.hostPermissions); staff
  * with admin.rooms.manage see them on any table.
  */
@@ -29,6 +29,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
   const [anteBB, setAnteBB] = useState<string>('2');
   const [kickId, setKickId] = useState<string>('');
   const [turnSeconds, setTurnSeconds] = useState<string>('');
+  const [copied, setCopied] = useState(false);
 
   const send = async (label: string, body: Record<string, unknown>) => {
     setBusy(label);
@@ -57,11 +58,67 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
   const button = 'px-3 py-1 rounded text-xs font-medium disabled:opacity-60';
   const can = (permission: string) => (extras.hostPermissions || []).includes(permission);
   const canConfigure = can('room.configure');
+  const isPrivate = extras.visibility === 'private';
+  const inviteLink = extras.inviteCode && typeof window !== 'undefined'
+    ? `${window.location.origin}/join/${extras.inviteCode}`
+    : null;
+  const copyInviteLink = () => {
+    if (!inviteLink) return;
+    navigator.clipboard?.writeText(inviteLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => setError('Copy the link from the box instead'));
+  };
 
   return (
     <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg shadow-md p-4 text-sm text-gray-900 dark:text-gray-100">
       <h3 className="font-semibold mb-3">{extras.isHost ? 'Host controls' : 'Host controls (staff)'}</h3>
       {error && <div className="mb-2 text-xs text-red-700 dark:text-red-300">{error}</div>}
+
+      {canConfigure && (
+        <div className="mb-3 space-y-2">
+          <label className="flex items-center justify-between gap-2">
+            <span>{isPrivate ? 'Private: only people with the invite link' : 'Public: listed on the dashboard'}</span>
+            <input
+              type="checkbox"
+              aria-label="Private table"
+              className="h-4 w-4 accent-amber-600"
+              checked={isPrivate}
+              disabled={!!busy}
+              onChange={e => send('visibility', { action: 'set-visibility', private: e.target.checked })}
+            />
+          </label>
+          {isPrivate && inviteLink && (
+            <div>
+              <div className="flex items-center gap-1">
+                <input
+                  readOnly
+                  aria-label="Invite link"
+                  value={inviteLink}
+                  onFocus={e => e.target.select()}
+                  className="flex-1 min-w-0 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs"
+                />
+                <button className={`${button} bg-blue-600 hover:bg-blue-700 text-white`} onClick={copyInviteLink}>
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+                <button
+                  className={`${button} bg-gray-500 hover:bg-gray-600 text-white`}
+                  disabled={!!busy}
+                  title="Stop the current link working and make a new one"
+                  onClick={() => {
+                    if (window.confirm('Make a new invite link? The current one stops working. Players already at the table keep their place.')) {
+                      send('invite', { action: 'new-invite-code' });
+                    }
+                  }}
+                >
+                  New link
+                </button>
+              </div>
+              <div className="mt-1 text-xs text-gray-600 dark:text-gray-300">Code {extras.inviteCode}: anyone with it can watch and ask to sit.</div>
+            </div>
+          )}
+        </div>
+      )}
 
       {gameState && (
         <div className="space-y-3">
@@ -242,7 +299,8 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             disabled={!!busy || !kickId}
             onClick={() => {
               const name = players.find(p => p.id === kickId)?.name || 'this player';
-              if (window.confirm(`Remove ${name} from the table? They are folded out of the current hand and leave with their chips.`)) {
+              const privateNote = isPrivate ? ' To keep them out, also make a new invite link.' : '';
+              if (window.confirm(`Remove ${name} from the table? They are folded out of the current hand and leave with their chips.${privateNote}`)) {
                 send('kick', { action: 'kick', targetId: kickId }).then(() => setKickId(''));
               }
             }}

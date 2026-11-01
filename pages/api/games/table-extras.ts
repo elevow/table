@@ -5,12 +5,16 @@ import { getUserAccess } from '../../../src/lib/auth/access-control';
 import { tableHostPermissions } from '../../../src/lib/auth/table-access';
 import { advanceSeatOffer, freeSeatNumbers, loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../src/lib/server/room-config';
 import { publishTableEvent } from '../../../src/lib/realtime/publisher';
+import {
+  PRIVATE_TABLE_RESPONSE, canEnterRoom, formatInviteCode, isPrivateRoom, type RoomPrivacyConfig,
+} from '../../../src/lib/server/room-privacy';
 
 /**
  * GET /api/games/table-extras?tableId=
  *
  * What the table page needs besides the game itself: who the host is, the table settings, the
- * waitlist and any seat held for it, the host controls the caller may use (hostPermissions), and
+ * waitlist and any seat held for it, the host controls the caller may use (hostPermissions),
+ * whether the table is private (with its invite code for whoever may configure it), and
  * pending seat requests for whoever may approve them. Also moves
  * the waitlist along when an offer has lapsed, since there is no background job to do it.
  */
@@ -24,7 +28,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const room = await loadRoom(tableId);
     if (!room) return res.status(404).json({ error: 'Room not found' });
-    const config = room.configuration as TableExtrasConfig;
+    const access = user ? await getUserAccess(user) : null;
+    if (!canEnterRoom(access, room)) return res.status(403).json(PRIVATE_TABLE_RESPONSE);
+    const config = room.configuration as TableExtrasConfig & RoomPrivacyConfig;
     const seats = await GameSeats.loadPersistedRoomSeats(tableId) || GameSeats.getRoomSeats(tableId);
 
     const next = advanceSeatOffer(config, freeSeatNumbers(seats, room.maxPlayers), Date.now());
@@ -34,11 +40,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const isHost = !!userId && room.createdBy === userId;
-    const hostPermissions = user ? tableHostPermissions(await getUserAccess(user), room) : [];
+    const hostPermissions = access ? tableHostPermissions(access, room) : [];
+    const isPrivate = isPrivateRoom(config);
     return res.status(200).json({
       hostId: room.createdBy,
       isHost,
       hostPermissions,
+      visibility: isPrivate ? 'private' : 'public',
+      // Whoever may change the table's settings can share and replace its invite link
+      inviteCode: isPrivate && config.inviteCode && hostPermissions.includes('room.configure')
+        ? formatInviteCode(config.inviteCode)
+        : undefined,
       requireSeatApproval: !!config.requireSeatApproval,
       allowStraddle: !!config.allowStraddle,
       allowRunItTwice: !!config.allowRunItTwice,

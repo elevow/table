@@ -36,6 +36,7 @@ import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/Ga
 import { ALL_VARIANTS, VARIANT_LABELS, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
 import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/components/PlayerNotesPanel';
 import HostControlsPanel from '../../src/components/HostControlsPanel';
+import PrivateTableNotice from '../../src/components/PrivateTableNotice';
 import WaitlistPanel from '../../src/components/WaitlistPanel';
 import { NOTE_COLOR_CLASSES, type NoteColor } from '../../src/lib/shared/note-colors';
 import BetPresetButtons from '../../src/components/BetPresetButtons';
@@ -126,6 +127,8 @@ export default function GamePage() {
   const [inviteeId, setInviteeId] = useState<string>('');
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+  // A private table the viewer isn't allowed into: the page shows how to get in instead
+  const [privateTableBlocked, setPrivateTableBlocked] = useState(false);
   
   // Avatar data for current player
   const { avatarData: currentPlayerAvatar, loading: avatarLoading, error: avatarError } = useUserAvatar(playerId);
@@ -664,7 +667,12 @@ export default function GamePage() {
     const fetchRoom = async () => {
       try {
         if (!id || typeof id !== 'string') return;
-        const resp = await fetch(`/api/games/rooms/${id}`);
+        const resp = await fetch(`/api/games/rooms/${id}`, { headers: authHeaders() });
+        if (resp.status === 403) {
+          const body = await resp.json().catch(() => ({}));
+          if (alive && body?.code === 'PRIVATE_TABLE') setPrivateTableBlocked(true);
+          return;
+        }
         if (!resp.ok) return;
         const data = await resp.json();
         if (!alive) return;
@@ -766,7 +774,7 @@ export default function GamePage() {
 
     const fetchSeats = async () => {
       try {
-        const resp = await fetch(`/api/games/seats/state?tableId=${id}`);
+        const resp = await fetch(`/api/games/seats/state?tableId=${id}`, { headers: authHeaders() });
         if (!resp.ok) return;
         const data = await resp.json();
         if (!alive) return;
@@ -2002,7 +2010,7 @@ export default function GamePage() {
       if (!id) return;
       
       try {
-        const response = await fetch(`/api/games/rooms/${id}`);
+        const response = await fetch(`/api/games/rooms/${id}`, { headers: authHeaders() });
         if (response.ok) {
           const roomData = await response.json();
           const roomMaxPlayers = roomData.maxPlayers || 6;
@@ -2189,7 +2197,7 @@ export default function GamePage() {
 
     const initSeatState = async () => {
       try {
-        const resp = await fetch(`/api/games/seats/state?tableId=${id}`);
+        const resp = await fetch(`/api/games/seats/state?tableId=${id}`, { headers: authHeaders() });
         if (resp.ok) {
           const data = await resp.json();
           if (!alive) return;
@@ -2468,6 +2476,8 @@ export default function GamePage() {
   const seatAnchors = getRotatedSeatPositions()
     .map(s => ({ playerId: seatAssignments[s.seatNumber]?.playerId || '', left: String(s.style.left), top: String(s.style.top) }))
     .filter(a => a.playerId);
+
+  if (privateTableBlocked) return <PrivateTableNotice />;
 
   return (
     <div className="game-page bg-gray-100 dark:bg-gray-900 min-h-screen overflow-x-clip">

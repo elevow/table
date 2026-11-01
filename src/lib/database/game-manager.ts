@@ -83,12 +83,14 @@ export class GameManager {
     return this.mapRoom(res.rows[0]);
   }
 
+  /** Public rooms only; private rooms are never listed. */
   async listRooms(page = 1, limit = 20): Promise<Paginated<GameRoomRecord>> {
     const offset = (page - 1) * limit;
-    const count = await this.pool.query(`SELECT COUNT(*) AS total FROM game_rooms`);
+    const publicOnly = `COALESCE(configuration->>'visibility', 'public') <> 'private'`;
+    const count = await this.pool.query(`SELECT COUNT(*) AS total FROM game_rooms WHERE ${publicOnly}`);
     const total = parseInt(count.rows?.[0]?.total || '0', 10);
     const rows = await this.pool.query(
-      `SELECT * FROM game_rooms ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+      `SELECT * FROM game_rooms WHERE ${publicOnly} ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
     const items = rows.rows.map(r => this.mapRoom(r));

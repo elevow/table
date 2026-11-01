@@ -6,6 +6,9 @@ export interface TableExtras {
   isHost: boolean;
   /** Host controls the viewer may use here: their own table's, or any table's for staff */
   hostPermissions?: string[];
+  visibility?: 'public' | 'private';
+  /** A private table's invite code, for whoever may change the table's settings */
+  inviteCode?: string;
   requireSeatApproval: boolean;
   allowStraddle: boolean;
   allowRunItTwice: boolean;

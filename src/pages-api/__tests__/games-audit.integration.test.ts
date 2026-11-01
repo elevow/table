@@ -12,6 +12,12 @@ jest.mock('../../../src/lib/database/pool', () => ({
   getPool: jest.fn(() => poolInstance)
 }));
 
+// Every room here is public; private-room checks have their own tests
+jest.mock('../../../src/lib/server/room-privacy', () => ({
+  ...jest.requireActual('../../../src/lib/server/room-privacy'),
+  guardRoomEntry: jest.fn().mockResolvedValue(true),
+}));
+
 jest.mock('../../../src/lib/api/rate-limit', () => ({
   rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 })
 }));

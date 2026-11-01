@@ -6,6 +6,7 @@ import { createSafeAudit } from '../../../../src/lib/api/audit';
 import {
   getLimit, hasPermission, requirePlayerAccess, sendLimitReached, sendPermissionDenied,
 } from '../../../../src/lib/auth/access-control';
+import { newInviteCode, stripPrivacyKeys } from '../../../../src/lib/server/room-privacy';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -27,6 +28,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if ((variant === 'dealers-choice' || variant === 'mixed') && !hasPermission(access, 'room.choose_variant')) {
     return sendPermissionDenied(res, 'room.choose_variant', access);
   }
+  const visibility = req.body?.visibility === 'private' ? 'private' : 'public';
+  if (visibility === 'private' && !hasPermission(access, 'room.create_private')) {
+    return sendPermissionDenied(res, 'room.create_private', access);
+  }
   const userId = access.userId;
 
   const pool = getPool();
@@ -43,8 +48,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const service = new GameService(pool);
-    // Sanitize/force createdBy to authenticated user
-    const payload = { ...req.body, createdBy: userId };
+    // Sanitize/force createdBy to authenticated user; only the server sets who may enter
+    const { visibility: _visibility, ...body } = req.body || {};
+    const configuration = {
+      ...stripPrivacyKeys(body.configuration),
+      visibility,
+      ...(visibility === 'private' ? { inviteCode: newInviteCode(), members: [] } : {}),
+    };
+    const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 60) : 'New Table';
+    const payload = { ...body, name, configuration, createdBy: userId };
 
     console.log('Creating room with data:', JSON.stringify({ ...payload, createdBy: '[auth-user]'} , null, 2));
     const created = await service.createRoom(payload);

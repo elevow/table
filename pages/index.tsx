@@ -16,6 +16,11 @@ const Home: NextPage = () => {
   const [healthResult, setHealthResult] = useState<any>(null);
   const showDbHealth = (process.env.NEXT_PUBLIC_SHOW_DB_HEALTH === '1' || process.env.NEXT_PUBLIC_SHOW_DB_HEALTH === 'true');
 
+  // Where to go after signing in: a page that sent the visitor here (an invite link), else the dashboard.
+  // Only paths on this site, so a crafted link can't send someone elsewhere.
+  const next = typeof router.query.next === 'string' ? router.query.next : '';
+  const afterSignIn = next.startsWith('/') && !next.startsWith('//') && !next.includes('\\') ? next : '/dashboard';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -51,13 +56,13 @@ const Home: NextPage = () => {
         // Try router.push first, with fallback to window.location
         console.log('Attempting navigation to dashboard...');
         try {
-          const navigationPromise = router.push('/dashboard');
+          const navigationPromise = router.push(afterSignIn);
           console.log('Router.push called, awaiting...');
           
           // Set a timeout for fallback navigation
           const timeoutId = setTimeout(() => {
             console.log('Router navigation timeout, using window.location.href');
-            window.location.href = '/dashboard';
+            window.location.href = afterSignIn;
           }, 2000);
           
           await navigationPromise;
@@ -67,7 +72,7 @@ const Home: NextPage = () => {
         } catch (routerError) {
           console.error('Router navigation failed:', routerError);
           console.log('Using window.location.href fallback');
-          window.location.href = '/dashboard';
+          window.location.href = afterSignIn;
         }
       } else {
         console.log('Login failed:', data);

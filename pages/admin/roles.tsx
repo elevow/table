@@ -497,14 +497,16 @@ function UsersTab({
 }) {
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [more, setMore] = useState(false);
   const [selected, setSelected] = useState<AdminUser | null>(null);
   const [searching, setSearching] = useState(false);
 
   const search = useCallback(async (q: string) => {
     setSearching(true);
     try {
-      const data = await api<{ users: AdminUser[] }>(`/api/admin/users?q=${encodeURIComponent(q)}`);
+      const data = await api<{ users: AdminUser[]; more?: boolean }>(`/api/admin/users?q=${encodeURIComponent(q)}`);
       setUsers(data.users);
+      setMore(!!data.more);
     } catch (e: any) {
       onError(e.message);
     } finally {
@@ -523,13 +525,16 @@ function UsersTab({
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search by email or username"
+            placeholder="Email or username; * is a wildcard, * alone is everyone"
+            aria-label="Search by email or username"
             className="flex-1 px-3 py-2 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
           />
           <button type="submit" className="px-4 py-2 rounded-md text-white bg-indigo-500 hover:bg-indigo-600">Search</button>
         </form>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-          {query ? (searching ? 'Searching…' : `${users.length} result(s)`) : 'Users with extra roles, overrides, limits, bans or suspensions'}
+          {query
+            ? (searching ? 'Searching…' : more ? `First ${users.length} results; narrow the search to see the rest` : `${users.length} result(s)`)
+            : 'Users with extra roles, overrides, limits, bans or suspensions'}
         </p>
         <ul className="divide-y divide-gray-100 dark:divide-gray-700">
           {users.map(u => (

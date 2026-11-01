@@ -22,6 +22,13 @@ jest.mock('../../lib/auth/access-control', () => ({
     }
     return mockActor.current;
   },
+  requireAnyPermission: async (_req: any, res: any, permissions: string[]) => {
+    if (!permissions.some(p => mockActor.current.permissions.has(p))) {
+      res.status(403).json({ error: 'Permission required', permission: permissions[0] });
+      return null;
+    }
+    return mockActor.current;
+  },
   requirePlayerAccess: async () => mockActor.current,
   hasPermission: (access: any, permission: string) => access.permissions.has(permission),
   sendPermissionDenied: (res: any, permission: string) => res.status(403).json({ error: 'Permission required', permission }),
@@ -34,6 +41,7 @@ import rolesHandler from '../../../pages/api/admin/roles/index';
 import roleHandler from '../../../pages/api/admin/roles/[id]';
 import userAccessHandler from '../../../pages/api/admin/users/[id]/access';
 import sanctionHandler from '../../../pages/api/admin/users/[id]/sanction';
+import usersHandler, { USER_SEARCH_LIMIT, userSearchPattern } from '../../../pages/api/admin/users/index';
 
 function actor(rank: number, permissions: string[], bootstrapAdmin = false) {
   return { userId: 'actor', email: 'a@example.com', roles: [], rank, permissions: new Set(permissions), bootstrapAdmin };
@@ -208,6 +216,46 @@ describe('PATCH/DELETE /api/admin/roles/[id]', () => {
     await roleHandler(makeReq('DELETE', undefined, { id: 'r1' }), custom);
     expect(custom.status).toHaveBeenCalledWith(200);
     expect(mockQuery.mock.calls.some(c => String(c[0]).startsWith('DELETE FROM access_roles'))).toBe(true);
+  });
+});
+
+describe('GET /api/admin/users', () => {
+  test('plain text matches anywhere; * is a wildcard over the whole value', () => {
+    expect(userSearchPattern('gene')).toBe('%gene%');
+    expect(userSearchPattern('gene*')).toBe('gene%');
+    expect(userSearchPattern('*@gmail.com')).toBe('%@gmail.com');
+    expect(userSearchPattern('g*e')).toBe('g%e');
+    expect(userSearchPattern('*')).toBe('%');
+    expect(userSearchPattern('**')).toBe('%');
+    // % and _ are literal, with or without a wildcard
+    expect(userSearchPattern('a_b%')).toBe('%a\\_b\\%%');
+    expect(userSearchPattern('a_b*')).toBe('a\\_b%');
+  });
+
+  test('* alone lists everyone, and says when there are more than the limit', async () => {
+    mockActor.current = actor(40, ['admin.users.view']);
+    const rows = Array.from({ length: USER_SEARCH_LIMIT + 1 }, (_, i) => ({
+      id: `u${i}`, email: `u${i}@example.com`, username: `u${i}`, roles: [], overrides: [], limits: [], sanction: null,
+    }));
+    mockQuery.mockResolvedValue({ rows });
+    const res = makeRes();
+    await usersHandler(makeReq('GET', undefined, { q: '*' }), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const [sql, params] = mockQuery.mock.calls[0];
+    expect(sql).toContain(`WHEN $2 = '%' THEN TRUE`);
+    expect(params[1]).toBe('%');
+    expect(params[3]).toBe(USER_SEARCH_LIMIT + 1);
+    const body = res.json.mock.calls[0][0];
+    expect(body.more).toBe(true);
+    expect(body.users).toHaveLength(USER_SEARCH_LIMIT);
+  });
+
+  test('needs roles.view or admin.users.view', async () => {
+    mockActor.current = actor(10, ['table.join']);
+    const res = makeRes();
+    await usersHandler(makeReq('GET', undefined, { q: '*' }), res);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 });
 

@@ -5,8 +5,9 @@ export function validateTournamentConfig(cfg: TournamentConfig): ValidationResul
 
   if (!cfg.blindLevels?.length) errors.push('At least one blind level is required');
   if (cfg.startingStack <= 0) errors.push('Starting stack must be > 0');
-  if (cfg.seatsPerTable !== undefined && !(Number.isInteger(cfg.seatsPerTable) && cfg.seatsPerTable >= 2 && cfg.seatsPerTable <= 10)) {
-    errors.push('Seats per table must be a whole number from 2 to 10');
+  // Game rooms seat at most 9
+  if (cfg.seatsPerTable !== undefined && !(Number.isInteger(cfg.seatsPerTable) && cfg.seatsPerTable >= 2 && cfg.seatsPerTable <= 9)) {
+    errors.push('Seats per table must be a whole number from 2 to 9');
   }
   if (cfg.maxPlayers !== undefined && !(Number.isInteger(cfg.maxPlayers) && cfg.maxPlayers >= 2)) {
     errors.push('Max players must be a whole number of at least 2');

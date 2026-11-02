@@ -95,6 +95,10 @@ export default function TournamentPage() {
           {view.you.place !== null
             ? <span>Finished {ordinal(view.you.place)}{finisherAt(view.you.place)?.prize ? `, won ${formatMoney(finisherAt(view.you.place)!.prize)}` : ''}</span>
             : view.you.table !== null && <span>Table {view.you.table}, seat {view.you.seat}</span>}
+          {view.you.chips !== null && view.status !== 'setup' && <span>Your stack: {view.you.chips.toLocaleString()}</span>}
+          {view.you.roomId && view.you.place === null && (
+            <Link href={`/game/${view.you.roomId}`} className="font-medium text-blue-600 dark:text-blue-400 hover:underline">Go to your table</Link>
+          )}
           {view.you.bounty !== null && <span>Bounty on you: {formatMoney(view.you.bounty)}</span>}
           {view.bounty && <span>Bounties won: {formatMoney(view.you.bountyWon)}</span>}
         </section>
@@ -144,13 +148,29 @@ export default function TournamentPage() {
         )}
       </div>
 
+      {view.status !== 'setup' && view.chipCounts.some(c => c.chips > 0) && (
+        <section aria-label="Chip counts">
+          <h2 className="text-lg font-semibold mb-2">Chip counts</h2>
+          <ol className="text-sm grid grid-cols-1 sm:grid-cols-2 gap-x-8">
+            {view.chipCounts.map((c, i) => (
+              <li key={c.userId} className="flex justify-between border-b border-gray-200 dark:border-gray-700 py-0.5">
+                <span>{i + 1}. {c.name}</span>
+                <span className="tabular-nums">{c.chips.toLocaleString()}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       {view.tables.length > 0 && view.status !== 'completed' && (
         <section aria-label="Tables">
           <h2 className="text-lg font-semibold mb-2">Tables</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {view.tables.map(tb => (
               <div key={tb.number} className={card}>
-                <p className="font-medium mb-1">Table {tb.number}</p>
+                <p className="font-medium mb-1">
+                  {tb.roomId ? <Link href={`/game/${tb.roomId}`} className="hover:underline">Table {tb.number}</Link> : `Table ${tb.number}`}
+                </p>
                 <ul className="text-sm space-y-0.5">
                   {tb.players.map(p => <li key={p.userId}>Seat {p.seat}: {p.name}</li>)}
                 </ul>

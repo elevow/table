@@ -26,7 +26,9 @@ export interface TournamentView {
   registration: { open: boolean; full: boolean; maxPlayers: number | null };
   // What each buy costs a player, bounty included
   costs: { entry: number; rebuy: number | null; addOn: number | null };
-  tables: { number: number; players: { seat: number; userId: string; name: string }[] }[];
+  tables: { number: number; roomId: string | null; players: { seat: number; userId: string; name: string }[] }[];
+  // Players still in, biggest stack first; chips bought but not yet at a table count
+  chipCounts: { userId: string; name: string; chips: number }[];
   entrants: { userId: string; name: string; out: boolean }[]; // everyone registered, by name
   canManage: boolean; // the viewer runs this tournament
   // For the director: the latest elimination, while it can still be undone
@@ -59,6 +61,8 @@ export interface TournamentView {
     bounty: number | null;
     bountyWon: number;
     paid: number; // everything this player has paid in
+    chips: number | null; // their stack, while still in
+    roomId: string | null; // the game room where they play
   };
 }
 
@@ -106,6 +110,7 @@ export function buildTournamentView(
     finishers.unshift({ place: 1, userId: remaining[0], name: nameOf(remaining[0]), prize: prizeFor(1), eliminatedBy: null, removed: false });
   }
   const paid = amountsPaid(t);
+  const chipsOf = (id: string) => (t.chips?.[id] ?? 0) + (t.pendingChips?.[id] ?? 0);
 
   let bounty: TournamentView['bounty'] = null;
   if (bountyEnabled(t.config)) {
@@ -139,6 +144,8 @@ export function buildTournamentView(
       bounty: bountyEnabled(t.config) && !eliminated ? t.bounties?.[viewerId] ?? 0 : null,
       bountyWon: t.bountyWinnings?.[viewerId] ?? 0,
       paid: paid[viewerId] ?? 0,
+      chips: eliminated ? null : chipsOf(viewerId),
+      roomId: table?.roomId ?? null,
     };
   }
 
@@ -158,8 +165,12 @@ export function buildTournamentView(
     entrants: t.registeredPlayers
       .map(id => ({ userId: id, name: nameOf(id), out: t.eliminatedPlayers.includes(id) }))
       .sort((a, b) => a.name.localeCompare(b.name)),
+    chipCounts: remaining
+      .map(id => ({ userId: id, name: nameOf(id), chips: chipsOf(id) }))
+      .sort((a, b) => b.chips - a.chips || a.name.localeCompare(b.name)),
     tables: t.tables.map(tb => ({
       number: tb.number,
+      roomId: tb.roomId ?? null,
       players: tb.seats.flatMap((id, i) => (id ? [{ seat: i + 1, userId: id, name: nameOf(id) }] : [])),
     })),
     canManage: !!options.canManage,

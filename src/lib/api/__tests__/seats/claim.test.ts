@@ -30,6 +30,7 @@ jest.mock('../../../database/pool', () => ({
 
 import handler from '../../../../../pages/api/games/seats/claim';
 import * as GameSeats from '../../../shared/game-seats';
+import * as roomConfig from '../../../server/room-config';
 
 describe('/api/games/seats/claim', () => {
   let res: Partial<NextApiResponse>;
@@ -73,5 +74,19 @@ describe('/api/games/seats/claim', () => {
 
     expect(statusMock).toHaveBeenCalledWith(401);
     expect(GameSeats.getRoomSeats('claim-table-2')[2]).toBeUndefined();
+  });
+
+  test('refuses seats at a tournament table, which the tournament assigns', async () => {
+    jest.spyOn(roomConfig, 'loadRoom').mockResolvedValueOnce({
+      createdBy: 'td-1', maxPlayers: 9, configuration: { tournamentId: 'tour-1', tournamentTableId: 'tbl-1' },
+    });
+    const req = {
+      method: 'POST',
+      body: { tableId: 'tournament-table', seatNumber: 3, playerId: 'player1', playerName: 'Alice' },
+    } as unknown as NextApiRequest;
+    await handler(req, res as NextApiResponse);
+    expect(statusMock).toHaveBeenCalledWith(409);
+    expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ code: 'TOURNAMENT_TABLE' }));
+    expect(GameSeats.getRoomSeats('tournament-table')[3]).toBeFalsy();
   });
 });

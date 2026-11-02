@@ -7,6 +7,7 @@ import { performSeatClaim } from '../../../../src/lib/server/seat-actions';
 import { tablesSeatedAt } from '../../../../src/lib/shared/game-seats';
 import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../../src/lib/server/room-config';
 import { PRIVATE_TABLE_RESPONSE, canEnterRoom, isPrivateRoom } from '../../../../src/lib/server/room-privacy';
+import { tournamentTableOf } from '../../../../src/lib/tournament/table-rooms';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -43,6 +44,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const room = await loadRoom(roomId).catch(() => null);
     const config = (room?.configuration || {}) as TableExtrasConfig;
     const isHost = !!room?.createdBy && room.createdBy === playerId;
+
+    if (tournamentTableOf(room?.configuration)) {
+      return res.status(409).json({ error: 'Seats at a tournament table are assigned by the tournament', code: 'TOURNAMENT_TABLE' });
+    }
 
     // Private tables: members only, and sitting at one is its own permission
     if (room && isPrivateRoom(config)) {

@@ -79,6 +79,7 @@ export class TournamentManager {
       if (t.tables.length > 0) {
         seatLatePlayer(t.tables, input.userId, seatsPerTable(t), this.random);
         this.balance(t);
+        addPendingChips(t, input.userId, t.config.startingStack);
       }
     });
   }
@@ -157,6 +158,7 @@ export class TournamentManager {
       if (t.registeredPlayers.length < 2) throw new Error('At least 2 players are needed to start');
       startClock(t, now);
       t.tables = drawSeats(t.registeredPlayers, seatsPerTable(t), this.random);
+      for (const userId of t.registeredPlayers) addPendingChips(t, userId, t.config.startingStack);
     });
   }
 
@@ -204,6 +206,7 @@ export class TournamentManager {
       (t.registrationTimeline = t.registrationTimeline || []).push({ at: now, type: 'rebuy', userId: input.userId });
       // Each rebuy buys a bounty too: a fresh one for a returning player, added to the bounty of one still in
       postBounty(t, input.userId);
+      addPendingChips(t, input.userId, t.config.rebuys?.stack ?? 0);
       // A busted player buys back in: back in the field, with their elimination undone and a new seat
       if (t.eliminatedPlayers.includes(input.userId)) {
         t.eliminatedPlayers = t.eliminatedPlayers.filter(p => p !== input.userId);
@@ -221,6 +224,58 @@ export class TournamentManager {
       const refused = whyNoAddOn(t, input.userId);
       if (refused) throw new Error(refused);
       (t.registrationTimeline = t.registrationTimeline || []).push({ at: now, type: 'addOn', userId: input.userId });
+      addPendingChips(t, input.userId, t.config.addOn?.stack ?? 0);
+    });
+  }
+
+  /**
+   * A table finished a hand: record everyone's stack, and eliminate the players who busted, in
+   * order (the smallest starting stack first, so it finishes lowest), crediting who won their chips.
+   * Busts recorded this way can't be undone: the chips have already moved at the table.
+   */
+  reportHand(input: {
+    tournamentId: string;
+    stacks: Record<string, number>;
+    busted: { userId: string; eliminatedBy?: string }[];
+  }): Promise<TournamentState> {
+    return this.change(input.tournamentId, (t, now) => {
+      if (t.status !== 'running' && t.status !== 'paused' && t.status !== 'on-break') return;
+      const chips = (t.chips = t.chips || {});
+      for (const [userId, stack] of Object.entries(input.stacks)) {
+        if (t.registeredPlayers.includes(userId) && !t.eliminatedPlayers.includes(userId)) chips[userId] = Math.max(0, stack);
+      }
+      for (const bust of input.busted) {
+        // An earlier bust in this hand may have ended the tournament
+        if ((t.status as TournamentState['status']) === 'completed') break;
+        if (t.eliminatedPlayers.includes(bust.userId) || !t.registeredPlayers.includes(bust.userId)) continue;
+        if (remainingPlayers(t).length <= 1) break;
+        const by = bust.eliminatedBy && bust.eliminatedBy !== bust.userId && remainingPlayers(t).includes(bust.eliminatedBy)
+          ? bust.eliminatedBy
+          : undefined;
+        this.knockOut(t, now, bust.userId, by, false, true);
+      }
+    });
+  }
+
+  /** Remember the game room a table plays in. */
+  setTableRoom(input: { tournamentId: string; tableId: string; roomId: string }): Promise<TournamentState> {
+    return this.change(input.tournamentId, t => {
+      const table = t.tables.find(tb => tb.id === input.tableId);
+      if (table && !table.roomId) table.roomId = input.roomId;
+    });
+  }
+
+  /** Chips bought earlier reached a table: they're part of the player's stack now. */
+  ackChips(input: { tournamentId: string; delivered: Record<string, number> }): Promise<TournamentState> {
+    return this.change(input.tournamentId, t => {
+      const chips = (t.chips = t.chips || {});
+      const pending = (t.pendingChips = t.pendingChips || {});
+      for (const [userId, amount] of Object.entries(input.delivered)) {
+        if (!(amount > 0)) continue;
+        chips[userId] = (chips[userId] ?? 0) + amount;
+        pending[userId] = Math.max(0, (pending[userId] ?? 0) - amount);
+        if (pending[userId] === 0) delete pending[userId];
+      }
     });
   }
 
@@ -228,7 +283,14 @@ export class TournamentManager {
    * Take a player out of the field. `removed` is the director removing them: no knocker is needed,
    * and in a knockout their bounty is forfeited rather than paid.
    */
-  private knockOut(t: TournamentState, now: number, userId: string, by: string | undefined, removed: boolean): void {
+  private knockOut(
+    t: TournamentState,
+    now: number,
+    userId: string,
+    by: string | undefined,
+    removed: boolean,
+    fromHand = false
+  ): void {
     if (t.status !== 'running' && t.status !== 'paused' && t.status !== 'on-break') {
       throw new Error('Players can only be eliminated while the tournament is in progress');
     }
@@ -242,13 +304,15 @@ export class TournamentManager {
     if (by !== undefined) {
       if (by === userId) throw new Error('A player cannot knock themselves out');
       if (!remaining.includes(by)) throw new Error('The player who made the knockout must still be in the tournament');
-    } else if (bountyEnabled(t.config) && !removed) {
+    } else if (bountyEnabled(t.config) && !removed && !fromHand) {
       throw new Error('Say who knocked the player out, so the bounty can be paid');
     }
     // Finishing place is the number of players left, counting the one going out
     t.eliminatedPlayers.push(userId);
     const bounty = by !== undefined ? settleKnockout(t, userId, by) : 0;
-    const forfeited = removed ? forfeitBounty(t, userId) : 0;
+    // A bust nobody can be credited with (rare: a hand result without a winner) forfeits the bounty too
+    const forfeited = removed || by === undefined ? forfeitBounty(t, userId) : 0;
+    if (t.chips) t.chips[userId] = 0;
     (t.eliminationRecords = t.eliminationRecords || []).push({
       userId,
       at: now,
@@ -378,4 +442,11 @@ function withdraw(t: TournamentState, userId: string): void {
   t.registeredPlayers = t.registeredPlayers.filter(p => p !== userId);
   t.registrationTimeline = (t.registrationTimeline || []).filter(e => !(e.type === 'register' && e.userId === userId));
   if (t.bounties) delete t.bounties[userId];
+}
+
+/** Chips a player bought that their table will hand them before its next hand. */
+function addPendingChips(t: TournamentState, userId: string, amount: number): void {
+  if (!(amount > 0)) return;
+  const pending = (t.pendingChips = t.pendingChips || {});
+  pending[userId] = (pending[userId] ?? 0) + amount;
 }

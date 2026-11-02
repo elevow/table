@@ -75,6 +75,15 @@ jest.mock('../../../src/lib/auth/auth-utils', () => ({
   requirePlayer: (...args: any[]) => mockRequirePlayer(...args),
 }));
 
+// Tournament tables follow the tournament between hands; ordinary rooms have no tournament link
+const mockLoadRoom = jest.fn().mockResolvedValue(null);
+jest.mock('../../../src/lib/server/room-config', () => ({ loadRoom: (...args: any[]) => mockLoadRoom(...args) }));
+const mockPrepareTournamentHand = jest.fn();
+jest.mock('../../../src/lib/tournament/table-rooms', () => ({
+  tournamentTableOf: (c: any) => (c?.tournamentId ? { tournamentId: c.tournamentId, tableId: c.tournamentTableId } : null),
+  prepareTournamentHand: (...args: any[]) => mockPrepareTournamentHand(...args),
+}));
+
 import type { NextApiRequest, NextApiResponse } from 'next';
 import handler from '../../../pages/api/games/next-hand';
 import * as enginePersistence from '../../../src/lib/poker/engine-persistence';
@@ -325,5 +334,49 @@ describe('/api/games/next-hand', () => {
     expect(engine.pauseForDealerChoice).toHaveBeenCalled();
     expect(mockPersistEngineState).toHaveBeenCalledWith('t1', engine);
     expect(mockPublishAwaitingDealerChoice).toHaveBeenCalledWith('t1', expect.objectContaining({ dealerId: 'b' }));
+  });
+
+  describe('tournament tables', () => {
+    const tournamentRoom = { configuration: { tournamentId: 'tour-1', tournamentTableId: 'tbl-1' } };
+
+    it('hold while the tournament is on a break, without dealing', async () => {
+      const engine = createEngine('showdown');
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+      mockLoadRoom.mockResolvedValueOnce(tournamentRoom);
+      mockPrepareTournamentHand.mockResolvedValueOnce({ ok: false, status: 409, body: { error: 'The tournament is on a break', code: 'TOURNAMENT_PAUSED' } });
+      const res = createRes();
+      await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+      expect(mockPrepareTournamentHand).toHaveBeenCalledWith('t1', engine, { tournamentId: 'tour-1', tableId: 'tbl-1' });
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'TOURNAMENT_PAUSED' }));
+      expect(engine.startNewHand).not.toHaveBeenCalled();
+    });
+
+    it('deal the next hand without rebuy prompts: a busted player is out of the tournament', async () => {
+      const engine = createEngine('showdown');
+      engine.getState.mockReturnValue({
+        stage: 'showdown', dealerPosition: 0,
+        players: [{ id: 'a', name: 'A', stack: 200 }, { id: 'b', name: 'B', stack: 0 }, { id: 'c', name: 'C', stack: 100 }],
+      });
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+      mockLoadRoom.mockResolvedValueOnce(tournamentRoom);
+      mockPrepareTournamentHand.mockResolvedValueOnce({ ok: true });
+      const res = createRes();
+      await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+      expect((publisher.publishRebuyPrompt as jest.Mock)).not.toHaveBeenCalled();
+      expect(engine.startNewHand).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('an ordinary room is not touched by the tournament code', async () => {
+      const engine = createEngine('showdown');
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+      await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());
+      expect(mockPrepareTournamentHand).not.toHaveBeenCalled();
+      expect(engine.startNewHand).toHaveBeenCalled();
+    });
   });
 });

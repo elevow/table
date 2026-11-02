@@ -44,6 +44,12 @@ jest.mock('../../../src/lib/auth/auth-utils', () => ({
   requirePlayer: (...args: any[]) => mockRequirePlayer(...args),
 }));
 
+// Tables play in game rooms; the room side is tested on its own
+const mockSyncRooms = jest.fn(async (_id: string) => {});
+jest.mock('../../../src/lib/tournament/table-rooms', () => ({
+  syncTournamentRooms: (id: string) => mockSyncRooms(id),
+}));
+
 // Usernames come from the users table
 const mockLoadPlayerNames = jest.fn(async (_ids: string[]) => ({ p1: 'Player One' }) as Record<string, string>);
 jest.mock('../../../src/lib/tournament/pg-tournament-store', () => ({

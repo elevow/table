@@ -22,6 +22,8 @@ import { GameService } from '../../../src/lib/services/game-service';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import type { BettingMode, GameVariant } from '../../../src/types/poker';
 import { ALL_VARIANTS } from '../../../src/lib/poker/variant-rules';
+import { loadRoom } from '../../../src/lib/server/room-config';
+import { prepareTournamentHand, tournamentTableOf } from '../../../src/lib/tournament/table-rooms';
 
 // Type definitions for room configuration from database
 interface RoomConfiguration {
@@ -155,6 +157,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     locks.add(tableId);
     try {
+      // A tournament table follows the tournament: busts, table moves, chips, blinds and breaks
+      const tournamentTable = tournamentTableOf((await loadRoom(tableId).catch(() => null))?.configuration);
+      if (tournamentTable) {
+        const prepared = await prepareTournamentHand(tableId, engine, tournamentTable);
+        if (!prepared.ok) return res.status(prepared.status).json(prepared.body);
+      }
       // Players who sat down since the game started, or stood up and came back, join from this hand
       if (typeof engine.syncSeatedPlayers === 'function') {
         try {
@@ -242,7 +250,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return pendingRebuyCount(tableId) === 0 && promptsIssued === 0;
       };
 
-      const rebuyReady = await handleBustedPlayers();
+      // In a tournament a busted player is out (or rebuys through the tournament), so nobody is prompted here
+      const rebuyReady = tournamentTable ? true : await handleBustedPlayers();
       if (!rebuyReady) {
         return res.status(200).json({ success: true, awaitingRebuyDecisions: true, pending: pendingRebuyCount(tableId), waitingFor });
       }

@@ -21,6 +21,7 @@ jest.mock('../../../auth/auth-utils', () => ({
 
 import handler from '../../../../../pages/api/games/seats/stand';
 import * as GameSeats from '../../../shared/game-seats';
+import { loadRoom } from '../../../server/room-config';
 
 // Mock the publisher module
 jest.mock('../../../realtime/publisher', () => ({
@@ -243,5 +244,13 @@ describe('/api/games/seats/stand', () => {
     const seats = GameSeats.getRoomSeats(tableId);
     expect(seats[5]).toEqual({ playerId, playerName: 'Alice', chips: 100 });
     expect(seats[3]).toBeNull();
+  });
+
+  test('refuses to let a player leave a tournament table', async () => {
+    (loadRoom as jest.Mock).mockResolvedValueOnce({ createdBy: 'td-1', maxPlayers: 9, configuration: { tournamentId: 'tour-1', tournamentTableId: 'tbl-1' } });
+    req.body = { tableId: 'tournament-table', playerId: 'player1' };
+    await handler(req as NextApiRequest, res as NextApiResponse);
+    expect(statusMock).toHaveBeenCalledWith(409);
+    expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ code: 'TOURNAMENT_TABLE' }));
   });
 });

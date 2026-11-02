@@ -31,7 +31,7 @@ export interface TournamentConfig {
   // Knockout: each entry and rebuy also puts `amount` on the player's head, paid to whoever knocks them out.
   // 'progressive' pays half and adds the other half to the knocker's own bounty.
   bounty?: { amount: number; type: 'standard' | 'progressive' };
-  seatsPerTable?: number; // seats at each table, 2-10; defaults to 9
+  seatsPerTable?: number; // seats at each table, 2-9 (a game room's size); defaults to 9
   maxPlayers?: number; // registration closes at this many players; unset means no cap
   payoutStructure: PayoutTier[];
   breaks: BreakSchedule[];

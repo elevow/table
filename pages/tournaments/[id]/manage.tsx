@@ -245,7 +245,9 @@ export default function ManageTournamentPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {view.tables.map(tb => (
               <div key={tb.number} className={card}>
-                <p className="font-medium mb-1">Table {tb.number} · {tb.players.length} players</p>
+                <p className="font-medium mb-1">
+                  {tb.roomId ? <Link href={`/game/${tb.roomId}`} className="hover:underline">Table {tb.number}</Link> : `Table ${tb.number}`} · {tb.players.length} players
+                </p>
                 <ul className="text-sm space-y-0.5">
                   {tb.players.map(p => <li key={p.userId}>Seat {p.seat}: {p.name}</li>)}
                 </ul>

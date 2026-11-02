@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { sendTournamentError } from '../../../src/lib/tournament/api-errors';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { tournamentManager } from '../../../src/lib/tournament/manager-instance';
+import { syncTournamentRooms } from '../../../src/lib/tournament/table-rooms';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { requireOrganizer } from '../../../src/lib/tournament/require-organizer';
 
@@ -22,6 +23,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!tournamentId) return res.status(400).json({ error: 'Missing tournamentId' });
     }
     const t = await tournamentManager.rebuy({ tournamentId, userId });
+    // Tables play in game rooms: open, seat and wake them to match
+    await syncTournamentRooms(t.id);
     return res.status(200).json(t);
   } catch (err) {
     return sendTournamentError(res, err);

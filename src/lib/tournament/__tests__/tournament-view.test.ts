@@ -97,3 +97,17 @@ describe('formatting', () => {
     expect(formatClock(ms)).toBe(s);
   });
 });
+
+describe('chip counts', () => {
+  test('rank the players still in by stack, counting chips not yet at a table, and show the viewer theirs', async () => {
+    const { mgr, id, view } = await setup();
+    await mgr.start(id);
+    // The tables took their starting stacks
+    await mgr.ackChips({ tournamentId: id, delivered: { a: 20000, b: 20000, c: 20000, d: 20000 } });
+    await mgr.reportHand({ tournamentId: id, stacks: { a: 50000, b: 12000, c: 18000, d: 0 }, busted: [{ userId: 'd', eliminatedBy: 'a' }] });
+    const v = await view('c');
+    expect(v.chipCounts.map(c => [c.name, c.chips])).toEqual([['Alice', 50000], ['Cara', 18000], ['Bob', 12000]]);
+    expect(v.you).toMatchObject({ chips: 18000, roomId: null });
+    expect(v.tables[0].roomId).toBeNull();
+  });
+});

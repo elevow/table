@@ -747,6 +747,11 @@ export default function GamePage() {
           setTableWaitNotice('Waiting for at least two players to sit in.');
         } else if (data?.code === 'PAUSED') {
           setTableWaitNotice(null);
+        } else if (data?.code === 'TOURNAMENT_PAUSED' || data?.code === 'TOURNAMENT_OVER' || data?.code === 'TABLE_CLOSED') {
+          // A tournament table waits for the tournament: a break, a pause, a closed table or the end
+          setTableWaitNotice(data.breakEndsAt
+            ? `${data.error}. Play resumes at ${new Date(data.breakEndsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`
+            : data.error);
         } else {
           console.warn('Next hand request failed:', data?.error || response.status);
         }

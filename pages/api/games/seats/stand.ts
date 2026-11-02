@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
 import { requirePlayer } from '../../../../src/lib/auth/auth-utils';
 import { leaveTable } from '../../../../src/lib/server/seat-actions';
+import { loadRoom } from '../../../../src/lib/server/room-config';
+import { tournamentTableOf } from '../../../../src/lib/tournament/table-rooms';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -21,6 +23,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!tableId) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Leaving a tournament table would cash out tournament chips; the director removes players instead
+    if (tournamentTableOf((await loadRoom(String(tableId)).catch(() => null))?.configuration)) {
+      return res.status(409).json({ error: "You can't leave a tournament table. Ask the director if you need to withdraw.", code: 'TOURNAMENT_TABLE' });
     }
 
     const seats = await GameSeats.loadPersistedRoomSeats(String(tableId)) || GameSeats.getRoomSeats(String(tableId));

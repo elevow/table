@@ -91,7 +91,7 @@ export default function TournamentSetupForm({
             Seats per table
             <select className={inputClass} value={config.seatsPerTable ?? 9}
               onChange={e => setConfig({ ...config, seatsPerTable: Number(e.target.value) })}>
-              {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <option key={n} value={n}>{n}</option>)}
+              {[2, 3, 4, 5, 6, 7, 8, 9].map(n => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
           <label className="block text-sm font-medium">

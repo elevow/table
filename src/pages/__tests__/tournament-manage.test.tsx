@@ -20,7 +20,8 @@ const view = (overrides: Partial<TournamentView> = {}): TournamentView => ({
   players: { entrants: 4, remaining: 3, paidPlaces: 3 },
   registration: { open: false, full: false, maxPlayers: null },
   costs: { entry: 13, rebuy: 12, addOn: null },
-  tables: [{ number: 1, players: [
+  chipCounts: [],
+  tables: [{ number: 1, roomId: 'room-1', players: [
     { seat: 2, userId: 'a', name: 'Alice' },
     { seat: 5, userId: 'b', name: 'Bob' },
     { seat: 8, userId: 'c', name: 'Cara' },

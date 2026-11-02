@@ -59,7 +59,7 @@ describe('US-057 Tournament Structure', () => {
 describe('seating config validation', () => {
   const base = () => createDefaultFreezeoutConfig();
 
-  test.each([1, 11, 6.5])('rejects seatsPerTable %p', seatsPerTable => {
+  test.each([1, 10, 6.5])('rejects seatsPerTable %p', seatsPerTable => {
     expect(validateTournamentConfig({ ...base(), seatsPerTable }).errors.join('\n')).toMatch(/Seats per table/);
   });
 

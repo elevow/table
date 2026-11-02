@@ -4,6 +4,7 @@ export type TournamentStatus = 'setup' | 'running' | 'paused' | 'on-break' | 'co
 
 export interface TournamentTable {
   id: string;
+  roomId?: string; // the game room where this table plays, once it has one
   number: number; // Table 1, Table 2, ... for display; numbers of broken tables aren't reused
   maxSeats: number;
   seats: (string | null)[]; // seats[i] is seat i + 1: the user ID sitting there, or null when empty
@@ -54,6 +55,10 @@ export interface TournamentState {
   // Knockouts (src/lib/tournament/tournament-money.ts)
   bounties?: Record<string, number>; // bounty on each player still in
   bountyWinnings?: Record<string, number>; // bounty cash each player has won
+  // Chips (src/lib/tournament/table-rooms.ts): each player's stack as last reported by their table,
+  // and chips they've bought (starting stack, late entry, rebuy, add-on) that haven't reached a table yet
+  chips?: Record<string, number>;
+  pendingChips?: Record<string, number>;
   cancelledAt?: number;
   cancelReason?: string | null;
   // The tournament just before the latest elimination, while nothing else has changed since; undo restores it

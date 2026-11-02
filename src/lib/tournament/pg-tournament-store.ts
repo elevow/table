@@ -43,6 +43,14 @@ export class PgTournamentStore implements TournamentStore {
       client.release();
     }
   }
+
+  async list(statuses: TournamentState['status'][], limit: number): Promise<TournamentState[]> {
+    const result = await getPool().query(
+      `SELECT state FROM tournaments WHERE status = ANY($1::text[]) ORDER BY created_at DESC LIMIT $2`,
+      [statuses, limit]
+    );
+    return result.rows.map((r: any) => r.state);
+  }
 }
 
 /** Usernames for tournament players, by user ID. IDs that aren't users are left out. */

@@ -135,6 +135,22 @@ export function catchUpClock(t: TournamentState, now: number): boolean {
   }
 }
 
+/**
+ * Tournament time played so far by the schedule: every finished level and break plus the time into
+ * the current one. Pauses don't count, and moving on early skips the rest of that level's time.
+ */
+export function scheduleElapsedMs(t: TournamentState, now: number): number {
+  if (t.status === 'setup') return 0;
+  const levels = t.config.blindLevels;
+  let ms = 0;
+  for (let i = 0; i < t.currentLevelIndex; i++) {
+    ms += levels[i].durationMinutes * MINUTE;
+    ms += (t.config.breaks.find(b => b.afterLevel === levels[i].level)?.durationMinutes ?? 0) * MINUTE;
+  }
+  // On a break the loop counted the whole break after the last level; take off what's left of it
+  return t.onBreak ? ms - (breakTimeRemainingMs(t, now) ?? 0) : ms + levelElapsedMs(t, now);
+}
+
 /** Time left in the current level, or null when no level is in play (before the start, on a break, after the end). */
 export function levelTimeRemainingMs(t: TournamentState, now: number): number | null {
   if (t.status !== 'running' && !(t.status === 'paused' && t.pausedFrom !== 'on-break')) return null;

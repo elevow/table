@@ -1,19 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { authHeaders } from '../../src/utils/auth-headers';
-import { formatClock, formatMoney } from '../../src/lib/tournament/format';
-import type { LevelView, TournamentView } from '../../src/lib/tournament/tournament-view';
-
-const POLL_MS = 5000;
-
-const blinds = (l: LevelView) =>
-  `${l.smallBlind.toLocaleString()}/${l.bigBlind.toLocaleString()}${l.ante ? ` ante ${l.ante.toLocaleString()}` : ''}`;
-
-const ordinal = (n: number) => {
-  const suffix = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
-  return `${n}${suffix}`;
-};
+import { formatMoney, ordinal } from '../../src/lib/tournament/format';
+import { postTournamentAction } from '../../src/lib/tournament/client';
+import { useTournamentView } from '../../src/lib/tournament/use-tournament-view';
+import TournamentClock from '../../src/components/tournament/TournamentClock';
+import type { TournamentView } from '../../src/lib/tournament/tournament-view';
 
 const statusLabel: Record<TournamentView['status'], string> = {
   setup: 'Registering', running: 'Running', paused: 'Paused', 'on-break': 'On break', completed: 'Finished', cancelled: 'Cancelled',
@@ -24,33 +18,25 @@ const card = 'rounded-lg bg-gray-50 dark:bg-gray-800 p-4';
 export default function TournamentPage() {
   const router = useRouter();
   const id = typeof router.query.id === 'string' ? router.query.id : null;
-  const [view, setView] = useState<TournamentView | null>(null);
-  const [fetchedAt, setFetchedAt] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
+  const { view, error, reload, levelLeft, breakLeft } = useTournamentView(id);
+  const [signedIn, setSignedIn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  useEffect(() => setSignedIn(!!authHeaders().Authorization), []);
 
-  const load = useCallback(async () => {
+  const act = async (action: 'register' | 'unregister' | 'rebuy' | 'add-on') => {
     if (!id) return;
+    setBusy(true);
+    setActionError(null);
     try {
-      const res = await fetch(`/api/tournaments/view?tournamentId=${encodeURIComponent(id)}`, { headers: authHeaders() });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || `Could not load the tournament (${res.status})`);
-      const at = Date.now();
-      setView(body);
-      setFetchedAt(at);
-      setNow(at);
-      setError(null);
+      await postTournamentAction(action, { tournamentId: id });
+      await reload();
     } catch (err: any) {
-      setError(err?.message || 'Could not load the tournament');
+      setActionError(err?.message || 'That did not work');
+    } finally {
+      setBusy(false);
     }
-  }, [id]);
-
-  useEffect(() => {
-    load();
-    const poll = setInterval(load, POLL_MS);
-    const tick = setInterval(() => setNow(Date.now()), 1000);
-    return () => { clearInterval(poll); clearInterval(tick); };
-  }, [load]);
+  };
 
   if (!view) {
     return (
@@ -60,10 +46,6 @@ export default function TournamentPage() {
     );
   }
 
-  // Count down locally between polls; a paused clock stands still
-  const elapsed = view.status === 'paused' ? 0 : Math.max(0, now - fetchedAt);
-  const levelLeft = view.levelRemainingMs !== null ? view.levelRemainingMs - (view.status === 'running' ? elapsed : 0) : null;
-  const breakLeft = view.breakRemainingMs !== null ? view.breakRemainingMs - (view.status === 'on-break' ? elapsed : 0) : null;
   const finisherAt = (place: number) => view.finishers.find(f => f.place === place);
 
   return (
@@ -75,28 +57,10 @@ export default function TournamentPage() {
         {error && <span role="alert" className="text-sm text-amber-700 dark:text-amber-400">Couldn&apos;t refresh: {error}</span>}
       </div>
 
-      <section aria-label="Clock" className={`${card} text-center`}>
-        {view.status === 'setup' && <p className="text-lg">Waiting to start. First level: {view.nextLevel && blinds(view.nextLevel)}</p>}
-        {view.onBreak && breakLeft !== null && (
-          <>
-            <p className="text-sm uppercase tracking-wide text-amber-700 dark:text-amber-300">Break{view.status === 'paused' ? ' (paused)' : ''}</p>
-            <p className="text-5xl font-bold tabular-nums my-2">{formatClock(breakLeft)}</p>
-            {view.level && <p>Back with level {view.level.number}: {blinds(view.level)}</p>}
-          </>
-        )}
-        {!view.onBreak && view.level && view.status !== 'setup' && (
-          <>
-            <p className="text-sm uppercase tracking-wide text-gray-600 dark:text-gray-400">
-              Level {view.level.number}{view.status === 'paused' ? ' (paused)' : ''}
-            </p>
-            <p className="text-3xl font-semibold my-1">{blinds(view.level)}</p>
-            {levelLeft !== null && view.status !== 'completed' && (
-              <p className="text-5xl font-bold tabular-nums my-2">{view.nextLevel ? formatClock(levelLeft) : 'Final level'}</p>
-            )}
-            {view.nextLevel && view.status !== 'completed' && <p className="text-gray-600 dark:text-gray-400">Next: {blinds(view.nextLevel)}</p>}
-          </>
-        )}
-      </section>
+      <TournamentClock view={view} levelLeft={levelLeft} breakLeft={breakLeft} />
+
+      <Actions view={view} signedIn={signedIn} busy={busy} onAct={act} />
+      {actionError && <p role="alert" className="text-sm text-red-600">{actionError}</p>}
 
       <section aria-label="Summary" className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
         <div className={card}>
@@ -172,6 +136,22 @@ export default function TournamentPage() {
         )}
       </div>
 
+      {view.tables.length > 0 && view.status !== 'completed' && (
+        <section aria-label="Tables">
+          <h2 className="text-lg font-semibold mb-2">Tables</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {view.tables.map(tb => (
+              <div key={tb.number} className={card}>
+                <p className="font-medium mb-1">Table {tb.number}</p>
+                <ul className="text-sm space-y-0.5">
+                  {tb.players.map(p => <li key={p.userId}>Seat {p.seat}: {p.name}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {view.finishers.length > 0 && (
         <section aria-label="Results">
           <h2 className="text-lg font-semibold mb-2">Results so far</h2>
@@ -186,4 +166,45 @@ export default function TournamentPage() {
       )}
     </div>
   );
+}
+
+/** What the viewer can do here: register, unregister, rebuy, take the add-on, or run the tournament. */
+function Actions({ view, signedIn, busy, onAct }: {
+  view: TournamentView;
+  signedIn: boolean;
+  busy: boolean;
+  onAct: (action: 'register' | 'unregister' | 'rebuy' | 'add-on') => void;
+}) {
+  const btn = 'px-4 py-2 rounded text-white disabled:opacity-50';
+  const cost = (n: number | null) => (n ? ` (${formatMoney(n)})` : '');
+  const items: React.ReactNode[] = [];
+  if (!view.you && view.registration.open && signedIn) {
+    items.push(
+      <button key="register" className={`${btn} bg-green-600`} disabled={busy} onClick={() => onAct('register')}>
+        {view.status === 'setup' ? 'Register' : 'Late register'}{cost(view.costs.entry)}
+      </button>
+    );
+  }
+  if (!view.you && view.registration.full && view.status === 'setup') items.push(<span key="full">Registration is full</span>);
+  if (!view.you && !signedIn && view.registration.open) items.push(<span key="signin">Sign in to register</span>);
+  if (view.you?.canUnregister) {
+    items.push(<button key="unregister" className={`${btn} bg-gray-500`} disabled={busy} onClick={() => onAct('unregister')}>Unregister</button>);
+  }
+  if (view.you?.canRebuy) {
+    items.push(
+      <button key="rebuy" className={`${btn} bg-blue-600`} disabled={busy} onClick={() => onAct('rebuy')}>
+        {view.you.eliminated ? 'Rebuy and return' : 'Rebuy'}{cost(view.costs.rebuy)}
+      </button>
+    );
+  }
+  if (view.you?.canAddOn) {
+    items.push(
+      <button key="addon" className={`${btn} bg-blue-600`} disabled={busy} onClick={() => onAct('add-on')}>Take the add-on{cost(view.costs.addOn)}</button>
+    );
+  }
+  if (view.canManage) {
+    items.push(<Link key="manage" href={`/tournaments/${view.id}/manage`} className="text-blue-600 dark:text-blue-400 hover:underline">Director controls</Link>);
+  }
+  if (items.length === 0) return null;
+  return <section aria-label="Actions" className="flex flex-wrap items-center gap-3">{items}</section>;
 }

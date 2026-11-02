@@ -14,11 +14,13 @@ import rebuyHandler from '../../../pages/api/tournaments/rebuy';
 import addOnHandler from '../../../pages/api/tournaments/add-on';
 import eliminateHandler from '../../../pages/api/tournaments/eliminate';
 import viewHandler from '../../../pages/api/tournaments/view';
+import listHandler from '../../../pages/api/tournaments/list';
+import unregisterHandler from '../../../pages/api/tournaments/unregister';
 
 import { createDefaultFreezeoutConfig } from '../../../src/lib/tournament/tournament-utils';
 
 // Signed-in organizer for organizer actions; players act as the userId they send
-const mockRequirePermission = jest.fn(async (_req: any, _res: any, _permission: string): Promise<any> => ({ userId: 'admin-1' }));
+const mockRequirePermission = jest.fn(async (_req: any, _res: any, _permission: string): Promise<any> => ({ userId: 'admin-1', permissions: new Set<string>() }));
 // Access of the caller on routes guests may use; signed-out visitors hold tournament.view
 const mockRequestAccess = jest.fn(async (_req: any): Promise<any> => ({ userId: null, permissions: new Set(['tournament.view']) }));
 jest.mock('../../../src/lib/auth/access-control', () => ({
@@ -213,6 +215,109 @@ describe('Tournaments API routes (US-058)', () => {
     const missing = createRes();
     await viewHandler(createReq('GET', undefined, { tournamentId: 'nope' }) as any, missing as any);
     expect(missing.status).toHaveBeenCalledWith(404);
+  });
+
+  describe('directors', () => {
+    async function runningTournament() {
+      const created = createRes();
+      await createHandler(createReq('POST', { name: 'Owned', config: createDefaultFreezeoutConfig() }) as any, created as any);
+      const { id } = created.json.mock.calls[0][0];
+      for (const userId of ['p1', 'p2', 'p3']) await registerHandler(createReq('POST', { tournamentId: id, userId }) as any, createRes() as any);
+      return id as string;
+    }
+    const asDirector = (userId: string, permissions: string[] = []) =>
+      mockRequirePermission.mockResolvedValueOnce({ userId, permissions: new Set(permissions) });
+
+    test('only the director who created a tournament can run it', async () => {
+      const id = await runningTournament();
+      asDirector('other-td');
+      const res = createRes();
+      await startHandler(createReq('POST', { tournamentId: id }) as any, res as any);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'NOT_ORGANIZER' }));
+
+      const own = createRes();
+      await startHandler(createReq('POST', { tournamentId: id }) as any, own as any);
+      expect(own.status).toHaveBeenCalledWith(200);
+
+      asDirector('other-td');
+      const elim = createRes();
+      await eliminateHandler(createReq('POST', { tournamentId: id, userId: 'p3' }) as any, elim as any);
+      expect(elim.status).toHaveBeenCalledWith(403);
+    });
+
+    test('tournament.manage_any can run any tournament', async () => {
+      const id = await runningTournament();
+      asDirector('staff-1', ['tournament.manage_any']);
+      const res = createRes();
+      await startHandler(createReq('POST', { tournamentId: id }) as any, res as any);
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('organizer routes check the permission first, then the tournament', async () => {
+      const missing = createRes();
+      await pauseHandler(createReq('POST', {}) as any, missing as any);
+      expect(missing.status).toHaveBeenCalledWith(400);
+      const unknown = createRes();
+      await pauseHandler(createReq('POST', { tournamentId: 'nope' }) as any, unknown as any);
+      expect(unknown.status).toHaveBeenCalledWith(404);
+    });
+
+    test('the director can record a rebuy for a player at the desk; others cannot', async () => {
+      const created = createRes();
+      const { createRebuyAddOnConfig } = await import('../../../src/lib/tournament/tournament-utils');
+      await createHandler(createReq('POST', { name: 'Desk', config: createRebuyAddOnConfig() }) as any, created as any);
+      const { id } = created.json.mock.calls[0][0];
+      for (const userId of ['p1', 'p2']) await registerHandler(createReq('POST', { tournamentId: id, userId }) as any, createRes() as any);
+      await startHandler(createReq('POST', { tournamentId: id }) as any, createRes() as any);
+
+      const res = createRes();
+      await rebuyHandler(createReq('POST', { tournamentId: id, forPlayer: 'p2' }) as any, res as any);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json.mock.calls[0][0].registrationTimeline).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'rebuy', userId: 'p2' })]));
+
+      asDirector('other-td');
+      const denied = createRes();
+      await rebuyHandler(createReq('POST', { tournamentId: id, forPlayer: 'p2' }) as any, denied as any);
+      expect(denied.status).toHaveBeenCalledWith(403);
+    });
+  });
+
+  test('players can unregister before the start', async () => {
+    const created = createRes();
+    await createHandler(createReq('POST', { name: 'Leaving', config: createDefaultFreezeoutConfig() }) as any, created as any);
+    const { id } = created.json.mock.calls[0][0];
+    await registerHandler(createReq('POST', { tournamentId: id, userId: 'u9' }) as any, createRes() as any);
+    const res = createRes();
+    await unregisterHandler(createReq('POST', { tournamentId: id, userId: 'u9' }) as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0].registeredPlayers).toEqual([]);
+    expect(mockRequirePlayer).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 'u9', 'tournament.register');
+  });
+
+  test('the lobby lists tournaments by filter with what the viewer can do', async () => {
+    const created = createRes();
+    await createHandler(createReq('POST', { name: 'Lobby test', config: { ...createDefaultFreezeoutConfig(), buyIn: 20 } }) as any, created as any);
+    const { id } = created.json.mock.calls[0][0];
+    await registerHandler(createReq('POST', { tournamentId: id, userId: 'lobby-user' }) as any, createRes() as any);
+
+    mockRequestAccess.mockResolvedValueOnce({ userId: 'lobby-user', permissions: new Set(['tournament.view']) });
+    const res = createRes();
+    await listHandler(createReq('GET', undefined, { filter: 'upcoming' }) as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const mine = res.json.mock.calls[0][0].tournaments.find((t: any) => t.id === id);
+    expect(mine).toMatchObject({
+      name: 'Lobby test', status: 'setup', entrants: 1, registrationOpen: true,
+      costs: { entry: 20, rebuy: null, addOn: null }, you: { registered: true, eliminated: false }, canManage: false,
+    });
+
+    const finished = createRes();
+    await listHandler(createReq('GET', undefined, { filter: 'finished' }) as any, finished as any);
+    expect(finished.json.mock.calls[0][0].tournaments.some((t: any) => t.id === id)).toBe(false);
+
+    const bad = createRes();
+    await listHandler(createReq('GET', undefined, { filter: 'someday' }) as any, bad as any);
+    expect(bad.status).toHaveBeenCalledWith(400);
   });
 
   test('create records who made the tournament', async () => {

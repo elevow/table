@@ -20,6 +20,10 @@ const baseView = (overrides: Partial<TournamentView> = {}): TournamentView => ({
   onBreak: false,
   breakRemainingMs: null,
   players: { entrants: 20, remaining: 9, paidPlaces: 3 },
+  registration: { open: false, full: false, maxPlayers: null },
+  costs: { entry: 13, rebuy: 12, addOn: 10 },
+  tables: [{ number: 2, players: [{ seat: 5, userId: 'me', name: 'Me' }, { seat: 7, userId: 'a', name: 'Alice' }] }],
+  canManage: false,
   prizePool: 200,
   payouts: [
     { place: 1, percentage: 50, amount: 100 },
@@ -38,15 +42,24 @@ const baseView = (overrides: Partial<TournamentView> = {}): TournamentView => ({
     ],
   },
   finishers: [{ place: 10, userId: 'z', name: 'Zed', prize: 0, eliminatedBy: 'a' }],
-  you: { eliminated: false, place: null, table: 2, seat: 5, bounty: 3, bountyWon: 1 },
+  you: { eliminated: false, canUnregister: false, canRebuy: false, canAddOn: false, place: null, table: 2, seat: 5, bounty: 3, bountyWon: 1 },
   ...overrides,
 });
 
 let view: TournamentView;
+let posts: { url: string; body: any }[];
 beforeEach(() => {
   jest.useFakeTimers();
   view = baseView();
-  (global as any).fetch = jest.fn(async () => ({ ok: true, json: async () => view }));
+  posts = [];
+  localStorage.setItem('auth_token', 'token-1');
+  (global as any).fetch = jest.fn(async (url: string, init?: any) => {
+    if (init?.method === 'POST') {
+      posts.push({ url, body: JSON.parse(init.body) });
+      return { ok: true, json: async () => ({}) };
+    }
+    return { ok: true, json: async () => view };
+  });
 });
 afterEach(() => jest.useRealTimers());
 
@@ -112,7 +125,7 @@ describe('Tournament page', () => {
     view = baseView({
       status: 'completed',
       finishers: [{ place: 2, userId: 'me', name: 'Me', prize: 60, eliminatedBy: 'a' }],
-      you: { eliminated: true, place: 2, table: null, seat: null, bounty: null, bountyWon: 2 },
+      you: { eliminated: true, canUnregister: false, canRebuy: false, canAddOn: false, place: 2, table: null, seat: null, bounty: null, bountyWon: 2 },
     });
     await renderPage();
     expect(within(screen.getByRole('region', { name: 'You' })).getByText('Finished 2nd, won $60')).toBeInTheDocument();
@@ -122,5 +135,41 @@ describe('Tournament page', () => {
     (global as any).fetch = jest.fn(async () => ({ ok: false, status: 404, json: async () => ({ error: 'Tournament not found' }) }));
     render(<TournamentPage />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Tournament not found');
+  });
+
+  test('lists the tables and seats', async () => {
+    await renderPage();
+    const tables = screen.getByRole('region', { name: 'Tables' });
+    expect(within(tables).getByText('Table 2')).toBeInTheDocument();
+    expect(within(tables).getByText('Seat 7: Alice')).toBeInTheDocument();
+  });
+
+  test('a signed-in visitor can register while registration is open', async () => {
+    view = baseView({ status: 'setup', you: null, registration: { open: true, full: false, maxPlayers: null } });
+    await renderPage();
+    await act(async () => { screen.getByRole('button', { name: 'Register ($13)' }).click(); });
+    expect(posts).toEqual([{ url: '/api/tournaments/register', body: { tournamentId: 't-1' } }]);
+  });
+
+  test('a busted player can rebuy and return, and the director gets a link to the controls', async () => {
+    view = baseView({
+      you: { eliminated: true, canUnregister: false, canRebuy: true, canAddOn: false, place: 10, table: null, seat: null, bounty: null, bountyWon: 0 },
+      canManage: true,
+    });
+    await renderPage();
+    expect(screen.getByRole('link', { name: 'Director controls' })).toHaveAttribute('href', '/tournaments/t-1/manage');
+    await act(async () => { screen.getByRole('button', { name: 'Rebuy and return ($12)' }).click(); });
+    expect(posts[0]).toEqual({ url: '/api/tournaments/rebuy', body: { tournamentId: 't-1' } });
+  });
+
+  test('a refused action shows why', async () => {
+    view = baseView({ status: 'setup', you: { ...baseView().you!, canUnregister: true } });
+    (global as any).fetch = jest.fn(async (_url: string, init?: any) =>
+      init?.method === 'POST'
+        ? { ok: false, status: 400, json: async () => ({ error: 'You can only unregister before the tournament starts' }) }
+        : { ok: true, json: async () => view });
+    await renderPage();
+    await act(async () => { screen.getByRole('button', { name: 'Unregister' }).click(); });
+    expect(await screen.findByText('You can only unregister before the tournament starts')).toBeInTheDocument();
   });
 });

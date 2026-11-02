@@ -9,6 +9,8 @@ export interface TournamentStore {
   insert(state: TournamentState): Promise<void>;
   get(id: string): Promise<TournamentState | null>;
   update(id: string, apply: (t: TournamentState) => void): Promise<TournamentState>;
+  /** Tournaments in any of `statuses`, newest first. */
+  list(statuses: TournamentState['status'][], limit: number): Promise<TournamentState[]>;
 }
 
 /** Tournaments in process memory, for tests. Hands out copies so callers can't change stored state. */
@@ -31,6 +33,14 @@ export class MemoryTournamentStore implements TournamentStore {
     apply(next);
     this.tournaments.set(id, next);
     return copy(next);
+  }
+
+  async list(statuses: TournamentState['status'][], limit: number): Promise<TournamentState[]> {
+    return [...this.tournaments.values()]
+      .filter(t => statuses.includes(t.status))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit)
+      .map(copy);
   }
 }
 

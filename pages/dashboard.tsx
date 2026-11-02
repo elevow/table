@@ -27,7 +27,6 @@ const Dashboard: NextPage = () => {
   const [canViewRoles, setCanViewRoles] = useState(false);
   // Shown until permissions load (or if they can't), since the API refuses room.create anyway
   const [canCreateRoom, setCanCreateRoom] = useState(true);
-  const [canCreateTournament, setCanCreateTournament] = useState(false);
   const [restriction, setRestriction] = useState<{ kind: 'ban' | 'suspend'; until: string | null; reason: string | null } | null>(null);
 
   // Show the roles link to staff who can see roles or users, hide Create Room without room.create, and show any
@@ -41,7 +40,6 @@ const Dashboard: NextPage = () => {
         const permissions: string[] = data?.permissions || [];
         setCanViewRoles(permissions.includes('roles.view') || permissions.includes('admin.users.view'));
         if (data) setCanCreateRoom(permissions.includes('room.create'));
-        setCanCreateTournament(permissions.includes('tournament.create'));
         setRestriction(data?.sanction ?? null);
       })
       .catch(() => {});
@@ -261,11 +259,9 @@ const Dashboard: NextPage = () => {
             <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/leaderboard')}>
               Leaderboard &amp; achievements
             </button>
-            {canCreateTournament && (
-              <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/tournaments/create')}>
-                Create tournament
-              </button>
-            )}
+            <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/tournaments')}>
+              Tournaments
+            </button>
             {canViewRoles && (
               <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/admin/roles')}>
                 Roles &amp; permissions

@@ -3,7 +3,7 @@ import { validateTournamentConfig } from './tournament-utils';
 import { bountyEnabled, collectWinnerBounty, payoutTable, postBounty, prizePool, remainingPlayers, settleKnockout } from './tournament-money';
 import type { TournamentStore } from './tournament-store';
 import { DEFAULT_SEATS_PER_TABLE, Random, balanceTables, drawSeats, seatLatePlayer, unseatPlayer } from './tournament-seating';
-import { catchUpClock, endBreak, enterNextLevel, pauseClock, resumeClock, startClock, stopClock } from './tournament-clock';
+import { catchUpClock, endBreak, enterNextLevel, pauseClock, resumeClock, scheduleElapsedMs, startClock, stopClock } from './tournament-clock';
 import type {
   TournamentState,
   CreateTournamentInput,
@@ -55,10 +55,20 @@ export class TournamentManager {
     return t;
   }
 
+  /** Tournaments in any of `statuses` as of now, newest first. */
+  async list(statuses: TournamentState['status'][], limit = 50): Promise<TournamentState[]> {
+    const now = this.now();
+    return (await this.store.list(statuses, limit)).map(t => {
+      catchUpClock(t, now);
+      finishIfDecided(t);
+      return t;
+    });
+  }
+
   register(input: RegisterPlayerInput): Promise<TournamentState> {
     return this.change(input.tournamentId, (t, now) => {
-      if (t.status !== 'setup' && t.status !== 'running') throw new Error('Registration closed');
       if (t.registeredPlayers.includes(input.userId)) return;
+      if (!registrationOpen(t, now)) throw new Error(t.status === 'setup' ? 'Registration closed' : 'Late registration has closed');
       if (t.config.maxPlayers && t.registeredPlayers.length >= t.config.maxPlayers) throw new Error('Tournament is full');
       t.registeredPlayers.push(input.userId);
       postBounty(t, input.userId);
@@ -69,6 +79,17 @@ export class TournamentManager {
         seatLatePlayer(t.tables, input.userId, seatsPerTable(t), this.random);
         this.balance(t);
       }
+    });
+  }
+
+  /** Withdraw before the start; the entry, and any bounty with it, is taken back. */
+  unregister(input: RegisterPlayerInput): Promise<TournamentState> {
+    return this.change(input.tournamentId, t => {
+      if (!t.registeredPlayers.includes(input.userId)) return;
+      if (t.status !== 'setup') throw new Error('You can only unregister before the tournament starts');
+      t.registeredPlayers = t.registeredPlayers.filter(p => p !== input.userId);
+      t.registrationTimeline = (t.registrationTimeline || []).filter(e => !(e.type === 'register' && e.userId === input.userId));
+      if (t.bounties) delete t.bounties[input.userId];
     });
   }
 
@@ -146,16 +167,8 @@ export class TournamentManager {
   // --- Rebuy/Add-on operations ---
   rebuy(input: { tournamentId: string; userId: string }): Promise<TournamentState> {
     return this.change(input.tournamentId, (t, now) => {
-      const cfg = t.config.rebuys;
-      if (!cfg?.enabled) throw new Error('Rebuys are not enabled');
-      if (!t.registeredPlayers.includes(input.userId)) throw new Error('Player not registered');
-      if (t.status !== 'running' && t.status !== 'on-break') throw new Error('Rebuys only allowed during running or break');
-      if (!rebuyPeriodOpen(t)) throw new Error('Rebuy period ended');
-      // Enforce per-player limit using timeline count; 0 or unset means unlimited
-      const prior = (t.registrationTimeline || []).filter(e => e.type === 'rebuy' && e.userId === input.userId).length;
-      if (cfg.maxPerPlayer && prior >= cfg.maxPerPlayer) {
-        throw new Error('Rebuy limit reached');
-      }
+      const refused = whyNoRebuy(t, input.userId);
+      if (refused) throw new Error(refused);
       (t.registrationTimeline = t.registrationTimeline || []).push({ at: now, type: 'rebuy', userId: input.userId });
       // Each rebuy buys a bounty too: a fresh one for a returning player, added to the bounty of one still in
       postBounty(t, input.userId);
@@ -173,19 +186,8 @@ export class TournamentManager {
 
   addOn(input: { tournamentId: string; userId: string }): Promise<TournamentState> {
     return this.change(input.tournamentId, (t, now) => {
-      const cfg = t.config.addOn;
-      if (!cfg?.enabled) throw new Error('Add-on is not enabled');
-      if (!t.registeredPlayers.includes(input.userId)) throw new Error('Player not registered');
-      // Only at the designated break
-      if (!t.onBreak || t.status !== 'on-break') throw new Error('Add-on only available during the specified break');
-      const targetLevel = cfg.availableAtBreakAfterLevel;
-      if (targetLevel === undefined || targetLevel === null) throw new Error('Add-on break level not specified');
-      // Determine which break we are currently on
-      const currentBreakAfterLevel = t.currentBreakAfterLevel ?? this.computeCurrentBreakAfterLevel(t);
-      if (currentBreakAfterLevel !== targetLevel) throw new Error('Add-on not available at this break');
-      // Only one add-on per player; check timeline
-      const prior = (t.registrationTimeline || []).some(e => e.type === 'addOn' && e.userId === input.userId);
-      if (prior) throw new Error('Add-on already taken');
+      const refused = whyNoAddOn(t, input.userId);
+      if (refused) throw new Error(refused);
       (t.registrationTimeline = t.registrationTimeline || []).push({ at: now, type: 'addOn', userId: input.userId });
     });
   }
@@ -208,18 +210,57 @@ export class TournamentManager {
     t.tables = tables;
     if (moves.length > 0) (t.tableMoves = t.tableMoves || []).push(...moves);
   }
-
-  private computeCurrentBreakAfterLevel(t: TournamentState): number | null {
-    if (!t.onBreak) return null;
-    // Based on when we set the break: it is scheduled after the previously completed level
-    // We stored currentLevelIndex as the next level index; find previous level number
-    const prevIdx = Math.max(0, t.currentLevelIndex - 1);
-    return t.config.blindLevels[prevIdx]?.level ?? null;
-  }
 }
 
 function seatsPerTable(t: TournamentState): number {
   return t.config.seatsPerTable ?? DEFAULT_SEATS_PER_TABLE;
+}
+
+/**
+ * Whether new players can join: any time before the start, then while late registration lasts,
+ * which is through the end of its last level and the break right after it, and no longer than
+ * its time limit of tournament time played.
+ */
+export function registrationOpen(t: TournamentState, now: number): boolean {
+  if (t.status === 'setup') return true;
+  if (t.status !== 'running' && t.status !== 'paused' && t.status !== 'on-break') return false;
+  const late = t.config.lateRegistration;
+  if (!late?.enabled) return false;
+  if (currentLevelNumber(t) > late.endLevel) return false;
+  return !(late.endTime > 0 && scheduleElapsedMs(t, now) > late.endTime * 60_000);
+}
+
+/** The level being played, or on a break the level just finished. */
+function currentLevelNumber(t: TournamentState): number {
+  return t.onBreak && t.currentBreakAfterLevel != null
+    ? t.currentBreakAfterLevel
+    : t.config.blindLevels[t.currentLevelIndex]?.level ?? 0;
+}
+
+/** Why a player can't rebuy right now, or null when they can. */
+export function whyNoRebuy(t: TournamentState, userId: string): string | null {
+  const cfg = t.config.rebuys;
+  if (!cfg?.enabled) return 'Rebuys are not enabled';
+  if (!t.registeredPlayers.includes(userId)) return 'Player not registered';
+  if (t.status !== 'running' && t.status !== 'on-break') return 'Rebuys only allowed during running or break';
+  if (!rebuyPeriodOpen(t)) return 'Rebuy period ended';
+  // 0 or unset means unlimited
+  const prior = (t.registrationTimeline || []).filter(e => e.type === 'rebuy' && e.userId === userId).length;
+  if (cfg.maxPerPlayer && prior >= cfg.maxPerPlayer) return 'Rebuy limit reached';
+  return null;
+}
+
+/** Why a player can't take the add-on right now, or null when they can: once, at the chosen break, while still in. */
+export function whyNoAddOn(t: TournamentState, userId: string): string | null {
+  const cfg = t.config.addOn;
+  if (!cfg?.enabled) return 'Add-on is not enabled';
+  if (!t.registeredPlayers.includes(userId)) return 'Player not registered';
+  if (t.eliminatedPlayers.includes(userId)) return "Busted players can't take the add-on";
+  if (!t.onBreak || t.status !== 'on-break') return 'Add-on only available during the specified break';
+  if (cfg.availableAtBreakAfterLevel === undefined || cfg.availableAtBreakAfterLevel === null) return 'Add-on break level not specified';
+  if (currentLevelNumber(t) !== cfg.availableAtBreakAfterLevel) return 'Add-on not available at this break';
+  if ((t.registrationTimeline || []).some(e => e.type === 'addOn' && e.userId === userId)) return 'Add-on already taken';
+  return null;
 }
 
 /**
@@ -230,11 +271,7 @@ export function rebuyPeriodOpen(t: TournamentState): boolean {
   const cfg = t.config.rebuys;
   if (!cfg?.enabled) return false;
   if (cfg.availableUntilLevel === undefined || cfg.availableUntilLevel === null) return true;
-  // On a break, the level that counts is the one just finished
-  const level = t.onBreak && t.currentBreakAfterLevel != null
-    ? t.currentBreakAfterLevel
-    : t.config.blindLevels[t.currentLevelIndex]?.level ?? 0;
-  return level <= cfg.availableUntilLevel;
+  return currentLevelNumber(t) <= cfg.availableUntilLevel;
 }
 
 /**

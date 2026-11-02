@@ -8,6 +8,9 @@ import { getRequestAccess, hasPermission, sendPermissionDenied } from '../../../
 import { canManageTournament } from '../../../src/lib/tournament/require-organizer';
 import { syncTournamentRooms } from '../../../src/lib/tournament/table-rooms';
 
+// Opening or waking a tournament's tables can take a while with many of them
+export const config = { maxDuration: 60 };
+
 /** What players see during a tournament: clock, blinds, prize pool and payouts, average stack, bounties and their own seat. */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });

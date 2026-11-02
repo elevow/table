@@ -8,6 +8,9 @@ import { syncTournamentRooms } from '../../../src/lib/tournament/table-rooms';
 import { getRequestAccess, hasPermission, sendPermissionDenied } from '../../../src/lib/auth/access-control';
 import type { TournamentStatus } from '../../../src/types/tournament-management';
 
+// Opening or waking a tournament's tables can take a while with many of them
+export const config = { maxDuration: 60 };
+
 const FILTERS: Record<string, TournamentStatus[]> = {
   upcoming: ['setup'],
   running: ['running', 'paused', 'on-break'],

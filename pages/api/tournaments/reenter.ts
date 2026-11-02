@@ -6,6 +6,9 @@ import { syncTournamentRooms } from '../../../src/lib/tournament/table-rooms';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { requireOrganizer } from '../../../src/lib/tournament/require-organizer';
 
+// Opening or waking a tournament's tables can take a while with many of them
+export const config = { maxDuration: 60 };
+
 /** A busted player buys a new entry (or the director records one for them at the desk). */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });

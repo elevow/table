@@ -8,8 +8,8 @@ import * as GameSeats from '../shared/game-seats';
 import { BASE_TURN_MS, DEFAULT_TIME_BANKS, DEFAULT_TIME_BANK_SECONDS } from '../shared/turn-clock';
 import { publishGameStateUpdate, publishTableEvent } from '../realtime/publisher';
 import { nextSeq } from '../realtime/sequence';
-import { loadRoom, updateRoomConfig } from '../server/room-config';
-import { newInviteCode } from '../server/room-privacy';
+import { loadRoom } from '../server/room-config';
+import { addRoomMember, newInviteCode } from '../server/room-privacy';
 import { tournamentManager } from './manager-instance';
 import { loadPlayerNames } from './pg-tournament-store';
 import { remainingPlayers } from './tournament-money';
@@ -87,9 +87,8 @@ async function seatPlayer(roomId: string, seats: GameSeats.GameSeats, seatNumber
   seats[seatNumber] = { playerId: userId, playerName: name, chips };
   GameSeats.setRoomSeats(roomId, seats);
   await GameSeats.persistRoomSeats(roomId, seats);
-  const room = await loadRoom(roomId);
-  const members: string[] = Array.isArray(room?.configuration?.members) ? room!.configuration.members : [];
-  if (!members.includes(userId)) await updateRoomConfig(roomId, { members: [...members, userId] });
+  // One statement: two players seated here at once mustn't drop each other from the members
+  await addRoomMember(roomId, userId);
 }
 
 async function vacateSeat(roomId: string, seats: GameSeats.GameSeats, userId: string) {

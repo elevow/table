@@ -66,9 +66,14 @@ jest.mock('../../shared/game-seats', () => ({
 }));
 jest.mock('../../server/room-config', () => ({
   loadRoom: async (roomId: string) => mockRooms.get(roomId) ?? null,
-  updateRoomConfig: async (roomId: string, patch: any) => { Object.assign(mockRooms.get(roomId)!.configuration, patch); },
 }));
-jest.mock('../../server/room-privacy', () => ({ newInviteCode: () => 'INVITE1234' }));
+jest.mock('../../server/room-privacy', () => ({
+  newInviteCode: () => 'INVITE1234',
+  addRoomMember: async (roomId: string, userId: string) => {
+    const cfg = mockRooms.get(roomId)!.configuration;
+    if (!(cfg.members || []).includes(userId)) cfg.members = [...(cfg.members || []), userId];
+  },
+}));
 jest.mock('../../services/game-service', () => ({
   GameService: class {
     async createRoom(input: any) {

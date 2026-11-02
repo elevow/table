@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userId = await requirePlayer(req, res, claimedUserId, 'tournament.register');
     if (!userId) return;
     if (!tournamentId) return res.status(400).json({ error: 'Missing tournamentId' });
-    const t = tournamentManager.register({ tournamentId, userId });
+    const t = await tournamentManager.register({ tournamentId, userId });
     return res.status(200).json(t);
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });

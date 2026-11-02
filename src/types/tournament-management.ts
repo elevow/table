@@ -13,6 +13,7 @@ export interface TournamentState {
   name: string;
   config: TournamentConfig;
   status: TournamentStatus;
+  createdBy?: string | null; // user who created it; null for tournaments made outside the API
   createdAt: number; // epoch ms
   updatedAt: number; // epoch ms
   registeredPlayers: string[];
@@ -31,6 +32,7 @@ export interface TournamentState {
 export interface CreateTournamentInput {
   name: string;
   config: TournamentConfig;
+  createdBy?: string | null;
 }
 
 export interface RegisterPlayerInput {

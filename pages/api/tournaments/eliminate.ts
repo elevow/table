@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { tournamentId, userId } = req.body || {};
     if (!tournamentId || !userId) return res.status(400).json({ error: 'Missing tournamentId or userId' });
-    const t = tournamentManager.eliminate({ tournamentId, userId });
+    const t = await tournamentManager.eliminate({ tournamentId, userId });
     return res.status(200).json(t);
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });

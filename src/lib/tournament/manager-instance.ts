@@ -1,4 +1,5 @@
 import { TournamentManager } from './tournament-manager';
+import { PgTournamentStore } from './pg-tournament-store';
 
-// Singleton TournamentManager instance for use across API handlers
-export const tournamentManager = new TournamentManager();
+// Shared TournamentManager for the API handlers; tournaments live in Postgres
+export const tournamentManager = new TournamentManager(new PgTournamentStore());

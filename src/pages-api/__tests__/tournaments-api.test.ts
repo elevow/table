@@ -17,9 +17,20 @@ import { createDefaultFreezeoutConfig } from '../../../src/lib/tournament/tourna
 
 // Signed-in organizer for organizer actions; players act as the userId they send
 const mockRequirePermission = jest.fn(async (_req: any, _res: any, _permission: string): Promise<any> => ({ userId: 'admin-1' }));
+// Access of the caller on routes guests may use; signed-out visitors hold tournament.view
+const mockRequestAccess = jest.fn(async (_req: any): Promise<any> => ({ userId: null, permissions: new Set(['tournament.view']) }));
 jest.mock('../../../src/lib/auth/access-control', () => ({
   requirePermission: (...args: [any, any, string]) => mockRequirePermission(...args),
+  getRequestAccess: (req: any) => mockRequestAccess(req),
+  hasPermission: (access: any, permission: string) => access.permissions.has(permission),
+  sendPermissionDenied: (res: any, permission: string) => res.status(403).json({ code: 'PERMISSION_DENIED', permission }),
 }));
+// Tournaments in memory instead of Postgres
+jest.mock('../../../src/lib/tournament/manager-instance', () => {
+  const { TournamentManager } = jest.requireActual('../../../src/lib/tournament/tournament-manager');
+  const { MemoryTournamentStore } = jest.requireActual('../../../src/lib/tournament/tournament-store');
+  return { tournamentManager: new TournamentManager(new MemoryTournamentStore()) };
+});
 const mockRequirePlayer = jest.fn(async (_req: any, _res: any, claimed?: unknown) => (claimed ? String(claimed) : 'u1'));
 jest.mock('../../../src/lib/auth/auth-utils', () => ({
   requirePlayer: (...args: any[]) => mockRequirePlayer(...args),
@@ -154,6 +165,41 @@ describe('Tournaments API routes (US-058)', () => {
   expect(res12.status).toHaveBeenCalledWith(200);
   const report = res12.json.mock.calls[0][0];
   expect(report.registration.total).toBeGreaterThanOrEqual(2);
+  });
+
+  test('create records who made the tournament', async () => {
+    const res = createRes();
+    await createHandler(createReq('POST', { name: 'Mine', config: createDefaultFreezeoutConfig() }) as any, res as any);
+    expect(res.json.mock.calls[0][0].createdBy).toBe('admin-1');
+  });
+
+  test('viewing needs tournament.view, which guests have', async () => {
+    const created = createRes();
+    await createHandler(createReq('POST', { name: 'Open', config: createDefaultFreezeoutConfig() }) as any, created as any);
+    const { id } = created.json.mock.calls[0][0];
+
+    const asGuest = createRes();
+    await getHandler(createReq('GET', undefined, { tournamentId: id }) as any, asGuest as any);
+    expect(asGuest.status).toHaveBeenCalledWith(200);
+
+    for (const [handler, query] of [[getHandler, { tournamentId: id }], [payoutsHandler, { tournamentId: id, prizePool: '100' }]] as const) {
+      mockRequestAccess.mockResolvedValueOnce({ userId: 'u1', permissions: new Set() });
+      const res = createRes();
+      await handler(createReq('GET', undefined, query) as any, res as any);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ permission: 'tournament.view' }));
+    }
+  });
+
+  test('reports need tournament.report', async () => {
+    mockRequirePermission.mockImplementationOnce(async (_req: any, res: any) => {
+      res.status(403).json({ error: 'Permission required' });
+      return null;
+    });
+    const res = createRes();
+    await reportHandler(createReq('GET', undefined, { tournamentId: 'x', prizePool: '100' }) as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(mockRequirePermission).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 'tournament.report');
   });
 
   test('organizer actions are rejected for non-admins', async () => {

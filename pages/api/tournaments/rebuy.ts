@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userId = await requirePlayer(req, res, claimedUserId, 'game.rebuy');
     if (!userId) return;
     if (!tournamentId) return res.status(400).json({ error: 'Missing tournamentId' });
-    const t = tournamentManager.rebuy({ tournamentId, userId });
+    const t = await tournamentManager.rebuy({ tournamentId, userId });
     return res.status(200).json(t);
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });

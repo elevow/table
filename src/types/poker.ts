@@ -47,8 +47,13 @@ export interface Player {
   timeBank: number;
   // Time banks left; each adds the table's timeBankSeconds once the base turn time runs out
   timeBanks?: number;
-  // Not dealt in, posts no blinds and is skipped by the button until they sit back in
+  // Not dealt in, posts no blinds and is skipped by the button until they sit back in. Under
+  // tournament rules they stay dealt in instead: blinds and antes are posted and their hands
+  // checked or folded for them
   isSittingOut?: boolean;
+  // Tournament tables only: seated by the tournament but hasn't opened the table yet, so sitting
+  // out until their screen does (which sits them in)
+  notArrived?: boolean;
   // Turns in a row the clock ran out on; reset when the player acts
   consecutiveTimeouts?: number;
   // Asked to straddle (post twice the big blind under the gun) next hand
@@ -121,6 +126,9 @@ export interface TableState {
   handActions?: HandActionEntry[];
   // Set when the hand is settled: chips in the pot and what each winner took from it
   handResult?: { pot: number; winnings: Record<string, number> };
+  // Tournament table: players sitting out are still dealt in and blinded off, and players who sit
+  // down are dealt in straight away rather than waiting for the big blind
+  tournamentRules?: boolean;
   // Host has paused the game: no actions, no clock, no new hands
   paused?: boolean;
   pausedTurnRemainingMs?: number;

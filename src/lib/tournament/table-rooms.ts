@@ -25,7 +25,9 @@ import type { TableState } from '../../types/poker';
  *   and busted players to the tournament, lets go of players the tournament moved to another
  *   table (writing them into that table's seats with their chips), seats players assigned here
  *   who aren't at any table yet, hands over chips bought since the last hand, sets the level's
- *   blinds and ante, and holds the table while the tournament is paused or on a break.
+ *   blinds and ante, and holds the table while the tournament is paused or on a break. Tables play
+ *   by tournament rules: a player sitting out is still dealt in, posts blinds and antes and has
+ *   their hands folded for them until they come back or are blinded off.
  * - syncTournamentRooms runs after the tournament changes outside a hand (start, resume, a late
  *   entry, a rebuy): it opens rooms for new tables, seats waiting players and wakes tables that
  *   can play.
@@ -104,6 +106,7 @@ async function vacateSeat(roomId: string, seats: GameSeats.GameSeats, userId: st
 export async function prepareTournamentHand(roomId: string, engine: PokerEngine, link: TournamentRoomLink): Promise<PrepareResult> {
   const state = engine.getState();
   if (!BETWEEN_HANDS.has(state.stage)) return { ok: false, status: 409, body: { error: 'Hand still in progress' } };
+  engine.useTournamentRules();
 
   // 1. Report the hand: stacks, and who busted (smallest starting stack first, so it finishes lowest)
   const live = state.players.filter(p => !engine.isRemoved(p.id));
@@ -226,11 +229,14 @@ async function startTableGame(roomId: string, t: TournamentState, seats: GameSea
     .map(([n, a]) => ({
       id: a!.playerId, name: a!.playerName || a!.playerId, position: Number(n), stack: Number(a!.chips),
       currentBet: 0, hasActed: false, isFolded: false, isAllIn: false, timeBank: 30, holeCards: [],
+      // Away until they open the table (their screen sits them in), so no-shows don't hold it up
+      isSittingOut: true, notArrived: true,
     }))
     .sort((a, b) => a.position - b.position);
   if (players.length < 2) return;
   const engine = new PokerEngine(roomId, players as any, level.smallBlind, level.bigBlind, { variant: 'texas-holdem' as any, bettingMode: 'no-limit' });
   engine.configureClock({ turnSeconds: BASE_TURN_MS / 1000, timeBanks: DEFAULT_TIME_BANKS, timeBankSeconds: DEFAULT_TIME_BANK_SECONDS });
+  engine.useTournamentRules();
   engine.setAnte(level.ante ?? 0);
   engine.startNewHand();
   const g: any = global as any;

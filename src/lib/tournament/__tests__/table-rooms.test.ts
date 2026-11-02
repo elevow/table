@@ -22,6 +22,7 @@ class MockEngine {
   setPendingBlinds(smallBlind: number, bigBlind: number) { this.pendingBlinds = { smallBlind, bigBlind }; }
   setAnte(amount: number) { this.ante = amount; }
   configureClock() {}
+  useTournamentRules() { this.state.tournamentRules = true; }
   syncSeatedPlayers(seated: Array<{ id: string; name: string; seatNumber: number; chips: number }>) {
     for (const s of seated) {
       if (!this.state.players.some((p: any) => p.id === s.id) || this.removed.has(s.id)) {
@@ -124,6 +125,8 @@ describe('opening tables', () => {
       expect(seated(table.roomId!)).toEqual(table.seats.filter(Boolean).sort());
       const engine = mockEngines.get(table.roomId!);
       expect(engine.state.players.map((p: any) => p.stack)).toEqual([20000, 20000]);
+      // Away until each opens the table, so a no-show doesn't hold up the first hands
+      expect(engine.state.players.every((p: any) => p.isSittingOut && p.notArrived)).toBe(true);
       expect(engine.handsStarted).toBe(1);
       expect([engine.state.smallBlind, engine.state.bigBlind]).toEqual([100, 200]);
     }
@@ -196,6 +199,18 @@ describe('between hands', () => {
     engine.endHand({ a: 40000, b: 0 }, 'a');
     expect(await prepareTournamentHand(roomId, engine, linkOf(roomId))).toMatchObject({ ok: false, body: { code: 'TOURNAMENT_OVER' } });
     expect((await t(id)).status).toBe('completed');
+  });
+
+  test('tables play by tournament rules, so players who are away are blinded off', async () => {
+    const id = await startTournament(['a', 'b']);
+    const roomId = await roomOf(id, 1);
+    const engine = mockEngines.get(roomId);
+    expect(engine.state.tournamentRules).toBe(true);
+    // A game saved before the rules existed picks them up at its next hand
+    delete engine.state.tournamentRules;
+    engine.endHand({});
+    await prepareTournamentHand(roomId, engine, linkOf(roomId));
+    expect(engine.state.tournamentRules).toBe(true);
   });
 
   test('a hand still being played is left alone', async () => {

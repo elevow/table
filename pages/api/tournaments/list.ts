@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { sendTournamentError } from '../../../src/lib/tournament/api-errors';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { tournamentManager } from '../../../src/lib/tournament/manager-instance';
 import { buildTournamentSummary } from '../../../src/lib/tournament/tournament-view';
@@ -29,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .filter(t => statuses.includes(t.status))
       .map(t => buildTournamentSummary(t, now, access.userId, canManageTournament(access, t)));
     return res.status(200).json({ tournaments });
-  } catch (err: any) {
-    return res.status(400).json({ error: err?.message || 'Bad request' });
+  } catch (err) {
+    return sendTournamentError(res, err);
   }
 }

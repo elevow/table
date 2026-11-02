@@ -61,8 +61,8 @@ describe('buildTournamentView', () => {
       { userId: 'b', name: 'Bob', won: 1, bounty: 3 },
     ]);
     expect(v.finishers).toEqual([
-      { place: 3, userId: 'c', name: 'Cara', prize: 8, eliminatedBy: 'b' },
-      { place: 4, userId: 'd', name: 'Dev', prize: 0, eliminatedBy: 'a' },
+      { place: 3, userId: 'c', name: 'Cara', prize: 8, eliminatedBy: 'b', removed: false },
+      { place: 4, userId: 'd', name: 'Dev', prize: 0, eliminatedBy: 'a', removed: false },
     ]);
     expect(v.you).toMatchObject({ eliminated: true, place: 3, table: null, bounty: null, bountyWon: 0 });
     expect(v.averageStack).toBe(40000);
@@ -74,7 +74,7 @@ describe('buildTournamentView', () => {
     for (const [out, by] of [['d', 'a'], ['c', 'a'], ['b', 'a']]) await mgr.eliminate({ tournamentId: id, userId: out, eliminatedBy: by });
     const v = await view('a');
     expect(v.status).toBe('completed');
-    expect(v.finishers[0]).toEqual({ place: 1, userId: 'a', name: 'Alice', prize: 20, eliminatedBy: null });
+    expect(v.finishers[0]).toEqual({ place: 1, userId: 'a', name: 'Alice', prize: 20, eliminatedBy: null, removed: false });
     expect(v.you).toMatchObject({ place: 1, bountyWon: 8 });
     expect(v.levelRemainingMs).toBeNull();
   });

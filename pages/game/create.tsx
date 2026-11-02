@@ -6,10 +6,8 @@ import {
 
 const DEFAULT_TURN_SECONDS = BASE_TURN_MS / 1000;
 import Head from 'next/head';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { tournamentPresets } from '../../src/lib/tournament/tournament-utils';
-import { TOURNAMENT_STRUCTURE_CREATION_ENABLED } from '../../src/lib/shared/feature-flags';
-import type { TournamentConfig } from '../../src/types/tournament';
 import type { BettingMode, MixedGameEntry } from '../../src/types/poker';
 import MixedGameSetup from '../../src/components/MixedGameSetup';
 import { defaultBettingModeForVariant } from '../../src/lib/game/variant-mapping';
@@ -46,13 +44,6 @@ export default function CreateGameRoomPage() {
   const [submitting, setSubmitting] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [enableTournament, setEnableTournament] = useState(false);
-  const [presetKey, setPresetKey] = useState<string>('freezeout_default');
-  const presetOptions = useMemo(() => Object.entries(tournamentPresets), []);
-  const selectedTournamentConfig: TournamentConfig | null = useMemo(
-    () => TOURNAMENT_STRUCTURE_CREATION_ENABLED && enableTournament ? tournamentPresets[presetKey]?.build() : null,
-    [enableTournament, presetKey]
-  );
 
   // On mount, determine if user is authenticated (token present)
   useEffect(() => {
@@ -127,9 +118,6 @@ export default function CreateGameRoomPage() {
             sevenDeuceBounty: sevenDeuceBounty > 0 ? sevenDeuceBounty : undefined,
             mixedGames: variant === 'mixed' ? mixedGames : undefined,
             handsPerGame: variant === 'mixed' ? handsPerGame : undefined,
-            tournament: TOURNAMENT_STRUCTURE_CREATION_ENABLED && enableTournament
-              ? { preset: presetKey, config: selectedTournamentConfig }
-              : undefined,
           },
         }),
       });
@@ -483,55 +471,9 @@ export default function CreateGameRoomPage() {
             </div>
           )}
         </div>
-        <div className="border-t pt-4 space-y-3">
-          <label className="inline-flex items-center space-x-2">
-            <input
-              type="checkbox"
-              className="w-4 h-4 accent-blue-600 dark:accent-blue-500"
-              checked={TOURNAMENT_STRUCTURE_CREATION_ENABLED && enableTournament}
-              disabled={!TOURNAMENT_STRUCTURE_CREATION_ENABLED}
-              title={TOURNAMENT_STRUCTURE_CREATION_ENABLED ? undefined : 'Tournament structure is temporarily disabled'}
-              onChange={e => setEnableTournament(e.target.checked)}
-            />
-            <span className={`text-sm font-medium ${TOURNAMENT_STRUCTURE_CREATION_ENABLED ? '' : 'text-gray-500'}`}>Enable tournament structure</span>
-          </label>
-          {TOURNAMENT_STRUCTURE_CREATION_ENABLED && enableTournament && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium">Preset</label>
-                <select
-                  className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  value={presetKey}
-                  onChange={e => setPresetKey(e.target.value)}
-                >
-                  {presetOptions.map(([key, p]) => (
-                    <option key={key} value={key}>{p.name}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-600 mt-1">{tournamentPresets[presetKey]?.description}</p>
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-700 rounded p-3 text-sm">
-                <div className="font-semibold mb-1 text-gray-900 dark:text-gray-100">Preview</div>
-                {selectedTournamentConfig ? (
-                  <ul className="list-disc pl-5 space-y-1 text-gray-700 dark:text-gray-300">
-                    <li>Type: {selectedTournamentConfig.type}</li>
-                    <li>Starting stack: {selectedTournamentConfig.startingStack.toLocaleString()}</li>
-                    <li>Levels: {selectedTournamentConfig.blindLevels.length} ({selectedTournamentConfig.blindLevels[0].durationMinutes} min)</li>
-                    <li>Late reg: {selectedTournamentConfig.lateRegistration.enabled ? `until L${selectedTournamentConfig.lateRegistration.endLevel}` : 'disabled'}</li>
-                    {selectedTournamentConfig.rebuys?.enabled && (
-                      <li>Rebuys: up to {selectedTournamentConfig.rebuys.maxPerPlayer ?? '∞'} until L{selectedTournamentConfig.rebuys.availableUntilLevel}</li>
-                    )}
-                    {selectedTournamentConfig.addOn?.enabled && (
-                      <li>Add-on at break after L{selectedTournamentConfig.addOn.availableAtBreakAfterLevel}</li>
-                    )}
-                  </ul>
-                ) : (
-                  <p className="text-gray-600 dark:text-gray-400">Select a preset to preview configuration.</p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+        <p className="border-t pt-4 text-sm text-gray-600 dark:text-gray-300">
+          Running a tournament? Set it up from the <Link href="/tournaments" className="text-blue-600 dark:text-blue-400 hover:underline">Tournaments</Link> page.
+        </p>
         {error && <p className="text-red-600 text-sm">{error}</p>}
         <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50" disabled={submitting || isNavigating || !isAuthenticated}>
           {isNavigating ? 'Joining room...' : submitting ? 'Creating…' : 'Create room'}

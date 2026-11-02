@@ -16,6 +16,10 @@ import eliminateHandler from '../../../pages/api/tournaments/eliminate';
 import viewHandler from '../../../pages/api/tournaments/view';
 import listHandler from '../../../pages/api/tournaments/list';
 import unregisterHandler from '../../../pages/api/tournaments/unregister';
+import undoHandler from '../../../pages/api/tournaments/undo-elimination';
+import removePlayerHandler from '../../../pages/api/tournaments/remove-player';
+import editHandler from '../../../pages/api/tournaments/edit';
+import cancelHandler from '../../../pages/api/tournaments/cancel';
 
 import { createDefaultFreezeoutConfig } from '../../../src/lib/tournament/tournament-utils';
 
@@ -280,6 +284,67 @@ describe('Tournaments API routes (US-058)', () => {
       const denied = createRes();
       await rebuyHandler(createReq('POST', { tournamentId: id, forPlayer: 'p2' }) as any, denied as any);
       expect(denied.status).toHaveBeenCalledWith(403);
+    });
+  });
+
+  describe('director tools', () => {
+    async function started(players = ['p1', 'p2', 'p3']) {
+      const created = createRes();
+      await createHandler(createReq('POST', { name: 'Tools', config: createDefaultFreezeoutConfig() }) as any, created as any);
+      const { id } = created.json.mock.calls[0][0];
+      for (const userId of players) await registerHandler(createReq('POST', { tournamentId: id, userId }) as any, createRes() as any);
+      return id as string;
+    }
+    const call = async (handler: any, body: any) => {
+      const res = createRes();
+      await handler(createReq('POST', body) as any, res as any);
+      return { status: res.status.mock.calls[0][0], body: res.json.mock.calls[0][0] };
+    };
+
+    test('edit changes the structure before the start', async () => {
+      const id = await started();
+      const r = await call(editHandler, { tournamentId: id, name: 'Renamed', config: { ...createDefaultFreezeoutConfig(), startingStack: 5000 } });
+      expect(r.status).toBe(200);
+      expect(r.body).toMatchObject({ name: 'Renamed', config: { startingStack: 5000 } });
+    });
+
+    test('eliminate, undo and remove, with get leaving out the undo copy', async () => {
+      const id = await started();
+      await call(startHandler, { tournamentId: id });
+      expect((await call(eliminateHandler, { tournamentId: id, userId: 'p3' })).status).toBe(200);
+
+      const got = createRes();
+      await getHandler(createReq('GET', undefined, { tournamentId: id }) as any, got as any);
+      expect(got.json.mock.calls[0][0]).not.toHaveProperty('lastElimination');
+
+      const undone = await call(undoHandler, { tournamentId: id });
+      expect(undone.status).toBe(200);
+      expect(undone.body.eliminatedPlayers).toEqual([]);
+      const again = await call(undoHandler, { tournamentId: id });
+      expect(again.status).toBe(400);
+
+      const removed = await call(removePlayerHandler, { tournamentId: id, userId: 'p2' });
+      expect(removed.body.eliminationRecords).toEqual([expect.objectContaining({ userId: 'p2', removed: true })]);
+      expect((await call(removePlayerHandler, { tournamentId: id })).status).toBe(400);
+    });
+
+    test('cancel records the reason', async () => {
+      const id = await started();
+      const r = await call(cancelHandler, { tournamentId: id, reason: 'Venue closed' });
+      expect(r.body).toMatchObject({ status: 'cancelled', cancelReason: 'Venue closed' });
+    });
+
+    test('only the director who created the tournament can use them', async () => {
+      const id = await started();
+      for (const [handler, body] of [
+        [editHandler, { tournamentId: id, name: 'X' }],
+        [cancelHandler, { tournamentId: id }],
+        [undoHandler, { tournamentId: id }],
+        [removePlayerHandler, { tournamentId: id, userId: 'p1' }],
+      ] as const) {
+        mockRequirePermission.mockResolvedValueOnce({ userId: 'someone-else', permissions: new Set() });
+        expect((await call(handler, body)).status).toBe(403);
+      }
     });
   });
 

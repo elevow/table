@@ -42,10 +42,22 @@ export interface TournamentState {
   currentBreakAfterLevel?: number | null; // which level's break we are currently on
   // Reporting fields
   registrationTimeline?: { at: number; type: 'register' | 'rebuy' | 'addOn'; userId?: string }[];
-  eliminationRecords?: { userId: string; at: number; place: number; eliminatedBy?: string; bounty?: number }[];
+  eliminationRecords?: {
+    userId: string;
+    at: number;
+    place: number;
+    eliminatedBy?: string;
+    bounty?: number;
+    removed?: boolean; // taken out by the director rather than knocked out
+    forfeitedBounty?: number; // a removed player's bounty, which nobody won
+  }[];
   // Knockouts (src/lib/tournament/tournament-money.ts)
   bounties?: Record<string, number>; // bounty on each player still in
   bountyWinnings?: Record<string, number>; // bounty cash each player has won
+  cancelledAt?: number;
+  cancelReason?: string | null;
+  // The tournament just before the latest elimination, while nothing else has changed since; undo restores it
+  lastElimination?: { before: TournamentState };
 }
 
 export interface CreateTournamentInput {

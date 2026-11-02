@@ -1,5 +1,5 @@
 import { breakTimeRemainingMs, levelTimeRemainingMs } from './tournament-clock';
-import { bountyEnabled, bountyPool, chipsInPlay, payoutTable, prizePool, remainingPlayers } from './tournament-money';
+import { amountsPaid, bountyEnabled, bountyPool, chipsInPlay, forfeitedBounties, payoutTable, prizePool, remainingPlayers } from './tournament-money';
 import { registrationOpen, whyNoAddOn, whyNoRebuy } from './tournament-manager';
 import type { BlindLevel, TournamentConfig } from '../../types/tournament';
 import type { TournamentState, TournamentStatus } from '../../types/tournament-management';
@@ -27,7 +27,13 @@ export interface TournamentView {
   // What each buy costs a player, bounty included
   costs: { entry: number; rebuy: number | null; addOn: number | null };
   tables: { number: number; players: { seat: number; userId: string; name: string }[] }[];
+  entrants: { userId: string; name: string; out: boolean }[]; // everyone registered, by name
   canManage: boolean; // the viewer runs this tournament
+  // For the director: the latest elimination, while it can still be undone
+  undo: null | { userId: string; name: string };
+  cancelled: null | { at: number; reason: string | null };
+  // For the director of a cancelled tournament: what each player paid in, and so is owed back
+  refunds: { userId: string; name: string; paid: number }[];
   prizePool: number;
   payouts: { place: number; percentage: number; amount: number }[];
   chipsInPlay: number;
@@ -36,11 +42,12 @@ export interface TournamentView {
     type: 'standard' | 'progressive';
     amount: number;
     total: number;
+    forfeited: number; // bounties of removed players, which nobody won
     // Everyone who has won bounty money or is still in, most won first
     board: { userId: string; name: string; won: number; bounty: number | null }[];
   };
   // Finishing order so far, best place first, with what each place wins
-  finishers: { place: number; userId: string; name: string; prize: number; eliminatedBy: string | null }[];
+  finishers: { place: number; userId: string; name: string; prize: number; eliminatedBy: string | null; removed: boolean }[];
   you: null | {
     eliminated: boolean;
     canUnregister: boolean;
@@ -51,6 +58,7 @@ export interface TournamentView {
     seat: number | null;
     bounty: number | null;
     bountyWon: number;
+    paid: number; // everything this player has paid in
   };
 }
 
@@ -91,10 +99,13 @@ export function buildTournamentView(
 
   const finishers = [...(t.eliminationRecords || [])]
     .sort((a, b) => a.place - b.place)
-    .map(r => ({ place: r.place, userId: r.userId, name: nameOf(r.userId), prize: prizeFor(r.place), eliminatedBy: r.eliminatedBy ?? null }));
+    .map(r => ({
+      place: r.place, userId: r.userId, name: nameOf(r.userId), prize: prizeFor(r.place), eliminatedBy: r.eliminatedBy ?? null, removed: !!r.removed,
+    }));
   if (t.status === 'completed' && remaining.length === 1) {
-    finishers.unshift({ place: 1, userId: remaining[0], name: nameOf(remaining[0]), prize: prizeFor(1), eliminatedBy: null });
+    finishers.unshift({ place: 1, userId: remaining[0], name: nameOf(remaining[0]), prize: prizeFor(1), eliminatedBy: null, removed: false });
   }
+  const paid = amountsPaid(t);
 
   let bounty: TournamentView['bounty'] = null;
   if (bountyEnabled(t.config)) {
@@ -105,6 +116,7 @@ export function buildTournamentView(
       type: t.config.bounty!.type,
       amount: t.config.bounty!.amount,
       total: bountyPool(t),
+      forfeited: forfeitedBounties(t),
       board: [...ids]
         .map(id => ({ userId: id, name: nameOf(id), won: won[id] ?? 0, bounty: remaining.includes(id) ? heads[id] ?? 0 : null }))
         .sort((a, b) => b.won - a.won || (b.bounty ?? -1) - (a.bounty ?? -1) || a.name.localeCompare(b.name)),
@@ -126,6 +138,7 @@ export function buildTournamentView(
       seat: table ? table.seats.indexOf(viewerId) + 1 : null,
       bounty: bountyEnabled(t.config) && !eliminated ? t.bounties?.[viewerId] ?? 0 : null,
       bountyWon: t.bountyWinnings?.[viewerId] ?? 0,
+      paid: paid[viewerId] ?? 0,
     };
   }
 
@@ -142,11 +155,25 @@ export function buildTournamentView(
     players: { entrants: t.registeredPlayers.length, remaining: remaining.length, paidPlaces: payouts.length },
     registration: { open: registrationOpen(t, now) && !isFull(t), full: isFull(t), maxPlayers: t.config.maxPlayers ?? null },
     costs: playerCosts(t.config),
+    entrants: t.registeredPlayers
+      .map(id => ({ userId: id, name: nameOf(id), out: t.eliminatedPlayers.includes(id) }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
     tables: t.tables.map(tb => ({
       number: tb.number,
       players: tb.seats.flatMap((id, i) => (id ? [{ seat: i + 1, userId: id, name: nameOf(id) }] : [])),
     })),
     canManage: !!options.canManage,
+    undo: options.canManage && t.lastElimination
+      ? (() => {
+          const last = (t.eliminationRecords || [])[(t.eliminationRecords || []).length - 1];
+          return last ? { userId: last.userId, name: nameOf(last.userId) } : null;
+        })()
+      : null,
+    cancelled: t.status === 'cancelled' ? { at: t.cancelledAt ?? t.updatedAt, reason: t.cancelReason ?? null } : null,
+    refunds: options.canManage && t.status === 'cancelled'
+      ? Object.entries(paid).filter(([, amount]) => amount > 0).map(([userId, amount]) => ({ userId, name: nameOf(userId), paid: amount }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      : [],
     prizePool: prizePool(t),
     payouts,
     chipsInPlay: chips,

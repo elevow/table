@@ -10,22 +10,6 @@ jest.mock('next/router', () => ({
   }),
 }));
 
-// Mock the tournament-utils module to avoid complex dependencies
-jest.mock('../../../src/lib/tournament/tournament-utils', () => ({
-  tournamentPresets: {
-    freezeout_default: {
-      name: 'Freezeout',
-      description: 'Standard freezeout tournament',
-      build: () => ({
-        type: 'freezeout',
-        startingStack: 10000,
-        blindLevels: [{ sb: 25, bb: 50, durationMinutes: 15 }],
-        lateRegistration: { enabled: false, endLevel: 0 },
-      }),
-    },
-  },
-}));
-
 // Import the component after mocks
 import CreateGameRoomPage from '../../../pages/game/create';
 
@@ -50,12 +34,11 @@ describe('CreateGameRoomPage', () => {
     expect(tableNameLabel).toBeNull();
   });
 
-  it('should keep tournament structure disabled on the Create page', () => {
+  it('points to the Tournaments page instead of setting up a tournament here', () => {
     render(<CreateGameRoomPage />);
 
-    const option = screen.getByLabelText('Enable tournament structure') as HTMLInputElement;
-    expect(option.disabled).toBe(true);
-    expect(option.checked).toBe(false);
+    expect(screen.queryByLabelText('Enable tournament structure')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Tournaments' }).getAttribute('href')).toBe('/tournaments');
   });
 });
 

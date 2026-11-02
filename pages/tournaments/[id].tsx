@@ -57,7 +57,15 @@ export default function TournamentPage() {
         {error && <span role="alert" className="text-sm text-amber-700 dark:text-amber-400">Couldn&apos;t refresh: {error}</span>}
       </div>
 
-      <TournamentClock view={view} levelLeft={levelLeft} breakLeft={breakLeft} />
+      {view.cancelled ? (
+        <section aria-label="Cancelled" className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4">
+          <p className="font-semibold">This tournament was cancelled.</p>
+          {view.cancelled.reason && <p className="text-sm">{view.cancelled.reason}</p>}
+          {view.you && view.you.paid > 0 && <p className="text-sm">You paid in {formatMoney(view.you.paid)}; the director will sort out refunds.</p>}
+        </section>
+      ) : (
+        <TournamentClock view={view} levelLeft={levelLeft} breakLeft={breakLeft} />
+      )}
 
       <Actions view={view} signedIn={signedIn} busy={busy} onAct={act} />
       {actionError && <p role="alert" className="text-sm text-red-600">{actionError}</p>}
@@ -158,7 +166,7 @@ export default function TournamentPage() {
           <ol className="text-sm space-y-0.5">
             {view.finishers.map(f => (
               <li key={`${f.place}-${f.userId}`}>
-                {ordinal(f.place)}: {f.name}{f.prize > 0 ? `, ${formatMoney(f.prize)}` : ''}
+                {ordinal(f.place)}: {f.name}{f.prize > 0 ? `, ${formatMoney(f.prize)}` : ''}{f.removed ? ' (removed)' : ''}
               </li>
             ))}
           </ol>

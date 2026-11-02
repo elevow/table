@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { sendTournamentError } from '../../../src/lib/tournament/api-errors';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { tournamentManager } from '../../../src/lib/tournament/manager-instance';
 import { requirePermission } from '../../../src/lib/auth/access-control';
@@ -14,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!name || !config) return res.status(400).json({ error: 'Missing name or config' });
     const created = await tournamentManager.create({ name, config, createdBy: access.userId });
     return res.status(201).json(created);
-  } catch (err: any) {
-    return res.status(400).json({ error: err?.message || 'Bad request' });
+  } catch (err) {
+    return sendTournamentError(res, err);
   }
 }

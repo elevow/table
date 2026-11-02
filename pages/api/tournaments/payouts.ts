@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { sendTournamentError } from '../../../src/lib/tournament/api-errors';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { tournamentManager } from '../../../src/lib/tournament/manager-instance';
 import { getRequestAccess, hasPermission, sendPermissionDenied } from '../../../src/lib/auth/access-control';
@@ -13,8 +14,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { tournamentId } = (req.query || {}) as any;
     if (!tournamentId) return res.status(400).json({ error: 'Missing tournamentId' });
     // The prize pool comes from the entries, rebuys and add-ons recorded on the server
-    return res.status(200).json(await tournamentManager.payouts(String(tournamentId)));
-  } catch (err: any) {
-    return res.status(400).json({ error: err?.message || 'Bad request' });
+    const result = await tournamentManager.payouts(String(tournamentId));
+    return res.status(200).json(result);
+  } catch (err) {
+    return sendTournamentError(res, err);
   }
 }

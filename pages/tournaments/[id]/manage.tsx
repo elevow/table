@@ -22,6 +22,7 @@ export default function ManageTournamentPage() {
   const [out, setOut] = useState('');
   const [by, setBy] = useState('');
   const [deskPlayer, setDeskPlayer] = useState('');
+  const [toRemove, setToRemove] = useState('');
 
   // Players still in, by table and seat; and everyone who has played, for rebuys
   const seated = useMemo(
@@ -71,6 +72,19 @@ export default function ManageTournamentPage() {
   const inPlay = view.status === 'running' || view.status === 'paused' || view.status === 'on-break';
   const bountyRequired = !!view.bounty;
 
+  const removePlayer = async () => {
+    if (!toRemove) return;
+    const during = view.status === 'setup' ? '' : ' They will be out of the tournament with nobody credited for the knockout.';
+    if (!window.confirm(`Remove ${nameOf(toRemove)}?${during}`)) return;
+    if (await run('remove-player', { userId: toRemove }, `${nameOf(toRemove)} was removed`)) setToRemove('');
+  };
+
+  const cancel = async () => {
+    const reason = window.prompt(`Cancel ${view.name}? Nothing will be paid out. You can give a reason for players:`, '');
+    if (reason === null) return;
+    await run('cancel', { reason }, 'Tournament cancelled');
+  };
+
   const eliminate = async () => {
     if (!out) return;
     const knocker = by ? ` by ${nameOf(by)}` : '';
@@ -108,10 +122,44 @@ export default function ManageTournamentPage() {
         {view.onBreak && (
           <button className={`${btn} bg-blue-600`} disabled={busy} onClick={() => run('end-break', {}, 'Break ended')}>End break now</button>
         )}
+        {view.status === 'setup' && (
+          <Link href={`/tournaments/${view.id}/edit`} className="text-blue-600 dark:text-blue-400 hover:underline">Edit structure</Link>
+        )}
+        {view.status !== 'completed' && view.status !== 'cancelled' && (
+          <button className="text-sm text-red-600 hover:underline disabled:opacity-50" disabled={busy} onClick={cancel}>Cancel tournament</button>
+        )}
         <span className="text-sm text-gray-600 dark:text-gray-400">
           {view.players.remaining} of {view.players.entrants} left · prize pool {formatMoney(view.prizePool)}
         </span>
       </section>
+
+      {view.undo && (
+        <section aria-label="Undo" className="flex flex-wrap items-center gap-3 rounded bg-amber-50 dark:bg-amber-900/20 p-3 text-sm">
+          <span>{view.undo.name} was the last player out.</span>
+          <button className={`${btn} bg-amber-600`} disabled={busy} onClick={() => run('undo-elimination', {}, `${view.undo!.name} is back in`)}>
+            Undo: put {view.undo.name} back
+          </button>
+        </section>
+      )}
+
+      {view.cancelled && (
+        <section aria-label="Cancelled" className={`${card} space-y-2`}>
+          <h2 className="text-lg font-semibold">Cancelled</h2>
+          {view.cancelled.reason && <p className="text-sm">Reason: {view.cancelled.reason}</p>}
+          {view.refunds.length > 0 ? (
+            <>
+              <p className="text-sm text-gray-600 dark:text-gray-400">What each player paid in, and is owed back:</p>
+              <table className="text-sm">
+                <tbody>
+                  {view.refunds.map(r => (
+                    <tr key={r.userId}><td className="pr-6 py-0.5">{r.name}</td><td className="tabular-nums">{formatMoney(r.paid)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : <p className="text-sm text-gray-600 dark:text-gray-400">Nobody paid anything in.</p>}
+        </section>
+      )}
 
       {message && (
         <p role={message.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${message.kind === 'error' ? 'text-red-600' : 'text-green-700 dark:text-green-400'}`}>
@@ -170,7 +218,28 @@ export default function ManageTournamentPage() {
         </section>
       )}
 
-      {view.tables.length > 0 && view.status !== 'completed' && (
+      {(view.status === 'setup' || inPlay) && view.entrants.some(e => !e.out) && (
+        <section aria-label="Remove a player" className={`${card} space-y-2`}>
+          <h2 className="text-lg font-semibold">Remove a player</h2>
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            {view.status === 'setup'
+              ? 'For someone registered by mistake: their entry is taken back.'
+              : 'For a disqualification: they are out with nobody credited, and any bounty on them is forfeited.'}
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="text-sm">
+              Player
+              <select className={`${select} block`} value={toRemove} onChange={e => setToRemove(e.target.value)}>
+                <option value="">Choose…</option>
+                {view.entrants.filter(e => !e.out).map(e => <option key={e.userId} value={e.userId}>{e.name}</option>)}
+              </select>
+            </label>
+            <button className={`${btn} bg-red-600`} disabled={busy || !toRemove} onClick={removePlayer}>Remove</button>
+          </div>
+        </section>
+      )}
+
+      {view.tables.length > 0 && view.status !== 'completed' && view.status !== 'cancelled' && (
         <section aria-label="Tables">
           <h2 className="text-lg font-semibold mb-2">Tables</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -194,6 +263,7 @@ export default function ManageTournamentPage() {
               <li key={`${f.place}-${f.userId}`}>
                 {ordinal(f.place)}: {f.name}{f.prize > 0 ? `, ${formatMoney(f.prize)}` : ''}
                 {f.eliminatedBy ? ` (knocked out by ${nameOf(f.eliminatedBy)})` : ''}
+                {f.removed ? ' (removed by the director)' : ''}
               </li>
             ))}
           </ol>

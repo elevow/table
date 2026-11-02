@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { sendTournamentError } from '../../../src/lib/tournament/api-errors';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { tournamentManager } from '../../../src/lib/tournament/manager-instance';
 import { loadPlayerNames } from '../../../src/lib/tournament/pg-tournament-store';
@@ -20,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!t) return res.status(404).json({ error: 'Tournament not found' });
     const names = await loadPlayerNames(t.registeredPlayers).catch(() => ({}));
     return res.status(200).json(buildTournamentView(t, Date.now(), access.userId, names, { canManage: canManageTournament(access, t) }));
-  } catch (err: any) {
-    return res.status(400).json({ error: err?.message || 'Bad request' });
+  } catch (err) {
+    return sendTournamentError(res, err);
   }
 }

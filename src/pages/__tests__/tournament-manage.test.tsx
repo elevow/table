@@ -26,12 +26,21 @@ const view = (overrides: Partial<TournamentView> = {}): TournamentView => ({
     { seat: 8, userId: 'c', name: 'Cara' },
   ] }],
   canManage: true,
+  entrants: [
+    { userId: 'a', name: 'Alice', out: false },
+    { userId: 'b', name: 'Bob', out: false },
+    { userId: 'c', name: 'Cara', out: false },
+    { userId: 'd', name: 'Dev', out: true },
+  ],
+  undo: null,
+  cancelled: null,
+  refunds: [],
   prizePool: 40,
   payouts: [],
   chipsInPlay: 80000,
   averageStack: 26667,
-  bounty: { type: 'standard', amount: 2, total: 8, board: [] },
-  finishers: [{ place: 4, userId: 'd', name: 'Dev', prize: 0, eliminatedBy: 'a' }],
+  bounty: { type: 'standard', amount: 2, total: 8, forfeited: 0, board: [] },
+  finishers: [{ place: 4, userId: 'd', name: 'Dev', prize: 0, eliminatedBy: 'a', removed: false }],
   you: null,
   ...overrides,
 });
@@ -127,5 +136,56 @@ describe('Director screen', () => {
     render(<ManageTournamentPage />);
     expect(await screen.findByText('Only the tournament director can run Friday KO.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument();
+  });
+
+  test('undoes the latest elimination', async () => {
+    current = view({ undo: { userId: 'd', name: 'Dev' } });
+    await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Undo: put Dev back' }));
+    await waitFor(() => expect(posts).toEqual([{ url: '/api/tournaments/undo-elimination', body: { tournamentId: 't-1' } }]));
+    expect(await screen.findByText('Dev is back in')).toBeInTheDocument();
+  });
+
+  test('removes a player after confirming', async () => {
+    await renderPage();
+    const section = screen.getByRole('region', { name: 'Remove a player' });
+    expect(within(section).getByText(/disqualification/)).toBeInTheDocument();
+    // Players already out aren't offered
+    expect(within(within(section).getByLabelText('Player')).queryByText('Dev')).not.toBeInTheDocument();
+    fireEvent.change(within(section).getByLabelText('Player'), { target: { value: 'b' } });
+    fireEvent.click(within(section).getByRole('button', { name: 'Remove' }));
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Remove Bob?'));
+    await waitFor(() => expect(posts).toEqual([{ url: '/api/tournaments/remove-player', body: { tournamentId: 't-1', userId: 'b' } }]));
+  });
+
+  test('cancels with a reason, or not at all if the prompt is dismissed', async () => {
+    await renderPage();
+    window.prompt = jest.fn(() => null);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel tournament' }));
+    expect(posts).toEqual([]);
+    window.prompt = jest.fn(() => 'Venue closed');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel tournament' }));
+    await waitFor(() => expect(posts).toEqual([{ url: '/api/tournaments/cancel', body: { tournamentId: 't-1', reason: 'Venue closed' } }]));
+  });
+
+  test('a cancelled tournament shows what each player is owed', async () => {
+    current = view({
+      status: 'cancelled',
+      cancelled: { at: 1, reason: 'Venue closed' },
+      refunds: [{ userId: 'a', name: 'Alice', paid: 25 }, { userId: 'b', name: 'Bob', paid: 13 }],
+    });
+    await renderPage();
+    const section = screen.getByRole('region', { name: 'Cancelled' });
+    expect(within(section).getByText('Reason: Venue closed')).toBeInTheDocument();
+    expect(within(section).getByText('$25')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel tournament' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Eliminate a player' })).not.toBeInTheDocument();
+  });
+
+  test('before the start the structure can be edited', async () => {
+    current = view({ status: 'setup', level: null, tables: [] });
+    await renderPage();
+    expect(screen.getByRole('link', { name: 'Edit structure' })).toHaveAttribute('href', '/tournaments/t-1/edit');
+    expect(within(screen.getByRole('region', { name: 'Remove a player' })).getByText(/registered by mistake/)).toBeInTheDocument();
   });
 });

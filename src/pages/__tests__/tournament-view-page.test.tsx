@@ -24,6 +24,10 @@ const baseView = (overrides: Partial<TournamentView> = {}): TournamentView => ({
   costs: { entry: 13, rebuy: 12, addOn: 10 },
   tables: [{ number: 2, players: [{ seat: 5, userId: 'me', name: 'Me' }, { seat: 7, userId: 'a', name: 'Alice' }] }],
   canManage: false,
+  entrants: [],
+  undo: null,
+  cancelled: null,
+  refunds: [],
   prizePool: 200,
   payouts: [
     { place: 1, percentage: 50, amount: 100 },
@@ -36,13 +40,14 @@ const baseView = (overrides: Partial<TournamentView> = {}): TournamentView => ({
     type: 'progressive',
     amount: 2,
     total: 40,
+    forfeited: 0,
     board: [
       { userId: 'a', name: 'Alice', won: 4.5, bounty: 6.5 },
       { userId: 'z', name: 'Zed', won: 1, bounty: null },
     ],
   },
-  finishers: [{ place: 10, userId: 'z', name: 'Zed', prize: 0, eliminatedBy: 'a' }],
-  you: { eliminated: false, canUnregister: false, canRebuy: false, canAddOn: false, place: null, table: 2, seat: 5, bounty: 3, bountyWon: 1 },
+  finishers: [{ place: 10, userId: 'z', name: 'Zed', prize: 0, eliminatedBy: 'a', removed: false }],
+  you: { eliminated: false, canUnregister: false, canRebuy: false, canAddOn: false, place: null, table: 2, seat: 5, bounty: 3, bountyWon: 1, paid: 13 },
   ...overrides,
 });
 
@@ -124,8 +129,8 @@ describe('Tournament page', () => {
   test('a finished player sees their place and prize', async () => {
     view = baseView({
       status: 'completed',
-      finishers: [{ place: 2, userId: 'me', name: 'Me', prize: 60, eliminatedBy: 'a' }],
-      you: { eliminated: true, canUnregister: false, canRebuy: false, canAddOn: false, place: 2, table: null, seat: null, bounty: null, bountyWon: 2 },
+      finishers: [{ place: 2, userId: 'me', name: 'Me', prize: 60, eliminatedBy: 'a', removed: false }],
+      you: { eliminated: true, canUnregister: false, canRebuy: false, canAddOn: false, place: 2, table: null, seat: null, bounty: null, bountyWon: 2, paid: 13 },
     });
     await renderPage();
     expect(within(screen.getByRole('region', { name: 'You' })).getByText('Finished 2nd, won $60')).toBeInTheDocument();
@@ -153,7 +158,7 @@ describe('Tournament page', () => {
 
   test('a busted player can rebuy and return, and the director gets a link to the controls', async () => {
     view = baseView({
-      you: { eliminated: true, canUnregister: false, canRebuy: true, canAddOn: false, place: 10, table: null, seat: null, bounty: null, bountyWon: 0 },
+      you: { eliminated: true, canUnregister: false, canRebuy: true, canAddOn: false, place: 10, table: null, seat: null, bounty: null, bountyWon: 0, paid: 13 },
       canManage: true,
     });
     await renderPage();
@@ -171,5 +176,14 @@ describe('Tournament page', () => {
     await renderPage();
     await act(async () => { screen.getByRole('button', { name: 'Unregister' }).click(); });
     expect(await screen.findByText('You can only unregister before the tournament starts')).toBeInTheDocument();
+  });
+
+  test('a cancelled tournament says so instead of showing the clock', async () => {
+    view = baseView({ status: 'cancelled', cancelled: { at: 1, reason: 'Venue closed' } });
+    await renderPage();
+    const section = screen.getByRole('region', { name: 'Cancelled' });
+    expect(within(section).getByText('Venue closed')).toBeInTheDocument();
+    expect(within(section).getByText(/You paid in \$13/)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Clock' })).not.toBeInTheDocument();
   });
 });

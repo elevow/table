@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { validateTournamentConfig } from './tournament-utils';
-import { bountyEnabled, collectWinnerBounty, payoutTable, postBounty, prizePool, remainingPlayers, settleKnockout } from './tournament-money';
+import { bountyEnabled, collectWinnerBounty, forfeitBounty, payoutTable, postBounty, prizePool, remainingPlayers, settleKnockout } from './tournament-money';
 import type { TournamentStore } from './tournament-store';
 import { DEFAULT_SEATS_PER_TABLE, Random, balanceTables, drawSeats, seatLatePlayer, unseatPlayer } from './tournament-seating';
 import { catchUpClock, endBreak, enterNextLevel, pauseClock, resumeClock, scheduleElapsedMs, startClock, stopClock } from './tournament-clock';
@@ -10,6 +10,7 @@ import type {
   RegisterPlayerInput,
   EliminatePlayerInput,
 } from '../../types/tournament-management';
+import type { TournamentConfig } from '../../types/tournament';
 
 export class TournamentManager {
   constructor(
@@ -87,9 +88,66 @@ export class TournamentManager {
     return this.change(input.tournamentId, t => {
       if (!t.registeredPlayers.includes(input.userId)) return;
       if (t.status !== 'setup') throw new Error('You can only unregister before the tournament starts');
-      t.registeredPlayers = t.registeredPlayers.filter(p => p !== input.userId);
-      t.registrationTimeline = (t.registrationTimeline || []).filter(e => !(e.type === 'register' && e.userId === input.userId));
-      if (t.bounties) delete t.bounties[input.userId];
+      withdraw(t, input.userId);
+    });
+  }
+
+  /**
+   * The director takes a player out: before the start it's as if they never registered; during play
+   * they're eliminated with nobody credited, and in a knockout their bounty is forfeited.
+   */
+  removePlayer(input: RegisterPlayerInput): Promise<TournamentState> {
+    return this.change(input.tournamentId, (t, now) => {
+      if (!t.registeredPlayers.includes(input.userId)) throw new Error('Player not registered');
+      if (t.status === 'setup') return withdraw(t, input.userId);
+      this.knockOut(t, now, input.userId, undefined, true);
+    }, { undoable: true });
+  }
+
+  /** Change the name or structure before the start. Bounties follow the new settings. */
+  edit(input: { tournamentId: string; name?: string; config?: TournamentConfig }): Promise<TournamentState> {
+    return this.change(input.tournamentId, t => {
+      if (t.status !== 'setup') throw new Error('A tournament can only be edited before it starts');
+      if (input.name !== undefined) {
+        if (!input.name.trim()) throw new Error('Give the tournament a name');
+        t.name = input.name.trim();
+      }
+      if (input.config) {
+        const res = validateTournamentConfig(input.config);
+        if (!res.valid) throw new Error(`Invalid tournament config: ${res.errors.join(', ')}`);
+        if (input.config.maxPlayers && t.registeredPlayers.length > input.config.maxPlayers) {
+          throw new Error(`${t.registeredPlayers.length} players have already registered, more than the new maximum`);
+        }
+        const config = input.config;
+        t.config = config;
+        t.bounties = bountyEnabled(config)
+          ? Object.fromEntries(t.registeredPlayers.map(u => [u, config.bounty!.amount]))
+          : undefined;
+      }
+    });
+  }
+
+  /** Call the tournament off. Nothing is paid out; what each player paid in shows as owed to them. */
+  cancel(input: { tournamentId: string; reason?: string }): Promise<TournamentState> {
+    return this.change(input.tournamentId, (t, now) => {
+      if (t.status === 'completed' || t.status === 'cancelled') throw new Error('This tournament has already finished');
+      t.status = 'cancelled';
+      stopClock(t);
+      t.cancelledAt = now;
+      t.cancelReason = input.reason?.trim() || null;
+    });
+  }
+
+  /**
+   * Take back the most recent elimination, as long as nothing else has happened since: the player,
+   * their seat and their bounty are restored exactly, even if it had ended the tournament.
+   */
+  undoElimination(tournamentId: string): Promise<TournamentState> {
+    return this.change(tournamentId, t => {
+      const before = t.lastElimination?.before;
+      if (!before) throw new Error('Only the most recent elimination can be undone, before anything else changes');
+      for (const key of Object.keys(t)) delete (t as any)[key];
+      Object.assign(t, before);
     });
   }
 
@@ -127,34 +185,8 @@ export class TournamentManager {
 
   eliminate(input: EliminatePlayerInput): Promise<TournamentState> {
     return this.change(input.tournamentId, (t, now) => {
-      if (t.status !== 'running' && t.status !== 'paused' && t.status !== 'on-break') {
-        throw new Error('Players can only be eliminated while the tournament is in progress');
-      }
-      if (!t.registeredPlayers.includes(input.userId)) throw new Error('Player not registered');
-      if (t.eliminatedPlayers.includes(input.userId)) return;
-      const remaining = remainingPlayers(t);
-      if (remaining.length <= 1) throw new Error('Cannot eliminate the last remaining player');
-      const by = input.eliminatedBy || undefined;
-      if (by !== undefined) {
-        if (by === input.userId) throw new Error('A player cannot knock themselves out');
-        if (!remaining.includes(by)) throw new Error('The player who made the knockout must still be in the tournament');
-      } else if (bountyEnabled(t.config)) {
-        throw new Error('Say who knocked the player out, so the bounty can be paid');
-      }
-      // Finishing place is the number of players left, counting the one going out
-      t.eliminatedPlayers.push(input.userId);
-      const bounty = by !== undefined ? settleKnockout(t, input.userId, by) : 0;
-      (t.eliminationRecords = t.eliminationRecords || []).push({
-        userId: input.userId,
-        at: now,
-        place: remaining.length,
-        ...(by !== undefined ? { eliminatedBy: by } : {}),
-        ...(bountyEnabled(t.config) ? { bounty } : {}),
-      });
-      unseatPlayer(t.tables, input.userId);
-      this.balance(t);
-      finishIfDecided(t);
-    });
+      this.knockOut(t, now, input.userId, input.eliminatedBy || undefined, false);
+    }, { undoable: true });
   }
 
   /** The prize pool so far and what each paid place wins from it. */
@@ -192,14 +224,68 @@ export class TournamentManager {
     });
   }
 
-  /** Apply a change to the tournament as of now, after catching its clock up. */
-  private change(id: string, apply: (t: TournamentState, now: number) => void): Promise<TournamentState> {
+  /**
+   * Take a player out of the field. `removed` is the director removing them: no knocker is needed,
+   * and in a knockout their bounty is forfeited rather than paid.
+   */
+  private knockOut(t: TournamentState, now: number, userId: string, by: string | undefined, removed: boolean): void {
+    if (t.status !== 'running' && t.status !== 'paused' && t.status !== 'on-break') {
+      throw new Error('Players can only be eliminated while the tournament is in progress');
+    }
+    if (!t.registeredPlayers.includes(userId)) throw new Error('Player not registered');
+    if (t.eliminatedPlayers.includes(userId)) {
+      if (removed) throw new Error('That player is already out');
+      return;
+    }
+    const remaining = remainingPlayers(t);
+    if (remaining.length <= 1) throw new Error('Cannot eliminate the last remaining player');
+    if (by !== undefined) {
+      if (by === userId) throw new Error('A player cannot knock themselves out');
+      if (!remaining.includes(by)) throw new Error('The player who made the knockout must still be in the tournament');
+    } else if (bountyEnabled(t.config) && !removed) {
+      throw new Error('Say who knocked the player out, so the bounty can be paid');
+    }
+    // Finishing place is the number of players left, counting the one going out
+    t.eliminatedPlayers.push(userId);
+    const bounty = by !== undefined ? settleKnockout(t, userId, by) : 0;
+    const forfeited = removed ? forfeitBounty(t, userId) : 0;
+    (t.eliminationRecords = t.eliminationRecords || []).push({
+      userId,
+      at: now,
+      place: remaining.length,
+      ...(by !== undefined ? { eliminatedBy: by } : {}),
+      ...(bountyEnabled(t.config) && !removed ? { bounty } : {}),
+      ...(removed ? { removed: true } : {}),
+      ...(forfeited > 0 ? { forfeitedBounty: forfeited } : {}),
+    });
+    unseatPlayer(t.tables, userId);
+    this.balance(t);
+    finishIfDecided(t);
+  }
+
+  /**
+   * Apply a change to the tournament as of now, after catching its clock up. An `undoable` change
+   * that takes a player out keeps a copy of the tournament from just before it, which the next
+   * change throws away.
+   */
+  private change(
+    id: string,
+    apply: (t: TournamentState, now: number) => void,
+    options: { undoable?: boolean } = {}
+  ): Promise<TournamentState> {
     return this.store.update(id, t => {
       const now = this.now();
       catchUpClock(t, now);
       // The rebuy period may have just closed with one player left
       finishIfDecided(t);
+      const { lastElimination: _previous, ...current } = t;
+      const before: TournamentState = JSON.parse(JSON.stringify(current));
       apply(t, now);
+      if (options.undoable && t.eliminatedPlayers.length > before.eliminatedPlayers.length) {
+        t.lastElimination = { before };
+      } else {
+        delete t.lastElimination;
+      }
       t.updatedAt = now;
     });
   }
@@ -285,4 +371,11 @@ function finishIfDecided(t: TournamentState): void {
   t.status = 'completed';
   stopClock(t);
   if (remaining.length === 1) collectWinnerBounty(t, remaining[0]);
+}
+
+/** Take a player's entry back, before the start: as if they never registered. */
+function withdraw(t: TournamentState, userId: string): void {
+  t.registeredPlayers = t.registeredPlayers.filter(p => p !== userId);
+  t.registrationTimeline = (t.registrationTimeline || []).filter(e => !(e.type === 'register' && e.userId === userId));
+  if (t.bounties) delete t.bounties[userId];
 }

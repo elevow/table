@@ -79,6 +79,38 @@ export function settleKnockout(t: TournamentState, eliminated: string, by: strin
   return cash;
 }
 
+/** A removed player's bounty goes to nobody; returns the amount, which is recorded as forfeited. */
+export function forfeitBounty(t: TournamentState, userId: string): number {
+  if (!bountyEnabled(t.config) || !t.bounties) return 0;
+  const bounty = t.bounties[userId] ?? 0;
+  delete t.bounties[userId];
+  return bounty;
+}
+
+/** Bounty money nobody won because its player was removed. */
+export function forfeitedBounties(t: TournamentState): number {
+  return round2((t.eliminationRecords || []).reduce((sum, r) => sum + (r.forfeitedBounty ?? 0), 0));
+}
+
+/**
+ * What each player has paid in: their entry (buy-in, fee and bounty), every rebuy (cost and bounty)
+ * and their add-on. A cancelled tournament owes this back.
+ */
+export function amountsPaid(t: TournamentState): Record<string, number> {
+  const { config } = t;
+  const bounty = bountyEnabled(config) ? config.bounty!.amount : 0;
+  const paid: Record<string, number> = {};
+  const add = (userId: string | undefined, amount: number) => {
+    if (userId) paid[userId] = round2((paid[userId] ?? 0) + amount);
+  };
+  for (const userId of t.registeredPlayers) add(userId, (config.buyIn ?? 0) + (config.entryFee ?? 0) + bounty);
+  for (const e of t.registrationTimeline || []) {
+    if (e.type === 'rebuy') add(e.userId, (config.rebuys?.cost ?? 0) + bounty);
+    if (e.type === 'addOn') add(e.userId, config.addOn?.cost ?? 0);
+  }
+  return paid;
+}
+
 /** The winner collects the bounty on their own head. */
 export function collectWinnerBounty(t: TournamentState, winner: string): void {
   if (!bountyEnabled(t.config)) return;

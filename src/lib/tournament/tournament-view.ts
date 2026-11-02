@@ -1,6 +1,6 @@
 import { breakTimeRemainingMs, levelTimeRemainingMs } from './tournament-clock';
-import { amountsPaid, bountyEnabled, bountyPool, chipsInPlay, forfeitedBounties, payoutTable, prizePool, remainingPlayers } from './tournament-money';
-import { registrationOpen, whyNoAddOn, whyNoRebuy } from './tournament-manager';
+import { amountsPaid, bountyEnabled, bountyPool, chipsInPlay, entryCount, forfeitedBounties, payoutTable, prizePool, remainingPlayers } from './tournament-money';
+import { registrationOpen, whyNoAddOn, whyNoRebuy, whyNoReentry } from './tournament-manager';
 import type { BlindLevel, TournamentConfig } from '../../types/tournament';
 import type { TournamentState, TournamentStatus } from '../../types/tournament-management';
 
@@ -17,15 +17,17 @@ export interface TournamentView {
   name: string;
   status: TournamentStatus;
   serverNow: number; // epoch ms the view was built, so clients can count down from it
+  startsAt: number | null; // when it starts by itself, if it has a start time
+  minPlayers: number | null;
   level: LevelView | null; // null before the start
   nextLevel: LevelView | null;
   levelRemainingMs: number | null;
   onBreak: boolean;
   breakRemainingMs: number | null;
-  players: { entrants: number; remaining: number; paidPlaces: number };
+  players: { entrants: number; entries: number; remaining: number; paidPlaces: number }; // entries count re-entries
   registration: { open: boolean; full: boolean; maxPlayers: number | null };
   // What each buy costs a player, bounty included
-  costs: { entry: number; rebuy: number | null; addOn: number | null };
+  costs: { entry: number; rebuy: number | null; addOn: number | null; reentry: number | null };
   tables: { number: number; roomId: string | null; players: { seat: number; userId: string; name: string }[] }[];
   // Players still in, biggest stack first; chips bought but not yet at a table count
   chipCounts: { userId: string; name: string; chips: number }[];
@@ -51,10 +53,12 @@ export interface TournamentView {
   // Finishing order so far, best place first, with what each place wins
   finishers: { place: number; userId: string; name: string; prize: number; eliminatedBy: string | null; removed: boolean }[];
   you: null | {
+    userId: string;
     eliminated: boolean;
     canUnregister: boolean;
     canRebuy: boolean;
     canAddOn: boolean;
+    canReenter: boolean;
     place: number | null;
     table: number | null;
     seat: number | null;
@@ -73,6 +77,7 @@ export function playerCosts(config: TournamentConfig): TournamentView['costs'] {
     entry: (config.buyIn ?? 0) + (config.entryFee ?? 0) + bounty,
     rebuy: config.rebuys?.enabled ? config.rebuys.cost + bounty : null,
     addOn: config.addOn?.enabled ? config.addOn.cost : null,
+    reentry: config.reentry?.enabled ? (config.buyIn ?? 0) + (config.entryFee ?? 0) + bounty : null,
   };
 }
 
@@ -134,10 +139,12 @@ export function buildTournamentView(
     const record = [...(t.eliminationRecords || [])].reverse().find(r => r.userId === viewerId);
     const eliminated = t.eliminatedPlayers.includes(viewerId);
     you = {
+      userId: viewerId,
       eliminated,
       canUnregister: t.status === 'setup',
       canRebuy: whyNoRebuy(t, viewerId) === null,
       canAddOn: whyNoAddOn(t, viewerId) === null,
+      canReenter: whyNoReentry(t, viewerId, now) === null,
       place: eliminated ? record?.place ?? null : t.status === 'completed' && remaining[0] === viewerId ? 1 : null,
       table: table?.number ?? null,
       seat: table ? table.seats.indexOf(viewerId) + 1 : null,
@@ -154,12 +161,14 @@ export function buildTournamentView(
     name: t.name,
     status: t.status,
     serverNow: now,
+    startsAt: t.config.startsAt ?? null,
+    minPlayers: t.config.minPlayers ?? null,
     level: started ? levelView(t.config.blindLevels[t.currentLevelIndex]) : null,
     nextLevel: levelView(t.config.blindLevels[started ? t.currentLevelIndex + 1 : 0]),
     levelRemainingMs: levelTimeRemainingMs(t, now),
     onBreak: t.onBreak,
     breakRemainingMs: breakTimeRemainingMs(t, now),
-    players: { entrants: t.registeredPlayers.length, remaining: remaining.length, paidPlaces: payouts.length },
+    players: { entrants: t.registeredPlayers.length, entries: entryCount(t), remaining: remaining.length, paidPlaces: payouts.length },
     registration: { open: registrationOpen(t, now) && !isFull(t), full: isFull(t), maxPlayers: t.config.maxPlayers ?? null },
     costs: playerCosts(t.config),
     entrants: t.registeredPlayers
@@ -200,6 +209,8 @@ export interface TournamentSummary {
   name: string;
   status: TournamentStatus;
   createdAt: number;
+  startsAt: number | null;
+  reentry: boolean;
   startingStack: number;
   seatsPerTable: number;
   costs: TournamentView['costs'];
@@ -221,6 +232,8 @@ export function buildTournamentSummary(t: TournamentState, now: number, viewerId
     name: t.name,
     status: t.status,
     createdAt: t.createdAt,
+    startsAt: t.config.startsAt ?? null,
+    reentry: !!t.config.reentry?.enabled,
     startingStack: t.config.startingStack,
     seatsPerTable: t.config.seatsPerTable ?? 9,
     costs: playerCosts(t.config),

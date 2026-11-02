@@ -26,7 +26,7 @@ describe('buildTournamentView', () => {
     expect(v.status).toBe('setup');
     expect(v.level).toBeNull();
     expect(v.nextLevel).toEqual({ number: 1, smallBlind: 100, bigBlind: 200, ante: null, minutes: 12 });
-    expect(v.players).toEqual({ entrants: 4, remaining: 4, paidPlaces: 3 });
+    expect(v.players).toEqual({ entrants: 4, entries: 4, remaining: 4, paidPlaces: 3 });
     expect(v.you).toMatchObject({ eliminated: false, table: null, bounty: 2 });
   });
 

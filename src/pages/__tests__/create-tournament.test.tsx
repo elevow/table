@@ -151,6 +151,41 @@ describe('Create tournament page', () => {
     expect(screen.queryByLabelText('Bounty ($)')).not.toBeInTheDocument();
   });
 
+  test('start time, a share of the field, late registration and re-entry go to the server', async () => {
+    createResponse = { ok: true, status: 201, body: { id: 't-4', name: 'Sched', config: { blindLevels: [], startingStack: 1 } } };
+    render(<CreateTournamentPage />);
+    fireEvent.change(screen.getByPlaceholderText('Friday Night Freezeout'), { target: { value: 'Sched' } });
+
+    fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: '2030-01-05T20:00' } });
+    fireEvent.change(screen.getByLabelText(/Minimum players/), { target: { value: '6' } });
+
+    fireEvent.click(screen.getByLabelText('A share of the field'));
+    fireEvent.change(screen.getByLabelText('Share of entries paid (%)'), { target: { value: '20' } });
+    expect(screen.getByText(/30 entries: 6 paid/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Until the end of level'), { target: { value: '3' } });
+    fireEvent.click(screen.getByLabelText(/Let busted players buy a new entry/));
+    fireEvent.change(screen.getByLabelText('Up to (per player)'), { target: { value: '1' } });
+
+    fireEvent.click(submit());
+    await screen.findByText('Tournament created');
+    const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/tournaments/create')!;
+    const config = JSON.parse(init.body).config;
+    expect(config.startsAt).toBe(new Date('2030-01-05T20:00').getTime());
+    expect(config.minPlayers).toBe(6);
+    expect(config.payoutScaling).toEqual({ paidPercent: 20 });
+    expect(config.lateRegistration).toMatchObject({ enabled: true, endLevel: 3 });
+    expect(config.reentry).toEqual({ enabled: true, maxPerPlayer: 1 });
+  });
+
+  test('turning late registration off turns re-entry off with it', () => {
+    render(<CreateTournamentPage />);
+    fireEvent.click(screen.getByLabelText(/Let busted players buy a new entry/));
+    fireEvent.click(screen.getByLabelText('Late registration'));
+    expect(screen.getByLabelText(/Let busted players buy a new entry/)).not.toBeChecked();
+    expect(screen.getByLabelText(/Let busted players buy a new entry/)).toBeDisabled();
+  });
+
   test('choosing the rebuy preset shows its rebuy and add-on settings', async () => {
     render(<CreateTournamentPage />);
     fireEvent.change(screen.getByLabelText(/Start from/), { target: { value: 'rebuy_addon' } });

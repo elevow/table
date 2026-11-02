@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { tournamentPresets, validateTournamentConfig } from '../../lib/tournament/tournament-utils';
+import { scaledPayoutStructure, tournamentPresets, validateTournamentConfig } from '../../lib/tournament/tournament-utils';
 import {
   addLevel, addPayoutPlace, formatMinutes, levelStartMinutes, normalizeLevels, removeLastPayoutPlace,
   removeLevel, setBreak, setPayoutPercentage, updateLevel,
@@ -16,6 +16,24 @@ const linkButton = 'text-sm text-blue-600 dark:text-blue-400 hover:underline dis
 
 /** A number from an input, with empty meaning undefined. */
 const optionalNumber = (value: string) => (value.trim() === '' ? undefined : Number(value));
+
+/** An epoch-ms time as the value of a datetime-local input, in the viewer's time zone. */
+function toLocalInput(ms: number | undefined): string {
+  if (ms === undefined) return '';
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** "30 entries: 5 paid, 1st gets 34.17%" for a few field sizes */
+function scalingExamples(paidPercent: number): string {
+  return [10, 30, 100]
+    .map(n => {
+      const tiers = scaledPayoutStructure(n, paidPercent);
+      return `${n} entries: ${tiers.length} paid, 1st gets ${tiers[0].percentage}%`;
+    })
+    .join(' · ');
+}
 
 /**
  * The tournament structure form, for creating a tournament or editing one before it starts.
@@ -99,6 +117,59 @@ export default function TournamentSetupForm({
             <input type="number" min={2} className={inputClass} value={config.maxPlayers ?? ''} placeholder="No limit"
               onChange={e => setConfig({ ...config, maxPlayers: optionalNumber(e.target.value) })} />
           </label>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold mb-2">Start and late registration</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="block text-sm font-medium">
+            Start time
+            <input type="datetime-local" className={inputClass} value={toLocalInput(config.startsAt)}
+              onChange={e => setConfig(e.target.value
+                ? { ...config, startsAt: new Date(e.target.value).getTime() }
+                : { ...config, startsAt: undefined, minPlayers: undefined })} />
+            <span className="block text-xs font-normal text-gray-600 dark:text-gray-400 mt-1">
+              {config.startsAt === undefined ? 'Leave empty to start it yourself.' : 'It starts by itself at this time.'}
+            </span>
+          </label>
+          {config.startsAt !== undefined && (
+            <label className="block text-sm font-medium">
+              Minimum players
+              <input type="number" min={2} className={inputClass} value={config.minPlayers ?? ''} placeholder="2"
+                onChange={e => setConfig({ ...config, minPlayers: optionalNumber(e.target.value) })} />
+              <span className="block text-xs font-normal text-gray-600 dark:text-gray-400 mt-1">With fewer registered by the start time, it&apos;s cancelled.</span>
+            </label>
+          )}
+        </div>
+        <div className="mt-3 flex flex-wrap items-end gap-4 text-sm">
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" checked={config.lateRegistration.enabled}
+              onChange={e => setConfig({
+                ...config,
+                lateRegistration: e.target.checked
+                  ? { enabled: true, endLevel: Math.min(Math.max(config.lateRegistration.endLevel, 1), lastLevel), endTime: config.lateRegistration.endTime > 0 ? config.lateRegistration.endTime : 60 }
+                  : { ...config.lateRegistration, enabled: false },
+                ...(e.target.checked ? {} : { reentry: config.reentry ? { ...config.reentry, enabled: false } : undefined }),
+              })} />
+            Late registration
+          </label>
+          {config.lateRegistration.enabled && (
+            <>
+              <label className="block">
+                Until the end of level
+                <select className={inputClass} value={config.lateRegistration.endLevel}
+                  onChange={e => setConfig({ ...config, lateRegistration: { ...config.lateRegistration, endLevel: Number(e.target.value) } })}>
+                  {config.blindLevels.map(l => <option key={l.level} value={l.level}>{l.level}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                And at most (minutes)
+                <input type="number" min={1} className={inputClass} value={config.lateRegistration.endTime}
+                  onChange={e => setConfig({ ...config, lateRegistration: { ...config.lateRegistration, endTime: Number(e.target.value) } })} />
+              </label>
+            </>
+          )}
         </div>
       </section>
 
@@ -228,6 +299,30 @@ export default function TournamentSetupForm({
 
       <section>
         <h2 className="text-lg font-semibold mb-2">Payouts</h2>
+        <div role="radiogroup" aria-label="How places are paid" className="flex flex-wrap gap-4 text-sm mb-2">
+          <label className="inline-flex items-center gap-2">
+            <input type="radio" name="payout-mode" checked={!config.payoutScaling}
+              onChange={() => setConfig({ ...config, payoutScaling: undefined })} />
+            Fixed places
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input type="radio" name="payout-mode" checked={!!config.payoutScaling}
+              onChange={() => setConfig({ ...config, payoutScaling: { paidPercent: 15 } })} />
+            A share of the field
+          </label>
+        </div>
+        {config.payoutScaling ? (
+          <div className="text-sm space-y-1">
+            <label className="inline-flex items-center gap-2">
+              Pay the top
+              <input type="number" min={1} max={100} className={`${inputClass} w-20`} aria-label="Share of entries paid (%)"
+                value={config.payoutScaling.paidPercent}
+                onChange={e => setConfig({ ...config, payoutScaling: { paidPercent: Number(e.target.value) } })} />
+              % of entries
+            </label>
+            <p className="text-xs text-gray-600 dark:text-gray-400">{scalingExamples(config.payoutScaling.paidPercent)}</p>
+          </div>
+        ) : (<>
         <div className="space-y-1 max-w-xs">
           {config.payoutStructure.map(p => (
             <label key={p.place} className="flex items-center gap-2 text-sm">
@@ -246,6 +341,7 @@ export default function TournamentSetupForm({
             Total {payoutTotal}%
           </span>
         </div>
+        </>)}
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -335,6 +431,25 @@ export default function TournamentSetupForm({
                   onChange={e => setConfig({ ...config, addOn: { ...config.addOn!, stack: Number(e.target.value) } })} />
               </label>
             </div>
+          )}
+        </fieldset>
+      </section>
+
+      <section>
+        <fieldset className="space-y-2">
+          <legend className="text-lg font-semibold mb-1">Re-entry</legend>
+          <label className={`inline-flex items-center gap-2 text-sm ${config.lateRegistration.enabled ? '' : 'opacity-50'}`}>
+            <input type="checkbox" checked={!!config.reentry?.enabled} disabled={!config.lateRegistration.enabled && !config.reentry?.enabled}
+              onChange={e => setConfig({ ...config, reentry: { ...config.reentry, enabled: e.target.checked } })} />
+            Let busted players buy a new entry while late registration is open
+          </label>
+          {!config.lateRegistration.enabled && <p className="text-xs text-gray-600 dark:text-gray-400">Turn on late registration to allow re-entry.</p>}
+          {config.reentry?.enabled && (
+            <label className="block text-sm max-w-xs">
+              Up to (per player)
+              <input type="number" min={0} className={inputClass} value={config.reentry.maxPerPlayer ?? ''} placeholder="No limit"
+                onChange={e => setConfig({ ...config, reentry: { ...config.reentry!, maxPerPlayer: optionalNumber(e.target.value) } })} />
+            </label>
           )}
         </fieldset>
       </section>

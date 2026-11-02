@@ -191,9 +191,9 @@ export default function ManageTournamentPage() {
         </section>
       )}
 
-      {inPlay && (view.costs.rebuy !== null || view.costs.addOn !== null) && (
+      {inPlay && (view.costs.rebuy !== null || view.costs.addOn !== null || view.costs.reentry !== null) && (
         <section aria-label="Desk" className={`${card} space-y-2`}>
-          <h2 className="text-lg font-semibold">Rebuys and add-ons at the desk</h2>
+          <h2 className="text-lg font-semibold">Rebuys, re-entries and add-ons at the desk</h2>
           <div className="flex flex-wrap items-end gap-3">
             <label className="text-sm">
               Player
@@ -206,6 +206,12 @@ export default function ManageTournamentPage() {
               <button className={`${btn} bg-blue-600`} disabled={busy || !deskPlayer}
                 onClick={() => run('rebuy', { forPlayer: deskPlayer }, `Rebuy recorded for ${nameOf(deskPlayer)}`)}>
                 Rebuy ({formatMoney(view.costs.rebuy)})
+              </button>
+            )}
+            {view.costs.reentry !== null && (
+              <button className={`${btn} bg-green-600`} disabled={busy || !deskPlayer}
+                onClick={() => run('reenter', { forPlayer: deskPlayer }, `Re-entry recorded for ${nameOf(deskPlayer)}`)}>
+                Re-entry ({formatMoney(view.costs.reentry)})
               </button>
             )}
             {view.costs.addOn !== null && (

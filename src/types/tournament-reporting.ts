@@ -1,4 +1,4 @@
-export type RegistrationEventType = 'register' | 'rebuy' | 'addOn';
+export type RegistrationEventType = 'register' | 'rebuy' | 'addOn' | 'reentry';
 
 export interface TimelineEntry {
   at: number; // epoch ms

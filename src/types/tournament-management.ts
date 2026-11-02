@@ -42,7 +42,7 @@ export interface TournamentState {
   pausedFrom?: 'running' | 'on-break' | null; // what resuming returns to
   currentBreakAfterLevel?: number | null; // which level's break we are currently on
   // Reporting fields
-  registrationTimeline?: { at: number; type: 'register' | 'rebuy' | 'addOn'; userId?: string }[];
+  registrationTimeline?: { at: number; type: 'register' | 'rebuy' | 'addOn' | 'reentry'; userId?: string }[];
   eliminationRecords?: {
     userId: string;
     at: number;

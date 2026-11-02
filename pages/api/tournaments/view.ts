@@ -6,6 +6,7 @@ import { loadPlayerNames } from '../../../src/lib/tournament/pg-tournament-store
 import { buildTournamentView } from '../../../src/lib/tournament/tournament-view';
 import { getRequestAccess, hasPermission, sendPermissionDenied } from '../../../src/lib/auth/access-control';
 import { canManageTournament } from '../../../src/lib/tournament/require-organizer';
+import { syncTournamentRooms } from '../../../src/lib/tournament/table-rooms';
 
 /** What players see during a tournament: clock, blinds, prize pool and payouts, average stack, bounties and their own seat. */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -17,8 +18,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { tournamentId } = (req.query || {}) as any;
     if (!tournamentId) return res.status(400).json({ error: 'Missing tournamentId' });
-    const t = await tournamentManager.get(String(tournamentId));
+    // A tournament with a start time starts (or is called off) when it's due
+    const { tournament: t, started } = await tournamentManager.startIfDue(String(tournamentId));
     if (!t) return res.status(404).json({ error: 'Tournament not found' });
+    if (started) await syncTournamentRooms(t.id);
     const names = await loadPlayerNames(t.registeredPlayers).catch(() => ({}));
     return res.status(200).json(buildTournamentView(t, Date.now(), access.userId, names, { canManage: canManageTournament(access, t) }));
   } catch (err) {

@@ -60,6 +60,13 @@ export async function publishTableEvent(tableId: string, payload: { type: string
   await supa.channel(`table:${tableId}`).send({ type: 'broadcast', event: 'table_event', payload });
 }
 
+/** A tournament changed: pages showing it reload, and players get notified of events that concern them. */
+export async function publishTournamentUpdate(tournamentId: string, payload: { status: string; events: unknown[] }) {
+  const supa = getSupabaseServer();
+  if (!supa) return;
+  await supa.channel(`tournament:${tournamentId}`).send({ type: 'broadcast', event: 'tournament_update', payload });
+}
+
 export async function publishRebuyResult(tableId: string, payload: any) {
   const supa = getSupabaseServer();
   if (!supa) return;

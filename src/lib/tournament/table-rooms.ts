@@ -142,6 +142,9 @@ export async function prepareTournamentHand(roomId: string, engine: PokerEngine,
       if (pending > 0) delivered[p.id] = pending;
       wake.add(dest.roomId);
     }
+    await publishTableEvent(roomId, {
+      type: 'tournament_moved', playerId: p.id, roomId: dest.roomId, table: dest.number, seat: dest.seats.indexOf(p.id) + 1,
+    }).catch(() => {});
   }
   // Players assigned here who aren't at any table yet (a late entry, a rebuy back in) sit down
   for (const userId of wanted) {

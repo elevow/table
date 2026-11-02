@@ -13,15 +13,21 @@ import type {
 import type { TournamentConfig } from '../../types/tournament';
 
 export class TournamentManager {
+  /**
+   * `onChange` hears about every saved change, with the tournament before and after it (used to
+   * push live updates). It must not throw; it isn't awaited.
+   */
   constructor(
     private store: TournamentStore,
     private random: Random = Math.random,
-    private now: () => number = Date.now
+    private now: () => number = Date.now,
+    private onChange?: (before: TournamentState, after: TournamentState) => void
   ) {}
 
   async create(input: CreateTournamentInput): Promise<TournamentState> {
     const res = validateTournamentConfig(input.config);
     if (!res.valid) throw new Error(`Invalid tournament config: ${res.errors.join(', ')}`);
+    if (input.config.startsAt !== undefined && input.config.startsAt < this.now() - 60_000) throw new Error('The start time has already passed');
     const id = uuidv4();
     const now = this.now();
     const state: TournamentState = {
@@ -156,10 +162,33 @@ export class TournamentManager {
     return this.change(id, (t, now) => {
       if (t.status !== 'setup') throw new Error(t.status === 'paused' ? 'Tournament is paused; resume it instead' : 'Tournament has already started');
       if (t.registeredPlayers.length < 2) throw new Error('At least 2 players are needed to start');
-      startClock(t, now);
-      t.tables = drawSeats(t.registeredPlayers, seatsPerTable(t), this.random);
-      for (const userId of t.registeredPlayers) addPendingChips(t, userId, t.config.startingStack);
+      this.begin(t, now);
     });
+  }
+
+  /**
+   * A tournament with a start time starts by itself once it's due, or is cancelled if too few
+   * players registered. Nothing runs in the background, so pages that show tournaments call this.
+   * Returns the tournament, and whether this call started it.
+   */
+  async startIfDue(id: string): Promise<{ tournament: TournamentState | null; started: boolean }> {
+    const current = await this.get(id);
+    const at = current?.config.startsAt;
+    if (!current || current.status !== 'setup' || at === undefined || this.now() < at) return { tournament: current, started: false };
+    let started = false;
+    const tournament = await this.change(id, (t, now) => {
+      if (t.status !== 'setup') return;
+      const needed = Math.max(2, t.config.minPlayers ?? 2);
+      if (t.registeredPlayers.length >= needed) {
+        this.begin(t, now);
+        started = true;
+      } else {
+        t.status = 'cancelled';
+        t.cancelledAt = now;
+        t.cancelReason = `Not enough players: ${t.registeredPlayers.length} registered, ${needed} needed`;
+      }
+    });
+    return { tournament, started };
   }
 
   pause(id: string): Promise<TournamentState> {
@@ -208,14 +237,7 @@ export class TournamentManager {
       postBounty(t, input.userId);
       addPendingChips(t, input.userId, t.config.rebuys?.stack ?? 0);
       // A busted player buys back in: back in the field, with their elimination undone and a new seat
-      if (t.eliminatedPlayers.includes(input.userId)) {
-        t.eliminatedPlayers = t.eliminatedPlayers.filter(p => p !== input.userId);
-        const records = t.eliminationRecords || [];
-        const last = records.map(r => r.userId).lastIndexOf(input.userId);
-        if (last >= 0) t.eliminationRecords = records.filter((_, i) => i !== last);
-        seatLatePlayer(t.tables, input.userId, seatsPerTable(t), this.random);
-        this.balance(t);
-      }
+      if (t.eliminatedPlayers.includes(input.userId)) this.returnToField(t, input.userId);
     });
   }
 
@@ -254,6 +276,21 @@ export class TournamentManager {
           : undefined;
         this.knockOut(t, now, bust.userId, by, false, true);
       }
+    });
+  }
+
+  /**
+   * A busted player buys a new entry while late registration is open: the buy-in goes to the
+   * prize pool, they count as another entry, and they're dealt back in with a starting stack.
+   */
+  reenter(input: { tournamentId: string; userId: string }): Promise<TournamentState> {
+    return this.change(input.tournamentId, (t, now) => {
+      const refused = whyNoReentry(t, input.userId, now);
+      if (refused) throw new Error(refused);
+      (t.registrationTimeline = t.registrationTimeline || []).push({ at: now, type: 'reentry', userId: input.userId });
+      postBounty(t, input.userId);
+      addPendingChips(t, input.userId, t.config.startingStack);
+      this.returnToField(t, input.userId);
     });
   }
 
@@ -337,13 +374,15 @@ export class TournamentManager {
     apply: (t: TournamentState, now: number) => void,
     options: { undoable?: boolean } = {}
   ): Promise<TournamentState> {
-    return this.store.update(id, t => {
+    let previous: TournamentState | null = null;
+    const saved = this.store.update(id, t => {
       const now = this.now();
       catchUpClock(t, now);
       // The rebuy period may have just closed with one player left
       finishIfDecided(t);
       const { lastElimination: _previous, ...current } = t;
       const before: TournamentState = JSON.parse(JSON.stringify(current));
+      previous = before;
       apply(t, now);
       if (options.undoable && t.eliminatedPlayers.length > before.eliminatedPlayers.length) {
         t.lastElimination = { before };
@@ -352,6 +391,29 @@ export class TournamentManager {
       }
       t.updatedAt = now;
     });
+    return saved.then(after => {
+      if (previous && this.onChange) {
+        try { this.onChange(previous, after); } catch (err) { console.warn('[tournament] Change listener failed:', err); }
+      }
+      return after;
+    });
+  }
+
+  /** Start play: the first level's clock, the seat draw and everyone's starting stack. */
+  private begin(t: TournamentState, now: number): void {
+    startClock(t, now);
+    t.tables = drawSeats(t.registeredPlayers, seatsPerTable(t), this.random);
+    for (const userId of t.registeredPlayers) addPendingChips(t, userId, t.config.startingStack);
+  }
+
+  /** A busted player comes back (rebuy or re-entry): their elimination is undone and they get a new seat. */
+  private returnToField(t: TournamentState, userId: string): void {
+    t.eliminatedPlayers = t.eliminatedPlayers.filter(p => p !== userId);
+    const records = t.eliminationRecords || [];
+    const last = records.map(r => r.userId).lastIndexOf(userId);
+    if (last >= 0) t.eliminationRecords = records.filter((_, i) => i !== last);
+    seatLatePlayer(t.tables, userId, seatsPerTable(t), this.random);
+    this.balance(t);
   }
 
   /** Balance and break tables after the field changed, logging who moved where. */
@@ -397,6 +459,18 @@ export function whyNoRebuy(t: TournamentState, userId: string): string | null {
   // 0 or unset means unlimited
   const prior = (t.registrationTimeline || []).filter(e => e.type === 'rebuy' && e.userId === userId).length;
   if (cfg.maxPerPlayer && prior >= cfg.maxPerPlayer) return 'Rebuy limit reached';
+  return null;
+}
+
+/** Why a player can't re-enter right now, or null when they can: busted, while late registration is open, within the limit. */
+export function whyNoReentry(t: TournamentState, userId: string, now: number): string | null {
+  const cfg = t.config.reentry;
+  if (!cfg?.enabled) return 'Re-entry is not allowed in this tournament';
+  if (!t.registeredPlayers.includes(userId)) return 'Player not registered';
+  if (!t.eliminatedPlayers.includes(userId)) return 'Only a player who has busted can re-enter';
+  if (!registrationOpen(t, now)) return 'Re-entry has closed with late registration';
+  const prior = (t.registrationTimeline || []).filter(e => e.type === 'reentry' && e.userId === userId).length;
+  if (cfg.maxPerPlayer && prior >= cfg.maxPerPlayer) return 'Re-entry limit reached';
   return null;
 }
 

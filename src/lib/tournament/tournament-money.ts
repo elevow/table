@@ -1,4 +1,4 @@
-import { buildPayouts } from './tournament-utils';
+import { buildPayouts, scaledPayoutStructure } from './tournament-utils';
 import type { TournamentConfig } from '../../types/tournament';
 import type { TournamentState } from '../../types/tournament-management';
 
@@ -11,7 +11,7 @@ import type { TournamentState } from '../../types/tournament-management';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-function countOf(t: TournamentState, type: 'rebuy' | 'addOn'): number {
+function countOf(t: TournamentState, type: 'rebuy' | 'addOn' | 'reentry'): number {
   return (t.registrationTimeline || []).filter(e => e.type === type).length;
 }
 
@@ -20,10 +20,15 @@ function poolShare(extra: { cost: number; feePercent?: number } | undefined): nu
   return extra ? extra.cost * (1 - (extra.feePercent ?? 0) / 100) : 0;
 }
 
+/** Entries: every registration plus every re-entry. Payouts and the paid places go by this. */
+export function entryCount(t: TournamentState): number {
+  return t.registeredPlayers.length + countOf(t, 'reentry');
+}
+
 export function prizePool(t: TournamentState): number {
   const { config } = t;
   return round2(
-    t.registeredPlayers.length * (config.buyIn ?? 0) +
+    entryCount(t) * (config.buyIn ?? 0) +
       countOf(t, 'rebuy') * poolShare(config.rebuys) +
       countOf(t, 'addOn') * poolShare(config.addOn)
   );
@@ -33,7 +38,7 @@ export function prizePool(t: TournamentState): number {
 export function chipsInPlay(t: TournamentState): number {
   const { config } = t;
   return (
-    t.registeredPlayers.length * config.startingStack +
+    entryCount(t) * config.startingStack +
     countOf(t, 'rebuy') * (config.rebuys?.stack ?? 0) +
     countOf(t, 'addOn') * (config.addOn?.stack ?? 0)
   );
@@ -45,7 +50,10 @@ export function remainingPlayers(t: TournamentState): string[] {
 
 /** Prize for each paid place. With fewer entrants than paid places, the places that can't be reached share out their percentage. */
 export function payoutTable(t: TournamentState): { place: number; percentage: number; amount: number }[] {
-  const reachable = t.config.payoutStructure.filter(p => p.place <= Math.max(1, t.registeredPlayers.length));
+  const structure = t.config.payoutScaling
+    ? scaledPayoutStructure(entryCount(t), t.config.payoutScaling.paidPercent)
+    : t.config.payoutStructure;
+  const reachable = structure.filter(p => p.place <= Math.max(1, entryCount(t)));
   if (reachable.length === 0) return [];
   const amounts = buildPayouts(prizePool(t), reachable);
   return amounts.map(a => ({ ...a, percentage: reachable.find(p => p.place === a.place)!.percentage }));
@@ -106,6 +114,7 @@ export function amountsPaid(t: TournamentState): Record<string, number> {
   for (const userId of t.registeredPlayers) add(userId, (config.buyIn ?? 0) + (config.entryFee ?? 0) + bounty);
   for (const e of t.registrationTimeline || []) {
     if (e.type === 'rebuy') add(e.userId, (config.rebuys?.cost ?? 0) + bounty);
+    if (e.type === 'reentry') add(e.userId, (config.buyIn ?? 0) + (config.entryFee ?? 0) + bounty);
     if (e.type === 'addOn') add(e.userId, config.addOn?.cost ?? 0);
   }
   return paid;
@@ -121,8 +130,8 @@ export function collectWinnerBounty(t: TournamentState, winner: string): void {
   if (own > 0) winnings[winner] = round2((winnings[winner] ?? 0) + own);
 }
 
-/** All bounty money put up so far: one bounty per entry and per rebuy. */
+/** All bounty money put up so far: one bounty per entry, re-entry and rebuy. */
 export function bountyPool(t: TournamentState): number {
   if (!bountyEnabled(t.config)) return 0;
-  return round2((t.registeredPlayers.length + countOf(t, 'rebuy')) * t.config.bounty!.amount);
+  return round2((entryCount(t) + countOf(t, 'rebuy')) * t.config.bounty!.amount);
 }

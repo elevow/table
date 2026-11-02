@@ -20,6 +20,7 @@ import undoHandler from '../../../pages/api/tournaments/undo-elimination';
 import removePlayerHandler from '../../../pages/api/tournaments/remove-player';
 import editHandler from '../../../pages/api/tournaments/edit';
 import cancelHandler from '../../../pages/api/tournaments/cancel';
+import reenterHandler from '../../../pages/api/tournaments/reenter';
 
 import { createDefaultFreezeoutConfig } from '../../../src/lib/tournament/tournament-utils';
 
@@ -352,6 +353,47 @@ describe('Tournaments API routes (US-058)', () => {
         expect((await call(handler, body)).status).toBe(403);
       }
     });
+  });
+
+  test('a busted player re-enters, or the director records it at the desk', async () => {
+    const created = createRes();
+    const config = { ...createDefaultFreezeoutConfig(), buyIn: 10, reentry: { enabled: true } };
+    await createHandler(createReq('POST', { name: 'Re-entry', config }) as any, created as any);
+    const { id } = created.json.mock.calls[0][0];
+    for (const userId of ['r1', 'r2', 'r3']) await registerHandler(createReq('POST', { tournamentId: id, userId }) as any, createRes() as any);
+    await startHandler(createReq('POST', { tournamentId: id }) as any, createRes() as any);
+    await eliminateHandler(createReq('POST', { tournamentId: id, userId: 'r3' }) as any, createRes() as any);
+
+    mockSyncRooms.mockClear();
+    const res = createRes();
+    await reenterHandler(createReq('POST', { tournamentId: id, userId: 'r3' }) as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockRequirePlayer).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 'r3', 'tournament.register');
+    expect(mockSyncRooms).toHaveBeenCalledWith(id);
+
+    const desk = createRes();
+    await reenterHandler(createReq('POST', { tournamentId: id, forPlayer: 'r3' }) as any, desk as any);
+    expect(desk.status).toHaveBeenCalledWith(400); // r3 is back in, so there's nothing to re-enter
+  });
+
+  test('viewing a tournament whose start time has come starts it and opens its tables', async () => {
+    const created = createRes();
+    const config = { ...createDefaultFreezeoutConfig(), startsAt: Date.now() + 200 };
+    await createHandler(createReq('POST', { name: 'Scheduled', config }) as any, created as any);
+    const { id } = created.json.mock.calls[0][0];
+    for (const userId of ['s1', 's2']) await registerHandler(createReq('POST', { tournamentId: id, userId }) as any, createRes() as any);
+    await new Promise(resolve => setTimeout(resolve, 250));
+
+    mockSyncRooms.mockClear();
+    const res = createRes();
+    await viewHandler(createReq('GET', undefined, { tournamentId: id }) as any, res as any);
+    expect(res.json.mock.calls[0][0].status).toBe('running');
+    expect(mockSyncRooms).toHaveBeenCalledWith(id);
+
+    // Already running: nothing more to start
+    mockSyncRooms.mockClear();
+    await viewHandler(createReq('GET', undefined, { tournamentId: id }) as any, createRes() as any);
+    expect(mockSyncRooms).not.toHaveBeenCalled();
   });
 
   test('players can unregister before the start', async () => {

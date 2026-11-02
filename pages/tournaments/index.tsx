@@ -15,7 +15,11 @@ const TABS: { key: Filter; label: string }[] = [
 ];
 
 const statusText = (t: TournamentSummary) => {
-  if (t.status === 'setup') return 'Registering';
+  if (t.status === 'setup') {
+    return t.startsAt
+      ? `Starts ${new Date(t.startsAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`
+      : 'Registering';
+  }
   if (t.status === 'completed') return 'Finished';
   if (t.status === 'cancelled') return 'Cancelled';
   const state = t.status === 'paused' ? 'paused' : t.status === 'on-break' ? 'on break' : '';
@@ -105,6 +109,9 @@ export default function TournamentLobbyPage() {
                 <tr key={t.id} className="border-t border-gray-200 dark:border-gray-700">
                   <td className="py-2 pr-3">
                     <Link href={`/tournaments/${t.id}`} className="font-medium text-blue-600 dark:text-blue-400 hover:underline">{t.name}</Link>
+                    {t.reentry && (
+                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200">Re-entry</span>
+                    )}
                     {t.bounty && (
                       <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200">
                         {t.bounty === 'progressive' ? 'PKO' : 'Knockout'}

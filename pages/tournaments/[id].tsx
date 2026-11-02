@@ -3,7 +3,9 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { authHeaders } from '../../src/utils/auth-headers';
-import { formatMoney, ordinal } from '../../src/lib/tournament/format';
+import { formatClock, formatMoney, ordinal } from '../../src/lib/tournament/format';
+import { noticesFor } from '../../src/lib/tournament/tournament-notices';
+import type { TournamentEvent } from '../../src/lib/tournament/tournament-events';
 import { postTournamentAction } from '../../src/lib/tournament/client';
 import { useTournamentView } from '../../src/lib/tournament/use-tournament-view';
 import TournamentClock from '../../src/components/tournament/TournamentClock';
@@ -18,13 +20,32 @@ const card = 'rounded-lg bg-gray-50 dark:bg-gray-800 p-4';
 export default function TournamentPage() {
   const router = useRouter();
   const id = typeof router.query.id === 'string' ? router.query.id : null;
-  const { view, error, reload, levelLeft, breakLeft } = useTournamentView(id);
+  const [notices, setNotices] = useState<string[]>([]);
+  const viewRef = React.useRef<TournamentView | null>(null);
+  const onEvents = (events: TournamentEvent[]) => {
+    const you = viewRef.current?.you ?? null;
+    const fresh = noticesFor(events, you?.userId ?? null, !!you && !you.eliminated);
+    if (fresh.length === 0) return;
+    setNotices(current => [...fresh.reverse(), ...current].slice(0, 4));
+    // A system notification too, if the player turned them on
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        for (const text of fresh) new Notification(viewRef.current?.name || 'Tournament', { body: text });
+      }
+    } catch { /* notifications unavailable */ }
+  };
+  const { view, error, reload, levelLeft, breakLeft } = useTournamentView(id, onEvents);
+  viewRef.current = view;
+  const [notifyState, setNotifyState] = useState<'unavailable' | 'default' | 'granted' | 'denied'>('unavailable');
+  useEffect(() => {
+    if (typeof Notification !== 'undefined') setNotifyState(Notification.permission as 'default' | 'granted' | 'denied');
+  }, []);
   const [signedIn, setSignedIn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   useEffect(() => setSignedIn(!!authHeaders().Authorization), []);
 
-  const act = async (action: 'register' | 'unregister' | 'rebuy' | 'add-on') => {
+  const act = async (action: 'register' | 'unregister' | 'rebuy' | 'add-on' | 'reenter') => {
     if (!id) return;
     setBusy(true);
     setActionError(null);
@@ -67,7 +88,32 @@ export default function TournamentPage() {
         <TournamentClock view={view} levelLeft={levelLeft} breakLeft={breakLeft} />
       )}
 
+      {view.status === 'setup' && view.startsAt && (
+        <p className="text-center text-sm">
+          Starts at {new Date(view.startsAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+          {view.startsAt > Date.now() ? ` (in ${formatClock(view.startsAt - Date.now())})` : ''}
+          {view.minPlayers ? `. Needs ${view.minPlayers} players; ${view.players.entrants} registered.` : '.'}
+        </p>
+      )}
+
+      {notices.length > 0 && (
+        <section aria-label="Notices" className="space-y-1">
+          {notices.map((text, i) => (
+            <div key={`${i}-${text}`} role="status" className="flex items-center justify-between rounded bg-blue-50 dark:bg-blue-900/30 px-3 py-2 text-sm">
+              <span>{text}</span>
+              <button className="text-xs text-gray-600 dark:text-gray-400 hover:underline" onClick={() => setNotices(n => n.filter((_, j) => j !== i))}>Dismiss</button>
+            </div>
+          ))}
+        </section>
+      )}
+
       <Actions view={view} signedIn={signedIn} busy={busy} onAct={act} />
+      {view.you && notifyState === 'default' && (
+        <button className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+          onClick={() => Notification.requestPermission().then(p => setNotifyState(p as 'default' | 'granted' | 'denied')).catch(() => {})}>
+          Notify me when I&apos;m moved, in the money or out
+        </button>
+      )}
       {actionError && <p role="alert" className="text-sm text-red-600">{actionError}</p>}
 
       <section aria-label="Summary" className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
@@ -201,7 +247,7 @@ function Actions({ view, signedIn, busy, onAct }: {
   view: TournamentView;
   signedIn: boolean;
   busy: boolean;
-  onAct: (action: 'register' | 'unregister' | 'rebuy' | 'add-on') => void;
+  onAct: (action: 'register' | 'unregister' | 'rebuy' | 'add-on' | 'reenter') => void;
 }) {
   const btn = 'px-4 py-2 rounded text-white disabled:opacity-50';
   const cost = (n: number | null) => (n ? ` (${formatMoney(n)})` : '');
@@ -223,6 +269,11 @@ function Actions({ view, signedIn, busy, onAct }: {
       <button key="rebuy" className={`${btn} bg-blue-600`} disabled={busy} onClick={() => onAct('rebuy')}>
         {view.you.eliminated ? 'Rebuy and return' : 'Rebuy'}{cost(view.costs.rebuy)}
       </button>
+    );
+  }
+  if (view.you?.canReenter) {
+    items.push(
+      <button key="reenter" className={`${btn} bg-green-600`} disabled={busy} onClick={() => onAct('reenter')}>Re-enter{cost(view.costs.reentry)}</button>
     );
   }
   if (view.you?.canAddOn) {

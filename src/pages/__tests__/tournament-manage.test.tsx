@@ -3,6 +3,8 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import '@testing-library/jest-dom';
 
 jest.mock('next/router', () => ({ useRouter: () => ({ query: { id: 't-1' }, push: jest.fn() }) }));
+// No live updates in these tests
+jest.mock('../../../src/lib/realtime/supabaseClient', () => ({ getSupabaseBrowser: () => null }));
 
 import ManageTournamentPage from '../../../pages/tournaments/[id]/manage';
 import type { TournamentView } from '../../../src/lib/tournament/tournament-view';
@@ -17,9 +19,11 @@ const view = (overrides: Partial<TournamentView> = {}): TournamentView => ({
   levelRemainingMs: 300_000,
   onBreak: false,
   breakRemainingMs: null,
-  players: { entrants: 4, remaining: 3, paidPlaces: 3 },
+  players: { entrants: 4, entries: 4, remaining: 3, paidPlaces: 3 },
   registration: { open: false, full: false, maxPlayers: null },
-  costs: { entry: 13, rebuy: 12, addOn: null },
+  costs: { entry: 13, rebuy: 12, addOn: null, reentry: null },
+  startsAt: null,
+  minPlayers: null,
   chipCounts: [],
   tables: [{ number: 1, roomId: 'room-1', players: [
     { seat: 2, userId: 'a', name: 'Alice' },

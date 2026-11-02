@@ -33,7 +33,11 @@ export interface TournamentConfig {
   bounty?: { amount: number; type: 'standard' | 'progressive' };
   seatsPerTable?: number; // seats at each table, 2-9 (a game room's size); defaults to 9
   maxPlayers?: number; // registration closes at this many players; unset means no cap
+  startsAt?: number; // epoch ms the tournament starts by itself; unset means the director starts it
+  minPlayers?: number; // with startsAt: fewer registered by then and the tournament is cancelled (at least 2)
   payoutStructure: PayoutTier[];
+  // Pay a share of the field instead of payoutStructure's fixed places, e.g. { paidPercent: 15 }
+  payoutScaling?: { paidPercent: number };
   breaks: BreakSchedule[];
   lateRegistration: {
     enabled: boolean;
@@ -48,6 +52,11 @@ export interface TournamentConfig {
     cost: number; // what a rebuy costs (currency units); goes to the prize pool less feePercent
     stack: number; // chips granted per rebuy
     feePercent?: number; // share of the cost kept by the house
+  };
+  // Re-entry: a busted player buys a new entry (buy-in, fee and bounty) while late registration is open
+  reentry?: {
+    enabled: boolean;
+    maxPerPlayer?: number; // 0/undefined = unlimited
   };
   addOn?: {
     enabled: boolean;

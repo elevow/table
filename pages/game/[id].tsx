@@ -461,6 +461,11 @@ export default function GamePage() {
         if (payload?.type === 'seat_request_resolved' && payload.playerId === playerId) {
           setSeatNotice(payload.approved ? 'The host approved your seat.' : 'The host declined your seat request.');
         }
+        // The tournament moved this player to another table: take them there
+        if (payload?.type === 'tournament_moved' && payload.playerId === playerId && payload.roomId) {
+          setSeatNotice(`You've been moved to table ${payload.table}, seat ${payload.seat}. Taking you there…`);
+          setTimeout(() => router.push(`/game/${payload.roomId}`), 3000);
+        }
       },
       onRebuyResult: (payload: any) => {
         console.log('📡 Supabase rebuy_result:', payload);

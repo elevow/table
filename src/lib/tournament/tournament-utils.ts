@@ -13,6 +13,20 @@ export function validateTournamentConfig(cfg: TournamentConfig): ValidationResul
     errors.push('Max players must be a whole number of at least 2');
   }
 
+  if (cfg.startsAt !== undefined && !(typeof cfg.startsAt === 'number' && Number.isFinite(cfg.startsAt))) {
+    errors.push('Start time is not a valid time');
+  }
+  if (cfg.minPlayers !== undefined) {
+    if (!(Number.isInteger(cfg.minPlayers) && cfg.minPlayers >= 2)) errors.push('Minimum players must be a whole number of at least 2');
+    else if (cfg.maxPlayers && cfg.minPlayers > cfg.maxPlayers) errors.push('Minimum players cannot be more than the maximum');
+  }
+  if (cfg.payoutScaling && !(typeof cfg.payoutScaling.paidPercent === 'number' && cfg.payoutScaling.paidPercent >= 1 && cfg.payoutScaling.paidPercent <= 100)) {
+    errors.push('The share of the field paid must be from 1 to 100 percent');
+  }
+  if (cfg.reentry?.enabled && !cfg.lateRegistration?.enabled) {
+    errors.push('Re-entry needs late registration, which sets how long it lasts');
+  }
+
   // Money
   const isMoney = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n >= 0;
   if (cfg.buyIn !== undefined && !isMoney(cfg.buyIn)) errors.push('Buy-in cannot be negative');
@@ -214,3 +228,18 @@ export const tournamentPresets: Record<string, { name: string; description: stri
     freezeout_hyper: { name: 'Freezeout (Hyper)', description: '5-min levels, 10K stack, very fast', build: createHyperFreezeoutConfig },
     rebuy_addon: { name: 'Rebuy + Add-on', description: 'Rebuys until L4, add-on at first break', build: createRebuyAddOnConfig },
   };
+
+/**
+ * Payout percentages for a field: the top `paidPercent` of entries are paid (at least one place),
+ * on a curve where each place pays more than the one below it, 1st the most. Percentages are
+ * rounded to hundredths and add up to exactly 100.
+ */
+export function scaledPayoutStructure(entries: number, paidPercent: number): PayoutTier[] {
+  const places = Math.max(1, Math.min(Math.max(entries, 1), Math.round((entries * paidPercent) / 100)));
+  const weights = Array.from({ length: places }, (_, i) => (places - i) ** 1.5);
+  const total = weights.reduce((a, b) => a + b, 0);
+  const tiers = weights.map((w, i) => ({ place: i + 1, percentage: Math.round((w / total) * 10000) / 100 }));
+  const residual = Math.round((100 - tiers.reduce((sum, t) => sum + t.percentage, 0)) * 100) / 100;
+  tiers[0].percentage = Math.round((tiers[0].percentage + residual) * 100) / 100;
+  return tiers;
+}

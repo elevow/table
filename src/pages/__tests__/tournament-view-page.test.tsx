@@ -3,6 +3,20 @@ import { render, screen, act, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 jest.mock('next/router', () => ({ useRouter: () => ({ query: { id: 't-1' }, push: jest.fn() }) }));
+// Live updates: the test pushes messages through the captured handler
+let mockRealtimeHandler: ((message: { payload: unknown }) => void) | null = null;
+jest.mock('../../../src/lib/realtime/supabaseClient', () => ({
+  getSupabaseBrowser: () => ({
+    channel: () => {
+      const channel: any = {
+        on: (_type: string, _filter: unknown, handler: (message: { payload: unknown }) => void) => { mockRealtimeHandler = handler; return channel; },
+        subscribe: () => channel,
+        unsubscribe: () => {},
+      };
+      return channel;
+    },
+  }),
+}));
 
 import TournamentPage from '../../../pages/tournaments/[id]';
 import type { TournamentView } from '../../../src/lib/tournament/tournament-view';
@@ -19,9 +33,11 @@ const baseView = (overrides: Partial<TournamentView> = {}): TournamentView => ({
   levelRemainingMs: 5 * MIN,
   onBreak: false,
   breakRemainingMs: null,
-  players: { entrants: 20, remaining: 9, paidPlaces: 3 },
+  players: { entrants: 20, entries: 20, remaining: 9, paidPlaces: 3 },
   registration: { open: false, full: false, maxPlayers: null },
-  costs: { entry: 13, rebuy: 12, addOn: 10 },
+  costs: { entry: 13, rebuy: 12, addOn: 10, reentry: null },
+  startsAt: null,
+  minPlayers: null,
   chipCounts: [{ userId: 'a', name: 'Alice', chips: 40000 }, { userId: 'me', name: 'Me', chips: 25000 }],
   tables: [{ number: 2, roomId: 'room-2', players: [{ seat: 5, userId: 'me', name: 'Me' }, { seat: 7, userId: 'a', name: 'Alice' }] }],
   canManage: false,
@@ -48,7 +64,7 @@ const baseView = (overrides: Partial<TournamentView> = {}): TournamentView => ({
     ],
   },
   finishers: [{ place: 10, userId: 'z', name: 'Zed', prize: 0, eliminatedBy: 'a', removed: false }],
-  you: { eliminated: false, canUnregister: false, canRebuy: false, canAddOn: false, place: null, table: 2, seat: 5, bounty: 3, bountyWon: 1, paid: 13, chips: 25000, roomId: 'room-2' },
+  you: { userId: 'me', eliminated: false, canUnregister: false, canRebuy: false, canAddOn: false, canReenter: false, place: null, table: 2, seat: 5, bounty: 3, bountyWon: 1, paid: 13, chips: 25000, roomId: 'room-2' },
   ...overrides,
 });
 
@@ -131,7 +147,7 @@ describe('Tournament page', () => {
     view = baseView({
       status: 'completed',
       finishers: [{ place: 2, userId: 'me', name: 'Me', prize: 60, eliminatedBy: 'a', removed: false }],
-      you: { eliminated: true, canUnregister: false, canRebuy: false, canAddOn: false, place: 2, table: null, seat: null, bounty: null, bountyWon: 2, paid: 13, chips: 25000, roomId: 'room-2' },
+      you: { userId: 'me', eliminated: true, canUnregister: false, canRebuy: false, canAddOn: false, canReenter: false, place: 2, table: null, seat: null, bounty: null, bountyWon: 2, paid: 13, chips: 25000, roomId: 'room-2' },
     });
     await renderPage();
     expect(within(screen.getByRole('region', { name: 'You' })).getByText('Finished 2nd, won $60')).toBeInTheDocument();
@@ -159,7 +175,7 @@ describe('Tournament page', () => {
 
   test('a busted player can rebuy and return, and the director gets a link to the controls', async () => {
     view = baseView({
-      you: { eliminated: true, canUnregister: false, canRebuy: true, canAddOn: false, place: 10, table: null, seat: null, bounty: null, bountyWon: 0, paid: 13, chips: 25000, roomId: 'room-2' },
+      you: { userId: 'me', eliminated: true, canUnregister: false, canRebuy: true, canAddOn: false, canReenter: false, place: 10, table: null, seat: null, bounty: null, bountyWon: 0, paid: 13, chips: 25000, roomId: 'room-2' },
       canManage: true,
     });
     await renderPage();
@@ -195,5 +211,41 @@ describe('Tournament page', () => {
     expect(within(counts).getByText('40,000')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'You' })).getByText('Your stack: 25,000')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Go to your table' })).toHaveAttribute('href', '/game/room-2');
+  });
+
+  test('a live update reloads the view and tells the player what concerns them', async () => {
+    await renderPage();
+    const loads = (global.fetch as jest.Mock).mock.calls.length;
+    view = baseView({ players: { entrants: 20, entries: 20, remaining: 3, paidPlaces: 3 } });
+    await act(async () => {
+      mockRealtimeHandler!({ payload: { status: 'running', events: [
+        { type: 'eliminated', userId: 'someone-else', place: 4, prize: 0 },
+        { type: 'in_the_money', paidPlaces: 3 },
+        { type: 'moved', userId: 'me', table: 1, seat: 4 },
+      ] } });
+    });
+    expect((global.fetch as jest.Mock).mock.calls.length).toBeGreaterThan(loads);
+    const notices = screen.getByRole('region', { name: 'Notices' });
+    expect(within(notices).getByText("You're in the money! The last 3 players are all paid.")).toBeInTheDocument();
+    expect(within(notices).getByText("You're moving to table 1, seat 4, after this hand.")).toBeInTheDocument();
+    expect(within(notices).queryByText(/someone-else/)).not.toBeInTheDocument();
+    expect(await screen.findByText('3 / 20')).toBeInTheDocument();
+  });
+
+  test('a busted player can re-enter while it is open', async () => {
+    view = baseView({
+      costs: { entry: 13, rebuy: null, addOn: null, reentry: 13 },
+      you: { userId: 'me', eliminated: true, canUnregister: false, canRebuy: false, canAddOn: false, canReenter: true, place: 12, table: null, seat: null, bounty: null, bountyWon: 0, paid: 13, chips: null, roomId: null },
+    });
+    await renderPage();
+    await act(async () => { screen.getByRole('button', { name: 'Re-enter ($13)' }).click(); });
+    expect(posts[0]).toEqual({ url: '/api/tournaments/reenter', body: { tournamentId: 't-1' } });
+  });
+
+  test('before a scheduled start it shows when it starts and how many are needed', async () => {
+    jest.setSystemTime(new Date('2026-11-02T18:00:00Z'));
+    view = baseView({ status: 'setup', level: null, startsAt: Date.parse('2026-11-02T18:30:00Z'), minPlayers: 6, players: { entrants: 4, entries: 4, remaining: 4, paidPlaces: 3 } });
+    await renderPage();
+    expect(screen.getByText(/\(in 30:00\)\. Needs 6 players; 4 registered\./)).toBeInTheDocument();
   });
 });

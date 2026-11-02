@@ -30,6 +30,29 @@ async function started(players: string[], cfg = config()) {
 const seated = (t: { tables: { seats: (string | null)[] }[] }) => t.tables.flatMap(tb => tb.seats.filter(Boolean));
 
 describe('rebuys', () => {
+  test('the director can close rebuys, which ends a tournament down to one player', async () => {
+    // Rebuys with no last level would otherwise stay open for good
+    const { mgr, id, read } = await started(['a', 'b'], config({ availableUntilLevel: undefined }));
+    await mgr.eliminate({ tournamentId: id, userId: 'b' });
+    expect((await read()).status).toBe('running');
+    expect(rebuyPeriodOpen(await read())).toBe(true);
+
+    const t = await mgr.closeRebuys(id);
+    expect(t.status).toBe('completed');
+    expect(rebuyPeriodOpen(t)).toBe(false);
+    await expect(mgr.rebuy({ tournamentId: id, userId: 'b' })).rejects.toThrow();
+    await expect(mgr.closeRebuys(id)).rejects.toThrow('Rebuys can only be closed while the tournament is on');
+  });
+
+  test('closing rebuys with several players left just stops rebuys', async () => {
+    const { mgr, id } = await started(['a', 'b', 'c']);
+    await mgr.eliminate({ tournamentId: id, userId: 'c' });
+    const t = await mgr.closeRebuys(id);
+    expect(t.status).toBe('running');
+    await expect(mgr.rebuy({ tournamentId: id, userId: 'c' })).rejects.toThrow('Rebuy period ended');
+    await expect(mgr.closeRebuys(id)).rejects.toThrow('Rebuys are already closed');
+  });
+
   test('a busted player who rebuys is back in the field with a seat', async () => {
     const { mgr, id } = await started(['a', 'b', 'c']);
     await mgr.eliminate({ tournamentId: id, userId: 'c' });

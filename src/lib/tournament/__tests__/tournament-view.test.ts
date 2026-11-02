@@ -79,6 +79,18 @@ describe('buildTournamentView', () => {
     expect(v.levelRemainingMs).toBeNull();
   });
 
+  test('down to one player with rebuys still open, it says the tournament waits on them', async () => {
+    const cfg = { ...createDefaultFreezeoutConfig(), type: 'rebuy' as const, rebuys: { enabled: true, cost: 10, stack: 20000 } };
+    const { mgr, id, view } = await setup(cfg);
+    expect((await view()).rebuysOpen).toBe(false);
+    await mgr.start(id);
+    expect(await view()).toMatchObject({ rebuysOpen: true, waitingOnRebuys: false });
+    for (const out of ['d', 'c', 'b']) await mgr.eliminate({ tournamentId: id, userId: out });
+    expect(await view()).toMatchObject({ status: 'running', rebuysOpen: true, waitingOnRebuys: true });
+    await mgr.closeRebuys(id);
+    expect(await view()).toMatchObject({ status: 'completed', rebuysOpen: false, waitingOnRebuys: false });
+  });
+
   test('players without a known name get a placeholder, and guests have no "you"', async () => {
     const { mgr, id } = await setup();
     const t = (await mgr.get(id))!;

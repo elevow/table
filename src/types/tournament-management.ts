@@ -30,6 +30,7 @@ export interface TournamentState {
   updatedAt: number; // epoch ms
   registeredPlayers: string[];
   eliminatedPlayers: string[]; // in elimination order
+  rebuysClosedAt?: number | null; // epoch ms the director closed rebuys ahead of their last level
   tables: TournamentTable[]; // drawn at the start; empty before it
   tableMoves?: TableMove[];
   currentLevelIndex: number; // index into config.blindLevels

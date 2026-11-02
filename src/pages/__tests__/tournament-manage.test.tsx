@@ -19,6 +19,8 @@ const view = (overrides: Partial<TournamentView> = {}): TournamentView => ({
   levelRemainingMs: 300_000,
   directorControlsLevels: false,
   breakAfterLevelMinutes: null,
+  rebuysOpen: false,
+  waitingOnRebuys: false,
   onBreak: false,
   breakRemainingMs: null,
   players: { entrants: 4, entries: 4, remaining: 3, paidPlaces: 3 },
@@ -201,6 +203,14 @@ describe('Director screen', () => {
     await renderPage();
     fireEvent.click(screen.getByRole('button', { name: 'Start the 10-minute break' }));
     await waitFor(() => expect(posts).toEqual([{ url: '/api/tournaments/advance-level', body: { tournamentId: 't-1' } }]));
+  });
+
+  test('with one player left and rebuys open, the director is told to close rebuys', async () => {
+    current = view({ rebuysOpen: true, waitingOnRebuys: true });
+    await renderPage();
+    expect(screen.getByText(/One player is left/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close rebuys' }));
+    await waitFor(() => expect(posts).toEqual([{ url: '/api/tournaments/close-rebuys', body: { tournamentId: 't-1' } }]));
   });
 
   test('a break waiting on the director has an End break button', async () => {

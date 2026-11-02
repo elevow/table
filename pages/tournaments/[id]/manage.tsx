@@ -140,6 +140,20 @@ export default function ManageTournamentPage() {
         </span>
       </section>
 
+      {view.rebuysOpen && (
+        <section aria-label="Rebuys" className={`flex flex-wrap items-center gap-3 rounded p-3 text-sm ${view.waitingOnRebuys ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
+          <span>
+            {view.waitingOnRebuys
+              ? 'One player is left. The tournament ends when you close rebuys, unless someone buys back in first.'
+              : 'Rebuys are open.'}
+          </span>
+          <button className={`${btn} ${view.waitingOnRebuys ? 'bg-amber-600' : 'bg-gray-600'}`} disabled={busy}
+            onClick={() => run('close-rebuys', {}, 'Rebuys closed')}>
+            Close rebuys
+          </button>
+        </section>
+      )}
+
       {view.undo && (
         <section aria-label="Undo" className="flex flex-wrap items-center gap-3 rounded bg-amber-50 dark:bg-amber-900/20 p-3 text-sm">
           <span>{view.undo.name} was the last player out.</span>

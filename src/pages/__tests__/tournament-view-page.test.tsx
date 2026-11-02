@@ -33,6 +33,8 @@ const baseView = (overrides: Partial<TournamentView> = {}): TournamentView => ({
   levelRemainingMs: 5 * MIN,
   directorControlsLevels: false,
   breakAfterLevelMinutes: null,
+  rebuysOpen: false,
+  waitingOnRebuys: false,
   onBreak: false,
   breakRemainingMs: null,
   players: { entrants: 20, entries: 20, remaining: 9, paidPlaces: 3 },

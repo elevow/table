@@ -241,6 +241,20 @@ export class TournamentManager {
     });
   }
 
+  /**
+   * The director closes rebuys now. Without it, rebuys that last to the end of the schedule would
+   * keep a tournament that is down to one player from ever finishing.
+   */
+  closeRebuys(id: string): Promise<TournamentState> {
+    return this.change(id, (t, now) => {
+      if (!t.config.rebuys?.enabled) throw new Error('Rebuys are not enabled');
+      if (t.status !== 'running' && t.status !== 'paused' && t.status !== 'on-break') throw new Error('Rebuys can only be closed while the tournament is on');
+      if (!rebuyPeriodOpen(t)) throw new Error('Rebuys are already closed');
+      t.rebuysClosedAt = now;
+      finishIfDecided(t);
+    });
+  }
+
   addOn(input: { tournamentId: string; userId: string }): Promise<TournamentState> {
     return this.change(input.tournamentId, (t, now) => {
       const refused = whyNoAddOn(t, input.userId);
@@ -493,7 +507,7 @@ export function whyNoAddOn(t: TournamentState, userId: string): string | null {
  */
 export function rebuyPeriodOpen(t: TournamentState): boolean {
   const cfg = t.config.rebuys;
-  if (!cfg?.enabled) return false;
+  if (!cfg?.enabled || t.rebuysClosedAt) return false;
   if (cfg.availableUntilLevel === undefined || cfg.availableUntilLevel === null) return true;
   return currentLevelNumber(t) <= cfg.availableUntilLevel;
 }

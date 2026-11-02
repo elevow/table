@@ -1,6 +1,6 @@
 import { breakTimeRemainingMs, levelTimeRemainingMs } from './tournament-clock';
 import { amountsPaid, bountyEnabled, bountyPool, chipsInPlay, entryCount, forfeitedBounties, payoutTable, prizePool, remainingPlayers } from './tournament-money';
-import { registrationOpen, whyNoAddOn, whyNoRebuy, whyNoReentry } from './tournament-manager';
+import { rebuyPeriodOpen, registrationOpen, whyNoAddOn, whyNoRebuy, whyNoReentry } from './tournament-manager';
 import type { BlindLevel, TournamentConfig } from '../../types/tournament';
 import type { TournamentState, TournamentStatus } from '../../types/tournament-management';
 
@@ -40,6 +40,10 @@ export interface TournamentView {
   // For the director: the latest elimination, while it can still be undone
   undo: null | { userId: string; name: string };
   cancelled: null | { at: number; reason: string | null };
+  // Rebuys are on and still open, so a player who busts can buy back in
+  rebuysOpen: boolean;
+  // One player is left, but the tournament can't end while busted players can still rebuy
+  waitingOnRebuys: boolean;
   // For the director of a cancelled tournament: what each player paid in, and so is owed back
   refunds: { userId: string; name: string; paid: number }[];
   prizePool: number;
@@ -198,6 +202,8 @@ export function buildTournamentView(
         })()
       : null,
     cancelled: t.status === 'cancelled' ? { at: t.cancelledAt ?? t.updatedAt, reason: t.cancelReason ?? null } : null,
+    rebuysOpen: started && t.status !== 'completed' && t.status !== 'cancelled' && rebuyPeriodOpen(t),
+    waitingOnRebuys: started && t.status !== 'completed' && t.status !== 'cancelled' && remaining.length === 1 && rebuyPeriodOpen(t),
     refunds: options.canManage && t.status === 'cancelled'
       ? Object.entries(paid).filter(([, amount]) => amount > 0).map(([userId, amount]) => ({ userId, name: nameOf(userId), paid: amount }))
           .sort((a, b) => a.name.localeCompare(b.name))

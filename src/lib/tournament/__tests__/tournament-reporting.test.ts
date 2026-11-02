@@ -11,7 +11,7 @@ describe('Tournament Reporting (US-059)', () => {
     await mgr.register({ tournamentId: t.id, userId: 'p2' });
     await mgr.start(t.id);
     await mgr.eliminate({ tournamentId: t.id, userId: 'p2' });
-    const report = buildTournamentReport((await mgr.get(t.id))!, 1000);
+    const report = buildTournamentReport((await mgr.get(t.id))!);
     expect(report.registration.total).toBe(2);
     expect(report.eliminations.length).toBe(1);
     expect(report.eliminations[0]).toMatchObject({ userId: 'p2', place: 2 });
@@ -27,8 +27,10 @@ describe('Tournament Reporting (US-059)', () => {
     await mgr.start(t.id);
     // Rebuy available during early levels
     await mgr.rebuy({ tournamentId: t.id, userId: 'p1' });
-    const report = buildTournamentReport((await mgr.get(t.id))!, 2500);
+    const report = buildTournamentReport((await mgr.get(t.id))!);
     expect(report.registration.rebuys).toBe(1);
+    // Two $50 entries and a $50 rebuy with a 10% house fee
+    expect(report.prizePool.total).toBe(145);
     expect(report.registration.timeline.length).toBeGreaterThanOrEqual(3);
   });
 

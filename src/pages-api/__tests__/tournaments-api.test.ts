@@ -12,6 +12,8 @@ import getHandler from '../../../pages/api/tournaments/get';
 import reportHandler from '../../../pages/api/tournaments/report';
 import rebuyHandler from '../../../pages/api/tournaments/rebuy';
 import addOnHandler from '../../../pages/api/tournaments/add-on';
+import eliminateHandler from '../../../pages/api/tournaments/eliminate';
+import viewHandler from '../../../pages/api/tournaments/view';
 
 import { createDefaultFreezeoutConfig } from '../../../src/lib/tournament/tournament-utils';
 
@@ -34,6 +36,12 @@ jest.mock('../../../src/lib/tournament/manager-instance', () => {
 const mockRequirePlayer = jest.fn(async (_req: any, _res: any, claimed?: unknown) => (claimed ? String(claimed) : 'u1'));
 jest.mock('../../../src/lib/auth/auth-utils', () => ({
   requirePlayer: (...args: any[]) => mockRequirePlayer(...args),
+}));
+
+// Usernames come from the users table
+const mockLoadPlayerNames = jest.fn(async (_ids: string[]) => ({ p1: 'Player One' }) as Record<string, string>);
+jest.mock('../../../src/lib/tournament/pg-tournament-store', () => ({
+  loadPlayerNames: (ids: string[]) => mockLoadPlayerNames(ids),
 }));
 
 // Mock rate limiter
@@ -116,11 +124,12 @@ describe('Tournaments API routes (US-058)', () => {
 
     // Payouts
     const res10 = createRes();
-    await payoutsHandler(createReq('GET', undefined, { tournamentId: created.id, prizePool: '1000' }) as any, res10 as any);
+    await payoutsHandler(createReq('GET', undefined, { tournamentId: created.id }) as any, res10 as any);
     expect(res10.status).toHaveBeenCalledWith(200);
+    // The default freezeout is free, so there's nothing in the pool; two entrants means two paid places
     const payouts = res10.json.mock.calls[0][0];
-    expect(Array.isArray(payouts)).toBe(true);
-    expect(payouts[0].amount).toBeGreaterThan(0);
+    expect(payouts.prizePool).toBe(0);
+    expect(payouts.payouts.map((p: any) => p.place)).toEqual([1, 2]);
 
     // Get current state
     const res11 = createRes();
@@ -165,6 +174,45 @@ describe('Tournaments API routes (US-058)', () => {
   expect(res12.status).toHaveBeenCalledWith(200);
   const report = res12.json.mock.calls[0][0];
   expect(report.registration.total).toBeGreaterThanOrEqual(2);
+  });
+
+  test('the view shows the tournament with names, and the knockout is recorded', async () => {
+    const created = createRes();
+    const config = { ...createDefaultFreezeoutConfig(), buyIn: 10, bounty: { amount: 2, type: 'standard' as const } };
+    await createHandler(createReq('POST', { name: 'KO', config }) as any, created as any);
+    const { id } = created.json.mock.calls[0][0];
+    for (const userId of ['p1', 'p2', 'p3']) await registerHandler(createReq('POST', { tournamentId: id, userId }) as any, createRes() as any);
+    await startHandler(createReq('POST', { tournamentId: id }) as any, createRes() as any);
+
+    const missingKnocker = createRes();
+    await eliminateHandler(createReq('POST', { tournamentId: id, userId: 'p3' }) as any, missingKnocker as any);
+    expect(missingKnocker.status).toHaveBeenCalledWith(400);
+    const knockedOut = createRes();
+    await eliminateHandler(createReq('POST', { tournamentId: id, userId: 'p3', eliminatedBy: 'p1' }) as any, knockedOut as any);
+    expect(knockedOut.status).toHaveBeenCalledWith(200);
+
+    mockRequestAccess.mockResolvedValueOnce({ userId: 'p1', permissions: new Set(['tournament.view']) });
+    const res = createRes();
+    await viewHandler(createReq('GET', undefined, { tournamentId: id }) as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const view = res.json.mock.calls[0][0];
+    expect(mockLoadPlayerNames).toHaveBeenCalledWith(['p1', 'p2', 'p3']);
+    expect(view.prizePool).toBe(30);
+    expect(view.players).toMatchObject({ entrants: 3, remaining: 2 });
+    expect(view.bounty.board[0]).toMatchObject({ userId: 'p1', name: 'Player One', won: 2 });
+    expect(view.you).toMatchObject({ bountyWon: 2, bounty: 2 });
+    expect(view.finishers).toEqual([expect.objectContaining({ place: 3, userId: 'p3', eliminatedBy: 'p1' })]);
+  });
+
+  test('the view needs tournament.view and an existing tournament', async () => {
+    mockRequestAccess.mockResolvedValueOnce({ userId: null, permissions: new Set() });
+    const denied = createRes();
+    await viewHandler(createReq('GET', undefined, { tournamentId: 'x' }) as any, denied as any);
+    expect(denied.status).toHaveBeenCalledWith(403);
+
+    const missing = createRes();
+    await viewHandler(createReq('GET', undefined, { tournamentId: 'nope' }) as any, missing as any);
+    expect(missing.status).toHaveBeenCalledWith(404);
   });
 
   test('create records who made the tournament', async () => {

@@ -1,22 +1,28 @@
 import { v4 as uuidv4 } from 'uuid';
-import { buildPayouts, validateTournamentConfig } from './tournament-utils';
+import { validateTournamentConfig } from './tournament-utils';
+import { bountyEnabled, collectWinnerBounty, payoutTable, postBounty, prizePool, remainingPlayers, settleKnockout } from './tournament-money';
 import type { TournamentStore } from './tournament-store';
+import { DEFAULT_SEATS_PER_TABLE, Random, balanceTables, drawSeats, seatLatePlayer, unseatPlayer } from './tournament-seating';
+import { catchUpClock, endBreak, enterNextLevel, pauseClock, resumeClock, startClock, stopClock } from './tournament-clock';
 import type {
   TournamentState,
   CreateTournamentInput,
   RegisterPlayerInput,
   EliminatePlayerInput,
-  TournamentTable,
 } from '../../types/tournament-management';
 
 export class TournamentManager {
-  constructor(private store: TournamentStore) {}
+  constructor(
+    private store: TournamentStore,
+    private random: Random = Math.random,
+    private now: () => number = Date.now
+  ) {}
 
   async create(input: CreateTournamentInput): Promise<TournamentState> {
     const res = validateTournamentConfig(input.config);
     if (!res.valid) throw new Error(`Invalid tournament config: ${res.errors.join(', ')}`);
     const id = uuidv4();
-    const now = Date.now();
+    const now = this.now();
     const state: TournamentState = {
       id,
       name: input.name,
@@ -39,144 +45,134 @@ export class TournamentManager {
     return state;
   }
 
-  get(id: string): Promise<TournamentState | null> {
-    return this.store.get(id);
+  /** The tournament as of now: levels whose time ran out have moved on, even if nothing was saved since. */
+  async get(id: string): Promise<TournamentState | null> {
+    const t = await this.store.get(id);
+    if (t) {
+      catchUpClock(t, this.now());
+      finishIfDecided(t);
+    }
+    return t;
   }
 
   register(input: RegisterPlayerInput): Promise<TournamentState> {
-    return this.store.update(input.tournamentId, t => {
+    return this.change(input.tournamentId, (t, now) => {
       if (t.status !== 'setup' && t.status !== 'running') throw new Error('Registration closed');
-      if (!t.registeredPlayers.includes(input.userId)) {
-        t.registeredPlayers.push(input.userId);
-        t.updatedAt = Date.now();
-        // Log timeline event for reporting
-        (t.registrationTimeline = t.registrationTimeline || []).push({ at: Date.now(), type: 'register', userId: input.userId });
+      if (t.registeredPlayers.includes(input.userId)) return;
+      if (t.config.maxPlayers && t.registeredPlayers.length >= t.config.maxPlayers) throw new Error('Tournament is full');
+      t.registeredPlayers.push(input.userId);
+      postBounty(t, input.userId);
+      // Log timeline event for reporting
+      (t.registrationTimeline = t.registrationTimeline || []).push({ at: now, type: 'register', userId: input.userId });
+      // Late registrants take a seat straight away; a new table may need balancing
+      if (t.tables.length > 0) {
+        seatLatePlayer(t.tables, input.userId, seatsPerTable(t), this.random);
+        this.balance(t);
       }
     });
   }
 
   start(id: string): Promise<TournamentState> {
-    return this.store.update(id, t => {
-      if (t.status !== 'setup' && t.status !== 'paused') throw new Error('Cannot start in current status');
-      t.status = 'running';
-      t.currentLevelIndex = t.currentLevelIndex || 0;
-      t.currentLevelStartedAt = Date.now();
-      t.updatedAt = Date.now();
-      if (t.tables.length === 0) {
-        // naive single table start; table management can be expanded later
-        const table: TournamentTable = { id: `tbl-${uuidv4()}`, players: [...t.registeredPlayers], maxSeats: 9 };
-        t.tables = [table];
-      }
+    return this.change(id, (t, now) => {
+      if (t.status !== 'setup') throw new Error(t.status === 'paused' ? 'Tournament is paused; resume it instead' : 'Tournament has already started');
+      if (t.registeredPlayers.length < 2) throw new Error('At least 2 players are needed to start');
+      startClock(t, now);
+      t.tables = drawSeats(t.registeredPlayers, seatsPerTable(t), this.random);
     });
   }
 
   pause(id: string): Promise<TournamentState> {
-    return this.store.update(id, t => {
-      if (t.status !== 'running') throw new Error('Only running tournaments can be paused');
-      t.status = 'paused';
-      t.updatedAt = Date.now();
-    });
+    return this.change(id, (t, now) => pauseClock(t, now));
   }
 
   resume(id: string): Promise<TournamentState> {
-    return this.store.update(id, t => {
-      if (t.status !== 'paused') throw new Error('Only paused tournaments can be resumed');
-      t.status = 'running';
-      t.updatedAt = Date.now();
-      if (!t.currentLevelStartedAt) t.currentLevelStartedAt = Date.now();
-    });
+    return this.change(id, (t, now) => resumeClock(t, now));
   }
 
+  /** Move to the next level now, ahead of the clock. */
   advanceLevel(id: string): Promise<TournamentState> {
-    return this.store.update(id, t => {
+    return this.change(id, (t, now) => {
       if (t.status !== 'running') throw new Error('Can only advance level while running');
-      const prevLevelIndex = t.currentLevelIndex;
-      if (t.currentLevelIndex + 1 >= t.config.blindLevels.length) {
-        // No further levels; tournament completes
-        t.status = 'completed';
-        t.updatedAt = Date.now();
-        return;
-      }
-      // Move to next level
-      t.currentLevelIndex += 1;
-      t.currentLevelStartedAt = Date.now();
-      t.updatedAt = Date.now();
-      // Enter break if scheduled AFTER the level we just completed (prevLevelIndex)
-      const prevLevel = t.config.blindLevels[prevLevelIndex];
-      const afterLevel = t.config.breaks.find(b => b.afterLevel === prevLevel.level);
-      if (afterLevel) {
-        t.onBreak = true;
-        t.breakEndsAt = Date.now() + afterLevel.durationMinutes * 60_000;
-        t.status = 'on-break';
-        t.currentBreakAfterLevel = prevLevel.level;
-      }
+      enterNextLevel(t, now);
     });
   }
 
+  /** End the break now, ahead of the clock. */
   endBreak(id: string): Promise<TournamentState> {
-    return this.store.update(id, t => {
-      if (!t.onBreak) return;
-      t.onBreak = false;
-      t.breakEndsAt = null;
-      t.currentBreakAfterLevel = null;
-      if (t.status === 'on-break') t.status = 'running';
-      t.updatedAt = Date.now();
+    return this.change(id, (t, now) => {
+      if (t.onBreak) endBreak(t, now);
     });
   }
 
   eliminate(input: EliminatePlayerInput): Promise<TournamentState> {
-    return this.store.update(input.tournamentId, t => {
+    return this.change(input.tournamentId, (t, now) => {
       if (t.status !== 'running' && t.status !== 'paused' && t.status !== 'on-break') {
         throw new Error('Players can only be eliminated while the tournament is in progress');
       }
       if (!t.registeredPlayers.includes(input.userId)) throw new Error('Player not registered');
       if (t.eliminatedPlayers.includes(input.userId)) return;
-      const remaining = t.registeredPlayers.filter(p => !t.eliminatedPlayers.includes(p));
+      const remaining = remainingPlayers(t);
       if (remaining.length <= 1) throw new Error('Cannot eliminate the last remaining player');
+      const by = input.eliminatedBy || undefined;
+      if (by !== undefined) {
+        if (by === input.userId) throw new Error('A player cannot knock themselves out');
+        if (!remaining.includes(by)) throw new Error('The player who made the knockout must still be in the tournament');
+      } else if (bountyEnabled(t.config)) {
+        throw new Error('Say who knocked the player out, so the bounty can be paid');
+      }
       // Finishing place is the number of players left, counting the one going out
       t.eliminatedPlayers.push(input.userId);
-      (t.eliminationRecords = t.eliminationRecords || []).push({ userId: input.userId, at: Date.now(), place: remaining.length });
-      t.updatedAt = Date.now();
-      // The tournament is over once one player remains, whether running, paused or on a break
-      if (remaining.length - 1 <= 1) {
-        t.status = 'completed';
-        t.onBreak = false;
-        t.breakEndsAt = null;
-        t.currentBreakAfterLevel = null;
-      }
+      const bounty = by !== undefined ? settleKnockout(t, input.userId, by) : 0;
+      (t.eliminationRecords = t.eliminationRecords || []).push({
+        userId: input.userId,
+        at: now,
+        place: remaining.length,
+        ...(by !== undefined ? { eliminatedBy: by } : {}),
+        ...(bountyEnabled(t.config) ? { bounty } : {}),
+      });
+      unseatPlayer(t.tables, input.userId);
+      this.balance(t);
+      finishIfDecided(t);
     });
   }
 
-  async payouts(id: string, prizePool: number) {
-    const t = await this.store.get(id);
+  /** The prize pool so far and what each paid place wins from it. */
+  async payouts(id: string) {
+    const t = await this.get(id);
     if (!t) throw new Error('Tournament not found');
-    return buildPayouts(prizePool, t.config.payoutStructure);
+    return { prizePool: prizePool(t), payouts: payoutTable(t) };
   }
 
   // --- Rebuy/Add-on operations ---
   rebuy(input: { tournamentId: string; userId: string }): Promise<TournamentState> {
-    return this.store.update(input.tournamentId, t => {
+    return this.change(input.tournamentId, (t, now) => {
       const cfg = t.config.rebuys;
       if (!cfg?.enabled) throw new Error('Rebuys are not enabled');
       if (!t.registeredPlayers.includes(input.userId)) throw new Error('Player not registered');
       if (t.status !== 'running' && t.status !== 'on-break') throw new Error('Rebuys only allowed during running or break');
-      // Check level window
-      const levelNumber = t.config.blindLevels[t.currentLevelIndex]?.level ?? 0;
-      if (cfg.availableUntilLevel !== undefined && levelNumber > cfg.availableUntilLevel) {
-        throw new Error('Rebuy period ended');
-      }
+      if (!rebuyPeriodOpen(t)) throw new Error('Rebuy period ended');
       // Enforce per-player limit using timeline count; 0 or unset means unlimited
       const prior = (t.registrationTimeline || []).filter(e => e.type === 'rebuy' && e.userId === input.userId).length;
       if (cfg.maxPerPlayer && prior >= cfg.maxPerPlayer) {
         throw new Error('Rebuy limit reached');
       }
-      (t.registrationTimeline = t.registrationTimeline || []).push({ at: Date.now(), type: 'rebuy', userId: input.userId });
-      t.updatedAt = Date.now();
+      (t.registrationTimeline = t.registrationTimeline || []).push({ at: now, type: 'rebuy', userId: input.userId });
+      // Each rebuy buys a bounty too: a fresh one for a returning player, added to the bounty of one still in
+      postBounty(t, input.userId);
+      // A busted player buys back in: back in the field, with their elimination undone and a new seat
+      if (t.eliminatedPlayers.includes(input.userId)) {
+        t.eliminatedPlayers = t.eliminatedPlayers.filter(p => p !== input.userId);
+        const records = t.eliminationRecords || [];
+        const last = records.map(r => r.userId).lastIndexOf(input.userId);
+        if (last >= 0) t.eliminationRecords = records.filter((_, i) => i !== last);
+        seatLatePlayer(t.tables, input.userId, seatsPerTable(t), this.random);
+        this.balance(t);
+      }
     });
   }
 
   addOn(input: { tournamentId: string; userId: string }): Promise<TournamentState> {
-    return this.store.update(input.tournamentId, t => {
+    return this.change(input.tournamentId, (t, now) => {
       const cfg = t.config.addOn;
       if (!cfg?.enabled) throw new Error('Add-on is not enabled');
       if (!t.registeredPlayers.includes(input.userId)) throw new Error('Player not registered');
@@ -190,9 +186,27 @@ export class TournamentManager {
       // Only one add-on per player; check timeline
       const prior = (t.registrationTimeline || []).some(e => e.type === 'addOn' && e.userId === input.userId);
       if (prior) throw new Error('Add-on already taken');
-      (t.registrationTimeline = t.registrationTimeline || []).push({ at: Date.now(), type: 'addOn', userId: input.userId });
-      t.updatedAt = Date.now();
+      (t.registrationTimeline = t.registrationTimeline || []).push({ at: now, type: 'addOn', userId: input.userId });
     });
+  }
+
+  /** Apply a change to the tournament as of now, after catching its clock up. */
+  private change(id: string, apply: (t: TournamentState, now: number) => void): Promise<TournamentState> {
+    return this.store.update(id, t => {
+      const now = this.now();
+      catchUpClock(t, now);
+      // The rebuy period may have just closed with one player left
+      finishIfDecided(t);
+      apply(t, now);
+      t.updatedAt = now;
+    });
+  }
+
+  /** Balance and break tables after the field changed, logging who moved where. */
+  private balance(t: TournamentState): void {
+    const { tables, moves } = balanceTables(t.tables, seatsPerTable(t), this.random);
+    t.tables = tables;
+    if (moves.length > 0) (t.tableMoves = t.tableMoves || []).push(...moves);
   }
 
   private computeCurrentBreakAfterLevel(t: TournamentState): number | null {
@@ -202,4 +216,36 @@ export class TournamentManager {
     const prevIdx = Math.max(0, t.currentLevelIndex - 1);
     return t.config.blindLevels[prevIdx]?.level ?? null;
   }
+}
+
+function seatsPerTable(t: TournamentState): number {
+  return t.config.seatsPerTable ?? DEFAULT_SEATS_PER_TABLE;
+}
+
+/**
+ * Whether players can still rebuy: through the end of the last rebuy level and the break right
+ * after it. With no last level set, rebuys stay open for the whole tournament.
+ */
+export function rebuyPeriodOpen(t: TournamentState): boolean {
+  const cfg = t.config.rebuys;
+  if (!cfg?.enabled) return false;
+  if (cfg.availableUntilLevel === undefined || cfg.availableUntilLevel === null) return true;
+  // On a break, the level that counts is the one just finished
+  const level = t.onBreak && t.currentBreakAfterLevel != null
+    ? t.currentBreakAfterLevel
+    : t.config.blindLevels[t.currentLevelIndex]?.level ?? 0;
+  return level <= cfg.availableUntilLevel;
+}
+
+/**
+ * End the tournament once one player is left, unless the rebuy period is still open: a player who
+ * busted can still buy back in, so the result isn't settled until it closes.
+ */
+function finishIfDecided(t: TournamentState): void {
+  if (t.status !== 'running' && t.status !== 'paused' && t.status !== 'on-break') return;
+  const remaining = remainingPlayers(t);
+  if (remaining.length > 1 || rebuyPeriodOpen(t)) return;
+  t.status = 'completed';
+  stopClock(t);
+  if (remaining.length === 1) collectWinnerBounty(t, remaining[0]);
 }

@@ -5,12 +5,37 @@ export function validateTournamentConfig(cfg: TournamentConfig): ValidationResul
 
   if (!cfg.blindLevels?.length) errors.push('At least one blind level is required');
   if (cfg.startingStack <= 0) errors.push('Starting stack must be > 0');
+  if (cfg.seatsPerTable !== undefined && !(Number.isInteger(cfg.seatsPerTable) && cfg.seatsPerTable >= 2 && cfg.seatsPerTable <= 10)) {
+    errors.push('Seats per table must be a whole number from 2 to 10');
+  }
+  if (cfg.maxPlayers !== undefined && !(Number.isInteger(cfg.maxPlayers) && cfg.maxPlayers >= 2)) {
+    errors.push('Max players must be a whole number of at least 2');
+  }
+
+  // Money
+  const isMoney = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n >= 0;
+  if (cfg.buyIn !== undefined && !isMoney(cfg.buyIn)) errors.push('Buy-in cannot be negative');
+  if (cfg.entryFee !== undefined && !isMoney(cfg.entryFee)) errors.push('Entry fee cannot be negative');
+  if (cfg.bounty) {
+    if (!(isMoney(cfg.bounty.amount) && cfg.bounty.amount > 0)) errors.push('Bounty must be more than 0');
+    if (cfg.bounty.type !== 'standard' && cfg.bounty.type !== 'progressive') errors.push('Bounty type must be standard or progressive');
+  }
+  for (const [label, extra] of [['Rebuy', cfg.rebuys], ['Add-on', cfg.addOn]] as const) {
+    if (!extra?.enabled) continue;
+    if (!isMoney(extra.cost)) errors.push(`${label} cost cannot be negative`);
+    if (extra.feePercent !== undefined && !(isMoney(extra.feePercent) && extra.feePercent <= 100)) {
+      errors.push(`${label} fee must be from 0 to 100 percent`);
+    }
+  }
 
   // Blind levels must be strictly increasing by level, with positive blinds and durations
   const seenLevels = new Set<number>();
+  let prevLevel = -Infinity;
   for (const lvl of cfg.blindLevels) {
     if (seenLevels.has(lvl.level)) errors.push(`Duplicate blind level: ${lvl.level}`);
+    else if (lvl.level < prevLevel) errors.push(`Blind levels must be in order: level ${lvl.level} comes after level ${prevLevel}`);
     seenLevels.add(lvl.level);
+    prevLevel = Math.max(prevLevel, lvl.level);
     if (lvl.durationMinutes <= 0) errors.push(`Level ${lvl.level} duration must be > 0`);
     if (lvl.smallBlind <= 0 || lvl.bigBlind <= 0) errors.push(`Level ${lvl.level} blinds must be > 0`);
     if (lvl.bigBlind < lvl.smallBlind) errors.push(`Level ${lvl.level} big blind < small blind`);
@@ -21,8 +46,9 @@ export function validateTournamentConfig(cfg: TournamentConfig): ValidationResul
   if (!cfg.payoutStructure?.length) {
     errors.push('Payout structure must not be empty');
   } else {
+    // The whole prize pool is paid out; the house's share is the entry fee
     const totalPct = cfg.payoutStructure.reduce((sum, t) => sum + t.percentage, 0);
-    if (totalPct <= 0 || totalPct > 100.0001) errors.push('Payout percentages must sum to > 0 and <= 100');
+    if (Math.abs(totalPct - 100) > 0.0001) errors.push(`Payout percentages must add up to 100 (they add up to ${Math.round(totalPct * 100) / 100})`);
     const seenPlaces = new Set<number>();
     for (const tier of cfg.payoutStructure) {
       if (tier.place <= 0) errors.push(`Invalid payout place: ${tier.place}`);
@@ -32,10 +58,27 @@ export function validateTournamentConfig(cfg: TournamentConfig): ValidationResul
     }
   }
 
-  // Breaks
+  // Breaks come between levels, so each follows a level that isn't the last
+  const lastLevel = cfg.blindLevels?.length ? cfg.blindLevels[cfg.blindLevels.length - 1].level : undefined;
+  const breakLevels = new Set<number>();
   for (const brk of cfg.breaks || []) {
     if (brk.afterLevel < 0) errors.push('Break afterLevel cannot be negative');
+    else if (!seenLevels.has(brk.afterLevel) || brk.afterLevel === lastLevel) {
+      errors.push(`Break after level ${brk.afterLevel} must follow a level before the last one`);
+    }
+    if (breakLevels.has(brk.afterLevel)) errors.push(`Duplicate break after level ${brk.afterLevel}`);
+    breakLevels.add(brk.afterLevel);
     if (brk.durationMinutes <= 0) errors.push('Break duration must be > 0');
+  }
+  const rebuyUntil = cfg.rebuys?.enabled ? cfg.rebuys.availableUntilLevel : undefined;
+  if (rebuyUntil !== undefined && rebuyUntil !== null && !seenLevels.has(rebuyUntil)) {
+    errors.push(`Rebuys are set to end after level ${rebuyUntil}, which isn't in the schedule`);
+  }
+  const addOnAt = cfg.addOn?.enabled ? cfg.addOn.availableAtBreakAfterLevel : undefined;
+  if (cfg.addOn?.enabled && (addOnAt === undefined || addOnAt === null)) {
+    errors.push('Choose the break the add-on is offered at');
+  } else if (addOnAt !== undefined && addOnAt !== null && !breakLevels.has(addOnAt)) {
+    errors.push(`Add-on is set for the break after level ${addOnAt}, but there is no break then`);
   }
 
   // Late registration constraints
@@ -149,6 +192,7 @@ export function createRebuyAddOnConfig(): TournamentConfig {
     type: 'rebuy',
     blindLevels,
     startingStack: 20000,
+    buyIn: 50,
     payoutStructure: [
       { place: 1, percentage: 45 },
       { place: 2, percentage: 28 },

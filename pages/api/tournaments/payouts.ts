@@ -10,12 +10,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const access = await getRequestAccess(req);
   if (!hasPermission(access, 'tournament.view')) return sendPermissionDenied(res, 'tournament.view', access);
   try {
-    const { tournamentId, prizePool } = (req.query || {}) as any;
-    if (!tournamentId || prizePool == null) return res.status(400).json({ error: 'Missing tournamentId or prizePool' });
-    const amount = Number(prizePool);
-    if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: 'Invalid prizePool' });
-    const result = await tournamentManager.payouts(tournamentId, amount);
-    return res.status(200).json(result);
+    const { tournamentId } = (req.query || {}) as any;
+    if (!tournamentId) return res.status(400).json({ error: 'Missing tournamentId' });
+    // The prize pool comes from the entries, rebuys and add-ons recorded on the server
+    return res.status(200).json(await tournamentManager.payouts(String(tournamentId)));
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });
   }

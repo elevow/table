@@ -9,9 +9,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
   if (!(await requirePermission(req, res, 'tournament.eliminate'))) return;
   try {
-    const { tournamentId, userId } = req.body || {};
+    const { tournamentId, userId, eliminatedBy } = req.body || {};
     if (!tournamentId || !userId) return res.status(400).json({ error: 'Missing tournamentId or userId' });
-    const t = await tournamentManager.eliminate({ tournamentId, userId });
+    const t = await tournamentManager.eliminate({ tournamentId, userId, eliminatedBy: eliminatedBy ? String(eliminatedBy) : undefined });
     return res.status(200).json(t);
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });

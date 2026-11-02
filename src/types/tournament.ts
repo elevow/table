@@ -26,6 +26,13 @@ export interface TournamentConfig {
   type: TournamentType;
   blindLevels: BlindLevel[];
   startingStack: number;
+  buyIn?: number; // each entry's contribution to the prize pool (currency units); unset means free
+  entryFee?: number; // charged on top of the buy-in for the house; not in the prize pool
+  // Knockout: each entry and rebuy also puts `amount` on the player's head, paid to whoever knocks them out.
+  // 'progressive' pays half and adds the other half to the knocker's own bounty.
+  bounty?: { amount: number; type: 'standard' | 'progressive' };
+  seatsPerTable?: number; // seats at each table, 2-10; defaults to 9
+  maxPlayers?: number; // registration closes at this many players; unset means no cap
   payoutStructure: PayoutTier[];
   breaks: BreakSchedule[];
   lateRegistration: {
@@ -38,9 +45,9 @@ export interface TournamentConfig {
     enabled: boolean;
     maxPerPlayer?: number; // 0/undefined = unlimited
     availableUntilLevel?: number; // inclusive
-    cost: number; // buy-in cost for a rebuy (currency units)
+    cost: number; // what a rebuy costs (currency units); goes to the prize pool less feePercent
     stack: number; // chips granted per rebuy
-    feePercent?: number; // optional fee
+    feePercent?: number; // share of the cost kept by the house
   };
   addOn?: {
     enabled: boolean;

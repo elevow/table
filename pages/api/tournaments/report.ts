@@ -10,13 +10,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
   if (!(await requirePermission(req, res, 'tournament.report'))) return;
   try {
-    const { tournamentId, prizePool } = req.query || {} as any;
+    const { tournamentId } = req.query || {} as any;
     if (!tournamentId) return res.status(400).json({ error: 'Missing tournamentId' });
-    const prize = typeof prizePool === 'string' ? parseFloat(prizePool) : Number(prizePool || 0);
-    if (Number.isNaN(prize) || prize < 0) return res.status(400).json({ error: 'Invalid prizePool' });
     const t = await tournamentManager.get(tournamentId as string);
     if (!t) return res.status(404).json({ error: 'Tournament not found' });
-    const report = buildTournamentReport(t, prize);
+    const report = buildTournamentReport(t);
     return res.status(200).json(report);
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });

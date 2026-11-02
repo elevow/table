@@ -1,7 +1,7 @@
 jest.mock('../../database/pool', () => ({ getPool: jest.fn() }));
 
 import { getPool } from '../../database/pool';
-import { PgTournamentStore } from '../pg-tournament-store';
+import { PgTournamentStore, loadPlayerNames } from '../pg-tournament-store';
 
 const ID = '3f1c2b9a-6a8e-4c1d-9f2e-5b7a1d0c4e21';
 
@@ -86,5 +86,19 @@ describe('PgTournamentStore', () => {
     const { pool } = mockPool();
     await expect(store.update('nope', () => {})).rejects.toThrow('Tournament not found');
     expect(pool.connect).not.toHaveBeenCalled();
+  });
+});
+
+describe('loadPlayerNames', () => {
+  test('looks up usernames for the ids that are users', async () => {
+    const { pool } = mockPool([{ id: ID, username: 'alice' }]);
+    expect(await loadPlayerNames([ID, ID, 'not-a-user'])).toEqual({ [ID]: 'alice' });
+    expect((pool.query as jest.Mock).mock.calls[0][1]).toEqual([[ID]]);
+  });
+
+  test('skips the query when there is nobody to look up', async () => {
+    const { pool } = mockPool();
+    expect(await loadPlayerNames(['guest-1'])).toEqual({});
+    expect(pool.query).not.toHaveBeenCalled();
   });
 });

@@ -44,3 +44,11 @@ export class PgTournamentStore implements TournamentStore {
     }
   }
 }
+
+/** Usernames for tournament players, by user ID. IDs that aren't users are left out. */
+export async function loadPlayerNames(userIds: string[]): Promise<Record<string, string>> {
+  const ids = [...new Set(userIds)].filter(id => UUID_RE.test(id));
+  if (ids.length === 0) return {};
+  const result = await getPool().query(`SELECT id, username FROM users WHERE id = ANY($1::uuid[])`, [ids]);
+  return Object.fromEntries(result.rows.map((r: any) => [String(r.id), r.username]));
+}

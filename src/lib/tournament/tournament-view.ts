@@ -22,6 +22,10 @@ export interface TournamentView {
   level: LevelView | null; // null before the start
   nextLevel: LevelView | null;
   levelRemainingMs: number | null;
+  // The director moves levels on by hand; the clock is only a guide
+  directorControlsLevels: boolean;
+  // Minutes of the break that follows the current level, if one does
+  breakAfterLevelMinutes: number | null;
   onBreak: boolean;
   breakRemainingMs: number | null;
   players: { entrants: number; entries: number; remaining: number; paidPlaces: number }; // entries count re-entries
@@ -166,6 +170,10 @@ export function buildTournamentView(
     level: started ? levelView(t.config.blindLevels[t.currentLevelIndex]) : null,
     nextLevel: levelView(t.config.blindLevels[started ? t.currentLevelIndex + 1 : 0]),
     levelRemainingMs: levelTimeRemainingMs(t, now),
+    directorControlsLevels: t.config.levelControl === 'director',
+    breakAfterLevelMinutes: started && !t.onBreak
+      ? t.config.breaks.find(b => b.afterLevel === t.config.blindLevels[t.currentLevelIndex]?.level)?.durationMinutes ?? null
+      : null,
     onBreak: t.onBreak,
     breakRemainingMs: breakTimeRemainingMs(t, now),
     players: { entrants: t.registeredPlayers.length, entries: entryCount(t), remaining: remaining.length, paidPlaces: payouts.length },

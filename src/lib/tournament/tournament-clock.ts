@@ -7,7 +7,9 @@ import type { TournamentState } from '../../types/tournament-management';
  * when play resumes; pausing a break banks what's left of it in breakRemainingMs.
  *
  * Nothing runs in the background: catchUpClock works out from these times what should have happened
- * by now, and the manager calls it whenever a tournament is read or changed.
+ * by now, and the manager calls it whenever a tournament is read or changed. When the director
+ * controls the levels (config.levelControl 'director') nothing happens by itself: the clocks count
+ * down to zero and wait there for the director to move on.
  */
 
 const MINUTE = 60_000;
@@ -23,6 +25,11 @@ function levelElapsedMs(t: TournamentState, now: number): number {
 function startLevel(t: TournamentState, at: number): void {
   t.currentLevelStartedAt = at;
   t.levelElapsedMs = 0;
+}
+
+/** Whether the director moves the levels on by hand rather than the clock doing it. */
+export function directorControlsLevels(t: TournamentState): boolean {
+  return t.config.levelControl === 'director';
 }
 
 export function isLastLevel(t: TournamentState): boolean {
@@ -113,9 +120,11 @@ export function stopClock(t: TournamentState): void {
  * Bring the clock up to `now`: move on from every level whose time ran out and end every break
  * that's over, each at the moment it was due, so catching up after a quiet spell gives the same
  * result as watching the whole time. The last level never ends on its own; it plays until there's
- * a winner. Returns whether anything changed.
+ * a winner. With the director in control nothing moves on by itself. Returns whether anything
+ * changed.
  */
 export function catchUpClock(t: TournamentState, now: number): boolean {
+  if (directorControlsLevels(t)) return false;
   let changed = false;
   for (;;) {
     if (t.status === 'running' && t.currentLevelStartedAt != null && !isLastLevel(t)) {

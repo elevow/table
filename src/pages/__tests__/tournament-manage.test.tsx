@@ -17,6 +17,8 @@ const view = (overrides: Partial<TournamentView> = {}): TournamentView => ({
   level: { number: 2, smallBlind: 200, bigBlind: 400, ante: null, minutes: 12 },
   nextLevel: { number: 3, smallBlind: 300, bigBlind: 600, ante: 75, minutes: 12 },
   levelRemainingMs: 300_000,
+  directorControlsLevels: false,
+  breakAfterLevelMinutes: null,
   onBreak: false,
   breakRemainingMs: null,
   players: { entrants: 4, entries: 4, remaining: 3, paidPlaces: 3 },
@@ -192,5 +194,19 @@ describe('Director screen', () => {
     await renderPage();
     expect(screen.getByRole('link', { name: 'Edit structure' })).toHaveAttribute('href', '/tournaments/t-1/edit');
     expect(within(screen.getByRole('region', { name: 'Remove a player' })).getByText(/registered by mistake/)).toBeInTheDocument();
+  });
+
+  test('with the director moving levels on, the buttons say what comes next', async () => {
+    current = view({ directorControlsLevels: true, breakAfterLevelMinutes: 10 });
+    await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Start the 10-minute break' }));
+    await waitFor(() => expect(posts).toEqual([{ url: '/api/tournaments/advance-level', body: { tournamentId: 't-1' } }]));
+  });
+
+  test('a break waiting on the director has an End break button', async () => {
+    current = view({ directorControlsLevels: true, status: 'on-break', onBreak: true, breakRemainingMs: 0, levelRemainingMs: null });
+    await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'End break' }));
+    await waitFor(() => expect(posts).toEqual([{ url: '/api/tournaments/end-break', body: { tournamentId: 't-1' } }]));
   });
 });

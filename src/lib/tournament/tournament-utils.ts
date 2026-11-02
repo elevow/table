@@ -23,6 +23,9 @@ export function validateTournamentConfig(cfg: TournamentConfig): ValidationResul
   if (cfg.payoutScaling && !(typeof cfg.payoutScaling.paidPercent === 'number' && cfg.payoutScaling.paidPercent >= 1 && cfg.payoutScaling.paidPercent <= 100)) {
     errors.push('The share of the field paid must be from 1 to 100 percent');
   }
+  if (cfg.levelControl !== undefined && cfg.levelControl !== 'director' && cfg.levelControl !== 'clock') {
+    errors.push('Levels change either when the director says or on the clock');
+  }
   if (cfg.reentry?.enabled && !cfg.lateRegistration?.enabled) {
     errors.push('Re-entry needs late registration, which sets how long it lasts');
   }

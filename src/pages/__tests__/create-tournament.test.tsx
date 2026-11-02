@@ -178,6 +178,19 @@ describe('Create tournament page', () => {
     expect(config.reentry).toEqual({ enabled: true, maxPerPlayer: 1 });
   });
 
+  test('levels change when the director says unless the clock is chosen', async () => {
+    createResponse = { ok: true, status: 201, body: { id: 't-5', name: 'Clock', config: { blindLevels: [], startingStack: 1 } } };
+    render(<CreateTournamentPage />);
+    expect(screen.getByLabelText('When the director moves them on')).toBeChecked();
+    expect(screen.getByText(/The minutes are a guide/)).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('Friday Night Freezeout'), { target: { value: 'Clock' } });
+    fireEvent.click(screen.getByLabelText('Automatically when time runs out'));
+    fireEvent.click(submit());
+    await screen.findByText('Tournament created');
+    const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/tournaments/create')!;
+    expect(JSON.parse(init.body).config.levelControl).toBe('clock');
+  });
+
   test('turning late registration off turns re-entry off with it', () => {
     render(<CreateTournamentPage />);
     fireEvent.click(screen.getByLabelText(/Let busted players buy a new entry/));

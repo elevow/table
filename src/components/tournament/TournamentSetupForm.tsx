@@ -39,6 +39,9 @@ function scalingExamples(paidPercent: number): string {
  * The tournament structure form, for creating a tournament or editing one before it starts.
  * Problems are listed as the director types, and submitting is blocked until there are none.
  */
+// A new tournament's levels change when the director says, unless they choose the clock
+const fromPreset = (key: string): TournamentConfig => ({ levelControl: 'director', ...normalizeLevels(tournamentPresets[key].build()) });
+
 export default function TournamentSetupForm({
   initialName = '',
   initialConfig,
@@ -60,7 +63,7 @@ export default function TournamentSetupForm({
 }) {
   const [name, setName] = useState(initialName);
   const [presetKey, setPresetKey] = useState(initialConfig ? '' : DEFAULT_PRESET);
-  const [config, setConfig] = useState<TournamentConfig>(() => initialConfig ?? normalizeLevels(tournamentPresets[DEFAULT_PRESET].build()));
+  const [config, setConfig] = useState<TournamentConfig>(() => initialConfig ?? fromPreset(DEFAULT_PRESET));
 
   const problems = useMemo(() => {
     const list = validateTournamentConfig(config).errors;
@@ -72,7 +75,7 @@ export default function TournamentSetupForm({
 
   const choosePreset = (key: string) => {
     setPresetKey(key);
-    setConfig(key ? normalizeLevels(tournamentPresets[key].build()) : initialConfig!);
+    setConfig(key ? fromPreset(key) : initialConfig!);
   };
 
   const submit = (e: React.FormEvent) => {
@@ -220,6 +223,23 @@ export default function TournamentSetupForm({
 
       <section>
         <h2 className="text-lg font-semibold mb-2">Blind levels</h2>
+        <div role="radiogroup" aria-label="Levels change" className="mb-1 flex flex-wrap gap-4 text-sm">
+          <label className="inline-flex items-center gap-2">
+            <input type="radio" name="levelControl" checked={config.levelControl === 'director'}
+              onChange={() => setConfig({ ...config, levelControl: 'director' })} />
+            When the director moves them on
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input type="radio" name="levelControl" checked={config.levelControl !== 'director'}
+              onChange={() => setConfig({ ...config, levelControl: 'clock' })} />
+            Automatically when time runs out
+          </label>
+        </div>
+        <p className="mb-3 text-xs text-gray-600 dark:text-gray-400">
+          {config.levelControl === 'director'
+            ? 'The minutes are a guide: the clock counts down, then waits for you to start the next level or break, and to end each break.'
+            : 'Levels and breaks move on by themselves when their time runs out.'}
+        </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

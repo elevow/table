@@ -117,10 +117,17 @@ export default function ManageTournamentPage() {
           <button className={`${btn} bg-green-600`} disabled={busy} onClick={() => run('resume', {}, 'Resumed')}>Resume</button>
         )}
         {view.status === 'running' && view.nextLevel && (
-          <button className={`${btn} bg-blue-600`} disabled={busy} onClick={() => run('advance-level', {}, 'Moved to the next level')}>Next level now</button>
+          <button className={`${btn} bg-blue-600`} disabled={busy}
+            onClick={() => run('advance-level', {}, view.breakAfterLevelMinutes ? 'Break started' : 'Moved to the next level')}>
+            {view.breakAfterLevelMinutes
+              ? `Start the ${view.breakAfterLevelMinutes}-minute break`
+              : view.directorControlsLevels ? 'Next level' : 'Next level now'}
+          </button>
         )}
         {view.onBreak && (
-          <button className={`${btn} bg-blue-600`} disabled={busy} onClick={() => run('end-break', {}, 'Break ended')}>End break now</button>
+          <button className={`${btn} bg-blue-600`} disabled={busy} onClick={() => run('end-break', {}, 'Break ended')}>
+            {view.directorControlsLevels ? 'End break' : 'End break now'}
+          </button>
         )}
         {view.status === 'setup' && (
           <Link href={`/tournaments/${view.id}/edit`} className="text-blue-600 dark:text-blue-400 hover:underline">Edit structure</Link>

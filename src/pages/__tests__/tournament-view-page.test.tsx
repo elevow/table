@@ -31,6 +31,8 @@ const baseView = (overrides: Partial<TournamentView> = {}): TournamentView => ({
   level: { number: 3, smallBlind: 300, bigBlind: 600, ante: 75, minutes: 12 },
   nextLevel: { number: 4, smallBlind: 400, bigBlind: 800, ante: 100, minutes: 12 },
   levelRemainingMs: 5 * MIN,
+  directorControlsLevels: false,
+  breakAfterLevelMinutes: null,
   onBreak: false,
   breakRemainingMs: null,
   players: { entrants: 20, entries: 20, remaining: 9, paidPlaces: 3 },
@@ -247,5 +249,17 @@ describe('Tournament page', () => {
     view = baseView({ status: 'setup', level: null, startsAt: Date.parse('2026-11-02T18:30:00Z'), minPlayers: 6, players: { entrants: 4, entries: 4, remaining: 4, paidPlaces: 3 } });
     await renderPage();
     expect(screen.getByText(/\(in 30:00\)\. Needs 6 players; 4 registered\./)).toBeInTheDocument();
+  });
+
+  test('when the director moves levels on, players see that time is up and who they are waiting for', async () => {
+    view = baseView({ directorControlsLevels: true, levelRemainingMs: 0 });
+    await renderPage();
+    expect(screen.getByText('Time is up. The next level starts when the director moves on.')).toBeInTheDocument();
+  });
+
+  test('a break past its time waits for the director', async () => {
+    view = baseView({ directorControlsLevels: true, onBreak: true, status: 'on-break', breakRemainingMs: 0, levelRemainingMs: null });
+    await renderPage();
+    expect(screen.getByText(/Break time is up/)).toBeInTheDocument();
   });
 });

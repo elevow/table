@@ -15,6 +15,9 @@ export default function TournamentClock({ view, levelLeft, breakLeft }: {
         <>
           <p className="text-sm uppercase tracking-wide text-amber-700 dark:text-amber-300">Break{view.status === 'paused' ? ' (paused)' : ''}</p>
           <p className="text-5xl font-bold tabular-nums my-2">{formatClock(breakLeft)}</p>
+          {view.directorControlsLevels && breakLeft <= 0 && view.status !== 'paused' && (
+            <p className="text-sm text-amber-700 dark:text-amber-300">Break time is up. Play resumes when the director ends the break.</p>
+          )}
           {view.level && <p>Back with level {view.level.number}: {formatBlinds(view.level)}</p>}
         </>
       )}
@@ -26,6 +29,11 @@ export default function TournamentClock({ view, levelLeft, breakLeft }: {
           <p className="text-3xl font-semibold my-1">{formatBlinds(view.level)}</p>
           {levelLeft !== null && view.status !== 'completed' && (
             <p className="text-5xl font-bold tabular-nums my-2">{view.nextLevel ? formatClock(levelLeft) : 'Final level'}</p>
+          )}
+          {view.directorControlsLevels && view.nextLevel && levelLeft !== null && levelLeft <= 0 && view.status === 'running' && (
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              Time is up. The {view.breakAfterLevelMinutes ? 'break' : 'next level'} starts when the director moves on.
+            </p>
           )}
           {view.nextLevel && view.status !== 'completed' && (
             <p className="text-gray-600 dark:text-gray-400">Next: {formatBlinds(view.nextLevel)}</p>

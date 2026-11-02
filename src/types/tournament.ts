@@ -35,6 +35,9 @@ export interface TournamentConfig {
   maxPlayers?: number; // registration closes at this many players; unset means no cap
   startsAt?: number; // epoch ms the tournament starts by itself; unset means the director starts it
   minPlayers?: number; // with startsAt: fewer registered by then and the tournament is cancelled (at least 2)
+  // Who moves the blinds up: 'director' changes levels and starts and ends breaks by hand, the
+  // clock only counting down as a guide; 'clock' (or unset) moves on by itself when time runs out
+  levelControl?: 'director' | 'clock';
   payoutStructure: PayoutTier[];
   // Pay a share of the field instead of payoutStructure's fixed places, e.g. { paidPercent: 15 }
   payoutScaling?: { paidPercent: number };

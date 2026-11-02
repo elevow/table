@@ -20,11 +20,11 @@ const config = (): TournamentConfig => ({
   lateRegistration: { enabled: false, endLevel: 0, endTime: 0 },
 });
 
-async function setup() {
+async function setup(changes: Partial<TournamentConfig> = {}) {
   let now = 1_000_000;
   const clock = { advance: (ms: number) => (now += ms), now: () => now };
   const mgr = new TournamentManager(new MemoryTournamentStore(), Math.random, clock.now);
-  const t = await mgr.create({ name: 'Clocked', config: config() });
+  const t = await mgr.create({ name: 'Clocked', config: { ...config(), ...changes } });
   await mgr.register({ tournamentId: t.id, userId: 'a' });
   await mgr.register({ tournamentId: t.id, userId: 'b' });
   await mgr.start(t.id);
@@ -155,5 +155,51 @@ describe('tournament clock', () => {
     const { mgr, id } = await setup();
     await mgr.pause(id);
     await expect(mgr.start(id)).rejects.toThrow('resume it instead');
+  });
+});
+
+describe('levels moved on by the director', () => {
+  const directed = () => setup({ levelControl: 'director' });
+
+  test('the level clock counts down to zero and waits there', async () => {
+    const { clock, read } = await directed();
+    clock.advance(25 * MIN);
+    const t = await read();
+    expect(t.currentLevelIndex).toBe(0);
+    expect(t.status).toBe('running');
+    expect(levelTimeRemainingMs(t, clock.now())).toBe(0);
+  });
+
+  test('the director starts the break, which waits for them to end it', async () => {
+    const { mgr, id, clock, read } = await directed();
+    clock.advance(12 * MIN);
+    await mgr.advanceLevel(id);
+    clock.advance(11 * MIN);
+    await mgr.advanceLevel(id);
+    let t = await read();
+    expect(t.status).toBe('on-break');
+    expect(t.currentLevelIndex).toBe(2);
+
+    clock.advance(30 * MIN);
+    t = await read();
+    expect(t.status).toBe('on-break');
+    expect(breakTimeRemainingMs(t, clock.now())).toBe(0);
+
+    await mgr.endBreak(id);
+    t = await read();
+    expect(t.status).toBe('running');
+    // Level 3 gets its full time from when the director ended the break
+    expect(levelTimeRemainingMs(t, clock.now())).toBe(15 * MIN);
+  });
+
+  test('pausing and resuming still work', async () => {
+    const { mgr, id, clock, read } = await directed();
+    clock.advance(4 * MIN);
+    await mgr.pause(id);
+    clock.advance(60 * MIN);
+    await mgr.resume(id);
+    const t = await read();
+    expect(t.currentLevelIndex).toBe(0);
+    expect(levelTimeRemainingMs(t, clock.now())).toBe(6 * MIN);
   });
 });

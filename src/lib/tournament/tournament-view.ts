@@ -44,6 +44,8 @@ export interface TournamentView {
   rebuysOpen: boolean;
   // One player is left, but the tournament can't end while busted players can still rebuy
   waitingOnRebuys: boolean;
+  // On the bubble the tables play hand for hand: this round's number, while they do
+  handForHandRound: number | null;
   // For the director of a cancelled tournament: what each player paid in, and so is owed back
   refunds: { userId: string; name: string; paid: number }[];
   prizePool: number;
@@ -204,6 +206,7 @@ export function buildTournamentView(
     cancelled: t.status === 'cancelled' ? { at: t.cancelledAt ?? t.updatedAt, reason: t.cancelReason ?? null } : null,
     rebuysOpen: started && t.status !== 'completed' && t.status !== 'cancelled' && rebuyPeriodOpen(t),
     waitingOnRebuys: started && t.status !== 'completed' && t.status !== 'cancelled' && remaining.length === 1 && rebuyPeriodOpen(t),
+    handForHandRound: t.handForHand?.round ?? null,
     refunds: options.canManage && t.status === 'cancelled'
       ? Object.entries(paid).filter(([, amount]) => amount > 0).map(([userId, amount]) => ({ userId, name: nameOf(userId), paid: amount }))
           .sort((a, b) => a.name.localeCompare(b.name))

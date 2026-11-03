@@ -1,16 +1,19 @@
 import { getPool } from '../database/pool';
 import { GameService } from '../services/game-service';
 import { PokerEngine } from '../poker/poker-engine';
-import { getOrRestoreEngine, persistEngineState } from '../poker/engine-persistence';
+import { STALE_STATE_RESPONSE, getLastActionAt, getOrRestoreEngine, persistEngineState } from '../poker/engine-persistence';
 import { clearRunItState, enrichStateWithRunIt } from '../poker/run-it-twice-manager';
 import { sanitizeStateForBroadcast } from '../poker/state-sanitizer';
 import * as GameSeats from '../shared/game-seats';
 import { BASE_TURN_MS, DEFAULT_TIME_BANKS, DEFAULT_TIME_BANK_SECONDS } from '../shared/turn-clock';
 import { publishGameStateUpdate, publishTableEvent } from '../realtime/publisher';
 import { nextSeq } from '../realtime/sequence';
+import { runGameAction } from '../server/game-action-pipeline';
 import { loadRoom } from '../server/room-config';
-import { addRoomMember, newInviteCode } from '../server/room-privacy';
+import { newInviteCode } from '../server/room-privacy';
 import { tournamentManager } from './manager-instance';
+import { leaveSeat, moveSeat, takeSeat } from './room-seats';
+import { handForHandWaits } from './tournament-manager';
 import { loadPlayerNames } from './pg-tournament-store';
 import { remainingPlayers } from './tournament-money';
 import type { TournamentState, TournamentTable } from '../../types/tournament-management';
@@ -25,12 +28,20 @@ import type { TableState } from '../../types/poker';
  *   and busted players to the tournament, lets go of players the tournament moved to another
  *   table (writing them into that table's seats with their chips), seats players assigned here
  *   who aren't at any table yet, hands over chips bought since the last hand, sets the level's
- *   blinds and ante, and holds the table while the tournament is paused or on a break. Tables play
+ *   blinds and ante, and holds the table while the tournament is paused or on a break, or while
+ *   it waits for the other tables hand for hand on the bubble. Tables play
  *   by tournament rules: a player sitting out is still dealt in, posts blinds and antes and has
  *   their hands folded for them until they come back or are blinded off.
  * - syncTournamentRooms runs after the tournament changes outside a hand (start, resume, a late
  *   entry, a rebuy): it opens rooms for new tables, seats waiting players and wakes tables that
  *   can play.
+ * - keepTablesMoving runs when the tournament is viewed and after a table deals: a table nobody
+ *   has open (everyone away, or gone) has no screen asking for its next hand or enforcing its turn
+ *   clock, so the server does both for it.
+ *
+ * Seats change one at a time in the database (room-seats.ts), a move changing both tables at once.
+ * Each table also clears seats the tournament no longer gives it, so a change that went wrong
+ * between hands is put right before the next.
  *
  * A player moved between tables finishes the hand they're in first: their old table lets them
  * go at its next break between hands, and their new table deals them in once it has them.
@@ -84,23 +95,19 @@ function seatedIn(seats: GameSeats.GameSeats, userId: string): boolean {
 
 /** Put a player in a room's seat (the tournament's seat number) and make them a member. */
 async function seatPlayer(roomId: string, seats: GameSeats.GameSeats, seatNumber: number, userId: string, name: string, chips: number) {
-  seats[seatNumber] = { playerId: userId, playerName: name, chips };
-  GameSeats.setRoomSeats(roomId, seats);
-  await GameSeats.persistRoomSeats(roomId, seats);
-  // One statement: two players seated here at once mustn't drop each other from the members
-  await addRoomMember(roomId, userId);
+  const seat = { playerId: userId, playerName: name, chips };
+  await takeSeat(roomId, seatNumber, seat);
+  seats[seatNumber] = seat;
 }
 
-async function vacateSeat(roomId: string, seats: GameSeats.GameSeats, userId: string) {
+function vacate(seats: GameSeats.GameSeats, userId: string) {
   for (const [n, a] of Object.entries(seats)) if (a?.playerId === userId) seats[Number(n)] = null;
-  GameSeats.setRoomSeats(roomId, seats);
-  await GameSeats.persistRoomSeats(roomId, seats);
 }
 
 /**
  * Bring a tournament table's room in line with the tournament before its next hand. On ok, the
  * caller syncs seated players into the engine, deals the hand and saves; otherwise it answers
- * with the result (the engine has already been saved if it changed).
+ * with the result. Players who left are saved straight away either way.
  */
 export async function prepareTournamentHand(roomId: string, engine: PokerEngine, link: TournamentRoomLink): Promise<PrepareResult> {
   const state = engine.getState();
@@ -111,11 +118,13 @@ export async function prepareTournamentHand(roomId: string, engine: PokerEngine,
   const live = state.players.filter(p => !engine.isRemoved(p.id));
   const stacks = Object.fromEntries(live.map(p => [p.id, Number(p.stack) || 0]));
   const bustedIds = new Set(live.filter(p => (Number(p.stack) || 0) <= 0).map(p => p.id));
+  const startStack = (id: string) => state.handStartStacks?.[id] ?? 0;
   const busted = live
     .filter(p => bustedIds.has(p.id))
-    .sort((a, b) => (state.handStartStacks?.[a.id] ?? 0) - (state.handStartStacks?.[b.id] ?? 0))
-    .map(p => ({ userId: p.id, eliminatedBy: biggestWinner(state, bustedIds) }));
-  let t = await tournamentManager.reportHand({ tournamentId: link.tournamentId, stacks, busted });
+    .sort((a, b) => startStack(a.id) - startStack(b.id))
+    .map(p => ({ userId: p.id, eliminatedBy: biggestWinner(state, bustedIds), startStack: startStack(p.id) }));
+  const handNumber = Number(state.handNumber) || 0;
+  let t = await tournamentManager.reportHand({ tournamentId: link.tournamentId, stacks, busted, tableId: link.tableId, handNumber });
 
   // 2. Seat the table the way the tournament has it
   const table = t.tables.find(tb => tb.id === link.tableId);
@@ -132,21 +141,33 @@ export async function prepareTournamentHand(roomId: string, engine: PokerEngine,
   for (const p of live) {
     if (wanted.has(p.id)) continue;
     engine.removePlayer(p.id);
-    await vacateSeat(roomId, seats, p.id);
     changed = true;
-    if (!remainingPlayers(t).includes(p.id)) continue;
-    const dest = t.tables.find(tb => tb.seats.includes(p.id));
-    if (!dest?.roomId) continue; // its room opens in syncTournamentRooms, which seats them
-    const destSeats = allSeats.get(dest.roomId) || {};
-    if (!seatedIn(destSeats, p.id)) {
+    const dest = remainingPlayers(t).includes(p.id) ? t.tables.find(tb => tb.seats.includes(p.id)) : undefined;
+    // A table without a room yet gets one in syncTournamentRooms, which seats them
+    const destSeats = dest?.roomId ? allSeats.get(dest.roomId) || {} : undefined;
+    if (dest?.roomId && destSeats && !seatedIn(destSeats, p.id)) {
       const { total, pending } = chipsToBring(t, p.id);
-      await seatPlayer(dest.roomId, destSeats, dest.seats.indexOf(p.id) + 1, p.id, nameOf(p.id), total);
+      const seat = { playerId: p.id, playerName: nameOf(p.id), chips: total };
+      await moveSeat(roomId, dest.roomId, dest.seats.indexOf(p.id) + 1, seat);
+      vacate(seats, p.id);
+      destSeats[dest.seats.indexOf(p.id) + 1] = seat;
       if (pending > 0) delivered[p.id] = pending;
       wake.add(dest.roomId);
+    } else {
+      await leaveSeat(roomId, p.id);
+      vacate(seats, p.id);
     }
+    if (!dest?.roomId) continue;
     await publishTableEvent(roomId, {
       type: 'tournament_moved', playerId: p.id, roomId: dest.roomId, table: dest.number, seat: dest.seats.indexOf(p.id) + 1,
     }).catch(() => {});
+  }
+  // Seats the tournament no longer gives this table (left by a change that went wrong) are cleared,
+  // so nobody who busted or moved comes back into the game here
+  for (const a of Object.values(seats)) {
+    if (!a?.playerId || wanted.has(a.playerId)) continue;
+    await leaveSeat(roomId, a.playerId);
+    vacate(seats, a.playerId);
   }
   // Players assigned here who aren't at any table yet (a late entry, a rebuy back in) sit down
   for (const userId of wanted) {
@@ -165,6 +186,17 @@ export async function prepareTournamentHand(roomId: string, engine: PokerEngine,
     }
   }
   if (Object.keys(delivered).length > 0) t = await tournamentManager.ackChips({ tournamentId: link.tournamentId, delivered });
+  const hold = (body: Record<string, unknown>): PrepareResult => ({ ok: false, status: 409, body });
+  // Save who left now, whatever happens next: a table that then can't deal (one player left, waiting
+  // for a moved player) would otherwise report the same busts again, eliminating a player who has
+  // since bought back in
+  if (changed && (await persistEngineState(roomId, engine)) === 'conflict') return hold({ ...STALE_STATE_RESPONSE });
+
+  // Hand for hand: the first table to deal a round's hand wakes the others to deal theirs
+  const h = t.handForHand;
+  if (h && h.dealtAfter[link.tableId] === handNumber && Object.keys(h.dealtAfter).length === 1 && h.finished.length === 0) {
+    for (const other of t.tables) if (other.roomId && other.roomId !== roomId) wake.add(other.roomId);
+  }
 
   // 3. This level's blinds and ante, from the next hand
   const level = currentLevel(t);
@@ -174,13 +206,10 @@ export async function prepareTournamentHand(roomId: string, engine: PokerEngine,
   for (const other of wake) await wakeTable(other).catch(err => console.warn('[tournament] Could not wake table:', err));
 
   // 4. Hold the table while the tournament isn't playing
-  const hold = (body: Record<string, unknown>): PrepareResult => ({ ok: false, status: 409, body });
   if (!IN_PLAY.has(t.status)) {
-    if (changed) await persistEngineState(roomId, engine);
     return hold({ error: t.status === 'completed' ? 'The tournament is over' : 'The tournament has ended', code: 'TOURNAMENT_OVER' });
   }
   if (wanted.size === 0) {
-    if (changed) await persistEngineState(roomId, engine);
     return hold({ error: 'This table has closed; its players have moved to other tables', code: 'TABLE_CLOSED' });
   }
   if (t.status !== 'running') {
@@ -190,6 +219,9 @@ export async function prepareTournamentHand(roomId: string, engine: PokerEngine,
       code: 'TOURNAMENT_PAUSED',
       breakEndsAt: t.status === 'on-break' ? t.breakEndsAt : null,
     });
+  }
+  if (handForHandWaits(t, link.tableId)) {
+    return hold({ error: 'Hand for hand: waiting for the other tables to finish their hands', code: 'HAND_FOR_HAND' });
   }
   return { ok: true };
 }
@@ -289,6 +321,57 @@ export async function wakeTable(roomId: string): Promise<void> {
   engine.startNewHand();
   if ((await persistEngineState(roomId, engine)) === 'conflict') return;
   await announce(roomId, engine.getState(), 'next_hand_started');
+}
+
+// Players' screens ask for the next hand 5 seconds after a showdown and enforce the turn clock the
+// moment it runs out; the server steps in only once they clearly haven't
+const IDLE_SHOWDOWN_MS = 12_000;
+const TURN_GRACE_MS = 5_000;
+const NUDGE_EVERY_MS = 10_000;
+const lastNudged = new Map<string, number>();
+
+/**
+ * Keep a tournament's tables playing when nobody has them open: deal the next hand at a table
+ * that has sat at showdown too long, and act for a player whose turn clock ran out without a
+ * screen enforcing it. Under tournament rules everyone away is dealt in and folded for, so an
+ * abandoned table carries on blinding its players off. At most every few seconds per tournament
+ * (on this server instance); failures are logged, not thrown.
+ */
+export async function keepTablesMoving(tournamentId: string, options: { skipRoomId?: string } = {}): Promise<void> {
+  const now = Date.now();
+  if (now - (lastNudged.get(tournamentId) ?? 0) < NUDGE_EVERY_MS) return;
+  lastNudged.set(tournamentId, now);
+  try {
+    const t = await tournamentManager.get(tournamentId);
+    if (!t || t.status !== 'running') return;
+    for (const table of t.tables) {
+      if (!table.roomId || table.roomId === options.skipRoomId) continue;
+      await moveTableOn(table.roomId, now).catch(err => console.warn('[tournament] Could not move a table on:', err));
+    }
+  } catch (err) {
+    console.warn('[tournament] Could not keep tables moving:', err);
+  }
+}
+
+async function moveTableOn(roomId: string, now: number): Promise<void> {
+  const engine = await getOrRestoreEngine(roomId);
+  if (!engine) return wakeTable(roomId);
+  const state = engine.getState();
+  if (BETWEEN_HANDS.has(state.stage)) {
+    const last = await getLastActionAt(roomId);
+    if (!last || now - last.getTime() >= IDLE_SHOWDOWN_MS) await wakeTable(roomId);
+    return;
+  }
+  const deadline = state.turnDeadline;
+  if (!state.activePlayer || typeof deadline !== 'number' || now < deadline + TURN_GRACE_MS || state.runItTwicePrompt || state.paused) return;
+  const player = state.players.find(p => p.id === state.activePlayer);
+  if (!player) return;
+  await runGameAction({
+    tableId: roomId,
+    engine,
+    apply: () => { engine.handleTimeout(now); },
+    lastAction: { action: player.currentBet < state.currentBet ? 'fold' : 'check', playerId: player.id, reason: 'timeout' },
+  });
 }
 
 /**

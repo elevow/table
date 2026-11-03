@@ -19,7 +19,7 @@ type SocketIOServer = {
   to: (room: string) => { emit: (event: string, data: unknown) => void };
 };
 
-export function getIo(res: NextApiResponse): SocketIOServer | null {
+export function getIo(res: NextApiResponse | undefined): SocketIOServer | null {
   try {
     // @ts-ignore
     const io = (res as any)?.socket?.server?.io;
@@ -35,7 +35,7 @@ export function getIo(res: NextApiResponse): SocketIOServer | null {
  */
 export async function broadcastGameState(
   tableId: string,
-  res: NextApiResponse,
+  res: NextApiResponse | undefined,
   state: TableState,
   lastAction: unknown
 ): Promise<TableState> {
@@ -87,7 +87,7 @@ export type GameActionResult =
 export async function runGameAction(opts: {
   tableId: string;
   engine: PokerEngine;
-  res: NextApiResponse;
+  res?: NextApiResponse;
   apply: () => void;
   lastAction: unknown;
 }): Promise<GameActionResult> {

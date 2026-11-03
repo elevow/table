@@ -6,7 +6,7 @@ import { loadPlayerNames } from '../../../src/lib/tournament/pg-tournament-store
 import { buildTournamentView } from '../../../src/lib/tournament/tournament-view';
 import { getRequestAccess, hasPermission, sendPermissionDenied } from '../../../src/lib/auth/access-control';
 import { canManageTournament } from '../../../src/lib/tournament/require-organizer';
-import { syncTournamentRooms } from '../../../src/lib/tournament/table-rooms';
+import { keepTablesMoving, syncTournamentRooms } from '../../../src/lib/tournament/table-rooms';
 
 // Opening or waking a tournament's tables can take a while with many of them
 export const config = { maxDuration: 60 };
@@ -25,6 +25,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { tournament: t, started } = await tournamentManager.startIfDue(String(tournamentId));
     if (!t) return res.status(404).json({ error: 'Tournament not found' });
     if (started) await syncTournamentRooms(t.id);
+    // Tables nobody has open still need their next hands dealt
+    else await keepTablesMoving(t.id);
     const names = await loadPlayerNames(t.registeredPlayers).catch(() => ({}));
     return res.status(200).json(buildTournamentView(t, Date.now(), access.userId, names, { canManage: canManageTournament(access, t) }));
   } catch (err) {

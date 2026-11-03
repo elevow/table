@@ -41,6 +41,22 @@ describe('bringing seated players into the game between hands', () => {
     expect(a.stack + a.currentBet).toBeLessThan(999);
   });
 
+  it('a player who left, missed hands and sits back down is dealt in again, not dropped every hand', () => {
+    const engine = new PokerEngine('t', [mk('a', 1), mk('b', 3), mk('c', 6)], 1, 2);
+    engine.useTournamentRules();
+    engine.startNewHand();
+    engine.removePlayer('b');
+    foldOut(engine);
+    engine.startNewHand(); // b is gone from this hand on
+    expect(engine.getState().players.map(p => p.id)).toEqual(['a', 'c']);
+    foldOut(engine);
+
+    expect(engine.syncSeatedPlayers([seat('a', 1), seat('b', 3, 500), seat('c', 6)])).toBe(true);
+    expect(engine.isRemoved('b')).toBe(false);
+    engine.startNewHand();
+    expect(engine.getState().players.map(p => p.id)).toEqual(['a', 'b', 'c']);
+  });
+
   it('a player who sat down after the game started joins in seat order once the big blind reaches them', () => {
     const engine = new PokerEngine('t', [mk('a', 1), mk('c', 6)], 1, 2);
     engine.startNewHand();

@@ -2,9 +2,12 @@ import { TableState, GameStage, Player } from '../../types/poker';
 import { isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { HandEvaluator } from './hand-evaluator';
 
-/** Not dealt into hands: sitting out, or waiting for the big blind to reach them. */
-export function sitsOutOfHand(p: Player): boolean {
-  return !!p.isSittingOut || !!p.waitingForBigBlind;
+/**
+ * Not dealt into hands: sitting out, or waiting for the big blind to reach them. Under tournament
+ * rules a player sitting out is still dealt in (and played for), so only waiting keeps them out.
+ */
+export function sitsOutOfHand(p: Player, state?: Pick<TableState, 'tournamentRules'>): boolean {
+  return (!!p.isSittingOut && !state?.tournamentRules) || !!p.waitingForBigBlind;
 }
 
 export class GameStateManager {
@@ -211,14 +214,14 @@ export class GameStateManager {
 
   /** Players taking part in the current hand: everyone not sitting out or waiting for the big blind. */
   public dealtInPlayers(): Player[] {
-    return this.state.players.filter(p => !sitsOutOfHand(p));
+    return this.state.players.filter(p => !sitsOutOfHand(p, this.state));
   }
 
   public rotateDealerButton(): number {
     // The button moves to the next player who is sitting in
     const n = this.state.players.length;
     let next = (this.state.dealerPosition + 1) % n;
-    for (let i = 0; i < n && this.state.players[next] && sitsOutOfHand(this.state.players[next]); i++) {
+    for (let i = 0; i < n && this.state.players[next] && sitsOutOfHand(this.state.players[next], this.state); i++) {
       next = (next + 1) % n;
     }
     this.state.dealerPosition = next;

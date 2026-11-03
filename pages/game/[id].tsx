@@ -461,6 +461,11 @@ export default function GamePage() {
         if (payload?.type === 'seat_request_resolved' && payload.playerId === playerId) {
           setSeatNotice(payload.approved ? 'The host approved your seat.' : 'The host declined your seat request.');
         }
+        // The tournament moved this player to another table: take them there
+        if (payload?.type === 'tournament_moved' && payload.playerId === playerId && payload.roomId) {
+          setSeatNotice(`You've been moved to table ${payload.table}, seat ${payload.seat}. Taking you there…`);
+          setTimeout(() => router.push(`/game/${payload.roomId}`), 3000);
+        }
       },
       onRebuyResult: (payload: any) => {
         console.log('📡 Supabase rebuy_result:', payload);
@@ -747,6 +752,11 @@ export default function GamePage() {
           setTableWaitNotice('Waiting for at least two players to sit in.');
         } else if (data?.code === 'PAUSED') {
           setTableWaitNotice(null);
+        } else if (data?.code === 'TOURNAMENT_PAUSED' || data?.code === 'TOURNAMENT_OVER' || data?.code === 'TABLE_CLOSED') {
+          // A tournament table waits for the tournament: a break, a pause, a closed table or the end
+          setTableWaitNotice(data.breakEndsAt
+            ? `${data.error}. Play resumes at ${new Date(data.breakEndsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`
+            : data.error);
         } else {
           console.warn('Next hand request failed:', data?.error || response.status);
         }
@@ -1395,12 +1405,13 @@ export default function GamePage() {
       if (!gs || !Array.isArray(gs.players) || gs.players.length < 2) return null;
 
       const allPlayers = gs.players as Array<{ id: string; position?: number; isSittingOut?: boolean; waitingForBigBlind?: boolean }>;
+      // At a tournament table players sitting out still post
       const dealerIdxAll = Number(gs.dealerPosition);
       if (!Number.isFinite(dealerIdxAll)) return null;
       const dealerId = allPlayers[dealerIdxAll]?.id;
       if (!dealerId) return null;
       // Blinds go round the players sitting in, as on the server
-      const players = allPlayers.filter(p => !p.isSittingOut && !p.waitingForBigBlind);
+      const players = allPlayers.filter(p => (gs.tournamentRules || !p.isSittingOut) && !p.waitingForBigBlind);
       const dealerIdx = Math.max(0, players.findIndex(p => p.id === dealerId));
       const n = players.length;
       if (n < 2) return null;
@@ -1573,6 +1584,23 @@ export default function GamePage() {
       setSitOutPending(false);
     }
   }, [tableId, playerId, me]);
+
+  // A tournament seated us at this table and we've just opened it: sit in. Retried on the next
+  // state update if the request fails or loses a race
+  const arriving = useRef(false);
+  const notArrived = !!me?.notArrived;
+  useEffect(() => {
+    if (!notArrived || !tableId || !playerId || arriving.current) return;
+    arriving.current = true;
+    fetch('/api/games/sit-out', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ tableId, playerId, sittingOut: false }),
+    })
+      .then(r => r.json().catch(() => ({})).then(data => { if (r.ok && data?.gameState) setPokerGameState(data.gameState); }))
+      .catch(err => console.warn('Could not sit in at the tournament table:', err))
+      .finally(() => { arriving.current = false; });
+  }, [notArrived, tableId, playerId, pokerGameState]);
 
   // After the hand: turn our cards face up for the table
   const showMyCards = useCallback(async () => {
@@ -1794,7 +1822,9 @@ export default function GamePage() {
                 const gamePlayer = pokerGameState.players?.find((p: any) => p.id === assignment.playerId);
                 return gamePlayer && (
                   <div className="text-xs mt-1">
-                    {gamePlayer.isSittingOut && <span className="text-gray-500 dark:text-gray-400 italic">Sitting out</span>}
+                    {gamePlayer.isSittingOut && (
+                      <span className="text-gray-500 dark:text-gray-400 italic">{gamePlayer.notArrived ? 'Not here yet (posting blinds)' : pokerGameState.tournamentRules ? 'Away (posting blinds)' : 'Sitting out'}</span>
+                    )}
                     {gamePlayer.waitingForBigBlind && !gamePlayer.isSittingOut && (
                       <span className="text-gray-500 dark:text-gray-400 italic">{gamePlayer.postBigBlindNow ? 'Posting big blind' : 'Waiting for big blind'}</span>
                     )}
@@ -2583,7 +2613,9 @@ export default function GamePage() {
                 onClick={toggleSitOut}
                 disabled={sitOutPending}
                 className={`${me.isSittingOut ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-600 hover:bg-gray-700'} disabled:opacity-60 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 w-full sm:w-auto whitespace-nowrap`}
-                title={me.isSittingOut ? 'You are sitting out; you will be dealt in from the next hand' : 'Keep your seat but skip hands from the next one'}
+                title={pokerGameState?.tournamentRules
+                  ? (me.isSittingOut ? 'You are away: your blinds and antes are posted and your hands folded until you come back' : 'Step away: your blinds and antes are still posted and your hands folded for you')
+                  : (me.isSittingOut ? 'You are sitting out; you will be dealt in from the next hand' : 'Keep your seat but skip hands from the next one')}
                 aria-pressed={!!me.isSittingOut}
               >
                 {me.isSittingOut ? "I'm Back" : 'Sit Out'}

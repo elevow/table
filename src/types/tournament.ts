@@ -26,7 +26,21 @@ export interface TournamentConfig {
   type: TournamentType;
   blindLevels: BlindLevel[];
   startingStack: number;
+  buyIn?: number; // each entry's contribution to the prize pool (currency units); unset means free
+  entryFee?: number; // charged on top of the buy-in for the house; not in the prize pool
+  // Knockout: each entry and rebuy also puts `amount` on the player's head, paid to whoever knocks them out.
+  // 'progressive' pays half and adds the other half to the knocker's own bounty.
+  bounty?: { amount: number; type: 'standard' | 'progressive' };
+  seatsPerTable?: number; // seats at each table, 2-9 (a game room's size); defaults to 9
+  maxPlayers?: number; // registration closes at this many players; unset means no cap
+  startsAt?: number; // epoch ms the tournament starts by itself; unset means the director starts it
+  minPlayers?: number; // with startsAt: fewer registered by then and the tournament is cancelled (at least 2)
+  // Who moves the blinds up: 'director' changes levels and starts and ends breaks by hand, the
+  // clock only counting down as a guide; 'clock' (or unset) moves on by itself when time runs out
+  levelControl?: 'director' | 'clock';
   payoutStructure: PayoutTier[];
+  // Pay a share of the field instead of payoutStructure's fixed places, e.g. { paidPercent: 15 }
+  payoutScaling?: { paidPercent: number };
   breaks: BreakSchedule[];
   lateRegistration: {
     enabled: boolean;
@@ -38,9 +52,14 @@ export interface TournamentConfig {
     enabled: boolean;
     maxPerPlayer?: number; // 0/undefined = unlimited
     availableUntilLevel?: number; // inclusive
-    cost: number; // buy-in cost for a rebuy (currency units)
+    cost: number; // what a rebuy costs (currency units); goes to the prize pool less feePercent
     stack: number; // chips granted per rebuy
-    feePercent?: number; // optional fee
+    feePercent?: number; // share of the cost kept by the house
+  };
+  // Re-entry: a busted player buys a new entry (buy-in, fee and bounty) while late registration is open
+  reentry?: {
+    enabled: boolean;
+    maxPerPlayer?: number; // 0/undefined = unlimited
   };
   addOn?: {
     enabled: boolean;

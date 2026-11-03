@@ -170,7 +170,7 @@ SELECT r.id, p FROM r, unnest(ARRAY[
   'room.approve_seat', 'room.kick_player', 'room.transfer_host',
   'room.view_ledger', 'room.edit_ledger',
   'tournament.view', 'tournament.register', 'tournament.create', 'tournament.manage',
-  'tournament.eliminate', 'tournament.payouts', 'tournament.report',
+  'tournament.manage_any', 'tournament.eliminate', 'tournament.payouts', 'tournament.report',
   'chat.send', 'chat.private', 'chat.delete_own', 'chat.delete_any', 'chat.moderate',
   'friends.use', 'profile.upload_avatar', 'avatar.moderate',
   'history.view_own', 'history.view_any', 'history.export', 'stats.hud', 'stats.view_others',

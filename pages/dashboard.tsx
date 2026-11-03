@@ -259,6 +259,9 @@ const Dashboard: NextPage = () => {
             <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/leaderboard')}>
               Leaderboard &amp; achievements
             </button>
+            <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/tournaments')}>
+              Tournaments
+            </button>
             {canViewRoles && (
               <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/admin/roles')}>
                 Roles &amp; permissions

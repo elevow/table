@@ -149,6 +149,13 @@ describe('hand records storage', () => {
       expect(awarded()).toEqual(['first_hand', 'first_win', 'quads_plus', 'first_hand']);
     });
 
+    it('casts each parameter, since Postgres rejects one used both as a value and against a column', async () => {
+      await applyHandToStatistics({ query } as any, record());
+      const sql: string = query.mock.calls[0][0];
+      expect(sql).toContain('SELECT $1::uuid, $2::varchar, $3::jsonb');
+      expect(sql).toContain('user_id = $1::uuid AND achievement_type = $2::varchar');
+    });
+
     it('awards milestone, big pot, double up, bomb pot and quads achievements', async () => {
       updateStats.mockResolvedValue({ handsPlayed: 1000, handsWon: 100 });
       await applyHandToStatistics({ query } as any, record({

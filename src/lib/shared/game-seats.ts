@@ -35,7 +35,7 @@ export function initializeRoomSeats(roomId: string): GameSeats {
   return gameSeats.get(roomId)!;
 }
 
-const normalizeRoomSeats = (value: unknown): GameSeats => {
+export const normalizeRoomSeats = (value: unknown): GameSeats => {
   const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const seats: GameSeats = {};
   for (let seatNumber = 1; seatNumber <= 9; seatNumber++) {

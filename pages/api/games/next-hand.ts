@@ -23,7 +23,7 @@ import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapp
 import type { BettingMode, GameVariant } from '../../../src/types/poker';
 import { ALL_VARIANTS } from '../../../src/lib/poker/variant-rules';
 import { loadRoom } from '../../../src/lib/server/room-config';
-import { prepareTournamentHand, tournamentTableOf } from '../../../src/lib/tournament/table-rooms';
+import { keepTablesMoving, prepareTournamentHand, tournamentTableOf } from '../../../src/lib/tournament/table-rooms';
 
 // Type definitions for room configuration from database
 interface RoomConfiguration {
@@ -51,6 +51,9 @@ function extractBlindValue(blinds: BlindLevels, ...keys: (keyof BlindLevels)[]):
 }
 
 const DEFAULT_DEALERS_CHOICE_VARIANTS: GameVariant[] = [...ALL_VARIANTS];
+
+// A tournament table also moves on the tournament's other tables if nobody has them open
+export const config = { maxDuration: 60 };
 
 const NEXT_HAND_LOCK_KEY = '__NEXT_HAND_LOCKS__';
 
@@ -297,6 +300,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           lastAction: { action: 'next_hand_started', playerId },
           timestamp: new Date().toISOString(),
         });
+        // The tournament's other tables may have nobody there to deal their next hands
+        if (tournamentTable) await keepTablesMoving(tournamentTable.tournamentId, { skipRoomId: tableId });
 
         // Sanitize the response for the requesting player - hide other players' hole cards
         // unless it's showdown or an all-in situation

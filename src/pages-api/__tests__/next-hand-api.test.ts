@@ -82,7 +82,9 @@ const mockPrepareTournamentHand = jest.fn();
 jest.mock('../../../src/lib/tournament/table-rooms', () => ({
   tournamentTableOf: (c: any) => (c?.tournamentId ? { tournamentId: c.tournamentId, tableId: c.tournamentTableId } : null),
   prepareTournamentHand: (...args: any[]) => mockPrepareTournamentHand(...args),
+  keepTablesMoving: (...args: any[]) => mockKeepTablesMoving(...args),
 }));
+const mockKeepTablesMoving = jest.fn(async (..._args: any[]) => {});
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import handler from '../../../pages/api/games/next-hand';
@@ -368,6 +370,8 @@ describe('/api/games/next-hand', () => {
       expect((publisher.publishRebuyPrompt as jest.Mock)).not.toHaveBeenCalled();
       expect(engine.startNewHand).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
+      // The tournament's other tables are looked at too, in case nobody has them open
+      expect(mockKeepTablesMoving).toHaveBeenCalledWith(expect.any(String), { skipRoomId: 't1' });
     });
 
     it('an ordinary room is not touched by the tournament code', async () => {

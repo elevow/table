@@ -21,6 +21,7 @@ const view = (overrides: Partial<TournamentView> = {}): TournamentView => ({
   breakAfterLevelMinutes: null,
   rebuysOpen: false,
   waitingOnRebuys: false,
+  handForHandRound: null,
   onBreak: false,
   breakRemainingMs: null,
   players: { entrants: 4, entries: 4, remaining: 3, paidPlaces: 3 },

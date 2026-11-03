@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { validateTournamentConfig } from './tournament-utils';
 import { bountyEnabled, collectWinnerBounty, forfeitBounty, payoutTable, postBounty, prizePool, remainingPlayers, settleKnockout } from './tournament-money';
 import type { TournamentStore } from './tournament-store';
-import { DEFAULT_SEATS_PER_TABLE, Random, balanceTables, drawSeats, seatLatePlayer, unseatPlayer } from './tournament-seating';
+import { DEFAULT_SEATS_PER_TABLE, Random, balanceTables, drawSeats, seatLatePlayer, seatedPlayers, unseatPlayer } from './tournament-seating';
 import { catchUpClock, endBreak, enterNextLevel, pauseClock, resumeClock, scheduleElapsedMs, startClock, stopClock } from './tournament-clock';
 import type {
   TournamentState,
@@ -268,11 +268,16 @@ export class TournamentManager {
    * A table finished a hand: record everyone's stack, and eliminate the players who busted, in
    * order (the smallest starting stack first, so it finishes lowest), crediting who won their chips.
    * Busts recorded this way can't be undone: the chips have already moved at the table.
+   *
+   * With `tableId` and `handNumber` (the hand just finished) the table also takes its turn hand for
+   * hand on the bubble (see handForHandWaits); busts in a hand-for-hand round wait for it to end.
    */
   reportHand(input: {
     tournamentId: string;
     stacks: Record<string, number>;
-    busted: { userId: string; eliminatedBy?: string }[];
+    busted: { userId: string; eliminatedBy?: string; startStack?: number }[];
+    tableId?: string;
+    handNumber?: number;
   }): Promise<TournamentState> {
     return this.change(input.tournamentId, (t, now) => {
       if (t.status !== 'running' && t.status !== 'paused' && t.status !== 'on-break') return;
@@ -280,16 +285,19 @@ export class TournamentManager {
       for (const [userId, stack] of Object.entries(input.stacks)) {
         if (t.registeredPlayers.includes(userId) && !t.eliminatedPlayers.includes(userId)) chips[userId] = Math.max(0, stack);
       }
-      for (const bust of input.busted) {
-        // An earlier bust in this hand may have ended the tournament
-        if ((t.status as TournamentState['status']) === 'completed') break;
-        if (t.eliminatedPlayers.includes(bust.userId) || !t.registeredPlayers.includes(bust.userId)) continue;
-        if (remainingPlayers(t).length <= 1) break;
-        const by = bust.eliminatedBy && bust.eliminatedBy !== bust.userId && remainingPlayers(t).includes(bust.eliminatedBy)
-          ? bust.eliminatedBy
-          : undefined;
-        this.knockOut(t, now, bust.userId, by, false, true);
+      const { tableId } = input;
+      const handNumber = input.handNumber ?? 0;
+      const h = t.handForHand;
+      if (h && tableId !== undefined && h.dealtAfter[tableId] !== undefined && handNumber > h.dealtAfter[tableId]) {
+        // This table's hand of the round is over; its busts wait for the other tables
+        for (const bust of input.busted) {
+          if (!h.busts.some(b => b.userId === bust.userId)) h.busts.push({ ...bust, startStack: bust.startStack ?? 0 });
+        }
+        if (!h.finished.includes(tableId)) h.finished.push(tableId);
+      } else {
+        this.eliminateBusts(t, now, input.busted);
       }
+      if (tableId !== undefined) this.takeHandForHandTurn(t, now, tableId, handNumber);
     });
   }
 
@@ -306,6 +314,40 @@ export class TournamentManager {
       addPendingChips(t, input.userId, t.config.startingStack);
       this.returnToField(t, input.userId);
     });
+  }
+
+  /** Eliminate players who busted at a table, in the order given, crediting who won their chips. */
+  private eliminateBusts(t: TournamentState, now: number, busted: { userId: string; eliminatedBy?: string }[]): void {
+    for (const bust of busted) {
+      // An earlier bust in this hand may have ended the tournament
+      if ((t.status as TournamentState['status']) === 'completed') break;
+      if (t.eliminatedPlayers.includes(bust.userId) || !t.registeredPlayers.includes(bust.userId)) continue;
+      if (remainingPlayers(t).length <= 1) break;
+      const by = bust.eliminatedBy && bust.eliminatedBy !== bust.userId && remainingPlayers(t).includes(bust.eliminatedBy)
+        ? bust.eliminatedBy
+        : undefined;
+      this.knockOut(t, now, bust.userId, by, false, true);
+    }
+  }
+
+  /**
+   * Hand for hand: end the round once every table playing has finished its hand (eliminating the
+   * round's busts, the smallest starting stack at any table finishing lowest), start a round when
+   * the tournament is on the bubble, and let this table deal its hand of the round if it hasn't.
+   */
+  private takeHandForHandTurn(t: TournamentState, now: number, tableId: string, handNumber: number): void {
+    let h = t.handForHand ?? null;
+    const round = h?.round ?? 0;
+    if (h && playingTables(t).every(tb => h!.finished.includes(tb.id))) {
+      const busts = [...h.busts].sort((a, b) => a.startStack - b.startStack);
+      t.handForHand = h = null;
+      this.eliminateBusts(t, now, busts);
+    }
+    if (!h && handForHandDue(t)) t.handForHand = h = { round: round + 1, dealtAfter: {}, finished: [], busts: [] };
+    if (!h) delete t.handForHand;
+    if (h && t.status === 'running' && h.dealtAfter[tableId] === undefined && playingTables(t).some(tb => tb.id === tableId)) {
+      h.dealtAfter[tableId] = handNumber;
+    }
   }
 
   /** Remember the game room a table plays in. */
@@ -510,6 +552,30 @@ export function rebuyPeriodOpen(t: TournamentState): boolean {
   if (!cfg?.enabled || t.rebuysClosedAt) return false;
   if (cfg.availableUntilLevel === undefined || cfg.availableUntilLevel === null) return true;
   return currentLevelNumber(t) <= cfg.availableUntilLevel;
+}
+
+/** Tables with at least two players, which can deal a hand. */
+function playingTables(t: TournamentState) {
+  return t.tables.filter(tb => seatedPlayers(tb).length >= 2);
+}
+
+/**
+ * Whether the tournament is on the bubble with more than one table, so the tables play hand for
+ * hand: one player away from the money, and rebuys over (a bust before then may buy back in).
+ */
+export function handForHandDue(t: TournamentState): boolean {
+  if (t.status !== 'running' && t.status !== 'paused' && t.status !== 'on-break') return false;
+  if (playingTables(t).length < 2 || rebuyPeriodOpen(t)) return false;
+  const paid = payoutTable(t).length;
+  return paid > 0 && remainingPlayers(t).length === paid + 1;
+}
+
+/**
+ * Whether a table that has finished a hand waits for the other tables before dealing another:
+ * hand for hand, it has played its hand of the round and other tables haven't finished theirs.
+ */
+export function handForHandWaits(t: TournamentState, tableId: string): boolean {
+  return !!t.handForHand?.finished.includes(tableId);
 }
 
 /**

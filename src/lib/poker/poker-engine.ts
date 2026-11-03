@@ -737,6 +737,8 @@ export class PokerEngine {
         delete existing.missedBigBlind;
         if (!this.state.tournamentRules) delete existing.notArrived;
       } else {
+        // Dropped at an earlier hand and back now (a tournament rebuy at the same table)
+        this.removedPlayers.delete(s.id);
         this.state.players.push({ id: s.id, ...fresh } as Player);
       }
     }

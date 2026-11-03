@@ -49,7 +49,9 @@ jest.mock('../../../src/lib/auth/auth-utils', () => ({
 const mockSyncRooms = jest.fn(async (_id: string) => {});
 jest.mock('../../../src/lib/tournament/table-rooms', () => ({
   syncTournamentRooms: (id: string) => mockSyncRooms(id),
+  keepTablesMoving: (id: string) => mockKeepTablesMoving(id),
 }));
+const mockKeepTablesMoving = jest.fn(async (_id: string) => {});
 
 // Usernames come from the users table
 const mockLoadPlayerNames = jest.fn(async (_ids: string[]) => ({ p1: 'Player One' }) as Record<string, string>);

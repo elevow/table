@@ -39,8 +39,11 @@ class MockEngine {
     if (this.pendingBlinds) Object.assign(this.state, this.pendingBlinds);
     this.state.stage = 'preflop';
     this.state.handStartStacks = Object.fromEntries(this.state.players.map((p: any) => [p.id, p.stack]));
+    this.state.handNumber = (this.state.handNumber || 0) + 1;
     this.handsStarted += 1;
   }
+  timedOutAt: number | null = null;
+  handleTimeout(now: number) { this.timedOutAt = now; }
   /** Test helper: the hand ends with these stacks, the winner taking the chips that changed hands. */
   endHand(stacks: Record<string, number>, winner?: string) {
     this.state.stage = 'showdown';
@@ -50,10 +53,36 @@ class MockEngine {
 }
 
 jest.mock('../../poker/poker-engine', () => ({ PokerEngine: MockEngine }));
+const mockSavedAt = new Map<string, number>();
 jest.mock('../../poker/engine-persistence', () => ({
   getOrRestoreEngine: async (roomId: string) => mockEngines.get(roomId) ?? null,
-  persistEngineState: async (roomId: string, engine: any) => { mockEngines.set(roomId, engine); return 'saved'; },
+  persistEngineState: async (roomId: string, engine: any) => { mockEngines.set(roomId, engine); mockSavedAt.set(roomId, Date.now()); return 'saved'; },
+  STALE_STATE_RESPONSE: { error: 'stale', code: 'STALE_GAME_STATE' },
+  getLastActionAt: async (roomId: string) => (mockSavedAt.has(roomId) ? new Date(mockSavedAt.get(roomId)!) : null),
 }));
+const mockTimeouts: string[] = [];
+jest.mock('../../server/game-action-pipeline', () => ({
+  runGameAction: async ({ tableId, apply }: { tableId: string; apply: () => void }) => { apply(); mockTimeouts.push(tableId); return { status: 'ok' }; },
+}));
+// Each seat change goes straight to the room's saved seats, like the database statements do
+jest.mock('../room-seats', () => {
+  const clear = (roomId: string, userId: string) => {
+    const seats = mockSeats.get(roomId) || {};
+    for (const n of Object.keys(seats)) if (seats[Number(n)]?.playerId === userId) seats[Number(n)] = null;
+    mockSeats.set(roomId, seats);
+  };
+  const take = (roomId: string, seatNumber: number, seat: any) => {
+    clear(roomId, seat.playerId);
+    mockSeats.get(roomId)![seatNumber] = { ...seat };
+    const cfg = mockRooms.get(roomId)!.configuration;
+    if (!(cfg.members || []).includes(seat.playerId)) cfg.members = [...(cfg.members || []), seat.playerId];
+  };
+  return {
+    takeSeat: async (roomId: string, seatNumber: number, seat: any) => take(roomId, seatNumber, seat),
+    leaveSeat: async (roomId: string, userId: string) => clear(roomId, userId),
+    moveSeat: async (from: string, to: string, seatNumber: number, seat: any) => { clear(from, seat.playerId); take(to, seatNumber, seat); },
+  };
+});
 jest.mock('../../poker/run-it-twice-manager', () => ({ clearRunItState: () => {}, enrichStateWithRunIt: (_id: string, s: any) => s }));
 jest.mock('../../poker/state-sanitizer', () => ({ sanitizeStateForBroadcast: (s: any) => s }));
 jest.mock('../../realtime/publisher', () => ({ publishGameStateUpdate: async () => {}, publishTableEvent: async () => {} }));
@@ -67,13 +96,7 @@ jest.mock('../../shared/game-seats', () => ({
 jest.mock('../../server/room-config', () => ({
   loadRoom: async (roomId: string) => mockRooms.get(roomId) ?? null,
 }));
-jest.mock('../../server/room-privacy', () => ({
-  newInviteCode: () => 'INVITE1234',
-  addRoomMember: async (roomId: string, userId: string) => {
-    const cfg = mockRooms.get(roomId)!.configuration;
-    if (!(cfg.members || []).includes(userId)) cfg.members = [...(cfg.members || []), userId];
-  },
-}));
+jest.mock('../../server/room-privacy', () => ({ newInviteCode: () => 'INVITE1234' }));
 jest.mock('../../services/game-service', () => ({
   GameService: class {
     async createRoom(input: any) {
@@ -91,7 +114,7 @@ jest.mock('../manager-instance', () => {
   return { tournamentManager: new TournamentManager(new MemoryTournamentStore(), () => 0, () => mockNow) };
 });
 
-import { prepareTournamentHand, syncTournamentRooms, tournamentTableOf } from '../table-rooms';
+import { keepTablesMoving, prepareTournamentHand, syncTournamentRooms, tournamentTableOf } from '../table-rooms';
 import { tournamentManager } from '../manager-instance';
 import { createDefaultFreezeoutConfig, createRebuyAddOnConfig } from '../tournament-utils';
 import type { TournamentConfig } from '../../../types/tournament';
@@ -102,6 +125,8 @@ beforeEach(() => {
   mockRooms.clear();
   mockSeats.clear();
   mockEngines.clear();
+  mockSavedAt.clear();
+  mockTimeouts.length = 0;
   mockNow = 1_000_000;
 });
 
@@ -256,6 +281,20 @@ describe('moving players between tables', () => {
     expect(mockRooms.get(tableA)!.configuration.members).toContain(moved);
   });
 
+  test('players who busted are saved as gone at once, even when the table then waits for a moved player', async () => {
+    // Before, a table that couldn't deal never saved, so its next try reported the same busts again
+    // and eliminated a player who had bought back in meanwhile
+    const id = await startTournament(['a', 'b', 'c', 'd', 'e', 'f'], { ...createDefaultFreezeoutConfig(), seatsPerTable: 3 });
+    const tableA = await roomOf(id, 1);
+    const [winner, out1, out2] = seated(tableA);
+    const engine = mockEngines.get(tableA);
+    engine.endHand({ [winner]: 60000, [out1]: 0, [out2]: 0 }, winner);
+    mockSavedAt.clear();
+    await prepareTournamentHand(tableA, engine, linkOf(tableA));
+    expect(mockSavedAt.has(tableA)).toBe(true);
+    expect(engine.isRemoved(out1) && engine.isRemoved(out2)).toBe(true);
+  });
+
   test('a table that breaks sends its players on and closes', async () => {
     const id = await startTournament(['a', 'b', 'c', 'd'], { ...createDefaultFreezeoutConfig(), seatsPerTable: 3 });
     // Tables of 2 and 2; a bust at table 1 leaves 3, who fit at one table, so the shortest (table 1) breaks
@@ -312,5 +351,107 @@ describe('chips bought during play', () => {
     const roomId = await roomOf(id, 1);
     expect(seated(roomId)).toEqual(['a', 'b', 'late']);
     expect((await t(id)).chips!.late).toBe(20000);
+  });
+});
+
+describe('seats out of step with the tournament', () => {
+  test('a seat the tournament no longer gives the table is cleared before the next hand', async () => {
+    const id = await startTournament(['a', 'b', 'c']);
+    const roomId = await roomOf(id, 1);
+    // A busted player left behind in the seats, as an overwritten change could leave them
+    mockSeats.get(roomId)![9] = { playerId: 'ghost', playerName: 'Ghost', chips: 20000 };
+    const engine = mockEngines.get(roomId);
+    engine.endHand({});
+    expect(await prepareTournamentHand(roomId, engine, linkOf(roomId))).toEqual({ ok: true });
+    expect(seated(roomId)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('tables nobody has open', () => {
+  test('a table left at showdown gets its next hand dealt; one that just got there is left to its players', async () => {
+    // Paying one place keeps four players off the bubble, where hand for hand would wake every table
+    const id = await startTournament(['a', 'b', 'c', 'd'], {
+      ...createDefaultFreezeoutConfig(), seatsPerTable: 2, payoutStructure: [{ place: 1, percentage: 100 }],
+    });
+    const idle = await roomOf(id, 1);
+    const fresh = await roomOf(id, 2);
+    mockEngines.get(idle).endHand({});
+    mockEngines.get(fresh).endHand({});
+    mockSavedAt.set(idle, Date.now() - 60_000);
+    mockSavedAt.set(fresh, Date.now());
+    await keepTablesMoving(id);
+    expect(mockEngines.get(idle).handsStarted).toBe(2);
+    expect(mockEngines.get(fresh).handsStarted).toBe(1);
+  });
+
+  test('a turn clock that ran out with no screen to enforce it is enforced', async () => {
+    const id = await startTournament(['a', 'b']);
+    const roomId = await roomOf(id, 1);
+    const engine = mockEngines.get(roomId);
+    engine.state.activePlayer = 'a';
+    engine.state.players.forEach((p: any) => { p.currentBet = 0; });
+    engine.state.currentBet = 0;
+    engine.state.turnDeadline = Date.now() - 60_000;
+    await keepTablesMoving(id);
+    expect(mockTimeouts).toEqual([roomId]);
+    expect(engine.timedOutAt).not.toBeNull();
+  });
+
+  test('a turn with time left, or a second call straight away, does nothing', async () => {
+    const id = await startTournament(['a', 'b']);
+    const roomId = await roomOf(id, 1);
+    const engine = mockEngines.get(roomId);
+    engine.state.activePlayer = 'a';
+    engine.state.turnDeadline = Date.now() + 20_000;
+    await keepTablesMoving(id);
+    engine.state.turnDeadline = Date.now() - 60_000;
+    await keepTablesMoving(id);
+    expect(mockTimeouts).toEqual([]);
+  });
+});
+
+describe('hand for hand on the bubble', () => {
+  const config = (): TournamentConfig => ({
+    ...createDefaultFreezeoutConfig(),
+    seatsPerTable: 3,
+    payoutStructure: [{ place: 1, percentage: 50 }, { place: 2, percentage: 30 }, { place: 3, percentage: 20 }],
+  });
+
+  test('each table plays one hand a round, and busts in a round finish by starting stack, whichever table reports first', async () => {
+    const id = await startTournament(['a', 'b', 'c', 'd', 'e'], config());
+    const rooms = (await t(id)).tables.map(tb => tb.roomId!);
+    const big = rooms.find(r => seated(r).length === 3)!;
+    const small = rooms.find(r => r !== big)!;
+    const engineBig = mockEngines.get(big);
+    const engineSmall = mockEngines.get(small);
+
+    // A bust at the table of three leaves four, one off the money: hand for hand starts
+    const [b1, b2, b3] = seated(big);
+    engineBig.endHand({ [b1]: 40000, [b2]: 0, [b3]: 20000 }, b1);
+    expect(await prepareTournamentHand(big, engineBig, linkOf(big))).toEqual({ ok: true });
+    expect((await t(id)).handForHand).toMatchObject({ round: 1 });
+
+    // Its hand of the round busts a player who started it with 40,000; it then waits
+    engineBig.startNewHand();
+    engineBig.state.handStartStacks = { [b1]: 40000, [b3]: 20000 };
+    engineBig.endHand({ [b1]: 60000, [b3]: 0 }, b1);
+    expect(await prepareTournamentHand(big, engineBig, linkOf(big))).toMatchObject({ ok: false, body: { code: 'HAND_FOR_HAND' } });
+    expect((await t(id)).eliminatedPlayers).not.toContain(b3);
+
+    // The other table finishes the hand it was playing, then deals its hand of the round
+    const [s1, s2] = seated(small);
+    engineSmall.endHand({});
+    expect(await prepareTournamentHand(small, engineSmall, linkOf(small))).toEqual({ ok: true });
+    engineSmall.startNewHand();
+    engineSmall.state.handStartStacks = { [s1]: 30000, [s2]: 10000 };
+    engineSmall.endHand({ [s1]: 40000, [s2]: 0 }, s1);
+    await prepareTournamentHand(small, engineSmall, linkOf(small));
+
+    // Both busted in the same round: the smaller starting stack finishes lower, off the money
+    const state = await t(id);
+    const placeOf = (u: string) => state.eliminationRecords!.find(r => r.userId === u)!.place;
+    expect(placeOf(s2)).toBe(4);
+    expect(placeOf(b3)).toBe(3);
+    expect(state.handForHand ?? null).toBeNull();
   });
 });

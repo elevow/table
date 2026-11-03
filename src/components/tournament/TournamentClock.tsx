@@ -38,6 +38,11 @@ export default function TournamentClock({ view, levelLeft, breakLeft }: {
           {view.nextLevel && view.status !== 'completed' && (
             <p className="text-gray-600 dark:text-gray-400">Next: {formatBlinds(view.nextLevel)}</p>
           )}
+          {view.handForHandRound !== null && (
+            <p className="mt-2 text-sm font-semibold text-amber-700 dark:text-amber-300">
+              Hand for hand (hand {view.handForHandRound}): each table waits for the others to finish before dealing again.
+            </p>
+          )}
         </>
       )}
     </section>

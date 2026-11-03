@@ -10,6 +10,21 @@ export interface TournamentTable {
   seats: (string | null)[]; // seats[i] is seat i + 1: the user ID sitting there, or null when empty
 }
 
+/**
+ * Hand for hand, on the bubble (src/lib/tournament/tournament-manager.ts): each table plays one hand
+ * of a round, then waits until every table has finished its hand before the next round is dealt.
+ */
+export interface HandForHand {
+  round: number; // 1 for the first round on this bubble
+  // Tables that have dealt their hand of the round, with the number of the hand each had just
+  // finished when it did (the round's hand is over once the table reports a later one)
+  dealtAfter: Record<string, number>;
+  finished: string[]; // tables whose hand of the round is over
+  // Players who busted this round, eliminated together when it ends, the smallest starting stack
+  // (at any table) finishing lowest
+  busts: { userId: string; eliminatedBy?: string; startStack: number }[];
+}
+
 /** A player moved to another table when the tables were balanced or one was broken. */
 export interface TableMove {
   at: number; // epoch ms
@@ -60,6 +75,7 @@ export interface TournamentState {
   // and chips they've bought (starting stack, late entry, rebuy, add-on) that haven't reached a table yet
   chips?: Record<string, number>;
   pendingChips?: Record<string, number>;
+  handForHand?: HandForHand | null;
   cancelledAt?: number;
   cancelReason?: string | null;
   // The tournament just before the latest elimination, while nothing else has changed since; undo restores it

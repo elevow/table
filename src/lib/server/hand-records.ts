@@ -120,12 +120,15 @@ function showdownRank(record: HandRecord, player: HandRecordPlayer): number | nu
   }
 }
 
-/** Award an achievement the first time a player earns it. */
+/**
+ * Award an achievement the first time a player earns it. The parameters are cast because each is
+ * used twice, as a selected value and against a column, and Postgres refuses to guess one type.
+ */
 async function awardOnce(pool: Pool, userId: string, type: string, metadata: Record<string, unknown>): Promise<void> {
   await pool.query(
     `INSERT INTO achievements (user_id, achievement_type, metadata)
-     SELECT $1, $2, $3
-     WHERE NOT EXISTS (SELECT 1 FROM achievements WHERE user_id = $1 AND achievement_type = $2)`,
+     SELECT $1::uuid, $2::varchar, $3::jsonb
+     WHERE NOT EXISTS (SELECT 1 FROM achievements WHERE user_id = $1::uuid AND achievement_type = $2::varchar)`,
     [userId, type, JSON.stringify(metadata)]
   );
 }

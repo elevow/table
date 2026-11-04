@@ -234,7 +234,7 @@ export default function LeaderboardPage() {
                   <div className="min-w-0">
                     <div className={`text-sm font-semibold ${when ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>{a.label}</div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">{a.description}</div>
-                    {when && <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-1">Earned {new Date(when).toLocaleDateString()}</div>}
+                    {when && <div className="mt-1 inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />Earned {new Date(when).toLocaleDateString()}</div>}
                   </div>
                 </div>
               </div>

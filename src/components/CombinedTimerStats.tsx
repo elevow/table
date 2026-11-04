@@ -281,40 +281,15 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
           </div>
         </div>
         
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          {/* Top row */}
-          <div className="surface-muted px-3 py-2.5">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Hands</div>
-            <div className="mt-0.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
-              {sessionStats.handsPlayed}
-            </div>
-          </div>
-          
-          <div className="surface-muted px-3 py-2.5">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Win rate</div>
-            <div className="mt-0.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
-              {calculateWinRate()}%
-            </div>
-          </div>
+        <dl className="space-y-2.5 text-sm">
+          <div className="flex justify-between"><dt className="text-gray-600 dark:text-gray-300">Hands</dt><dd className="tabular-nums text-gray-900 dark:text-gray-100">{sessionStats.handsPlayed}</dd></div>
+          <div className="flex justify-between"><dt className="text-gray-600 dark:text-gray-300">Win rate</dt><dd className="tabular-nums text-gray-900 dark:text-gray-100">{calculateWinRate()}%</dd></div>
+          <div className="flex justify-between"><dt className="text-gray-600 dark:text-gray-300">Biggest pot won</dt><dd className="tabular-nums text-gray-900 dark:text-gray-100">{formatCurrency(Math.max(0, sessionStats.biggestPotWon || 0))}</dd></div>
+          <div className="flex justify-between font-semibold"><dt className="text-gray-900 dark:text-gray-100">Net</dt><dd className={`tabular-nums ${calculateNetWinnings() >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatCurrency(calculateNetWinnings())}</dd></div>
+        </dl>
 
-          {/* Bottom row */}
-          <div className="surface-muted px-3 py-2.5">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Net</div>
-            <div className={`mt-0.5 text-base font-semibold tabular-nums ${calculateNetWinnings() >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-              {formatCurrency(calculateNetWinnings())}
-            </div>
-          </div>
-
-          <div className="surface-muted px-3 py-2.5">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Biggest pot won</div>
-            <div className="mt-0.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
-              {formatCurrency(Math.max(0, sessionStats.biggestPotWon || 0))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-3 pt-2 border-t border-gray-100 dark:border-white/[0.05]">
-          <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
+        <div className="mt-3">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             Started at {sessionStats.sessionStartTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
           </div>
         </div>

@@ -235,7 +235,7 @@ const Dashboard: NextPage = () => {
           </section>
 
           {/* Join by code */}
-          <section className="surface p-6 lg:col-span-2 flex flex-col justify-center">
+          <section className="surface p-6 lg:col-span-2">
             <h2 className="section-title">Have a code?</h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Enter a room code or a private invite code.</p>
             <form onSubmit={handleJoinByRoomCode} className="mt-4 space-y-3">
@@ -253,7 +253,7 @@ const Dashboard: NextPage = () => {
                 />
                 <button
                   type="submit"
-                  disabled={isValidating || !roomCode.trim()}
+                  disabled={isValidating}
                   className="btn btn-secondary shrink-0"
                 >
                   {isValidating ? 'Checking…' : 'Join'}

@@ -15,7 +15,7 @@ interface Props {
 export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMuted }: Props) {
   if (muted) {
     return (
-      <div className="mt-28 sm:mt-36 flex justify-center">
+      <div className="mt-28 sm:mt-36 lg:mt-0 lg:absolute lg:right-0 lg:bottom-6 flex justify-center">
         <button
           type="button"
           onClick={() => onToggleMuted(false)}
@@ -30,7 +30,7 @@ export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMu
   }
   return (
     // The top margin clears our own seat and its name plate, which hang below the felt
-    <div className="mt-28 sm:mt-36 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Table reactions">
+    <div className="mt-28 sm:mt-36 lg:mt-0 lg:absolute lg:right-0 lg:bottom-6 lg:max-w-[340px] lg:justify-end flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Table reactions">
       {TABLE_REACTIONS.map(emote => (
         <button
           key={emote}

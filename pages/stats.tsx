@@ -126,7 +126,7 @@ export default function StatsPage() {
 
             <section className="surface p-5 sm:p-6 mb-6">
               <h2 className="section-title mb-1">Profit over time</h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              <p className="text-[13px] text-gray-500 dark:text-gray-400 mb-3">
                 Running total, one step per hand{data.truncated ? ` (your latest ${data.totals.hands.toLocaleString()} hands)` : ''}.
               </p>
               <ProfitChart points={data.series} />
@@ -145,7 +145,7 @@ export default function StatsPage() {
                   </button>
                 )}
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 px-6 mt-1 mb-3">A break of more than two hours at a table starts a new session.</p>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400 px-6 mt-1 mb-3">A break of more than two hours at a table starts a new session.</p>
               <table className="data-table">
                 <thead>
                   <tr>

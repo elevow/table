@@ -254,7 +254,7 @@ const Home: NextPage = () => {
             <button
               type="button"
               onClick={handleGuestAccess}
-              className="btn btn-secondary mt-6 w-full h-11"
+              className="btn btn-secondary mt-6 w-full h-11 !font-medium dark:!text-gray-300"
             >
               Continue as guest
             </button>

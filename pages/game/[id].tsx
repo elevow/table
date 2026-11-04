@@ -1750,7 +1750,7 @@ export default function GamePage() {
                       </span>
                     )}
                     {(gamePlayer.timeBanks ?? 0) > 0 && <span className="ml-1"><TimeBankBadge count={gamePlayer.timeBanks} seconds={pokerGameState?.timeBankSeconds} compact /></span>}
-                    {turnClock.activePlayer === gamePlayer.id && <TurnClockBar clock={turnClock} compact />}
+                    {turnClock.activePlayer === gamePlayer.id && !(isCurrentPlayer && actionPanelOpen) && <TurnClockBar clock={turnClock} compact />}
                   </div>
                 );
               })()}
@@ -2732,8 +2732,8 @@ export default function GamePage() {
               })()}
             </div>
           )}
-          {/* Poker Table - Green Felt Design */}
-          <div className="lg:col-span-2 relative">
+          {/* Poker Table - Green Felt Design; on wide screens the reaction row sits beside your seat */}
+          <div className="lg:col-span-2 relative lg:pb-24">
             {/* Green felt table surface */}
             <div className="table-rail relative rounded-full mx-auto max-sm:mt-7 max-sm:mb-20"
                  style={{
@@ -2911,7 +2911,7 @@ export default function GamePage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => handlePokerAction('bring-in')}
-                      className="btn btn-lg act-call max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base sm:w-[calc(30%-0.375rem)]"
+                      className="btn btn-lg act-call max-sm:min-h-[48px] max-sm:text-base w-[calc(25%-0.5rem)] sm:w-[calc(30%-0.375rem)]"
                     >
                       Bring in {showStackInBB ? formatChips(bringInAmount, pokerGameState?.bigBlind || null, true) : `$${bringInAmount}`}
                     </button>
@@ -2929,7 +2929,7 @@ export default function GamePage() {
               <div className="relative flex flex-wrap gap-2">
                 <button
                   onClick={handleFold}
-                  className="btn btn-lg act-fold max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base sm:w-[calc(30%-0.375rem)]"
+                  className="btn btn-lg act-fold max-sm:min-h-[48px] max-sm:text-base w-[calc(25%-0.5rem)] sm:w-[calc(30%-0.375rem)]"
                 >
                   Fold
                 </button>
@@ -2937,14 +2937,14 @@ export default function GamePage() {
                 {myOwed === 0 ? (
                   <button
                     onClick={handleCheck}
-                    className="btn btn-lg act-neutral max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base sm:w-[calc(30%-0.375rem)]"
+                    className="btn btn-lg act-neutral max-sm:min-h-[48px] max-sm:text-base w-[calc(25%-0.5rem)] sm:w-[calc(30%-0.375rem)]"
                   >
                     Check
                   </button>
                 ) : (
                   <button
                     onClick={handleCall}
-                    className="btn btn-lg act-call max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base sm:w-[calc(30%-0.375rem)]"
+                    className="btn btn-lg act-call max-sm:min-h-[48px] max-sm:text-base w-[calc(25%-0.5rem)] sm:w-[calc(30%-0.375rem)]"
                   >
                     Call {showStackInBB ? formatChips(myCallAmount, pokerGameState?.bigBlind || null, true) : `$${myCallAmount}`}{myCallIsAllIn ? ' (all-in)' : ''}
                   </button>
@@ -2953,8 +2953,8 @@ export default function GamePage() {
                 {/* No-Limit betting controls */}
                 {((pokerGameState?.bettingMode || 'no-limit') === 'no-limit') && (
                   (pokerGameState.currentBet || 0) === 0 ? (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full sm:order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
-                      <div className="text-sm text-gray-700 dark:text-gray-300 font-medium max-sm:sr-only">Bet amount</div>
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                      <div className="sr-only">Bet amount</div>
                       {(() => {
                         const { min, max } = getBetBounds();
                         const bb = Number(pokerGameState.bigBlind || 0) || 0;
@@ -3006,7 +3006,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:w-[40%]">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
                                     {label}
                                   </button>
                                 );
@@ -3017,7 +3017,7 @@ export default function GamePage() {
                       })()}
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full sm:order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Raise to</div>
                       {(() => {
                         const { min, max } = getRaiseBounds();
@@ -3071,7 +3071,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:w-[40%]">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
                                     {label}
                                   </button>
                                 );
@@ -3091,7 +3091,7 @@ export default function GamePage() {
                 {/* Pot-Limit betting controls */}
                 {((pokerGameState?.bettingMode || 'no-limit') === 'pot-limit') && (
                   (pokerGameState.currentBet || 0) === 0 ? (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full sm:order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Bet amount (Pot-Limit)</div>
                       {(() => {
                         const { min, max } = getPotLimitBetBounds();
@@ -3142,7 +3142,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:w-[40%]">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
                                     {label}
                                   </button>
                                 );
@@ -3153,7 +3153,7 @@ export default function GamePage() {
                       })()}
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full sm:order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Raise to (Pot-Limit)</div>
                       {(() => {
                         const { min, max } = getPotLimitRaiseBounds();
@@ -3205,7 +3205,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:w-[40%]">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
                                     {label}
                                   </button>
                                 );

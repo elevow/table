@@ -6,7 +6,7 @@ import {
 import { performSeatClaim } from '../../../../src/lib/server/seat-actions';
 import { tablesSeatedAt } from '../../../../src/lib/shared/game-seats';
 import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../../src/lib/server/room-config';
-import { PRIVATE_TABLE_RESPONSE, canEnterRoom, isPrivateRoom } from '../../../../src/lib/server/room-privacy';
+import { PRIVATE_TABLE_RESPONSE, canEnterRoom, isPrivateRoom, isRoomMember } from '../../../../src/lib/server/room-privacy';
 import { tournamentTableOf } from '../../../../src/lib/tournament/table-rooms';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -49,10 +49,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(409).json({ error: 'Seats at a tournament table are assigned by the tournament', code: 'TOURNAMENT_TABLE' });
     }
 
-    // Private tables: members only, and sitting at one is its own permission
+    // Private tables: the host and players who used the invite link may sit. Staff who can see the
+    // table without an invite also need table.join_private to sit at it.
     if (room && isPrivateRoom(config)) {
       if (!canEnterRoom(access, room)) return res.status(403).json(PRIVATE_TABLE_RESPONSE);
-      if (!isHost && !hasPermission(access, 'table.join_private')) return sendPermissionDenied(res, 'table.join_private', access);
+      if (!isHost && !isRoomMember(config, playerId) && !hasPermission(access, 'table.join_private')) {
+        return sendPermissionDenied(res, 'table.join_private', access);
+      }
     }
 
     // A seat offered to the next player on the waitlist is theirs until the offer runs out

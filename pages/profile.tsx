@@ -2,6 +2,7 @@ import type { NextPage } from 'next';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useState, useRef, useCallback, useEffect } from 'react';
+import ProfileDisplaySettings from '../src/components/ProfileDisplaySettings';
 import { useUserAvatar } from '../src/hooks/useUserAvatar';
 import Avatar from '../src/components/Avatar';
 import { useTheme } from '../src/contexts/ThemeContext';
@@ -299,6 +300,8 @@ const Profile: NextPage = () => {
                   )}
                 </div>
               </div>
+
+              <ProfileDisplaySettings />
 
               {/* Settings Section */}
               <div className="border-t dark:border-gray-700 pt-4">

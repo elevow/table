@@ -1,201 +1,63 @@
-/**
- * This is a mock component for demonstration purposes.
- * In a real implementation, you would have a fully functional game settings component.
- */
-import { useEffect, useState, useRef, memo } from 'react';
+// The table's display settings. Each player's usual choice is in their profile; changing one here
+// applies to this table only. Sound is the table's own Sound on/off button, and time banks are set
+// by the host when the table is created.
+import { memo } from 'react';
+import type { DisplaySettings } from '../lib/shared/display-settings';
 
-export interface GameSettings {
-  soundEnabled: boolean;
-  chatEnabled: boolean;
-  notificationsEnabled: boolean;
-  autoFoldEnabled: boolean;
-  rabbitHuntEnabled: boolean;
-  timeBank: number;
-  highContrastCards: boolean;
-  showPotOdds: boolean;
-  showStackInBB: boolean;
-}
+export type GameSettings = DisplaySettings;
 
 interface GameSettingsProps {
-  gameId: string;
-  onSettingsChange?: (settings: GameSettings) => void;
+  settings: DisplaySettings;
+  onChange: (setting: keyof DisplaySettings, value: boolean) => void;
+  /** Whether this table has changes from the profile settings, which onReset undoes */
+  hasOverrides?: boolean;
+  onReset?: () => void;
 }
 
-function GameSettings({ gameId, onSettingsChange }: GameSettingsProps) {
-  const [settings, setSettings] = useState<GameSettings>({
-    soundEnabled: true,
-    chatEnabled: true,
-    notificationsEnabled: true,
-    autoFoldEnabled: false,
-    rabbitHuntEnabled: false,
-    timeBank: 30,
-    highContrastCards: false,
-    showPotOdds: true,
-    showStackInBB: false,
-  });
+const OPTIONS: { key: keyof DisplaySettings; label: string; help: string }[] = [
+  { key: 'highContrastCards', label: 'High Contrast Cards', help: 'When enabled: Hearts = Red, Diamonds = Yellow, Spades = Black, Clubs = Blue.' },
+  { key: 'showPotOdds', label: 'Show Pot Odds', help: 'Display the ratio between the pot size and the bet you are facing.' },
+  { key: 'showStackInBB', label: 'Show Stack in Big Blinds', help: 'Display chip stacks in Big Blinds (BB) instead of raw chip counts.' },
+];
 
-  // Use a ref to store the callback to avoid re-triggering effects
-  const onSettingsChangeRef = useRef(onSettingsChange);
-  useEffect(() => {
-    onSettingsChangeRef.current = onSettingsChange;
-  }, [onSettingsChange]);
-  
-  useEffect(() => {
-    // Log when the component is loaded to demonstrate code splitting
-    // console.log('GameSettings component loaded for game:', gameId);
-    
-    // Load saved settings for this game if present
-    try {
-      const raw = localStorage.getItem(`game_settings_${gameId}`);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        setSettings(prev => {
-          const merged = { ...prev, ...saved };
-          // Notify parent of initial load with merged settings
-          if (typeof onSettingsChangeRef.current === 'function') {
-            onSettingsChangeRef.current(merged);
-          }
-          return merged;
-        });
-      } else {
-        // No saved settings, notify parent with current default settings
-        // We intentionally use the initial settings value here, not a dependency
-        if (typeof onSettingsChangeRef.current === 'function') {
-          onSettingsChangeRef.current(settings);
-        }
-      }
-    } catch {}
-    // settings is intentionally not in dependencies - we want the initial value
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameId]);
-
-  // Persist settings when they change
-  useEffect(() => {
-    try {
-      localStorage.setItem(`game_settings_${gameId}`, JSON.stringify(settings));
-    } catch {}
-    // Notify parent on any change
-    if (typeof onSettingsChangeRef.current === 'function') {
-      onSettingsChangeRef.current(settings);
-    }
-  }, [gameId, settings]);
-  
-  const handleSettingChange = (setting: string, value: boolean | number) => {
-    setSettings(prev => ({ ...prev, [setting]: value }));
-  };
-  
+function GameSettings({ settings, onChange, hasOverrides = false, onReset }: GameSettingsProps) {
   return (
     <div className="game-settings">
       <h2>Game Settings</h2>
-      
+
       <div className="settings-group">
-        <h3>Audio Settings</h3>
-        <div className="setting-item">
-          <label>
-            <input 
-              type="checkbox"
-              checked={settings.soundEnabled}
-              onChange={(e) => handleSettingChange('soundEnabled', e.target.checked)}
-            />
-            Enable Sound Effects
-          </label>
-        </div>
-      </div>
-      
-      <div className="settings-group">
-        <h3>Chat Settings</h3>
-        <div className="setting-item">
-          <label>
-            <input 
-              type="checkbox"
-              checked={settings.chatEnabled}
-              onChange={(e) => handleSettingChange('chatEnabled', e.target.checked)}
-            />
-            Enable Chat
-          </label>
-        </div>
-      </div>
-      
-      <div className="settings-group">
-        <h3>Gameplay Settings</h3>
-        <div className="setting-item">
-          <label>
-            <input 
-              type="checkbox"
-              checked={settings.autoFoldEnabled}
-              onChange={(e) => handleSettingChange('autoFoldEnabled', e.target.checked)}
-            />
-            Auto-fold when inactive
-          </label>
-        </div>
-        <div className="setting-item">
-          <label>
-            <input
-              type="checkbox"
-              checked={settings.rabbitHuntEnabled}
-              onChange={(e) => handleSettingChange('rabbitHuntEnabled', e.target.checked)}
-            />
-            Rabbit Hunt (preview)
-          </label>
-        </div>
-        <div className="setting-item">
-          <label>
-            <input
-              type="checkbox"
-              checked={settings.highContrastCards}
-              onChange={(e) => handleSettingChange('highContrastCards', e.target.checked)}
-            />
-            High Contrast Cards
-          </label>
-          <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
-            When enabled: Hearts = Red, Diamonds = Yellow, Spades = Black, Clubs = Blue.
+        <h3>Display Settings</h3>
+        {OPTIONS.map(({ key, label, help }) => (
+          <div className="setting-item" key={key}>
+            <label>
+              <input
+                type="checkbox"
+                checked={settings[key]}
+                onChange={(e) => onChange(key, e.target.checked)}
+              />
+              {label}
+            </label>
+            <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">{help}</div>
           </div>
-        </div>
-        <div className="setting-item">
-          <label>
-            <input
-              type="checkbox"
-              checked={settings.showPotOdds}
-              onChange={(e) => handleSettingChange('showPotOdds', e.target.checked)}
-            />
-            Show Pot Odds
-          </label>
-          <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
-            Display the ratio between the pot size and the bet you are facing.
-          </div>
-        </div>
-        <div className="setting-item">
-          <label>
-            <input
-              type="checkbox"
-              checked={settings.showStackInBB}
-              onChange={(e) => handleSettingChange('showStackInBB', e.target.checked)}
-            />
-            Show Stack in Big Blinds
-          </label>
-          <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
-            Display chip stacks in Big Blinds (BB) instead of raw chip counts.
-          </div>
-        </div>
-        <div className="setting-item">
-          <label>
-            Time bank (seconds):
-            <input 
-              type="range"
-              min="10"
-              max="60"
-              value={settings.timeBank}
-              onChange={(e) => handleSettingChange('timeBank', parseInt(e.target.value))}
-            />
-            {settings.timeBank}
-          </label>
-        </div>
+        ))}
       </div>
-      
-      <button className="save-settings">Save Settings</button>
+
+      <div className="text-xs text-gray-600 dark:text-gray-300 mt-2">
+        {hasOverrides ? (
+          <>
+            Changed for this table only.{' '}
+            {onReset && (
+              <button type="button" onClick={onReset} className="text-blue-600 hover:underline dark:text-blue-400">
+                Use my profile settings
+              </button>
+            )}
+          </>
+        ) : (
+          'These are your profile settings. Changes here apply to this table only.'
+        )}
+      </div>
     </div>
   );
 }
 
-// Use memo to prevent unnecessary re-renders
 export default memo(GameSettings);

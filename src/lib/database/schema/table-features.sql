@@ -71,3 +71,20 @@ BEGIN
     REVOKE ALL ON hand_records, chip_ledger, player_notes FROM authenticated;
   END IF;
 END $$;
+
+-- Each user's saved preferences, e.g. { "display": { "highContrastCards": true } }
+CREATE TABLE IF NOT EXISTS user_preferences (
+  user_id TEXT PRIMARY KEY,
+  preferences JSONB NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON user_preferences FROM anon;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON user_preferences FROM authenticated;
+  END IF;
+END $$;

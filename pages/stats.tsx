@@ -164,7 +164,7 @@ export default function StatsPage() {
                       <tr key={key} className="text-gray-900 dark:text-gray-100">
                         <td className="whitespace-nowrap text-gray-600 dark:text-gray-300">{new Date(s.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</td>
                         <td>
-                          <Link href={`/history?room=${encodeURIComponent(s.roomId)}`} className="font-mono text-[13px] text-gray-900 hover:text-emerald-600 dark:text-gray-100 dark:hover:text-emerald-300">
+                          <Link href={`/history?room=${encodeURIComponent(s.roomId)}`} className="font-mono text-[13px] text-gray-500 hover:text-emerald-600 dark:text-gray-400 dark:hover:text-emerald-300">
                             {data.roomNames[s.roomId] || s.roomId}
                           </Link>
                         </td>
@@ -175,9 +175,11 @@ export default function StatsPage() {
                           <button
                             onClick={() => exportSession(s)}
                             disabled={exporting === key}
-                            className="btn btn-secondary btn-sm disabled:opacity-60"
+                            className="btn btn-ghost btn-sm !px-2 disabled:opacity-60"
+                            title="Export this session"
+                            aria-label={exporting === key ? 'Exporting…' : 'Export'}
                           >
-                            {exporting === key ? 'Exporting…' : 'Export'}
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></svg>
                           </button>
                           {canDelete && (
                             <button

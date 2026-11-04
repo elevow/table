@@ -199,7 +199,7 @@ const Dashboard: NextPage = () => {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-5">
+        <div className="grid gap-6 lg:grid-cols-5 lg:items-start">
           {/* Welcome and the main actions */}
           <section className="surface relative overflow-hidden p-6 lg:col-span-3">
             <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />

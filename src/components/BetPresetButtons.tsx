@@ -24,7 +24,7 @@ const SHORTCUT_KEY: Record<BetPreset, string> = {
   'all-in': 'allin',
 };
 
-const buttonClass = 'px-2 py-1 min-h-[40px] sm:min-h-0 text-xs rounded bg-gray-200 hover:bg-gray-300 text-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100';
+const buttonClass = 'btn btn-sm btn-secondary !px-2.5 shrink-0 max-sm:h-10';
 
 /**
  * Quick amounts for the bet and raise controls. Hidden for betting modes without free sizing.
@@ -32,7 +32,7 @@ const buttonClass = 'px-2 py-1 min-h-[40px] sm:min-h-0 text-xs rounded bg-gray-2
 export default function BetPresetButtons({ kind, bettingMode, pot, currentBet, myBet, min, max, bigBlind, value, onChange }: Props) {
   if (!supportsBetPresets(bettingMode)) return null;
   return (
-    <div className="flex flex-wrap gap-2" role="group" aria-label={kind === 'bet' ? 'Bet size presets' : 'Raise size presets'}>
+    <div className="flex flex-wrap gap-1.5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:-mx-1 max-sm:px-1 [scrollbar-width:none]" role="group" aria-label={kind === 'bet' ? 'Bet size presets' : 'Raise size presets'}>
       {BET_PRESETS.map(({ preset, label, title }) => (
         <button
           key={preset}

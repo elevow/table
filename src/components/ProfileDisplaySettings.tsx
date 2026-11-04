@@ -5,9 +5,9 @@ import {
 import { authHeaders } from '../utils/auth-headers';
 
 const LABELS: Record<keyof DisplaySettings, string> = {
-  highContrastCards: 'High Contrast Cards',
-  showPotOdds: 'Show Pot Odds',
-  showStackInBB: 'Show Stack in Big Blinds',
+  highContrastCards: 'High-contrast cards',
+  showPotOdds: 'Show pot odds',
+  showStackInBB: 'Show stacks in big blinds',
 };
 
 /** The profile's table display settings: every table starts from these, and each saves as it's changed. */
@@ -45,7 +45,7 @@ export default function ProfileDisplaySettings() {
   return (
     <section>
       <div className="mb-2 flex items-center justify-between px-1">
-        <h3 className="eyebrow">Table Display</h3>
+        <h3 className="eyebrow">Table display</h3>
         {status && (
           <p role="status" className={`text-xs ${status.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
             {status.text}

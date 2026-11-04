@@ -23,19 +23,19 @@ beforeEach(() => {
 test('shows the saved settings and saves each change', async () => {
   saved.showStackInBB = true;
   render(<ProfileDisplaySettings />);
-  await waitFor(() => expect(screen.getByLabelText('Show Stack in Big Blinds')).toBeChecked());
-  fireEvent.click(screen.getByLabelText('High Contrast Cards'));
+  await waitFor(() => expect(screen.getByLabelText('Show stacks in big blinds')).toBeChecked());
+  fireEvent.click(screen.getByLabelText('High-contrast cards'));
   expect(await screen.findByText('Saved')).toBeInTheDocument();
   const put = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')!;
   expect(JSON.parse(put[1].body)).toEqual({ display: { highContrastCards: true } });
-  expect(screen.getByLabelText('High Contrast Cards')).toBeChecked();
+  expect(screen.getByLabelText('High-contrast cards')).toBeChecked();
 });
 
 test('a failed save puts the checkbox back', async () => {
   failPut = true;
   render(<ProfileDisplaySettings />);
-  await waitFor(() => expect(screen.getByLabelText('Show Pot Odds')).toBeEnabled());
-  fireEvent.click(screen.getByLabelText('Show Pot Odds'));
+  await waitFor(() => expect(screen.getByLabelText('Show pot odds')).toBeEnabled());
+  fireEvent.click(screen.getByLabelText('Show pot odds'));
   expect(await screen.findByText(/Couldn't save/)).toBeInTheDocument();
-  expect(screen.getByLabelText('Show Pot Odds')).toBeChecked();
+  expect(screen.getByLabelText('Show pot odds')).toBeChecked();
 });

@@ -261,10 +261,10 @@ const Profile: NextPage = () => {
 
         {/* Quick actions */}
         <section>
-          <h2 className="eyebrow mb-2 px-1">Quick Actions</h2>
+          <h2 className="eyebrow mb-2 px-1">Quick actions</h2>
           <div className="surface divide-y divide-gray-100 overflow-hidden dark:divide-white/[0.05]">
-            <Row label="Return to Dashboard" onClick={() => router.push('/dashboard')} />
-            {canCreateRoom && <Row label="Create New Game" onClick={() => router.push('/game/create')} />}
+            <Row label="Back to the lobby" onClick={() => router.push('/dashboard')} />
+            {canCreateRoom && <Row label="Create a table" onClick={() => router.push('/game/create')} />}
           </div>
         </section>
 
@@ -274,12 +274,12 @@ const Profile: NextPage = () => {
         <section>
           <h2 className="eyebrow mb-2 px-1">Settings</h2>
           <div className="surface divide-y divide-gray-100 overflow-hidden dark:divide-white/[0.05]">
-            <Row label="Account Settings" onClick={() => router.push('/account-settings')} />
-            <Row label="Privacy Settings" />
+            <Row label="Account settings" onClick={() => router.push('/account-settings')} />
+            <Row label="Privacy settings" />
             <Row
-              label="Theme Settings"
+              label="Theme"
               onClick={toggleTheme}
-              right={<span className="text-xs">{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>}
+              right={<span className="text-xs">{theme === 'dark' ? 'Dark' : 'Light'}</span>}
             />
           </div>
         </section>

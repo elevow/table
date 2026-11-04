@@ -375,7 +375,7 @@ export default function CreateGameRoomPage() {
             )}
           </div>
           <div>
-            <label className="label">Number of Rebuys</label>
+            <label className="label">Number of rebuys</label>
             <select
               className="input"
               value={numberOfRebuys === 'unlimited' ? 'unlimited' : String(numberOfRebuys)}
@@ -399,16 +399,16 @@ export default function CreateGameRoomPage() {
                 checked={allowRunItTwice}
                 onChange={e => setAllowRunItTwice(e.target.checked)}
               />
-              <span>Allow Run It Twice</span>
+              <span>Allow run it twice</span>
             </label>
             <p className="hint">
               After an all-in, the player with the weakest hand can choose to deal the rest of the board more than once and split the pot between the runs. Hold&apos;em and Omaha only.
             </p>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="label">Buy-In</label>
+            <label className="label">Buy-in</label>
             <input
               type="number"
               className="input"
@@ -421,7 +421,7 @@ export default function CreateGameRoomPage() {
           </div>
           {numberOfRebuys !== 0 && (
             <div>
-              <label className="label">Rebuy Amount (chips)</label>
+              <label className="label">Rebuy amount (chips)</label>
               <input
                 type="number"
                 className="input"
@@ -533,7 +533,7 @@ export default function CreateGameRoomPage() {
           <div className="flex gap-2">
             <Link href="/dashboard" className="btn btn-ghost">Cancel</Link>
             <button type="submit" className="btn btn-primary" disabled={submitting || isNavigating || !isAuthenticated}>
-              {isNavigating ? 'Joining room...' : submitting ? 'Creating…' : 'Create room'}
+              {isNavigating ? 'Joining room...' : submitting ? 'Creating…' : 'Create table'}
             </button>
           </div>
         </div>

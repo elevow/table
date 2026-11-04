@@ -102,12 +102,12 @@ test.describe('Roles and permissions', () => {
       }
     });
 
-    test('only hosts see Create New Game on the profile page', async ({ browser }) => {
+    test('only hosts see Create a table on the profile page', async ({ browser }) => {
       for (const n of [1, 2]) {
         const page = await signedInPage(browser, users[n]);
         await page.goto('/profile');
-        await expect(page.getByRole('button', { name: 'Return to Dashboard' })).toBeVisible({ timeout: 30_000 });
-        const create = page.getByRole('button', { name: 'Create New Game' });
+        await expect(page.getByRole('button', { name: 'Back to the lobby' })).toBeVisible({ timeout: 30_000 });
+        const create = page.getByRole('button', { name: 'Create a table' });
         if (n === 1) await expect(create, 'TEST_USER1').toHaveCount(0);
         else await expect(create, 'TEST_USER2').toBeVisible();
         // There's no join page; joining is by room code or invite link from the dashboard

@@ -131,7 +131,7 @@ describe('CreateGameRoomPage - Big Blind auto-update', () => {
     render(<CreateGameRoomPage />);
     
     // Find the Buy-In input by looking for the label text and then finding the input in the same container
-    const buyInLabel = screen.getByText('Buy-In');
+    const buyInLabel = screen.getByText('Buy-in');
     const buyInContainer = buyInLabel.parentElement;
     const buyInInput = buyInContainer?.querySelector('input[type="number"]') as HTMLInputElement;
     
@@ -142,7 +142,7 @@ describe('CreateGameRoomPage - Big Blind auto-update', () => {
   it('should allow changing the buy-in value', () => {
     render(<CreateGameRoomPage />);
     
-    const buyInLabel = screen.getByText('Buy-In');
+    const buyInLabel = screen.getByText('Buy-in');
     const buyInContainer = buyInLabel.parentElement;
     const buyInInput = buyInContainer?.querySelector('input[type="number"]') as HTMLInputElement;
     
@@ -170,14 +170,14 @@ describe('CreateGameRoomPage - Rebuy Amount Field', () => {
   });
 
   const getNumberOfRebuysSelect = () => {
-    const labels = screen.getAllByText('Number of Rebuys');
+    const labels = screen.getAllByText('Number of rebuys');
     const label = labels[0];
     return label.parentElement?.querySelector('select') as HTMLSelectElement;
   };
 
   const getRebuyAmountInput = () => {
     try {
-      const labels = screen.getAllByText('Rebuy Amount (chips)');
+      const labels = screen.getAllByText('Rebuy amount (chips)');
       const label = labels[0];
       return label.parentElement?.querySelector('input') as HTMLInputElement;
     } catch (err) {

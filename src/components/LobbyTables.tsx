@@ -37,7 +37,7 @@ function TablesList({ title, empty, tables, showHost }: { title: string; empty: 
                     <span className="truncate text-sm font-medium text-gray-900 dark:text-white">{t.name}</span>
                     {t.isHost && <span className="badge badge-amber">Host</span>}
                   </div>
-                  <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+                  <div className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400 tabular-nums">
                     {t.game} · {stakes(t)} · {t.seated}/{t.maxPlayers} seated
                   </div>
                 </div>

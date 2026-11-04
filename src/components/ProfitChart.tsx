@@ -19,7 +19,7 @@ function niceTicks(min: number, max: number): number[] {
   }
   const raw = (max - min) / 4;
   const mag = Math.pow(10, Math.floor(Math.log10(raw)));
-  const step = [1, 2, 5, 10].map(m => m * mag).find(s => s >= raw) || raw;
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw) || raw;
   const ticks: number[] = [];
   for (let v = Math.floor(min / step) * step; v <= max + step / 2; v += step) ticks.push(Math.round(v * 100) / 100);
   return ticks;
@@ -92,14 +92,28 @@ export default function ProfitChart({ points }: Props) {
         <text x={W - PAD.right} y={H - 8} textAnchor="end" className="fill-gray-400 dark:fill-gray-500 text-[10px]">
           {`Hand ${points.length}`}
         </text>
+        {/* Above zero is green, below zero is red: the same shapes drawn twice, each clipped to its side */}
         <defs>
-          <linearGradient id="profit-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="rgb(16 185 129)" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="rgb(16 185 129)" stopOpacity="0" />
-          </linearGradient>
+          <clipPath id="profit-above"><rect x={0} y={0} width={W} height={geo.y(0)} /></clipPath>
+          <clipPath id="profit-below"><rect x={0} y={geo.y(0)} width={W} height={H} /></clipPath>
         </defs>
-        <path d={`${geo.path} L${geo.x(points.length)},${geo.y(0)} L${geo.x(0)},${geo.y(0)} Z`} fill="url(#profit-fill)" />
-        <path d={geo.path} fill="none" className="stroke-emerald-500 dark:stroke-emerald-400" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {(['above', 'below'] as const).map(side => (
+          <g key={side} clipPath={`url(#profit-${side})`}>
+            <path
+              d={`${geo.path} L${geo.x(points.length)},${geo.y(0)} L${geo.x(0)},${geo.y(0)} Z`}
+              fill={side === 'above' ? 'rgb(16 185 129)' : 'rgb(248 113 113)'}
+              fillOpacity={0.14}
+            />
+            <path
+              d={geo.path}
+              fill="none"
+              className={side === 'above' ? 'stroke-emerald-500 dark:stroke-emerald-400' : 'stroke-red-500 dark:stroke-red-400'}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          </g>
+        ))}
         {hp && hover != null && (
           <g pointerEvents="none">
             <line x1={geo.x(hover + 1)} x2={geo.x(hover + 1)} y1={PAD.top} y2={H - PAD.bottom} className="stroke-gray-400 dark:stroke-gray-500" strokeWidth={1} />

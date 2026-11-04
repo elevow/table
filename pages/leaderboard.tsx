@@ -134,7 +134,7 @@ export default function LeaderboardPage() {
             <thead>
               <tr>
                 <th className="w-14">#</th>
-                <th>Player</th>
+                <th className="w-full">Player</th>
                 <th className="!text-right">{current.label}</th>
                 <th className="!text-right">Hands</th>
                 {canManage && <th><span className="sr-only">Manage</span></th>}

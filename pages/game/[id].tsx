@@ -1618,78 +1618,6 @@ export default function GamePage() {
   // Allow claiming even if seat state hasn't synced yet; server validates occupancy
   const canClaim = isEmpty && userRole !== 'guest' && !currentPlayerSeat && claimingSeat === null;
 
-    // Determine info box position based on seat coordinates - RIGHT NEXT to each seat
-    const getInfoBoxPosition = (currentPosition: string, seatStyle?: React.CSSProperties) => {
-      // Special case: for the current player, show info card to the right of their avatar
-      // We know the current player's avatar is anchored at bottom-center (left: 50%, top: 104%)
-      // so we offset horizontally to the right with a translate to avoid overlap.
-      if (isCurrentPlayer) {
-        // Position info box so its left edge touches the avatar circle's right edge (w-16 => 64px, half=32px + 2px border)
-        // Use calc to place left at 50% + 34px; keep vertical centering relative to avatar center
-        return 'left-[calc(50%+54px)] max-sm:left-[calc(50%+42px)] top-[104%] transform -translate-y-1/2';
-      }
-
-      // If we have style coordinates, use them to determine position
-      if (seatStyle && seatStyle.left && seatStyle.top) {
-        const leftPercent = parseFloat(seatStyle.left.toString().replace('%', ''));
-        const topPercent = parseFloat(seatStyle.top.toString().replace('%', ''));
-        
-        // More precise positioning based on 8 directions around the table
-        if (topPercent < 25) {
-          // Top area
-          if (leftPercent < 35) {
-            // Top-left - info touching table edge
-            return '-top-2 -left-2';
-          } else if (leftPercent > 65) {
-            // Top-right - info touching table edge
-            return '-top-2 -right-2';
-          } else {
-            // Top-center - info pushed above table edge
-            return '-top-20 left-1/2 transform -translate-x-1/2';
-          }
-        } else if (topPercent > 75) {
-          // Bottom area
-          if (leftPercent < 35) {
-            // Bottom-left - info touching table edge
-            return '-bottom-2 -left-2';
-          } else if (leftPercent > 65) {
-            // Bottom-right - info touching table edge
-            return '-bottom-2 -right-2';
-          } else {
-            // Bottom-center - info pushed below table edge
-            return '-bottom-20 left-1/2 transform -translate-x-1/2';
-          }
-        } else {
-          // Middle area (left/right sides)
-          if (leftPercent < 50) {
-            // Left side - info touching table edge
-            return 'top-0 -left-2';
-          } else {
-            // Right side - info touching table edge
-            return 'top-0 -right-2';
-          }
-        }
-      }
-      
-      // Fallback to CSS class-based positioning for backwards compatibility
-      if (currentPosition.includes('top-1') && currentPosition.includes('left-1/2')) {
-        return '-top-16 left-1/2 transform -translate-x-1/2';
-      } else if (currentPosition.includes('top-8') && currentPosition.includes('right-8')) {
-        return 'top-0 -right-32';
-      } else if (currentPosition.includes('bottom-8') && currentPosition.includes('right-8')) {
-        return 'bottom-0 -right-32';
-      } else if (currentPosition.includes('bottom-1') && currentPosition.includes('left-1/2')) {
-        return '-bottom-16 left-1/2 transform -translate-x-1/2';
-      } else if (currentPosition.includes('bottom-8') && currentPosition.includes('left-8')) {
-        return 'bottom-0 -left-32';
-      } else if (currentPosition.includes('top-8') && currentPosition.includes('left-8')) {
-        return 'top-0 -left-32';
-      }
-      
-      // Default fallback
-      return '-bottom-16 left-1/2 transform -translate-x-1/2';
-    };
-
     // Seat records keep the buy-in; once the player is in the game, the engine stack is the truth
     const seatGamePlayer = assignment ? pokerGameState?.players?.find((p: any) => p.id === assignment.playerId) : undefined;
     const seatChips = Number(seatGamePlayer ? seatGamePlayer.stack : assignment?.chips) || 0;
@@ -1783,12 +1711,11 @@ export default function GamePage() {
         {/* Player info box - only show if seat is occupied */}
         {!isEmpty && assignment && (
           <div
-            className={!isCurrentPlayer ? 'absolute z-10' : `absolute ${getInfoBoxPosition(position, style)} z-10`}
-            // Opponents' placards sit beside the seat on the side away from the felt, so they never cover
-            // avatars or cards; your own sits to the right of your avatar, clear of your hole cards
-            style={isCurrentPlayer ? { pointerEvents: 'none' } : narrowInfoBoxStyle(style, isNarrowScreen ? 34 : 44)}
+            className="absolute z-10"
+            // Every placard sits beside its seat on the side away from the felt, so it never covers avatars or cards
+            style={narrowInfoBoxStyle(style, isNarrowScreen ? 34 : 44)}
           >
-            <div className={`min-w-[88px] px-3 py-1.5 max-sm:px-2 max-sm:py-1 max-sm:text-[10px] max-sm:min-w-0 max-sm:max-w-[104px] rounded-xl shadow-card border backdrop-blur-sm text-xs bg-gray-950/85 text-gray-100 ${
+            <div className={`min-w-[96px] max-w-[150px] px-3 py-1.5 max-sm:px-2 max-sm:py-1 max-sm:text-[10px] max-sm:min-w-[84px] max-sm:max-w-[120px] rounded-xl shadow-card border backdrop-blur-sm text-xs bg-gray-950/85 text-gray-100 ${
               isCurrentPlayer ? 'border-emerald-400/40' : 'border-white/10'
             }`}>
               <div className="font-medium text-gray-200 whitespace-nowrap max-sm:truncate">
@@ -1804,7 +1731,7 @@ export default function GamePage() {
               {pokerGameState && (() => {
                 const gamePlayer = pokerGameState.players?.find((p: any) => p.id === assignment.playerId);
                 return gamePlayer && (
-                  <div className="text-xs mt-1">
+                  <div className="text-xs max-sm:text-[10px] mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
                     {gamePlayer.isSittingOut && (
                       <span className="text-gray-400 italic">{gamePlayer.notArrived ? 'Not here yet (posting blinds)' : pokerGameState.tournamentRules ? 'Away (posting blinds)' : 'Sitting out'}</span>
                     )}
@@ -1849,8 +1776,9 @@ export default function GamePage() {
             const leftPercent = parseFloat(leftStr.replace('%', ''));
             const topPercent = parseFloat(topStr.replace('%', ''));
             // Move cards toward the table center (opposite side of avatar)
-            const dx = leftPercent >= 50 ? -36 : 36;
-            const dy = topPercent >= 50 ? -36 : 36;
+            const offset = isNarrowScreen ? 36 : 46;
+            const dx = leftPercent >= 50 ? -offset : offset;
+            const dy = topPercent >= 50 ? -offset : offset;
             cardStyle = {
               position: 'absolute',
               left: `calc(${leftStr} + ${dx}px)`,
@@ -2560,11 +2488,11 @@ export default function GamePage() {
             <GameRulesBadges state={pokerGameState} />
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 max-sm:gap-0.5">
             {currentPlayerSeat && (
               <button
                 onClick={standUp}
-                className="btn btn-secondary btn-sm"
+                className="btn btn-ghost btn-sm max-sm:!px-2"
                 title={`Stand up from seat ${currentPlayerSeat}`}
                 aria-label="Stand up from seat"
               >
@@ -2576,7 +2504,7 @@ export default function GamePage() {
             )}
             <a
               href={`/history?room=${encodeURIComponent(tableId)}`}
-              className="btn btn-secondary btn-sm"
+              className="btn btn-ghost btn-sm max-sm:!px-2"
               title="Hand history"
             >
               <svg className="h-4 w-4 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.8L3 8M3 3v5h5M12 7v5l3 2" /></svg>
@@ -2585,7 +2513,7 @@ export default function GamePage() {
             {gameStarted && me && tableExtras?.allowStraddle && !isStudVariant() && (pokerGameState?.players?.length || 0) >= 3 && (
               <button
                 onClick={toggleStraddle}
-                className={`btn btn-sm ${me.wantsStraddle ? 'btn-warning' : 'btn-secondary'}`}
+                className={`btn btn-sm ${me.wantsStraddle ? 'btn-warning' : 'btn-ghost'}`}
                 title="Post twice the big blind under the gun next hand (only if you are under the gun)"
                 aria-pressed={!!me.wantsStraddle}
               >
@@ -2596,18 +2524,18 @@ export default function GamePage() {
               <button
                 onClick={() => setSeatOption('leave-after-hand', !me.leaveAfterHand)}
                 disabled={seatOptionPending}
-                className={`btn btn-sm ${me.leaveAfterHand ? 'btn-warning' : 'btn-secondary'}`}
+                className={`btn btn-sm ${me.leaveAfterHand ? 'btn-warning' : 'btn-ghost'}`}
                 title={me.leaveAfterHand ? 'You will stand up when this hand ends; click to stay' : 'Finish this hand, then stand up'}
                 aria-pressed={!!me.leaveAfterHand}
               >
-                {me.leaveAfterHand ? 'Leaving after this hand' : <>Leave after <span className="max-sm:hidden">this&nbsp;</span>hand</>}
+                <span>{me.leaveAfterHand ? 'Leaving after this hand' : <>Leave after <span className="max-sm:hidden">this </span>hand</>}</span>
               </button>
             )}
             {gameStarted && me && (
               <button
                 onClick={toggleSitOut}
                 disabled={sitOutPending}
-                className={`btn btn-sm ${me.isSittingOut ? 'btn-primary' : 'btn-secondary'}`}
+                className={`btn btn-sm ${me.isSittingOut ? 'btn-primary' : 'btn-ghost'}`}
                 title={pokerGameState?.tournamentRules
                   ? (me.isSittingOut ? 'You are away: your blinds and antes are posted and your hands folded until you come back' : 'Step away: your blinds and antes are still posted and your hands folded for you')
                   : (me.isSittingOut ? 'You are sitting out; you will be dealt in from the next hand' : 'Keep your seat but skip hands from the next one')}
@@ -2620,7 +2548,7 @@ export default function GamePage() {
               <>
                 <button
                   onClick={() => turnAlerts.setSoundEnabled(!turnAlerts.soundEnabled)}
-                  className="btn btn-secondary btn-sm !px-2"
+                  className="btn btn-ghost btn-sm !px-2"
                   title={turnAlerts.soundEnabled ? 'Turn off the sound when it is your turn' : 'Play a sound when it is your turn'}
                   aria-label={turnAlerts.soundEnabled ? 'Sound on' : 'Sound off'}
                   aria-pressed={turnAlerts.soundEnabled}
@@ -2635,7 +2563,7 @@ export default function GamePage() {
                 {turnAlerts.notifyPermission !== 'unsupported' && turnAlerts.notifyPermission !== 'denied' && (
                   <button
                     onClick={() => turnAlerts.setNotifyEnabled(!turnAlerts.notifyEnabled)}
-                    className={`btn btn-secondary btn-sm !px-2 ${turnAlerts.notifyEnabled ? '!text-emerald-500 dark:!text-emerald-300' : ''}`}
+                    className={`btn btn-ghost btn-sm !px-2 ${turnAlerts.notifyEnabled ? '!text-emerald-500 dark:!text-emerald-300' : ''}`}
                     title="Get a browser notification when it is your turn and this tab is in the background"
                     aria-label={turnAlerts.notifyEnabled ? 'Alerts on' : 'Alert me'}
                     aria-pressed={turnAlerts.notifyEnabled}
@@ -2647,7 +2575,7 @@ export default function GamePage() {
                 )}
               </>
             )}
-            <span className="mx-1 h-5 w-px shrink-0 bg-gray-200 dark:bg-white/10 max-sm:hidden" aria-hidden="true" />
+            <span className="mx-1 h-5 w-px shrink-0 bg-gray-200 dark:bg-white/10 max-sm:hidden sm:ml-auto" aria-hidden="true" />
             {canStartGame() && !gameStarted && (
               <button
                 onClick={handleStartGame}
@@ -2663,7 +2591,7 @@ export default function GamePage() {
             )}
             <button
               onClick={handleLeaveGame}
-              className="btn btn-danger btn-sm"
+              className="btn btn-ghost btn-sm max-sm:!px-2 text-red-600 hover:!text-red-500 dark:text-red-400 dark:hover:!text-red-300 dark:hover:!bg-red-500/10"
               title="Leave this game and return to dashboard"
               aria-label="Leave game"
             >
@@ -3018,7 +2946,7 @@ export default function GamePage() {
                 {((pokerGameState?.bettingMode || 'no-limit') === 'no-limit') && (
                   (pokerGameState.currentBet || 0) === 0 ? (
                     <div className="flex flex-col gap-2 surface-muted p-3 w-full">
-                      <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Bet amount</div>
+                      <div className="text-sm text-gray-700 dark:text-gray-300 font-medium max-sm:sr-only">Bet amount</div>
                       {(() => {
                         const { min, max } = getBetBounds();
                         const bb = Number(pokerGameState.bigBlind || 0) || 0;
@@ -3285,24 +3213,20 @@ export default function GamePage() {
               </div>
               )}
 
-              <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-                <p>
-                  Current Bet: {showStackInBB 
-                    ? formatChips(pokerGameState.currentBet || 0, pokerGameState?.bigBlind || null, true)
-                    : `$${pokerGameState.currentBet || 0}`
-                  } | Pot: {showStackInBB 
-                    ? formatChips(pokerGameState.pot || 0, pokerGameState?.bigBlind || null, true)
-                    : `$${pokerGameState.pot || 0}`
-                  }
-                </p>
-                <p>
-                  Your Stack: {(() => {
-                    const myStack = pokerGameState.players.find((p: any) => p.id === playerId)?.stack || 0;
-                    return showStackInBB 
-                      ? formatChips(myStack, pokerGameState?.bigBlind || null, true)
-                      : `$${myStack}`;
-                  })()}
-                </p>
+              {/* The pot is on the felt, so phones skip this line to keep the panel short */}
+              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400 tabular-nums max-sm:hidden">
+                <span>Current bet <span className="font-semibold text-gray-800 dark:text-gray-200">{showStackInBB
+                  ? formatChips(pokerGameState.currentBet || 0, pokerGameState?.bigBlind || null, true)
+                  : `$${pokerGameState.currentBet || 0}`}</span></span>
+                <span>Pot <span className="font-semibold text-gray-800 dark:text-gray-200">{showStackInBB
+                  ? formatChips(pokerGameState.pot || 0, pokerGameState?.bigBlind || null, true)
+                  : `$${pokerGameState.pot || 0}`}</span></span>
+                <span>Your stack <span className="font-semibold text-gray-800 dark:text-gray-200">{(() => {
+                  const myStack = pokerGameState.players.find((p: any) => p.id === playerId)?.stack || 0;
+                  return showStackInBB
+                    ? formatChips(myStack, pokerGameState?.bigBlind || null, true)
+                    : `$${myStack}`;
+                })()}</span></span>
               </div>
             </div>
           )}
@@ -3408,30 +3332,33 @@ export default function GamePage() {
               )}
               <TurnClockBar clock={turnClock} />
               <div className="text-sm text-gray-600 dark:text-gray-300">
-                <p>Waiting for {pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'} to act...</p>
-                <p>Current Bet: {showStackInBB 
-                  ? formatChips(pokerGameState.currentBet || 0, pokerGameState?.bigBlind || null, true)
-                  : `$${pokerGameState.currentBet || 0}`
-                } | Pot: {showStackInBB 
-                  ? formatChips(pokerGameState.pot || 0, pokerGameState?.bigBlind || null, true)
-                  : `$${pokerGameState.pot || 0}`
-                }</p>
+                <p className="mb-3 text-gray-700 dark:text-gray-200">
+                  Waiting for <span className="font-semibold text-gray-900 dark:text-white">{pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'}</span> to act…
+                </p>
                 {(() => {
+                  const fmt = (n: number) => (showStackInBB ? formatChips(n, pokerGameState?.bigBlind || null, true) : `$${n}`);
                   const summary = getMyHandSummary();
                   const isHiLo = pokerGameState?.variant === 'omaha-hi-lo' || pokerGameState?.variant === 'seven-card-stud-hi-lo';
+                  const tiles: Array<{ label: string; value: React.ReactNode }> = [
+                    { label: 'Current bet', value: fmt(pokerGameState.currentBet || 0) },
+                    { label: 'Pot', value: fmt(pokerGameState.pot || 0) },
+                  ];
                   if (isHiLo) {
-                    const highDisplay = summary.highLabel || summary.primary || 'Waiting for more cards';
-                    const lowDisplay = summary.lowLabel || 'No qualifying low yet';
-                    return (
-                      <div className="mt-2 text-sm space-y-0.5">
-                        <div>High Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{highDisplay}</span></div>
-                        <div>Low Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{lowDisplay}</span></div>
-                      </div>
-                    );
+                    tiles.push({ label: 'High hand', value: summary.highLabel || summary.primary || 'Waiting for more cards' });
+                    tiles.push({ label: 'Low hand', value: summary.lowLabel || 'No qualifying low yet' });
+                  } else if (summary.primary) {
+                    tiles.push({ label: 'Your hand', value: summary.primary });
                   }
-                  return summary.primary ? (
-                    <p className="mt-1">Your Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{summary.primary}</span></p>
-                  ) : null;
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {tiles.map(t => (
+                        <div key={t.label} className="surface-muted px-3 py-2.5 min-w-0">
+                          <div className="text-xs text-gray-500 dark:text-gray-400">{t.label}</div>
+                          <div className="mt-0.5 truncate font-semibold tabular-nums text-gray-900 dark:text-white">{t.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
                 })()}
               </div>
             </div>

@@ -41,6 +41,10 @@ export interface TournamentState {
   config: TournamentConfig;
   status: TournamentStatus;
   createdBy?: string | null; // user who created it; null for tournaments made outside the API
+  // Private tournaments (src/lib/tournament/tournament-privacy.ts); unset means public
+  visibility?: 'public' | 'private';
+  inviteCode?: string; // stored without the dash
+  members?: string[]; // users who joined through the invite link
   createdAt: number; // epoch ms
   updatedAt: number; // epoch ms
   registeredPlayers: string[];
@@ -86,6 +90,7 @@ export interface CreateTournamentInput {
   name: string;
   config: TournamentConfig;
   createdBy?: string | null;
+  visibility?: 'public' | 'private';
 }
 
 export interface RegisterPlayerInput {

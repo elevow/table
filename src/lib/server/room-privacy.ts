@@ -2,7 +2,6 @@
 // invite link (its members) and staff with table.view_private. Public is the default, so rooms
 // created before this existed stay public. Everything lives in game_rooms.configuration.
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { customAlphabet } from 'nanoid';
 import { getPool } from '../database/pool';
 import { getSessionUser } from '../auth/auth-utils';
 import { getUserAccess, type UserAccess } from '../auth/access-control';
@@ -26,27 +25,7 @@ export const PRIVATE_TABLE_RESPONSE = {
   code: 'PRIVATE_TABLE',
 } as const;
 
-// Uppercase without 0/O, 1/I and L; 10 characters, so never mistaken for an 8-character room id
-const INVITE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
-const INVITE_LENGTH = 10;
-const generateInviteCode = customAlphabet(INVITE_ALPHABET, INVITE_LENGTH);
-
-export function newInviteCode(): string {
-  return generateInviteCode();
-}
-
-/** "K7QM2XPAHR" -> "K7QM2-XPAHR" */
-export function formatInviteCode(code: string): string {
-  return code.length === INVITE_LENGTH ? `${code.slice(0, 5)}-${code.slice(5)}` : code;
-}
-
-/** What someone typed or pasted, as a stored code, or null if it can't be one. */
-export function normalizeInviteCode(input: unknown): string | null {
-  if (typeof input !== 'string') return null;
-  const code = input.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (code.length !== INVITE_LENGTH) return null;
-  return [...code].every(c => INVITE_ALPHABET.includes(c)) ? code : null;
-}
+export { newInviteCode, formatInviteCode, normalizeInviteCode } from '../shared/invite-code';
 
 function privacyOf(configuration: unknown): RoomPrivacyConfig {
   return configuration && typeof configuration === 'object' ? configuration as RoomPrivacyConfig : {};

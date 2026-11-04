@@ -104,7 +104,7 @@ export class PlayerStatisticsManager {
       `SELECT ps.user_id, ps.${column} as value, u.username, ps.hands_played
        FROM player_statistics ps
        LEFT JOIN users u ON u.id = ps.user_id
-       WHERE ps.hands_played > 0
+       WHERE ps.hands_played > 0 AND NOT ps.leaderboard_hidden
        ORDER BY ps.${column} DESC NULLS LAST
        LIMIT $1`,
       [limit],

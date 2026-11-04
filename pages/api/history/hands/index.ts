@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
 import { getAuthenticatedUserId } from '../../../../src/lib/auth/auth-utils';
 import { rowToHandRecord, summarizeHand } from '../../../../src/lib/server/hand-records';
+import { PLAYER_HANDS_SQL } from '../../../../src/lib/server/hidden-hands';
 
 /**
  * GET /api/history/hands?roomId=&limit=&before=
@@ -20,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const params: unknown[] = [userId, limit];
-    let where = 'player_ids @> ARRAY[$1]::text[]';
+    let where = PLAYER_HANDS_SQL;
     if (roomId) {
       params.push(roomId);
       where += ` AND room_id = $${params.length}`;

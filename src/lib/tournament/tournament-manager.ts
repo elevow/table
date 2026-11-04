@@ -11,6 +11,8 @@ import type {
   EliminatePlayerInput,
 } from '../../types/tournament-management';
 import type { TournamentConfig } from '../../types/tournament';
+import { newInviteCode } from '../shared/invite-code';
+import { isPrivateTournament } from './tournament-privacy';
 
 export class TournamentManager {
   /**
@@ -36,6 +38,7 @@ export class TournamentManager {
       config: input.config,
       status: 'setup',
       createdBy: input.createdBy ?? null,
+      ...(input.visibility === 'private' ? { visibility: 'private' as const, inviteCode: newInviteCode(), members: [] } : {}),
       createdAt: now,
       updatedAt: now,
       registeredPlayers: [],
@@ -153,8 +156,54 @@ export class TournamentManager {
     return this.change(tournamentId, t => {
       const before = t.lastElimination?.before;
       if (!before) throw new Error('Only the most recent elimination can be undone, before anything else changes');
+      // Who's invited isn't part of the elimination: keep anyone who joined or a new link since
+      const { visibility, inviteCode, members } = t;
       for (const key of Object.keys(t)) delete (t as any)[key];
-      Object.assign(t, before);
+      Object.assign(t, before, { visibility, inviteCode, members });
+      for (const key of ['visibility', 'inviteCode', 'members'] as const) if (t[key] === undefined) delete t[key];
+    });
+  }
+
+  /** The private tournament an invite code opens, if any. */
+  findByInviteCode(code: string): Promise<TournamentState | null> {
+    return this.store.findByInviteCode(code);
+  }
+
+  /*
+   * Who's invited changes outside play, so these save without going through `change`: they don't
+   * throw away the director's undo or tell the tables anything happened.
+   */
+
+  /** Someone redeemed the invite link: they may see the tournament and register from now on. */
+  addMember(tournamentId: string, userId: string): Promise<TournamentState> {
+    return this.store.update(tournamentId, t => {
+      if (!isPrivateTournament(t)) return;
+      const members = t.members ?? [];
+      if (!members.includes(userId)) t.members = [...members, userId];
+    });
+  }
+
+  /** Make the tournament private (with a fresh invite link if it has none) or public again. */
+  setVisibility(tournamentId: string, visibility: 'public' | 'private'): Promise<TournamentState> {
+    return this.store.update(tournamentId, t => {
+      if (t.status === 'completed' || t.status === 'cancelled') throw new Error('This tournament has already finished');
+      if (visibility === 'private') {
+        t.visibility = 'private';
+        t.inviteCode = t.inviteCode || newInviteCode();
+        t.members = t.members ?? [];
+      } else {
+        delete t.visibility;
+      }
+      t.updatedAt = this.now();
+    });
+  }
+
+  /** Replace the invite link; the old one stops working, but everyone who used it stays invited. */
+  replaceInviteCode(tournamentId: string): Promise<TournamentState> {
+    return this.store.update(tournamentId, t => {
+      if (!isPrivateTournament(t)) throw new Error('Only a private tournament has an invite link');
+      t.inviteCode = newInviteCode();
+      t.updatedAt = this.now();
     });
   }
 

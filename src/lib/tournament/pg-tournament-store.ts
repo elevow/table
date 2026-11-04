@@ -51,6 +51,14 @@ export class PgTournamentStore implements TournamentStore {
     );
     return result.rows.map((r: any) => r.state);
   }
+
+  async findByInviteCode(code: string): Promise<TournamentState | null> {
+    const result = await getPool().query(
+      `SELECT state FROM tournaments WHERE state->>'visibility' = 'private' AND state->>'inviteCode' = $1 LIMIT 1`,
+      [code]
+    );
+    return result.rows[0]?.state ?? null;
+  }
 }
 
 /** Usernames for tournament players, by user ID. IDs that aren't users are left out. */

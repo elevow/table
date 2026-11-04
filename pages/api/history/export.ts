@@ -4,6 +4,7 @@ import { getAuthenticatedUserId } from '../../../src/lib/auth/auth-utils';
 import { redactHandRecord, rowToHandRecord } from '../../../src/lib/server/hand-records';
 import { fetchRoomNames } from '../../../src/lib/server/room-names';
 import { formatPokerStarsHands } from '../../../src/lib/shared/pokerstars-export';
+import { PLAYER_HANDS_SQL } from '../../../src/lib/server/hidden-hands';
 
 export const EXPORT_HAND_LIMIT = 1000;
 
@@ -31,7 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const pool = getPool();
     const params: unknown[] = [userId];
-    let where = 'player_ids @> ARRAY[$1]::text[]';
+    let where = PLAYER_HANDS_SQL;
     if (handId) {
       params.push(handId);
       where += ` AND id = $${params.length}`;

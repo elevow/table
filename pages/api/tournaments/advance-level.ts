@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { sendTournamentError } from '../../../src/lib/tournament/api-errors';
+import { withoutTournamentInvite } from '../../../src/lib/tournament/tournament-privacy';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { tournamentManager } from '../../../src/lib/tournament/manager-instance';
 import { requireOrganizer } from '../../../src/lib/tournament/require-organizer';
@@ -12,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!(await requireOrganizer(req, res, 'tournament.manage', tournamentId))) return;
   try {
     const t = await tournamentManager.advanceLevel(tournamentId);
-    return res.status(200).json(t);
+    return res.status(200).json(withoutTournamentInvite(t));
   } catch (err) {
     return sendTournamentError(res, err);
   }

@@ -14,6 +14,7 @@ export default function CreateTournamentPage() {
   // Assumed until permissions load; the API refuses without tournament.create anyway
   const [canCreate, setCanCreate] = useState(true);
   const [signedIn, setSignedIn] = useState(true);
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<TournamentState | null>(null);
@@ -32,7 +33,7 @@ export default function CreateTournamentPage() {
     setSubmitting(true);
     setError(null);
     try {
-      setCreated(await postTournamentAction('create', { name, config }));
+      setCreated(await postTournamentAction('create', { name, config, visibility }));
     } catch (err: any) {
       setError(err?.message || 'Could not create the tournament');
     } finally {
@@ -51,13 +52,19 @@ export default function CreateTournamentPage() {
             {created.config.blindLevels.length} levels, {created.config.startingStack.toLocaleString()} starting stack,{' '}
             {created.config.seatsPerTable ?? 9}-max tables. Registration is open.
           </p>
+          {created.visibility === 'private' && (
+            <p>It&apos;s private: get the invite link from the director controls and send it to your players.</p>
+          )}
           <p className="text-gray-600 dark:text-gray-400">Tournament ID: <code>{created.id}</code></p>
         </div>
         <div className="mt-4 flex gap-4">
           <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={() => router.push(`/tournaments/${created.id}`)}>
             View tournament
           </button>
-          <button className={linkButton} onClick={() => { setCreated(null); setFormKey(k => k + 1); }}>Create another</button>
+          {created.visibility === 'private' && (
+            <button className={linkButton} onClick={() => router.push(`/tournaments/${created.id}/manage`)}>Director controls</button>
+          )}
+          <button className={linkButton} onClick={() => { setCreated(null); setVisibility('public'); setFormKey(k => k + 1); }}>Create another</button>
           <button className={linkButton} onClick={() => router.push('/dashboard')}>Back to dashboard</button>
         </div>
       </div>
@@ -72,6 +79,19 @@ export default function CreateTournamentPage() {
       {signedIn && !canCreate && (
         <p className="mb-4 text-sm text-red-600">You don&apos;t have permission to create tournaments. Ask an admin for the Tournament Director role.</p>
       )}
+      <fieldset className="mb-6">
+        <legend className="text-lg font-semibold mb-2">Who can join</legend>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <label className="inline-flex items-center gap-2">
+            <input type="radio" name="tournament-visibility" checked={visibility === 'public'} onChange={() => setVisibility('public')} />
+            Public: listed in the tournament lobby
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input type="radio" name="tournament-visibility" checked={visibility === 'private'} onChange={() => setVisibility('private')} />
+            Private: only people with the invite link
+          </label>
+        </div>
+      </fieldset>
       <TournamentSetupForm
         key={formKey}
         submitLabel="Create tournament"

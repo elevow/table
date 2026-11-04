@@ -7,6 +7,7 @@ import { buildTournamentView } from '../../../src/lib/tournament/tournament-view
 import { getRequestAccess, hasPermission, sendPermissionDenied } from '../../../src/lib/auth/access-control';
 import { canManageTournament } from '../../../src/lib/tournament/require-organizer';
 import { keepTablesMoving, syncTournamentRooms } from '../../../src/lib/tournament/table-rooms';
+import { PRIVATE_TOURNAMENT_RESPONSE, canSeeTournament } from '../../../src/lib/tournament/tournament-privacy';
 
 // Opening or waking a tournament's tables can take a while with many of them
 export const config = { maxDuration: 60 };
@@ -21,8 +22,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { tournamentId } = (req.query || {}) as any;
     if (!tournamentId) return res.status(400).json({ error: 'Missing tournamentId' });
+    const found = await tournamentManager.get(String(tournamentId));
+    if (!found) return res.status(404).json({ error: 'Tournament not found' });
+    if (!canSeeTournament(access, found)) return res.status(403).json(PRIVATE_TOURNAMENT_RESPONSE);
     // A tournament with a start time starts (or is called off) when it's due
-    const { tournament: t, started } = await tournamentManager.startIfDue(String(tournamentId));
+    const { tournament: t, started } = await tournamentManager.startIfDue(found.id);
     if (!t) return res.status(404).json({ error: 'Tournament not found' });
     if (started) await syncTournamentRooms(t.id);
     // Tables nobody has open still need their next hands dealt

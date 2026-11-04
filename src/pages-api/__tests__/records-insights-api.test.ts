@@ -170,7 +170,7 @@ describe('GET /api/history/export', () => {
     const res = createRes();
     await exportHandler(req({ handId: HAND_ID }), res);
     const [sql, params] = mockQuery.mock.calls[0];
-    expect(sql).toContain('player_ids @> ARRAY[$1]::text[] AND id = $2');
+    expect(sql).toContain('player_ids @> ARRAY[$1]::text[] AND NOT (hidden_for @> ARRAY[$1]::text[]) AND id = $2');
     expect(params).toEqual(['me', HAND_ID, 1]);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.headers['Content-Type']).toBe('text/plain; charset=utf-8');

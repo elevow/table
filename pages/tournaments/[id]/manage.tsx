@@ -85,6 +85,16 @@ export default function ManageTournamentPage() {
     await run('cancel', { reason }, 'Tournament cancelled');
   };
 
+  const inviteLink = (code: string) => `${typeof window !== 'undefined' ? window.location.origin : ''}/join/${code}`;
+  const copyInvite = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(inviteLink(code));
+      setMessage({ kind: 'ok', text: 'Invite link copied' });
+    } catch {
+      setMessage({ kind: 'error', text: "Couldn't copy; select the link and copy it yourself" });
+    }
+  };
+
   const eliminate = async () => {
     if (!out) return;
     const knocker = by ? ` by ${nameOf(by)}` : '';
@@ -139,6 +149,38 @@ export default function ManageTournamentPage() {
           {view.players.remaining} of {view.players.entrants} left · prize pool {formatMoney(view.prizePool)}
         </span>
       </section>
+
+      {view.status !== 'completed' && view.status !== 'cancelled' && (
+        <section aria-label="Privacy" className={`${card} space-y-2 text-sm`}>
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" checked={view.visibility === 'private'} disabled={busy}
+              onChange={e => {
+                const visibility = e.target.checked ? 'private' : 'public';
+                run('privacy', { action: 'set-visibility', visibility },
+                  visibility === 'private' ? 'The tournament is private' : 'The tournament is public');
+              }} />
+            Private: hidden from the lobby; only people with the invite link can see it and register
+          </label>
+          {view.visibility === 'private' && view.inviteCode && (
+            <div className="flex flex-wrap items-center gap-2">
+              <input readOnly aria-label="Invite link" value={inviteLink(view.inviteCode)}
+                className={`${select} flex-1 min-w-[16rem]`} onFocus={e => e.target.select()} />
+              <button className={`${btn} bg-blue-600`} disabled={busy} onClick={() => copyInvite(view.inviteCode!)}>Copy</button>
+              <button className="text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50" disabled={busy}
+                onClick={() => {
+                  if (window.confirm('Make a new invite link? The current one will stop working; players who already used it stay invited.')) {
+                    run('privacy', { action: 'new-invite-code' }, 'New invite link made');
+                  }
+                }}>
+                New link
+              </button>
+            </div>
+          )}
+          {view.visibility === 'private' && (
+            <p className="text-xs text-gray-600 dark:text-gray-400">Players can also type the code {view.inviteCode} into the join box on the dashboard.</p>
+          )}
+        </section>
+      )}
 
       {view.rebuysOpen && (
         <section aria-label="Rebuys" className={`flex flex-wrap items-center gap-3 rounded p-3 text-sm ${view.waitingOnRebuys ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>

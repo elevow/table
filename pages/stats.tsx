@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { authHeaders } from '../src/utils/auth-headers';
@@ -21,9 +21,13 @@ export default function StatsPage() {
   const [data, setData] = useState<ProfitData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
+  // Hidden unless the player has stats.delete_sessions; the API checks it again
+  const [canDelete, setCanDelete] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/stats/profit', { headers: authHeaders() })
+  const load = useCallback(() => {
+    return fetch('/api/stats/profit', { headers: authHeaders() })
       .then(async resp => {
         const body = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(resp.status === 401 ? 'Sign in to see your results.' : body?.error || 'Could not load your results');
@@ -31,6 +35,42 @@ export default function StatsPage() {
       })
       .catch(e => setError(e?.message || 'Could not load your results'));
   }, []);
+
+  useEffect(() => {
+    load();
+    const headers = authHeaders();
+    if (!headers.Authorization) return;
+    fetch('/api/auth/check-admin', { headers })
+      .then(r => (r.ok ? r.json() : null))
+      .then(me => setCanDelete(!!me?.permissions?.includes('stats.delete_sessions')))
+      .catch(() => {});
+  }, [load]);
+
+  const deleteSessions = async (which: PlayedSession | 'all') => {
+    const question = which === 'all'
+      ? "Delete all your sessions? Every hand you have played will be removed from your results, hand history and leaderboard totals. Other players keep their copies. This can't be undone."
+      : `Delete this session (${which.hands} hand${which.hands === 1 ? '' : 's'})? The hands will be removed from your results, hand history and leaderboard totals. Other players keep their copies. This can't be undone.`;
+    if (!window.confirm(question)) return;
+    const key = which === 'all' ? 'all' : `${which.roomId}:${which.start}`;
+    setDeleting(key);
+    setError(null);
+    setNotice(null);
+    try {
+      const resp = await fetch('/api/stats/sessions/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify(which === 'all' ? { all: true } : { roomId: which.roomId, start: which.start, end: which.end }),
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(body?.error || 'Could not delete the sessions');
+      setNotice(`Deleted ${body.hands} hand${body.hands === 1 ? '' : 's'} from your results.`);
+      await load();
+    } catch (e: any) {
+      setError(e?.message || 'Could not delete the sessions');
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   const exportSession = async (s: PlayedSession) => {
     const key = `${s.roomId}:${s.start}`;
@@ -65,6 +105,7 @@ export default function StatsPage() {
         </div>
 
         {error && <div className="p-3 mb-4 rounded bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-200 text-sm">{error}</div>}
+        {notice && <div role="status" className="p-3 mb-4 rounded bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 text-sm">{notice}</div>}
         {!data && !error && <p className="text-gray-500 dark:text-gray-400">Loading…</p>}
 
         {data && data.totals.hands === 0 && (
@@ -98,7 +139,18 @@ export default function StatsPage() {
             </section>
 
             <section className="rounded-lg bg-white dark:bg-gray-800 shadow overflow-x-auto">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 px-4 pt-4">Sessions</h2>
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Sessions</h2>
+                {canDelete && data.sessions.length > 0 && (
+                  <button
+                    onClick={() => deleteSessions('all')}
+                    disabled={deleting !== null}
+                    className="text-xs text-red-600 dark:text-red-400 hover:underline disabled:opacity-60"
+                  >
+                    {deleting === 'all' ? 'Deleting…' : 'Delete all sessions'}
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 px-4 mb-2">A break of more than two hours at a table starts a new session.</p>
               <table className="w-full text-sm">
                 <thead className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
@@ -125,7 +177,7 @@ export default function StatsPage() {
                         <td className="px-3 py-2 text-right tabular-nums">{s.hands}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatDuration(s.durationMs)}</td>
                         <td className={`px-3 py-2 text-right tabular-nums font-semibold ${netClass(s.net)}`}>{signed(s.net)}</td>
-                        <td className="px-3 py-2 text-right">
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
                           <button
                             onClick={() => exportSession(s)}
                             disabled={exporting === key}
@@ -133,6 +185,16 @@ export default function StatsPage() {
                           >
                             {exporting === key ? 'Exporting…' : 'Export'}
                           </button>
+                          {canDelete && (
+                            <button
+                              onClick={() => deleteSessions(s)}
+                              disabled={deleting !== null}
+                              aria-label={`Delete the session at ${data.roomNames[s.roomId] || s.roomId} on ${new Date(s.start).toLocaleString()}`}
+                              className="ml-3 text-xs text-red-600 dark:text-red-400 hover:underline disabled:opacity-60"
+                            >
+                              {deleting === key ? 'Deleting…' : 'Delete'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );

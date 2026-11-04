@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
 import { getAuthenticatedUserId } from '../../../src/lib/auth/auth-utils';
 import { fetchRoomNames } from '../../../src/lib/server/room-names';
+import { PLAYER_HANDS_SQL } from '../../../src/lib/server/hidden-hands';
 import { buildProfitSeries, groupSessions, type ProfitHand } from '../../../src/lib/shared/profit-sessions';
 
 // Most recent hands used for the graph and sessions
@@ -25,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `SELECT id, room_id, started_at, ended_at,
          (SELECT (elem->>'net')::numeric FROM jsonb_array_elements(players) elem WHERE elem->>'id' = $1 LIMIT 1) AS net
        FROM hand_records
-       WHERE player_ids @> ARRAY[$1]::text[]
+       WHERE ${PLAYER_HANDS_SQL}
        ORDER BY ended_at DESC
        LIMIT $2`,
       [userId, PROFIT_HAND_LIMIT]

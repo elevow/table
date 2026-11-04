@@ -18,6 +18,8 @@ export function useTournamentView(id: string | null, onEvents?: (events: Tournam
   const [view, setView] = useState<TournamentView | null>(null);
   const [fetchedAt, setFetchedAt] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // The server's reason code with the error, e.g. PRIVATE_TOURNAMENT
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   const reload = useCallback(async () => {
@@ -25,7 +27,11 @@ export function useTournamentView(id: string | null, onEvents?: (events: Tournam
     try {
       const res = await fetch(`/api/tournaments/view?tournamentId=${encodeURIComponent(id)}`, { headers: authHeaders() });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || `Could not load the tournament (${res.status})`);
+      if (!res.ok) {
+        setErrorCode(typeof body?.code === 'string' ? body.code : null);
+        throw new Error(body?.error || `Could not load the tournament (${res.status})`);
+      }
+      setErrorCode(null);
       const at = Date.now();
       setView(body);
       setFetchedAt(at);
@@ -60,5 +66,5 @@ export function useTournamentView(id: string | null, onEvents?: (events: Tournam
   const elapsed = view && view.status !== 'paused' ? Math.max(0, now - fetchedAt) : 0;
   const levelLeft = view?.levelRemainingMs != null ? view.levelRemainingMs - (view.status === 'running' ? elapsed : 0) : null;
   const breakLeft = view?.breakRemainingMs != null ? view.breakRemainingMs - (view.status === 'on-break' ? elapsed : 0) : null;
-  return { view, error, reload, levelLeft, breakLeft };
+  return { view, error, errorCode, reload, levelLeft, breakLeft };
 }

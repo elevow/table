@@ -118,7 +118,7 @@ export default function StatsPage() {
                 { label: 'Winning sessions', value: `${wins} of ${data.sessions.length}`, cls: '' },
               ].map(t => (
                 <div key={t.label} className="surface px-5 py-4">
-                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400">{t.label}</div>
+                  <div className="text-[13px] font-medium text-gray-500 dark:text-gray-400">{t.label}</div>
                   <div className={`mt-1 text-2xl font-semibold tracking-tight tabular-nums ${t.cls || 'text-gray-900 dark:text-white'}`}>{t.value}</div>
                 </div>
               ))}

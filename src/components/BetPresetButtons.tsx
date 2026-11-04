@@ -32,7 +32,7 @@ const buttonClass = 'btn btn-sm btn-secondary !px-2.5 shrink-0 max-sm:h-10';
 export default function BetPresetButtons({ kind, bettingMode, pot, currentBet, myBet, min, max, bigBlind, value, onChange }: Props) {
   if (!supportsBetPresets(bettingMode)) return null;
   return (
-    <div className="flex flex-wrap gap-1.5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:-mx-1 max-sm:px-1 [scrollbar-width:none]" role="group" aria-label={kind === 'bet' ? 'Bet size presets' : 'Raise size presets'}>
+    <div className="flex flex-wrap gap-1.5 max-sm:grid max-sm:w-full max-sm:grid-cols-4" role="group" aria-label={kind === 'bet' ? 'Bet size presets' : 'Raise size presets'}>
       {BET_PRESETS.map(({ preset, label, title }) => (
         <button
           key={preset}

@@ -315,7 +315,7 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
 
         <div className="mt-3 pt-2 border-t border-gray-100 dark:border-white/[0.05]">
           <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
-            Started at {sessionStats.sessionStartTime.toLocaleTimeString()}
+            Started at {sessionStats.sessionStartTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
           </div>
         </div>
 

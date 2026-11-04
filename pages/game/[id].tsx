@@ -2488,7 +2488,7 @@ export default function GamePage() {
             <GameRulesBadges state={pokerGameState} />
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 max-sm:gap-0.5">
+          <div className="flex flex-wrap items-center gap-1.5 max-sm:justify-between max-sm:gap-0">
             {currentPlayerSeat && (
               <button
                 onClick={standUp}
@@ -2858,6 +2858,14 @@ export default function GamePage() {
                   Your turn
                   <TimeBankBadge count={me?.timeBanks} seconds={pokerGameState?.timeBankSeconds} />
                 </h3>
+                <div className="flex gap-1 sm:hidden" aria-hidden="true">
+                  {(isStudVariant() ? (() => { const c = getStudCardsForPlayer(playerId); return [...c.down, ...c.up]; })() : (getCurrentPlayerCards() || [])).map((card: any, i: number) => (
+                    <div key={i} className="playing-card w-8 h-11 text-[13px] rounded">
+                      <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
+                      <div className={suitColorClass(card.suit)}>{card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}</div>
+                    </div>
+                  ))}
+                </div>
                 <button
                   type="button"
                   onClick={() => shortcuts.setHelpOpen(true)}
@@ -2890,7 +2898,7 @@ export default function GamePage() {
                   );
                 }
                 return summary.primary ? (
-                  <div className="mb-3 text-sm text-gray-700 dark:text-gray-200">Your Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{summary.primary}</span></div>
+                  <div className="mb-3 text-sm text-gray-700 dark:text-gray-200">Your hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{summary.primary}</span></div>
                 ) : null;
               })()}
               {/* Pot Odds Display */}
@@ -2945,7 +2953,7 @@ export default function GamePage() {
                 {/* No-Limit betting controls */}
                 {((pokerGameState?.bettingMode || 'no-limit') === 'no-limit') && (
                   (pokerGameState.currentBet || 0) === 0 ? (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium max-sm:sr-only">Bet amount</div>
                       {(() => {
                         const { min, max } = getBetBounds();
@@ -2972,7 +2980,7 @@ export default function GamePage() {
                                 step={0.01}
                                 value={Number(clamp(betInput, min, max)).toFixed(2)}
                                 onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
-                                className="input w-28 tabular-nums"
+                                className="input w-28 max-sm:w-full tabular-nums"
                                 data-shortcut-amount="true"
                               />
                               <BetPresetButtons
@@ -3009,7 +3017,7 @@ export default function GamePage() {
                       })()}
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Raise to</div>
                       {(() => {
                         const { min, max } = getRaiseBounds();
@@ -3037,7 +3045,7 @@ export default function GamePage() {
                                 step={0.01}
                                 value={Number(clamp(raiseInput, min, max)).toFixed(2)}
                                 onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
-                                className="input w-28 tabular-nums"
+                                className="input w-28 max-sm:w-full tabular-nums"
                                 data-shortcut-amount="true"
                               />
                               <BetPresetButtons
@@ -3083,7 +3091,7 @@ export default function GamePage() {
                 {/* Pot-Limit betting controls */}
                 {((pokerGameState?.bettingMode || 'no-limit') === 'pot-limit') && (
                   (pokerGameState.currentBet || 0) === 0 ? (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Bet amount (Pot-Limit)</div>
                       {(() => {
                         const { min, max } = getPotLimitBetBounds();
@@ -3110,7 +3118,7 @@ export default function GamePage() {
                                 step={0.01}
                                 value={Number(clamp(betInput, min, max)).toFixed(2)}
                                 onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
-                                className="input w-28 tabular-nums"
+                                className="input w-28 max-sm:w-full tabular-nums"
                                 data-shortcut-amount="true"
                               />
                               <BetPresetButtons
@@ -3145,7 +3153,7 @@ export default function GamePage() {
                       })()}
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Raise to (Pot-Limit)</div>
                       {(() => {
                         const { min, max } = getPotLimitRaiseBounds();
@@ -3173,7 +3181,7 @@ export default function GamePage() {
                                 step={0.01}
                                 value={Number(clamp(raiseInput, min, max)).toFixed(2)}
                                 onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
-                                className="input w-28 tabular-nums"
+                                className="input w-28 max-sm:w-full tabular-nums"
                                 data-shortcut-amount="true"
                               />
                               <BetPresetButtons

@@ -86,13 +86,13 @@ export default function AppShell({ children, actions }: { children: ReactNode; a
           </div>
         </div>
         {/* Phones get the same links as a scrollable strip */}
-        <nav className="md:hidden flex gap-1 overflow-x-auto px-3 pb-2 -mt-1 pr-10 [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_75%,transparent)]" aria-label="Main">
+        <nav className="md:hidden flex gap-0.5 overflow-x-auto px-2 pb-2 -mt-1 [scrollbar-width:none]" aria-label="Main">
           {NAV.map(item => (
             <Link
               key={item.href}
               href={item.href}
               aria-current={isActive(item.href) ? 'page' : undefined}
-              className={`h-8 px-2.5 inline-flex shrink-0 items-center rounded-md text-[13px] font-medium ${
+              className={`h-8 px-2 inline-flex shrink-0 items-center rounded-md text-[13px] font-medium ${
                 isActive(item.href)
                   ? 'bg-gray-100 text-gray-900 dark:bg-white/[0.07] dark:text-white'
                   : 'text-gray-500 dark:text-gray-400'

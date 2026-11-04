@@ -89,6 +89,14 @@ export default function ProfitChart({ points }: Props) {
           </g>
         ))}
         <text x={PAD.left} y={H - 8} className="fill-gray-400 dark:fill-gray-500 text-[10px]">Hand 1</text>
+        {points.length >= 8 && [0.25, 0.5, 0.75].map(f => {
+          const hand = Math.max(1, Math.round(points.length * f));
+          return (
+            <text key={f} x={geo.x(hand)} y={H - 8} textAnchor="middle" className="fill-gray-400 dark:fill-gray-500 text-[10px]">
+              {`Hand ${hand}`}
+            </text>
+          );
+        })}
         <text x={W - PAD.right} y={H - 8} textAnchor="end" className="fill-gray-400 dark:fill-gray-500 text-[10px]">
           {`Hand ${points.length}`}
         </text>

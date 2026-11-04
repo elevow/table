@@ -154,7 +154,7 @@ export default function StatsPage() {
                     <th className="!text-right">Hands</th>
                     <th className="!text-right">Duration</th>
                     <th className="!text-right">Net</th>
-                    <th><span className="sr-only">Actions</span></th>
+                    <th className="!text-right">Export</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -164,7 +164,7 @@ export default function StatsPage() {
                       <tr key={key} className="text-gray-900 dark:text-gray-100">
                         <td className="whitespace-nowrap text-gray-600 dark:text-gray-300">{new Date(s.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</td>
                         <td>
-                          <Link href={`/history?room=${encodeURIComponent(s.roomId)}`} className="font-mono text-[13px] text-gray-600 hover:text-emerald-600 dark:text-gray-300 dark:hover:text-emerald-300">
+                          <Link href={`/history?room=${encodeURIComponent(s.roomId)}`} className={`${data.roomNames[s.roomId] ? '' : 'font-mono text-[13px]'} text-gray-600 hover:text-emerald-600 dark:text-gray-300 dark:hover:text-emerald-300`}>
                             {data.roomNames[s.roomId] || s.roomId}
                           </Link>
                         </td>
@@ -175,7 +175,7 @@ export default function StatsPage() {
                           <button
                             onClick={() => exportSession(s)}
                             disabled={exporting === key}
-                            className="btn btn-ghost btn-sm !px-2 disabled:opacity-60"
+                            className="btn btn-ghost btn-sm !h-8 !px-2 disabled:opacity-60"
                             title="Export this session"
                             aria-label={exporting === key ? 'Exporting…' : 'Export'}
                           >

@@ -22,12 +22,12 @@ export default function PreActionBar({ owed, selected, onSelect, formatAmount, s
     ? [
         { pre: { type: 'check-fold' }, label: 'Fold', title: 'Fold when it is your turn (check instead if the bet is withdrawn)' },
         { pre: { type: 'call', amount: owed }, label: `Call ${formatAmount(typeof stack === 'number' ? Math.min(owed, stack) : owed)}`, title: 'Call this amount; cancelled if someone raises' },
-        { pre: { type: 'call-any' }, label: 'Call Any', title: 'Call whatever it costs when it is your turn' },
+        { pre: { type: 'call-any' }, label: 'Call any', title: 'Call whatever it costs when it is your turn' },
       ]
     : [
         { pre: { type: 'check-fold' }, label: 'Check/Fold', title: 'Check if you can, otherwise fold' },
         { pre: { type: 'check' }, label: 'Check', title: 'Check if nobody bets; cancelled if someone does' },
-        { pre: { type: 'call-any' }, label: 'Call Any', title: 'Check, or call any bet, when it is your turn' },
+        { pre: { type: 'call-any' }, label: 'Call any', title: 'Check, or call any bet, when it is your turn' },
       ];
 
   return (

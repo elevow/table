@@ -28,13 +28,13 @@ export default function HandActionLog({ actions = [], players, handNumber, varia
     if (a.stage !== stage) {
       stage = a.stage;
       rows.push(
-        <li key={`s${i}`} className="pt-1 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 first:border-t-0 first:pt-0">
+        <li key={`s${i}`} className="pt-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 border-t border-gray-100 dark:border-white/[0.05] first:border-t-0 first:pt-0">
           {streetLabel(a.stage, variant)}
         </li>
       );
     }
     rows.push(
-      <li key={i} className={a.action === 'fold' ? 'text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-gray-100'}>
+      <li key={i} className={a.action === 'fold' ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'}>
         {describeAction(a, names.get(a.playerId) || 'Player', money)}
       </li>
     );
@@ -48,7 +48,7 @@ export default function HandActionLog({ actions = [], players, handNumber, varia
       {rows.length === 0 ? (
         <p className="text-xs text-gray-500 dark:text-gray-400">No actions yet this hand.</p>
       ) : (
-        <ol ref={listRef} className="max-h-48 overflow-y-auto space-y-0.5 text-xs" aria-live="polite" aria-label="Actions this hand">
+        <ol ref={listRef} className="max-h-48 overflow-y-auto space-y-0.5 text-[13px] leading-5" aria-live="polite" aria-label="Actions this hand">
           {rows}
         </ol>
       )}

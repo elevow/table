@@ -1607,7 +1607,7 @@ export default function GamePage() {
     // Place the current player's cards centered near the bottom of the felt,
     // lowered to just touch the top of the avatar positioned below the table.
     if (!currentPlayerSeat) return 'bottom-6 left-1/2 transform -translate-x-1/2';
-    return 'bottom-6 max-sm:bottom-7 left-1/2 transform -translate-x-1/2';
+    return 'bottom-9 max-sm:bottom-9 left-1/2 transform -translate-x-1/2';
   };
 
   // Render seat component with adjacent player info

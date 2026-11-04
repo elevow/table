@@ -34,11 +34,11 @@ export default function TurnClockBar({ clock, compact = false }: Props) {
       aria-live="off"
       aria-label={`Time to act: ${label}`}
     >
-      <div className={`flex items-center justify-between ${compact ? 'text-[10px]' : 'text-xs'} font-semibold ${low ? 'text-red-600 dark:text-red-400' : clock.inTimeBank ? 'text-amber-600 dark:text-amber-400' : 'text-gray-600 dark:text-gray-300'}`}>
-        <span>{compact ? '' : 'Time to act'}</span>
-        <span className="tabular-nums">{label}</span>
+      <div className={`mb-1 flex items-center justify-between ${compact ? 'text-[10px]' : 'text-xs'} font-medium`}>
+        <span className="text-gray-500 dark:text-gray-400">{compact ? '' : 'Time to act'}</span>
+        <span className={`tabular-nums ${low ? 'text-red-600 dark:text-red-400' : clock.inTimeBank ? 'text-amber-600 dark:text-amber-400' : 'text-gray-600 dark:text-gray-300'}`}>{label}</span>
       </div>
-      <div className={`w-full ${compact ? 'h-1' : 'h-1.5'} rounded bg-gray-200 dark:bg-gray-700 overflow-hidden`}>
+      <div className={`w-full ${compact ? 'h-1' : 'h-1.5'} rounded-full bg-gray-200 dark:bg-white/[0.08] overflow-hidden`}>
         <div
           className={`h-full ${barColor} transition-[width] duration-200 ease-linear`}
           style={{ width: `${fraction * 100}%` }}

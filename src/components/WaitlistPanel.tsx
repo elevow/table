@@ -34,7 +34,7 @@ export default function WaitlistPanel({ extras, playerId, isSeated, tableFull, c
         <span className="text-sm text-emerald-900 dark:text-emerald-100">
           Seat {offer.seatNumber} is free and held for you for {secondsLeft}s.
         </span>
-        <button onClick={() => onTakeSeat(offer.seatNumber)} className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium">
+        <button onClick={() => onTakeSeat(offer.seatNumber)} className="btn btn-primary btn-sm">
           Take seat {offer.seatNumber}
         </button>
       </div>
@@ -52,7 +52,7 @@ export default function WaitlistPanel({ extras, playerId, isSeated, tableFull, c
   if (!tableFull && position < 0) return null;
 
   return (
-    <div className="lg:col-span-3 flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+    <div className="lg:col-span-3 flex flex-wrap items-center justify-between gap-3 surface p-3">
       <span className="text-sm text-gray-700 dark:text-gray-200">
         {position >= 0
           ? `You are number ${position + 1} on the waitlist.`

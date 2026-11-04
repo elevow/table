@@ -310,7 +310,7 @@ function RolesTab({
         Higher-ranked roles can assign lower ones.
       </p>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-x-auto">
+      <div className="surface overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="sticky top-0 bg-gray-50 dark:bg-gray-700">
             <tr>
@@ -399,7 +399,7 @@ function RolesTab({
       )}
 
       {canEdit && (
-        <form onSubmit={create} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 flex flex-wrap items-end gap-3">
+        <form onSubmit={create} className="surface p-4 flex flex-wrap items-end gap-3">
           <h2 className="w-full font-semibold text-gray-900 dark:text-gray-100">New role</h2>
           <label className="text-sm text-gray-700 dark:text-gray-200">
             Name
@@ -520,7 +520,7 @@ function UsersTab({
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
+      <div className="surface p-4">
         <form onSubmit={e => { e.preventDefault(); search(query); }} className="flex gap-2 mb-3">
           <input
             value={query}
@@ -573,7 +573,7 @@ function UsersTab({
           onError={onError}
         />
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 text-gray-500 dark:text-gray-400">
+        <div className="surface p-4 text-gray-500 dark:text-gray-400">
           Pick a user to see and change their roles.
         </div>
       )}
@@ -641,7 +641,7 @@ function UserEditor({
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 space-y-5">
+    <div className="surface p-4 space-y-5">
       <div>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{user.username}</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">{user.email}</p>
@@ -933,7 +933,7 @@ function AuditTab({ onError }: { onError: (message: string) => void }) {
   if (!entries.length) return <p className="text-gray-600 dark:text-gray-300">No admin actions yet.</p>;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-x-auto">
+    <div className="surface overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead className="bg-gray-50 dark:bg-gray-700 text-left text-gray-900 dark:text-gray-100">
           <tr>

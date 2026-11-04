@@ -175,13 +175,13 @@ function CombinedPlayerStats() {
 
   if (isLoading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-          Overall Player Statistics
+      <div className="surface p-6">
+        <h3 className="section-title mb-4">
+          Your statistics
         </h3>
         <div className="animate-pulse">
-          <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-3/4 mb-2"></div>
-          <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-1/2"></div>
+          <div className="h-4 bg-gray-200 dark:bg-white/[0.06] rounded w-3/4 mb-2"></div>
+          <div className="h-4 bg-gray-200 dark:bg-white/[0.06] rounded w-1/2"></div>
         </div>
       </div>
     );
@@ -192,22 +192,22 @@ function CombinedPlayerStats() {
     value: string | number;
     color?: string;
   }) => (
-    <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-      <div className="text-sm text-gray-600 dark:text-gray-400">{label}</div>
-      <div className={`text-lg font-semibold ${color}`}>{value}</div>
+    <div className="surface-muted px-4 py-3">
+      <div className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</div>
+      <div className={`mt-1 text-lg font-semibold tabular-nums ${color}`}>{value}</div>
     </div>
   );
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+    <div className="surface p-6">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          Overall Player Statistics
+        <h3 className="section-title">
+          Your statistics
         </h3>
         {combinedStats.totalSessions > 0 && (
           <button
             onClick={handleResetClick}
-            className="text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 px-3 py-1 rounded border border-red-200 hover:border-red-300 dark:border-red-500 dark:hover:border-red-400 transition-colors"
+            className="btn btn-ghost btn-sm text-red-600 dark:text-red-400"
           >
             Reset Statistics
           </button>
@@ -244,12 +244,15 @@ function CombinedPlayerStats() {
       )}
       
       {combinedStats.totalSessions === 0 ? (
-        <div className="text-gray-600 dark:text-gray-400 text-center py-8">
-          <p className="text-lg mb-2">No game sessions found</p>
-          <p className="text-sm">Start playing to see your statistics here!</p>
+        <div className="text-center py-4">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/[0.05] dark:text-gray-500">
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-6" /></svg>
+          </div>
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">No sessions yet</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Play a few hands and your numbers will show up here.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           <StatCard 
             label="Total Sessions" 
             value={combinedStats.totalSessions} 
@@ -263,13 +266,13 @@ function CombinedPlayerStats() {
           <StatCard 
             label="Win Rate" 
             value={`${combinedStats.overallWinRate}%`}
-            color={combinedStats.overallWinRate >= 50 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}
+            color={combinedStats.overallWinRate >= 50 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}
           />
           
           <StatCard 
             label="Net Winnings" 
             value={`$${combinedStats.netWinnings.toLocaleString()}`}
-            color={combinedStats.netWinnings >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}
+            color={combinedStats.netWinnings >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}
           />
           
           <StatCard 
@@ -280,7 +283,7 @@ function CombinedPlayerStats() {
           <StatCard 
             label="Total Winnings" 
             value={`$${combinedStats.totalWinnings.toLocaleString()}`}
-            color="text-green-600 dark:text-green-400"
+            color="text-emerald-600 dark:text-emerald-400"
           />
           
           <StatCard 
@@ -296,7 +299,7 @@ function CombinedPlayerStats() {
       )}
       
       {combinedStats.totalSessions > 0 && (
-        <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-600">
+        <div className="mt-6 pt-4 border-t border-gray-200 dark:border-white/[0.06]">
           <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
             <p>
               <span className="font-medium">Hands Won:</span> {combinedStats.totalHandsWon.toLocaleString()} 

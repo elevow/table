@@ -28,7 +28,7 @@ export default function SeatReactionBubbles({ anchors, bubbles, nameOf }: Props)
             style={{ left: anchor.left, top: `calc(${anchor.top} - 44px)`, transform: 'translate(-50%, -50%)' }}
           >
             <div
-              className="table-reaction-pop rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xl leading-none text-gray-900 shadow-lg dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              className="table-reaction-pop rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xl leading-none text-gray-900 shadow-lg dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100"
               role="img"
               aria-label={`${nameOf(anchor.playerId)} reacts ${bubble.emote}`}
             >

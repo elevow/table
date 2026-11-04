@@ -3,6 +3,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
+import { BrandMark } from '../src/components/AppShell';
 
 const Home: NextPage = () => {
   const router = useRouter();
@@ -104,30 +105,34 @@ const Home: NextPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 flex items-center justify-center">
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden px-4 py-12">
+      {/* A soft felt glow behind the card */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 50% 45% at 50% 50%, rgba(16,185,129,0.10), transparent 70%)' }} />
+      </div>
       <Head>
         <title>{`${isLogin ? 'Login' : 'Sign Up'} - Table`}</title>
         <meta name="description" content="Login to Table - Online poker platform" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="w-full max-w-md px-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-8">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Welcome to Table
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              {isLogin ? 'Sign in to your account' : 'Create your account'}
-            </p>
-          </div>
+      <main className="relative w-full max-w-[400px]">
+        <div className="flex flex-col items-center text-center mb-8">
+          <BrandMark className="h-12 w-12 rounded-xl" />
+          <h1 className="mt-5 text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">
+            {isLogin ? 'Welcome back' : 'Create your account'}
+          </h1>
+          <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
+            {isLogin ? 'Sign in to pull up a chair at Table.' : 'Join Table and start a game with friends.'}
+          </p>
+        </div>
+        <div className="surface p-6 sm:p-8">
 
           {/* Login/Signup Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Email Address
+              <label htmlFor="email" className="label">
+                Email address
               </label>
               <input
                 id="email"
@@ -137,14 +142,14 @@ const Home: NextPage = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="input h-11"
                 placeholder="Enter your email"
               />
             </div>
 
             {!isLogin && (
               <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label htmlFor="username" className="label">
                   Username
                 </label>
                 <input
@@ -155,14 +160,14 @@ const Home: NextPage = () => {
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input h-11"
                   placeholder="Choose a username"
                 />
               </div>
             )}
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="password" className="label">
                 Password
               </label>
               <input
@@ -173,14 +178,14 @@ const Home: NextPage = () => {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="input h-11"
                 placeholder="Enter your password"
               />
             </div>
 
             {!isLogin && (
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label htmlFor="confirmPassword" className="label">
                   Confirm Password
                 </label>
                 <input
@@ -189,7 +194,7 @@ const Home: NextPage = () => {
                   type="password"
                   autoComplete="new-password"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input h-11"
                   placeholder="Confirm your password"
                 />
               </div>
@@ -202,20 +207,20 @@ const Home: NextPage = () => {
                     id="remember-me"
                     name="remember-me"
                     type="checkbox"
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    className="checkbox"
                   />
-                  <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                  <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-600 dark:text-gray-400">
                     Remember me
                   </label>
                 </div>
-                <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-500">
+                <Link href="/forgot-password" className="link text-sm">
                   Forgot password?
                 </Link>
               </div>
             )}
 
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+              <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
                 {error}
               </div>
             )}
@@ -223,25 +228,42 @@ const Home: NextPage = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+              className="btn btn-primary w-full h-11"
             >
               {loading ? (
                 <div className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                   Processing...
                 </div>
               ) : (
-                isLogin ? 'Sign In' : 'Create Account'
+                isLogin ? 'Sign in' : 'Create account'
               )}
             </button>
           </form>
 
+          {/* Guest access */}
+          <div className="mt-6">
+            <div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500">
+              <div className="h-px flex-1 bg-gray-200 dark:bg-white/[0.08]" />
+              or
+              <div className="h-px flex-1 bg-gray-200 dark:bg-white/[0.08]" />
+            </div>
+            <button
+              type="button"
+              onClick={handleGuestAccess}
+              className="btn btn-secondary mt-6 w-full h-11 !font-medium dark:!text-gray-300"
+            >
+              Continue as guest
+            </button>
+          </div>
+        </div>
+
           {/* Toggle between login/signup */}
           <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               {isLogin ? "Don't have an account? " : "Already have an account? "}
               <button
                 type="button"
@@ -249,31 +271,14 @@ const Home: NextPage = () => {
                   setIsLogin(!isLogin);
                   setError(null); // Clear error when switching
                 }}
-                className="font-medium text-blue-600 hover:text-blue-500"
+                className="link"
               >
                 {isLogin ? 'Sign up' : 'Sign in'}
               </button>
             </p>
           </div>
 
-          {/* Guest access */}
-          <div className="mt-4">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300 dark:border-gray-600" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white dark:bg-gray-800 text-gray-500">Or</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleGuestAccess}
-              className="mt-4 w-full flex justify-center py-3 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
-            >
-              Continue as Guest
-            </button>
-
+          <div>
             {/* DB Health Check (hidden unless NEXT_PUBLIC_SHOW_DB_HEALTH is set) */}
             {showDbHealth && (
               <div className="mt-4">
@@ -281,19 +286,18 @@ const Home: NextPage = () => {
                   type="button"
                   onClick={testDbHealth}
                   disabled={healthLoading}
-                  className="w-full flex justify-center py-3 px-4 border border-green-600 rounded-md shadow-sm text-sm font-medium text-green-50 bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                  className="btn btn-ghost btn-sm w-full"
                 >
                   {healthLoading ? 'Testing DB Connection…' : 'Test DB Connection'}
                 </button>
                 {healthResult && (
-                  <pre className="mt-3 max-h-64 overflow-auto text-xs bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-3 rounded border border-gray-300 dark:border-gray-700">
+                  <pre className="mt-3 max-h-64 overflow-auto text-xs surface-muted text-gray-800 dark:text-gray-200 p-3">
 {JSON.stringify(healthResult, null, 2)}
                   </pre>
                 )}
               </div>
             )}
           </div>
-        </div>
       </main>
     </div>
   );

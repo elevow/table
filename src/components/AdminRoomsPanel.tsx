@@ -155,7 +155,7 @@ export default function AdminRoomsPanel() {
 
   if (loading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mt-8">
+      <div className="surface p-6 mt-8">
         <div className="animate-pulse">
           <div className="h-6 bg-gray-200 rounded w-1/4 mb-4"></div>
           <div className="space-y-3">
@@ -234,7 +234,7 @@ export default function AdminRoomsPanel() {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mt-8">
+    <div className="surface p-6 mt-8">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
           <span className="bg-red-500 text-white px-2 py-1 rounded text-sm mr-3">ADMIN</span>
@@ -290,7 +290,7 @@ export default function AdminRoomsPanel() {
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {rooms.map((room) => (
-                <tr key={room.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <tr key={room.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.08]">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       {room.room_code || room.room_id || room.id}

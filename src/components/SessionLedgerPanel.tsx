@@ -63,8 +63,8 @@ export default function SessionLedgerPanel({ tableId, refreshKey }: { tableId: s
   const s = data.session;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">This session</h3>
+    <div className="surface p-5">
+      <h3 className="section-title mb-3">This session</h3>
       <div className="grid grid-cols-2 gap-2 text-sm mb-3">
         <div className="text-gray-600 dark:text-gray-300">Hands</div>
         <div className="text-right tabular-nums text-gray-900 dark:text-gray-100">{s.handsPlayed}</div>
@@ -80,7 +80,7 @@ export default function SessionLedgerPanel({ tableId, refreshKey }: { tableId: s
 
       <button
         onClick={() => setOpen(o => !o)}
-        className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+        className="link text-sm"
         aria-expanded={open}
       >
         {open ? 'Hide table ledger' : 'Show table ledger'}

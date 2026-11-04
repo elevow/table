@@ -27,10 +27,13 @@ module.exports = (phase, { defaultConfig }) => {
           vendors: {
             test: /[\\/]node_modules[\\/]/,
             name(module) {
-              // Get the name of the npm package
-              const packageName = module.context.match(
+              // Get the name of the npm package. Some generated modules (e.g. next/font) match the
+              // test by resource path but have no node_modules context, so fall back to 'vendors'.
+              const match = (module.context || '').match(
                 /[\\/]node_modules[\\/](.*?)([\\/]|$)/
-              )[1];
+              );
+              if (!match) return 'vendors';
+              const packageName = match[1];
               
               // Major vendors go to their own chunk, rest go to vendors
               const majorVendors = ['react', 'react-dom', 'next'];

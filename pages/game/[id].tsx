@@ -1,6 +1,7 @@
 import { useRouter } from 'next/router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
 import { useComponentPerformance } from '../../src/utils/performance-monitor';
 import { createInvite } from '../../src/services/friends-ui';
@@ -49,7 +50,7 @@ import { useTableReactions } from '../../src/hooks/useTableReactions';
 import TableChipAnimations from '../../src/components/TableChipAnimations';
 import MobileCollapsible from '../../src/components/MobileCollapsible';
 import { useMediaQuery, NARROW_SCREEN_QUERY } from '../../src/hooks/useMediaQuery';
-import { narrowInfoBoxStyle } from '../../src/lib/shared/seat-layout';
+import { seatPlateStyle } from '../../src/lib/shared/seat-layout';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -228,6 +229,7 @@ export default function GamePage() {
     bb?: number;
     numberOfRebuys?: number | 'unlimited';
     buyIn?: number;
+    name?: string;
   } | null>(null);
   
   // Seat management state - initialize dynamically based on maxPlayers
@@ -643,7 +645,7 @@ export default function GamePage() {
       if (suit === 'clubs') return 'text-blue-600';
       return 'text-black'; // spades
     }
-    return (suit === 'hearts' || suit === 'diamonds') ? 'text-red-500' : 'text-black';
+    return (suit === 'hearts' || suit === 'diamonds') ? 'text-red-600' : 'text-gray-900';
   }, [highContrastCards]);
 
   // Fetch room configuration to determine variant, betting mode, and blinds
@@ -671,7 +673,8 @@ export default function GamePage() {
           ? cfg.numberOfRebuys
           : 'unlimited';
         const buyIn = typeof cfg?.buyIn === 'number' && cfg.buyIn > 0 ? cfg.buyIn : 1000;
-        setRoomConfig({ variant, bettingMode, sb, bb, numberOfRebuys, buyIn });
+        const name = typeof data?.name === 'string' && data.name.trim() ? data.name.trim() : undefined;
+        setRoomConfig({ variant, bettingMode, sb, bb, numberOfRebuys, buyIn, name });
       } catch {}
     };
     fetchRoom();
@@ -1604,7 +1607,7 @@ export default function GamePage() {
     // Place the current player's cards centered near the bottom of the felt,
     // lowered to just touch the top of the avatar positioned below the table.
     if (!currentPlayerSeat) return 'bottom-6 left-1/2 transform -translate-x-1/2';
-    return 'bottom-2 left-1/2 transform -translate-x-1/2';
+    return 'bottom-9 max-sm:bottom-9 left-1/2 transform -translate-x-1/2';
   };
 
   // Render seat component with adjacent player info
@@ -1614,78 +1617,6 @@ export default function GamePage() {
   const isEmpty = !assignment;
   // Allow claiming even if seat state hasn't synced yet; server validates occupancy
   const canClaim = isEmpty && userRole !== 'guest' && !currentPlayerSeat && claimingSeat === null;
-
-    // Determine info box position based on seat coordinates - RIGHT NEXT to each seat
-    const getInfoBoxPosition = (currentPosition: string, seatStyle?: React.CSSProperties) => {
-      // Special case: for the current player, show info card to the right of their avatar
-      // We know the current player's avatar is anchored at bottom-center (left: 50%, top: 104%)
-      // so we offset horizontally to the right with a translate to avoid overlap.
-      if (isCurrentPlayer) {
-        // Position info box so its left edge touches the avatar circle's right edge (w-16 => 64px, half=32px + 2px border)
-        // Use calc to place left at 50% + 34px; keep vertical centering relative to avatar center
-        return 'left-[calc(50%+34px)] top-[104%] transform -translate-y-1/2';
-      }
-
-      // If we have style coordinates, use them to determine position
-      if (seatStyle && seatStyle.left && seatStyle.top) {
-        const leftPercent = parseFloat(seatStyle.left.toString().replace('%', ''));
-        const topPercent = parseFloat(seatStyle.top.toString().replace('%', ''));
-        
-        // More precise positioning based on 8 directions around the table
-        if (topPercent < 25) {
-          // Top area
-          if (leftPercent < 35) {
-            // Top-left - info touching table edge
-            return '-top-2 -left-2';
-          } else if (leftPercent > 65) {
-            // Top-right - info touching table edge
-            return '-top-2 -right-2';
-          } else {
-            // Top-center - info pushed above table edge
-            return '-top-20 left-1/2 transform -translate-x-1/2';
-          }
-        } else if (topPercent > 75) {
-          // Bottom area
-          if (leftPercent < 35) {
-            // Bottom-left - info touching table edge
-            return '-bottom-2 -left-2';
-          } else if (leftPercent > 65) {
-            // Bottom-right - info touching table edge
-            return '-bottom-2 -right-2';
-          } else {
-            // Bottom-center - info pushed below table edge
-            return '-bottom-20 left-1/2 transform -translate-x-1/2';
-          }
-        } else {
-          // Middle area (left/right sides)
-          if (leftPercent < 50) {
-            // Left side - info touching table edge
-            return 'top-0 -left-2';
-          } else {
-            // Right side - info touching table edge
-            return 'top-0 -right-2';
-          }
-        }
-      }
-      
-      // Fallback to CSS class-based positioning for backwards compatibility
-      if (currentPosition.includes('top-1') && currentPosition.includes('left-1/2')) {
-        return '-top-16 left-1/2 transform -translate-x-1/2';
-      } else if (currentPosition.includes('top-8') && currentPosition.includes('right-8')) {
-        return 'top-0 -right-32';
-      } else if (currentPosition.includes('bottom-8') && currentPosition.includes('right-8')) {
-        return 'bottom-0 -right-32';
-      } else if (currentPosition.includes('bottom-1') && currentPosition.includes('left-1/2')) {
-        return '-bottom-16 left-1/2 transform -translate-x-1/2';
-      } else if (currentPosition.includes('bottom-8') && currentPosition.includes('left-8')) {
-        return 'bottom-0 -left-32';
-      } else if (currentPosition.includes('top-8') && currentPosition.includes('left-8')) {
-        return 'top-0 -left-32';
-      }
-      
-      // Default fallback
-      return '-bottom-16 left-1/2 transform -translate-x-1/2';
-    };
 
     // Seat records keep the buy-in; once the player is in the game, the engine stack is the truth
     const seatGamePlayer = assignment ? pokerGameState?.players?.find((p: any) => p.id === assignment.playerId) : undefined;
@@ -1697,14 +1628,14 @@ export default function GamePage() {
       <React.Fragment key={seatNumber}>
         {/* Main seat */}
         <div
-          className={`absolute w-16 h-16 max-sm:w-12 max-sm:h-12 rounded-full border-2 flex flex-col items-center justify-center text-white text-xs font-semibold relative ${position} ${
+          className={`absolute w-16 h-16 max-sm:w-12 max-sm:h-12 rounded-full border-2 flex flex-col items-center justify-center text-white text-xs font-semibold relative transition-colors ${position} ${isCurrentPlayer && actionPanelOpen ? 'max-sm:invisible' : ''} ${
             isEmpty
               ? canClaim
-                ? 'bg-gray-600 border-gray-500 hover:bg-gray-500 hover:border-gray-400 cursor-pointer opacity-60 hover:opacity-80'
-                : 'bg-gray-700 border-gray-600 opacity-50'
+                ? 'border-dashed border-white/30 bg-black/20 text-white/70 hover:border-emerald-300/80 hover:bg-emerald-400/10 hover:text-white cursor-pointer'
+                : 'border-dashed border-white/15 bg-black/15 text-white/40'
               : isCurrentPlayer
-                ? 'bg-blue-600 border-blue-500 opacity-90'
-                : 'bg-green-600 border-green-500 opacity-80'
+                ? 'bg-gray-950 border-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.15)]'
+                : 'bg-gray-950 border-white/25'
           } ${isHandWinner ? 'table-winner-pulse' : ''}`}
           style={style}
           onClick={() => {
@@ -1740,15 +1671,15 @@ export default function GamePage() {
           }
         >
           {isEmpty ? (
-            <div className="text-center leading-tight text-white text-xs font-semibold">
-              {claimingSeat === seatNumber ? 'Claiming…' : <>P{seatNumber}</>}
+            <div className="text-center leading-tight text-[11px] font-semibold">
+              {claimingSeat === seatNumber ? 'Claiming…' : canClaim ? <>Sit</> : <>{seatNumber}</>}
             </div>
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <Avatar 
                 src={getPlayerAvatarSrc(assignment.playerId)}
                 size="lg"
-                className={`w-12 h-12 max-sm:w-10 max-sm:h-10 rounded-full border-2 border-white shadow-sm ${(() => {
+                className={`w-[52px] h-[52px] max-sm:w-10 max-sm:h-10 rounded-full shadow-sm ${(() => {
                   const tag = playerNotes[assignment.playerId]?.color as NoteColor | undefined;
                   return tag && NOTE_COLOR_CLASSES[tag] ? `ring-4 ${NOTE_COLOR_CLASSES[tag].ring}` : '';
                 })()}`}
@@ -1758,13 +1689,13 @@ export default function GamePage() {
                 const token = getPlayerToken(assignment.playerId);
                 if (!token) return null;
                 const styleMap: Record<'D' | 'SB' | 'BB', string> = {
-                  D: 'bg-white text-gray-900 border-gray-300',
-                  SB: 'bg-sky-600 text-white border-sky-400',
-                  BB: 'bg-indigo-700 text-white border-indigo-500',
+                  D: 'bg-white text-gray-900 border-gray-200 min-w-[20px] text-center',
+                  SB: 'bg-gray-800 text-gray-100 border-white/25',
+                  BB: 'bg-gray-800 text-amber-200 border-amber-300/40',
                 };
                 return (
                   <div
-                    className={`absolute -top-2 -right-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold border shadow ${styleMap[token]}`}
+                    className={`absolute -top-1.5 -right-1.5 z-30 px-1.5 py-0.5 rounded-full text-[10px] leading-none font-bold border shadow-md ${styleMap[token]}`}
                     title={token === 'D' ? 'Dealer' : token === 'SB' ? 'Small Blind' : 'Big Blind'}
                     aria-label={token === 'D' ? 'Dealer' : token === 'SB' ? 'Small Blind' : 'Big Blind'}
                     style={{ pointerEvents: 'none' }}
@@ -1780,18 +1711,17 @@ export default function GamePage() {
         {/* Player info box - only show if seat is occupied */}
         {!isEmpty && assignment && (
           <div
-            className={isNarrowScreen ? 'absolute z-10' : `absolute ${getInfoBoxPosition(position, style)} z-10`}
-            style={isNarrowScreen ? narrowInfoBoxStyle(style) : { pointerEvents: 'none' }}
+            className="absolute z-10"
+            // Every seat's plate sits centred under its avatar; the seat's cards sit beside the avatar instead
+            style={seatPlateStyle(style, isNarrowScreen ? 30 : 38)}
           >
-            <div className={`px-3 py-2 max-sm:px-2 max-sm:py-1 max-sm:text-[10px] max-sm:max-w-[104px] rounded-lg shadow-lg border-2 text-xs ${
-              isCurrentPlayer
-                ? 'bg-blue-100 dark:bg-blue-900/80 border-blue-300 dark:border-blue-600 text-blue-900 dark:text-blue-100'
-                : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100'
+            <div className={`min-w-[96px] max-w-[150px] px-3 py-1.5 max-sm:px-2 max-sm:py-1 max-sm:text-[10px] max-sm:min-w-[84px] max-sm:max-w-[120px] rounded-xl shadow-card border backdrop-blur-sm text-xs bg-gray-950/85 text-gray-100 ${
+              isCurrentPlayer ? 'border-emerald-400/40' : 'border-white/10'
             }`}>
-              <div className="font-semibold whitespace-nowrap max-sm:truncate">
+              <div className="font-medium text-gray-200 whitespace-nowrap max-sm:truncate">
                 {assignment.playerName || `Player ${seatNumber}`}
               </div>
-              <div className="text-green-600 dark:text-green-400 font-bold">
+              <div className="text-emerald-300 font-semibold tabular-nums">
                 {showStackInBB 
                   ? formatChips(seatChips, pokerGameState?.bigBlind || null, true)
                   : `$${seatChips}`
@@ -1801,26 +1731,26 @@ export default function GamePage() {
               {pokerGameState && (() => {
                 const gamePlayer = pokerGameState.players?.find((p: any) => p.id === assignment.playerId);
                 return gamePlayer && (
-                  <div className="text-xs mt-1">
+                  <div className="text-xs max-sm:text-[10px] mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis empty:hidden">
                     {gamePlayer.isSittingOut && (
-                      <span className="text-gray-500 dark:text-gray-400 italic">{gamePlayer.notArrived ? 'Not here yet (posting blinds)' : pokerGameState.tournamentRules ? 'Away (posting blinds)' : 'Sitting out'}</span>
+                      <span className="text-gray-400 italic">{gamePlayer.notArrived ? 'Not here yet (posting blinds)' : pokerGameState.tournamentRules ? 'Away (posting blinds)' : 'Sitting out'}</span>
                     )}
                     {gamePlayer.waitingForBigBlind && !gamePlayer.isSittingOut && (
-                      <span className="text-gray-500 dark:text-gray-400 italic">{gamePlayer.postBigBlindNow ? 'Posting big blind' : 'Waiting for big blind'}</span>
+                      <span className="text-gray-400 italic">{gamePlayer.postBigBlindNow ? 'Posting big blind' : 'Waiting for big blind'}</span>
                     )}
-                    {gamePlayer.leaveAfterHand && <span className="text-gray-500 dark:text-gray-400 italic"> Leaving after hand</span>}
-                    {(gamePlayer.folded || gamePlayer.isFolded) && !gamePlayer.isSittingOut && <span className="text-red-500">Folded</span>}
-                    {gamePlayer.isAllIn && <span className="text-yellow-500">All-in</span>}
+                    {gamePlayer.leaveAfterHand && <span className="text-gray-400 italic"> Leaving after hand</span>}
+                    {(gamePlayer.folded || gamePlayer.isFolded) && !gamePlayer.isSittingOut && <span className="text-gray-400">Folded</span>}
+                    {gamePlayer.isAllIn && <span className="font-semibold text-amber-300">All-in</span>}
                     {gamePlayer.currentBet > 0 && !gamePlayer.folded && (
-                      <span className="text-blue-500">
+                      <span className="text-sky-300 tabular-nums">
                         Bet: {showStackInBB 
                           ? formatChips(gamePlayer.currentBet, pokerGameState?.bigBlind || null, true)
                           : `$${gamePlayer.currentBet}`
                         }
                       </span>
                     )}
-                    <span className="ml-1"><TimeBankBadge count={gamePlayer.timeBanks} seconds={pokerGameState?.timeBankSeconds} compact /></span>
-                    {turnClock.activePlayer === gamePlayer.id && <TurnClockBar clock={turnClock} compact />}
+                    {(gamePlayer.timeBanks ?? 0) > 0 && <span className="ml-1"><TimeBankBadge count={gamePlayer.timeBanks} seconds={pokerGameState?.timeBankSeconds} compact /></span>}
+                    {turnClock.activePlayer === gamePlayer.id && !(isCurrentPlayer && actionPanelOpen) && <TurnClockBar clock={turnClock} compact />}
                   </div>
                 );
               })()}
@@ -1846,8 +1776,9 @@ export default function GamePage() {
             const leftPercent = parseFloat(leftStr.replace('%', ''));
             const topPercent = parseFloat(topStr.replace('%', ''));
             // Move cards toward the table center (opposite side of avatar)
-            const dx = leftPercent >= 50 ? -36 : 36;
-            const dy = topPercent >= 50 ? -36 : 36;
+            const offset = isNarrowScreen ? 56 : 58;
+            const dx = leftPercent >= 50 ? -offset : offset;
+            const dy = topPercent >= 50 ? -4 : 4;
             cardStyle = {
               position: 'absolute',
               left: `calc(${leftStr} + ${dx}px)`,
@@ -1865,22 +1796,22 @@ export default function GamePage() {
                   {/* Down cards: reveal at showdown, otherwise keep face-down */}
                   {down.map((card: any, i: number) => (
                     atShowdown ? (
-                      <div key={`down-${i}`} className="bg-white rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow">
-                        <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
+                      <div key={`down-${i}`} className="playing-card text-[11px] w-8 h-12">
+                        <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                         <div className={suitColorClass(card.suit)}>
                           {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                         </div>
                       </div>
                     ) : (
-                      <div key={`down-${i}`} className="w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center">
-                        <div className="w-6 h-10 rounded bg-blue-600/50 border border-blue-400"></div>
+                      <div key={`down-${i}`} className="card-back w-8 h-12">
+                        <div className="card-back-inner"></div>
                       </div>
                     )
                   ))}
                   {/* Up cards (always face up) */}
                   {up.map((card: any, i: number) => (
-                    <div key={`up-${i}`} className="bg-white rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow">
-                      <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
+                    <div key={`up-${i}`} className="playing-card text-[11px] w-8 h-12">
+                      <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                       <div className={suitColorClass(card.suit)}>
                         {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                       </div>
@@ -1896,7 +1827,7 @@ export default function GamePage() {
           if (pokerGameState?.stage === 'showdown' && !showFaceUp && getActiveNonFoldedPlayers().length >= 2) {
             return (
               <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent mucked">
-                <span className="px-2 py-0.5 rounded bg-gray-800/70 text-[10px] text-gray-200">Mucked</span>
+                <span className="px-2 py-0.5 rounded-full bg-black/40 ring-1 ring-white/10 text-[10px] font-medium text-white/70">Mucked</span>
               </div>
             );
           }
@@ -1906,8 +1837,8 @@ export default function GamePage() {
               <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (revealed)">
                 <div className="flex gap-1">
                   {holes.map((card: any, index: number) => (
-                    <div key={index} className="bg-white dark:bg-gray-700 rounded border text-[10px] p-1 w-8 h-12 flex flex-col items-center justify-center text-black dark:text-gray-100 font-bold shadow">
-                      <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
+                    <div key={index} className="playing-card text-[11px] w-8 h-12">
+                      <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                       <div className={suitColorClass(card.suit)}>
                         {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                       </div>
@@ -1921,11 +1852,11 @@ export default function GamePage() {
           return (
             <div key={`opp-backs-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (hidden)">
               <div className="flex gap-1">
-                <div className="table-card-deal w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center">
-                  <div className="w-6 h-10 rounded bg-blue-600/50 border border-blue-400"></div>
+                <div className="table-card-deal card-back w-8 h-12">
+                  <div className="card-back-inner"></div>
                 </div>
-                <div className="table-card-deal w-8 h-12 rounded border border-blue-700 bg-gradient-to-br from-blue-500 to-blue-700 shadow-md flex items-center justify-center -ml-3 rotate-3" style={{ animationDelay: '80ms' }}>
-                  <div className="w-6 h-10 rounded bg-blue-600/50 border border-blue-400"></div>
+                <div className="table-card-deal card-back w-8 h-12 -ml-3 rotate-6" style={{ animationDelay: '80ms' }}>
+                  <div className="card-back-inner"></div>
                 </div>
               </div>
             </div>
@@ -2490,7 +2421,7 @@ export default function GamePage() {
   if (privateTableBlocked) return <PrivateTableNotice />;
 
   return (
-    <div className="game-page bg-gray-100 dark:bg-gray-900 min-h-screen overflow-x-clip">
+    <div className="game-page min-h-screen overflow-x-clip">
       <ShortcutHelpOverlay open={shortcuts.helpOpen} onClose={() => shortcuts.setHelpOpen(false)} />
       {/* Screen readers hear turns, actions, board cards and results */}
       <TableAnnouncer
@@ -2526,51 +2457,63 @@ export default function GamePage() {
           </div>
         </div>
       )}
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 max-sm:break-all">Game: {id}</h1>
+      {/* Table bar: where you are on the left, what you can do on the right */}
+      <header className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/80 backdrop-blur-md dark:border-white/[0.06] dark:bg-gray-900/75">
+        <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-2 lg:py-2.5 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link href="/dashboard" className="btn btn-ghost btn-sm !px-2 shrink-0" aria-label="Back to the lobby" title="Back to the lobby">
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M12.8 5.2a1 1 0 010 1.4L9.4 10l3.4 3.4a1 1 0 01-1.4 1.4l-4.1-4.1a1 1 0 010-1.4l4.1-4.1a1 1 0 011.4 0z" clipRule="evenodd" /></svg>
+            </Link>
+            <div className="min-w-0">
+              <h1 className="truncate text-[15px] font-semibold leading-tight text-gray-900 dark:text-white">{roomConfig?.name || 'Table'}</h1>
+              <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <span className="font-mono tracking-wide">{id}</span>
+                {roomConfig?.sb && roomConfig?.bb ? <span className="tabular-nums">· ${roomConfig.sb}/${roomConfig.bb}</span> : null}
+              </div>
+            </div>
+            <div className="hidden sm:flex flex-wrap items-center gap-1.5">
             {roomConfig?.numberOfRebuys !== undefined && (
-              <span className="inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-100">
+              <span className="badge">
                 Rebuys: {roomConfig.numberOfRebuys === 'unlimited' ? 'Unlimited' : roomConfig.numberOfRebuys}
               </span>
             )}
             {tableExtras?.allowRunItTwice && (
               <span
-                className="inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-100"
+                className="badge badge-violet"
                 title="After an all-in, the weakest hand can choose to run the board more than once"
               >
                 Run it twice
               </span>
             )}
             <GameRulesBadges state={pokerGameState} />
-            {/* Removed seated info banner at user request */}
-            {/* Removed game started banner at user request */}
+            </div>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 max-sm:justify-between max-sm:gap-0">
             {currentPlayerSeat && (
               <button
                 onClick={standUp}
-                className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto"
+                className="btn btn-ghost btn-sm max-sm:!px-2"
                 title={`Stand up from seat ${currentPlayerSeat}`}
                 aria-label="Stand up from seat"
               >
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg className="w-4 h-4 flex-shrink-0 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                 </svg>
-                <span className="whitespace-nowrap">Stand Up (P{currentPlayerSeat})</span>
+                <span className="whitespace-nowrap max-sm:sr-only">Stand up</span>
               </button>
             )}
             <a
               href={`/history?room=${encodeURIComponent(tableId)}`}
-              className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-center whitespace-nowrap"
+              className="btn btn-ghost btn-sm max-sm:!px-2"
+              title="Hand history"
             >
-              Hand history
+              <svg className="h-4 w-4 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.8L3 8M3 3v5h5M12 7v5l3 2" /></svg>
+              <span className="max-sm:sr-only">Hand history</span>
             </a>
             {gameStarted && me && tableExtras?.allowStraddle && !isStudVariant() && (pokerGameState?.players?.length || 0) >= 3 && (
               <button
                 onClick={toggleStraddle}
-                className={`${me.wantsStraddle ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'} text-white font-medium px-4 py-2 rounded-lg w-full sm:w-auto whitespace-nowrap`}
+                className={`btn btn-sm ${me.wantsStraddle ? 'btn-warning' : 'btn-ghost'}`}
                 title="Post twice the big blind under the gun next hand (only if you are under the gun)"
                 aria-pressed={!!me.wantsStraddle}
               >
@@ -2581,52 +2524,62 @@ export default function GamePage() {
               <button
                 onClick={() => setSeatOption('leave-after-hand', !me.leaveAfterHand)}
                 disabled={seatOptionPending}
-                className={`${me.leaveAfterHand ? 'bg-orange-600 hover:bg-orange-700' : 'bg-gray-600 hover:bg-gray-700'} disabled:opacity-60 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 w-full sm:w-auto whitespace-nowrap`}
+                className={`btn btn-sm ${me.leaveAfterHand ? 'btn-warning' : 'btn-ghost'}`}
                 title={me.leaveAfterHand ? 'You will stand up when this hand ends; click to stay' : 'Finish this hand, then stand up'}
                 aria-pressed={!!me.leaveAfterHand}
               >
-                {me.leaveAfterHand ? 'Leaving after this hand' : 'Leave after this hand'}
+                <svg className="h-4 w-4 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg><span className="max-sm:sr-only">{me.leaveAfterHand ? 'Leaving after this hand' : 'Leave after this hand'}</span>
               </button>
             )}
             {gameStarted && me && (
               <button
                 onClick={toggleSitOut}
                 disabled={sitOutPending}
-                className={`${me.isSittingOut ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-600 hover:bg-gray-700'} disabled:opacity-60 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 w-full sm:w-auto whitespace-nowrap`}
+                className={`btn btn-sm ${me.isSittingOut ? 'btn-primary' : 'btn-ghost'}`}
                 title={pokerGameState?.tournamentRules
                   ? (me.isSittingOut ? 'You are away: your blinds and antes are posted and your hands folded until you come back' : 'Step away: your blinds and antes are still posted and your hands folded for you')
                   : (me.isSittingOut ? 'You are sitting out; you will be dealt in from the next hand' : 'Keep your seat but skip hands from the next one')}
                 aria-pressed={!!me.isSittingOut}
               >
-                {me.isSittingOut ? "I'm Back" : 'Sit Out'}
+                {me.isSittingOut ? "I'm back" : <><svg className="h-4 w-4 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 010 8h-1M3 8h14v9a4 4 0 01-4 4H7a4 4 0 01-4-4V8zM6 2v2M10 2v2M14 2v2" /></svg><span className="max-sm:sr-only">Sit out</span></>}
               </button>
             )}
             {gameStarted && me && (
-              <div className="flex gap-2">
+              <>
                 <button
                   onClick={() => turnAlerts.setSoundEnabled(!turnAlerts.soundEnabled)}
-                  className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  className="btn btn-ghost btn-sm !px-2"
                   title={turnAlerts.soundEnabled ? 'Turn off the sound when it is your turn' : 'Play a sound when it is your turn'}
+                  aria-label={turnAlerts.soundEnabled ? 'Sound on' : 'Sound off'}
                   aria-pressed={turnAlerts.soundEnabled}
                 >
-                  {turnAlerts.soundEnabled ? 'Sound on' : 'Sound off'}
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M11 5L6 9H3v6h3l5 4V5z" />
+                    {turnAlerts.soundEnabled
+                      ? <path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13" />
+                      : <path d="M16 9l5 6M21 9l-5 6" />}
+                  </svg>
                 </button>
                 {turnAlerts.notifyPermission !== 'unsupported' && turnAlerts.notifyPermission !== 'denied' && (
                   <button
                     onClick={() => turnAlerts.setNotifyEnabled(!turnAlerts.notifyEnabled)}
-                    className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    className={`btn btn-ghost btn-sm !px-2 ${turnAlerts.notifyEnabled ? '!text-emerald-500 dark:!text-emerald-300' : ''}`}
                     title="Get a browser notification when it is your turn and this tab is in the background"
+                    aria-label={turnAlerts.notifyEnabled ? 'Alerts on' : 'Alert me'}
                     aria-pressed={turnAlerts.notifyEnabled}
                   >
-                    {turnAlerts.notifyEnabled ? 'Alerts on' : 'Alert me'}
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0" />
+                    </svg>
                   </button>
                 )}
-              </div>
+              </>
             )}
+            <span className="mx-1 h-5 w-px shrink-0 bg-gray-200 dark:bg-white/10 max-sm:hidden sm:ml-auto" aria-hidden="true" />
             {canStartGame() && !gameStarted && (
               <button
                 onClick={handleStartGame}
-                className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto"
+                className="btn btn-primary btn-sm"
                 title={`Start the game with ${getSeatedPlayersCount()} players`}
                 aria-label="Start game"
               >
@@ -2638,20 +2591,20 @@ export default function GamePage() {
             )}
             <button
               onClick={handleLeaveGame}
-              className="bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 w-full sm:w-auto"
+              className="btn btn-ghost btn-sm max-sm:!px-2 text-red-600 hover:!text-red-500 dark:text-red-400 dark:hover:!text-red-300 dark:hover:!bg-red-500/10"
               title="Leave this game and return to dashboard"
               aria-label="Leave game"
             >
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <svg className="w-4 h-4 flex-shrink-0 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
-              <span className="whitespace-nowrap">Leave Game</span>
+              <span className="whitespace-nowrap max-sm:sr-only">Leave</span>
             </button>
-            {/* Removed top Settings button at user request */}
           </div>
         </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      </header>
+      <div className="mx-auto max-w-7xl px-4 pt-2 pb-6 sm:py-8 lg:pt-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-flow-row-dense gap-6">
           {seatNotice && (
             <div className="lg:col-span-3 flex items-center justify-between gap-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg p-3 text-sm text-blue-900 dark:text-blue-100" role="status">
               <span>{seatNotice}</span>
@@ -2779,33 +2732,17 @@ export default function GamePage() {
               })()}
             </div>
           )}
-          {/* Poker Table - Green Felt Design */}
-          <div className="lg:col-span-2 relative">
+          {/* Poker Table - Green Felt Design; on wide screens the reaction row sits beside your seat */}
+          <div className="lg:col-span-2 relative lg:pb-20">
             {/* Green felt table surface */}
-            <div className="relative bg-gradient-to-br from-green-700 via-green-800 to-green-900 rounded-full mx-auto shadow-2xl border-8 border-amber-800 max-sm:mt-12 max-sm:mb-20" 
+            <div className="table-rail relative rounded-full mx-auto max-sm:mt-7 max-sm:mb-20"
                  style={{
                    width: '100%',
-                   maxWidth: '800px',
+                   maxWidth: '820px',
                    height: '400px',
-                   background: 'radial-gradient(ellipse at center, #16a34a 0%, #15803d 50%, #14532d 100%)',
-                   boxShadow: 'inset 0 0 50px rgba(0,0,0,0.3), 0 10px 30px rgba(0,0,0,0.4)'
                  }}>
-              
-              {/* Table rail/border */}
-              <div className="absolute inset-0 rounded-full border-4 border-amber-700 bg-gradient-to-r from-amber-800 via-amber-700 to-amber-800"
-                   style={{
-                     background: 'linear-gradient(45deg, #92400e, #b45309, #92400e)',
-                     clipPath: 'polygon(0 0, 100% 0, 90% 100%, 10% 100%)',
-                     transform: 'scale(1.02)'
-                   }}>
-              </div>
-              
               {/* Inner felt playing surface */}
-              <div className="absolute inset-4 rounded-full bg-gradient-to-br from-green-600 to-green-800"
-                   style={{
-                     background: 'radial-gradient(ellipse at center, #22c55e 10%, #16a34a 60%, #15803d 100%)',
-                     boxShadow: 'inset 0 0 30px rgba(0,0,0,0.2)'
-                   }}>
+              <div className="table-felt absolute inset-[14px] rounded-full">
                 
                 {/* Player positions - evenly spaced around table */}
                 {getRotatedSeatPositions().map((seatData) => 
@@ -2819,8 +2756,8 @@ export default function GamePage() {
                       <div key={`run-${run}`} className="flex items-center gap-1">
                         <span className="text-[10px] uppercase tracking-wide text-amber-200 font-semibold drop-shadow w-10 text-right">Run {run + 1}</span>
                         {board.map((card: any, index: number) => (
-                          <div key={index} className="table-card-flip bg-white rounded border text-[10px] p-0.5 w-7 h-10 flex flex-col items-center justify-center text-black font-bold">
-                            <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
+                          <div key={index} className="table-card-flip playing-card text-[11px] w-8 h-11">
+                            <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                             <div className={suitColorClass(card.suit)}>
                               {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                             </div>
@@ -2834,10 +2771,10 @@ export default function GamePage() {
                     ))}
                   </div>
                 ) : pokerGameState?.communityCards && pokerGameState.communityCards.length > 0 && (
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-8 flex gap-1">
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-7 flex gap-1.5 max-sm:gap-1">
                     {pokerGameState.communityCards.map((card: any, index: number) => (
-                      <div key={index} className="table-card-flip bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold" style={{ animationDelay: `${index < 3 ? index * 90 : 0}ms` }}>
-                        <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
+                      <div key={index} className="table-card-flip playing-card text-base max-sm:text-sm w-11 h-16 max-sm:w-9 max-sm:h-[52px] rounded-lg gap-0.5" style={{ animationDelay: `${index < 3 ? index * 90 : 0}ms` }}>
+                        <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                         <div className={suitColorClass(card.suit)}>
                           {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                         </div>
@@ -2847,9 +2784,10 @@ export default function GamePage() {
                 )}
 
                 {/* Pot area - positioned below the community cards */}
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-8 text-white text-center">
-                  <div className="bg-gray-800 bg-opacity-70 px-3 py-1 rounded text-sm font-semibold">
-                    Pot: {showStackInBB 
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-12 max-sm:mt-10 text-white text-center">
+                  <div className="inline-flex items-center gap-1.5 bg-black/35 ring-1 ring-white/10 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-semibold tabular-nums">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-white/60">Pot</span>
+                    {showStackInBB 
                       ? formatChips(pokerGameState?.pot || 0, pokerGameState?.bigBlind || null, true)
                       : `$${pokerGameState?.pot || 0}`
                     }
@@ -2867,10 +2805,10 @@ export default function GamePage() {
                     // Show ALL of my cards face-up (no face-down backs for the current player)
                     const all = [...down, ...up];
                     return (
-                      <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
+                      <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''} ${actionPanelOpen ? 'max-sm:hidden' : ''}`}>
                         {all.map((card: any, i: number) => (
-                          <div key={`me-card-${i}`} style={{ animationDelay: `${Math.min(i, 2) * 80}ms` }} className="table-card-deal bg-white rounded border text-xs p-1 w-10 h-14 flex flex-col items-center justify-center text-black font-bold shadow-lg">
-                            <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
+                          <div key={`me-card-${i}`} style={{ animationDelay: `${Math.min(i, 2) * 80}ms` }} className="table-card-deal playing-card text-sm w-10 h-14 rounded-lg">
+                            <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                             <div className={suitColorClass(card.suit)}>
                               {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                             </div>
@@ -2884,10 +2822,10 @@ export default function GamePage() {
                   const holes = getCurrentPlayerCards();
                   if (!holes || holes.length === 0) return null;
                   return (
-                    <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
+                    <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''} ${actionPanelOpen ? 'max-sm:hidden' : ''}`}>
                       {holes.map((card: any, index: number) => (
-                        <div key={index} style={{ animationDelay: `${index * 80}ms` }} className="table-card-deal bg-white rounded border text-xs p-1 w-8 h-12 flex flex-col items-center justify-center text-black font-bold shadow-lg">
-                          <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
+                        <div key={index} style={{ animationDelay: `${index * 80}ms` }} className="table-card-deal playing-card text-[15px] max-sm:text-sm w-10 h-[58px] max-sm:w-9 max-sm:h-[52px] rounded-lg gap-0.5 ring-2 ring-emerald-400/60">
+                          <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                           <div className={suitColorClass(card.suit)}>
                             {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                           </div>
@@ -2913,19 +2851,44 @@ export default function GamePage() {
 
           {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && (
-            <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-4 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
+            <div className="lg:col-span-2 surface max-sm:!bg-gray-50 max-sm:dark:!bg-gray-800 p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
               <div className="flex items-center justify-between gap-2 mb-2">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  Your Turn
+                <h3 className="text-base font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
+                  Your turn
                   <TimeBankBadge count={me?.timeBanks} seconds={pokerGameState?.timeBankSeconds} />
                 </h3>
+                <div className="flex gap-1 sm:hidden" aria-hidden="true">
+                  {(isStudVariant() ? (() => { const c = getStudCardsForPlayer(playerId); return [...c.down, ...c.up]; })() : (getCurrentPlayerCards() || [])).map((card: any, i: number) => (
+                    <div key={i} className="playing-card w-8 h-11 text-[13px] rounded">
+                      <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
+                      <div className={suitColorClass(card.suit)}>{card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* The pot is on the felt, so phones skip this line to keep the sheet short */}
+                <div className="ml-auto flex flex-wrap justify-end gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400 tabular-nums max-sm:hidden">
+                  <span>Current bet <span className="font-semibold text-gray-800 dark:text-gray-200">{showStackInBB
+                    ? formatChips(pokerGameState.currentBet || 0, pokerGameState?.bigBlind || null, true)
+                    : `$${pokerGameState.currentBet || 0}`}</span></span>
+                  <span>Pot <span className="font-semibold text-gray-800 dark:text-gray-200">{showStackInBB
+                    ? formatChips(pokerGameState.pot || 0, pokerGameState?.bigBlind || null, true)
+                    : `$${pokerGameState.pot || 0}`}</span></span>
+                  <span>Your stack <span className="font-semibold text-gray-800 dark:text-gray-200">{(() => {
+                    const myStack = pokerGameState.players.find((p: any) => p.id === playerId)?.stack || 0;
+                    return showStackInBB
+                      ? formatChips(myStack, pokerGameState?.bigBlind || null, true)
+                      : `$${myStack}`;
+                  })()}</span></span>
+                </div>
                 <button
                   type="button"
                   onClick={() => shortcuts.setHelpOpen(true)}
-                  className="hidden sm:inline text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  className="hidden sm:inline-flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 text-xs text-gray-500 hover:text-gray-700 dark:border-white/10 dark:text-gray-400 dark:hover:text-gray-200"
                   title="Show keyboard shortcuts"
+                  aria-label="Show keyboard shortcuts"
                 >
-                  Keyboard: <kbd className="font-mono">?</kbd>
+                  <kbd className="font-mono">?</kbd>
                 </button>
               </div>
               {shortcuts.allInArmed && (
@@ -2951,7 +2914,7 @@ export default function GamePage() {
                   );
                 }
                 return summary.primary ? (
-                  <div className="mb-3 text-sm text-gray-700 dark:text-gray-200">Your Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{summary.primary}</span></div>
+                  <div className="mb-3 text-sm text-gray-700 dark:text-gray-200">Your hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{summary.primary}</span></div>
                 ) : null;
               })()}
               {/* Pot Odds Display */}
@@ -2964,14 +2927,14 @@ export default function GamePage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => handlePokerAction('bring-in')}
-                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                      className="btn btn-lg act-call max-sm:min-h-[48px] max-sm:text-base w-[calc(25%-0.5rem)] sm:w-[calc(30%-0.375rem)]"
                     >
                       Bring in {showStackInBB ? formatChips(bringInAmount, pokerGameState?.bigBlind || null, true) : `$${bringInAmount}`}
                     </button>
                     {completeAmount > bringInAmount && (
                       <button
                         onClick={() => handlePokerAction('bet', completeAmount)}
-                        className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                        className="btn btn-lg act-raise max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
                       >
                         Complete to {showStackInBB ? formatChips(completeAmount, pokerGameState?.bigBlind || null, true) : `$${completeAmount}`}
                       </button>
@@ -2979,10 +2942,10 @@ export default function GamePage() {
                   </div>
                 </div>
               ) : (
-              <div className="flex flex-wrap gap-2">
+              <div className="relative flex flex-wrap gap-2">
                 <button
                   onClick={handleFold}
-                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                  className="btn btn-lg act-fold max-sm:min-h-[48px] max-sm:text-base w-[calc(25%-0.5rem)] sm:w-[calc(30%-0.375rem)]"
                 >
                   Fold
                 </button>
@@ -2990,14 +2953,14 @@ export default function GamePage() {
                 {myOwed === 0 ? (
                   <button
                     onClick={handleCheck}
-                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                    className="btn btn-lg act-neutral max-sm:min-h-[48px] max-sm:text-base w-[calc(25%-0.5rem)] sm:w-[calc(30%-0.375rem)]"
                   >
                     Check
                   </button>
                 ) : (
                   <button
                     onClick={handleCall}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                    className="btn btn-lg act-call max-sm:min-h-[48px] max-sm:text-base w-[calc(25%-0.5rem)] sm:w-[calc(30%-0.375rem)]"
                   >
                     Call {showStackInBB ? formatChips(myCallAmount, pokerGameState?.bigBlind || null, true) : `$${myCallAmount}`}{myCallIsAllIn ? ' (all-in)' : ''}
                   </button>
@@ -3006,8 +2969,8 @@ export default function GamePage() {
                 {/* No-Limit betting controls */}
                 {((pokerGameState?.bettingMode || 'no-limit') === 'no-limit') && (
                   (pokerGameState.currentBet || 0) === 0 ? (
-                    <div className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-900/30 p-3 rounded-md w-full">
-                      <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Bet amount</div>
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                      <div className="sr-only">Bet amount</div>
                       {(() => {
                         const { min, max } = getBetBounds();
                         const bb = Number(pokerGameState.bigBlind || 0) || 0;
@@ -3033,7 +2996,7 @@ export default function GamePage() {
                                 step={0.01}
                                 value={Number(clamp(betInput, min, max)).toFixed(2)}
                                 onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
-                                className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                                className="input w-28 max-sm:w-full tabular-nums"
                                 data-shortcut-amount="true"
                               />
                               <BetPresetButtons
@@ -3059,7 +3022,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
                                     {label}
                                   </button>
                                 );
@@ -3070,7 +3033,7 @@ export default function GamePage() {
                       })()}
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-900/30 p-3 rounded-md w-full">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Raise to</div>
                       {(() => {
                         const { min, max } = getRaiseBounds();
@@ -3098,7 +3061,7 @@ export default function GamePage() {
                                 step={0.01}
                                 value={Number(clamp(raiseInput, min, max)).toFixed(2)}
                                 onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
-                                className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                                className="input w-28 max-sm:w-full tabular-nums"
                                 data-shortcut-amount="true"
                               />
                               <BetPresetButtons
@@ -3124,7 +3087,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
                                     {label}
                                   </button>
                                 );
@@ -3144,7 +3107,7 @@ export default function GamePage() {
                 {/* Pot-Limit betting controls */}
                 {((pokerGameState?.bettingMode || 'no-limit') === 'pot-limit') && (
                   (pokerGameState.currentBet || 0) === 0 ? (
-                    <div className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-900/30 p-3 rounded-md w-full">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Bet amount (Pot-Limit)</div>
                       {(() => {
                         const { min, max } = getPotLimitBetBounds();
@@ -3171,7 +3134,7 @@ export default function GamePage() {
                                 step={0.01}
                                 value={Number(clamp(betInput, min, max)).toFixed(2)}
                                 onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
-                                className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                                className="input w-28 max-sm:w-full tabular-nums"
                                 data-shortcut-amount="true"
                               />
                               <BetPresetButtons
@@ -3195,7 +3158,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
                                     {label}
                                   </button>
                                 );
@@ -3206,7 +3169,7 @@ export default function GamePage() {
                       })()}
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2 bg-gray-50 dark:bg-gray-900/30 p-3 rounded-md w-full">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Raise to (Pot-Limit)</div>
                       {(() => {
                         const { min, max } = getPotLimitRaiseBounds();
@@ -3234,7 +3197,7 @@ export default function GamePage() {
                                 step={0.01}
                                 value={Number(clamp(raiseInput, min, max)).toFixed(2)}
                                 onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
-                                className="w-28 border rounded px-2 py-1 bg-white dark:bg-gray-800"
+                                className="input w-28 max-sm:w-full tabular-nums"
                                 data-shortcut-amount="true"
                               />
                               <BetPresetButtons
@@ -3258,7 +3221,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition-colors">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
                                     {label}
                                   </button>
                                 );
@@ -3274,25 +3237,6 @@ export default function GamePage() {
               </div>
               )}
 
-              <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-                <p>
-                  Current Bet: {showStackInBB 
-                    ? formatChips(pokerGameState.currentBet || 0, pokerGameState?.bigBlind || null, true)
-                    : `$${pokerGameState.currentBet || 0}`
-                  } | Pot: {showStackInBB 
-                    ? formatChips(pokerGameState.pot || 0, pokerGameState?.bigBlind || null, true)
-                    : `$${pokerGameState.pot || 0}`
-                  }
-                </p>
-                <p>
-                  Your Stack: {(() => {
-                    const myStack = pokerGameState.players.find((p: any) => p.id === playerId)?.stack || 0;
-                    return showStackInBB 
-                      ? formatChips(myStack, pokerGameState?.bigBlind || null, true)
-                      : `$${myStack}`;
-                  })()}
-                </p>
-              </div>
             </div>
           )}
 
@@ -3380,9 +3324,10 @@ export default function GamePage() {
 
           {/* Game Status Display (only before showdown); hide if only one non-folded remains; hide during Run-It-Twice prompt */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer !== playerId && !runItTwicePrompt && (
-            <div className="lg:col-span-2 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-md p-4 mt-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Game Status</h3>
+            <div className="lg:col-span-2 surface p-4 sm:p-5 mt-4 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:!bg-gray-50 max-sm:dark:!bg-gray-800 max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
+              {/* On phones this pins to the bottom as a slim bar: heading and tiles give way to the pre-actions */}
+              <div className="flex items-center justify-between mb-3 max-sm:hidden">
+                <h3 className="section-title">Game status</h3>
               </div>
               {me && !me.isFolded && !me.isAllIn && (
                 <div className="mb-3">
@@ -3397,30 +3342,33 @@ export default function GamePage() {
               )}
               <TurnClockBar clock={turnClock} />
               <div className="text-sm text-gray-600 dark:text-gray-300">
-                <p>Waiting for {pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'} to act...</p>
-                <p>Current Bet: {showStackInBB 
-                  ? formatChips(pokerGameState.currentBet || 0, pokerGameState?.bigBlind || null, true)
-                  : `$${pokerGameState.currentBet || 0}`
-                } | Pot: {showStackInBB 
-                  ? formatChips(pokerGameState.pot || 0, pokerGameState?.bigBlind || null, true)
-                  : `$${pokerGameState.pot || 0}`
-                }</p>
+                <p className="mb-3 max-sm:mb-0 text-gray-700 dark:text-gray-200">
+                  Waiting for <span className="font-semibold text-gray-900 dark:text-white">{pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'}</span> to act…
+                </p>
                 {(() => {
+                  const fmt = (n: number) => (showStackInBB ? formatChips(n, pokerGameState?.bigBlind || null, true) : `$${n}`);
                   const summary = getMyHandSummary();
                   const isHiLo = pokerGameState?.variant === 'omaha-hi-lo' || pokerGameState?.variant === 'seven-card-stud-hi-lo';
+                  const tiles: Array<{ label: string; value: React.ReactNode }> = [
+                    { label: 'Current bet', value: fmt(pokerGameState.currentBet || 0) },
+                    { label: 'Pot', value: fmt(pokerGameState.pot || 0) },
+                  ];
                   if (isHiLo) {
-                    const highDisplay = summary.highLabel || summary.primary || 'Waiting for more cards';
-                    const lowDisplay = summary.lowLabel || 'No qualifying low yet';
-                    return (
-                      <div className="mt-2 text-sm space-y-0.5">
-                        <div>High Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{highDisplay}</span></div>
-                        <div>Low Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{lowDisplay}</span></div>
-                      </div>
-                    );
+                    tiles.push({ label: 'High hand', value: summary.highLabel || summary.primary || 'Waiting for more cards' });
+                    tiles.push({ label: 'Low hand', value: summary.lowLabel || 'No qualifying low yet' });
+                  } else if (summary.primary) {
+                    tiles.push({ label: 'Your hand', value: summary.primary });
                   }
-                  return summary.primary ? (
-                    <p className="mt-1">Your Hand: <span className="font-semibold text-gray-900 dark:text-gray-100">{summary.primary}</span></p>
-                  ) : null;
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-sm:hidden">
+                      {tiles.map(t => (
+                        <div key={t.label} className="surface-muted px-3 py-2.5 min-w-0">
+                          <div className="text-xs text-gray-500 dark:text-gray-400">{t.label}</div>
+                          <div className="mt-0.5 truncate font-semibold tabular-nums text-gray-900 dark:text-white">{t.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
                 })()}
               </div>
             </div>
@@ -3443,7 +3391,7 @@ export default function GamePage() {
                         <div className="flex gap-1 mb-3">
                           {board.map((card: any, ci: number) => (
                             <div key={ci} className="bg-white dark:bg-gray-700 rounded border text-[10px] p-1 w-7 h-10 flex flex-col items-center justify-center text-black dark:text-gray-100 font-bold">
-                              <div className={highContrastCards ? suitColorClass(card.suit) : 'text-black'}>{card.rank}</div>
+                              <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                               <div className={suitColorClass(card.suit)}>
                                 {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                               </div>
@@ -3550,11 +3498,11 @@ export default function GamePage() {
               || (contested && !me.isFolded && (anyAllIn() || winners.includes(playerId)));
             if (alreadyShown) return null;
             return (
-              <div className="lg:col-span-2 flex items-center justify-between gap-3 bg-white dark:bg-gray-800 rounded-lg shadow-md p-3 mt-4">
+              <div className="lg:col-span-2 flex items-center justify-between gap-3 surface p-3 mt-4">
                 <span className="text-sm text-gray-700 dark:text-gray-200">Your cards are hidden from the table.</span>
                 <button
                   onClick={showMyCards}
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-1.5 rounded"
+                  className="btn btn-secondary btn-sm"
                 >
                   Show my cards
                 </button>
@@ -3566,7 +3514,7 @@ export default function GamePage() {
           {gameStarted && pokerGameState && (pokerGameState.stage === 'showdown' || getActiveNonFoldedPlayers().length === 1)
             && !pokerGameState.runItTwice?.enabled
             && !(((pokerGameState.variant === 'omaha-hi-lo' || pokerGameState.variant === 'seven-card-stud-hi-lo')) && pokerGameState.lastHiLoResult) && (
-            <div className="lg:col-span-2 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 rounded-lg shadow-md p-4 mt-4">
+            <div className="lg:col-span-2 rounded-2xl border border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-400/25 dark:bg-emerald-400/[0.08] dark:text-emerald-100 p-4 mt-4">
               {(() => {
                 const remaining = getActiveNonFoldedPlayers();
                 // Win-by-fold: only one active player remains
@@ -3741,8 +3689,8 @@ export default function GamePage() {
           })()}
 
           {/* Right column: timer and statistics, then host controls, session and notes */}
-          <div className="flex flex-col gap-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
+          <div className="flex flex-col gap-4 lg:row-span-4">
+          <div className="surface p-5">
             {id && playerId && (
               <CombinedTimerStats 
                 tableId={String(id)} 
@@ -3786,7 +3734,7 @@ export default function GamePage() {
 
           {/* Less critical component in viewport */}
           <MobileCollapsible title="Chat" className="lg:col-span-2">
-          <div ref={chatPanelRef} className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6 max-sm:mt-0">
+          <div ref={chatPanelRef} className="lg:col-span-2 surface p-4 max-sm:mt-0">
             <ChatPanel gameId={String(id)} playerId={playerId} isAdmin={userRole === 'admin'} />
           </div>
           </MobileCollapsible>

@@ -13,9 +13,10 @@ const percent = (value: string | number | undefined): number | null => {
  * Where a seat's name/stack box goes on a phone: right next to the seat, on the side away from
  * the table centre (above seats in the top half, below seats in the bottom half), so it never
  * covers the board or the cards dealt toward the middle. Boxes near the left or right edge are
- * shifted inwards so they stay on screen.
+ * shifted inwards so they stay on screen. Wider screens use the same layout with a bigger gap
+ * for their bigger seats.
  */
-export function narrowInfoBoxStyle(seat?: CSSProperties): CSSProperties {
+export function narrowInfoBoxStyle(seat?: CSSProperties, gapPx: number = NARROW_INFO_GAP_PX): CSSProperties {
   const left = percent(seat?.left as string | number | undefined);
   const top = percent(seat?.top as string | number | undefined);
   if (left === null || top === null) {
@@ -26,8 +27,29 @@ export function narrowInfoBoxStyle(seat?: CSSProperties): CSSProperties {
   return {
     position: 'absolute',
     left: `${left}%`,
-    top: above ? `calc(${top}% - ${NARROW_INFO_GAP_PX}px)` : `calc(${top}% + ${NARROW_INFO_GAP_PX}px)`,
+    top: above ? `calc(${top}% - ${gapPx}px)` : `calc(${top}% + ${gapPx}px)`,
     transform: `translate(${shiftX}, ${above ? '-100%' : '0'})`,
+    pointerEvents: 'none',
+  };
+}
+
+/**
+ * Where a seat's name plate goes: centred just under the avatar, the same for every seat, with
+ * plates near the left or right edge shifted inwards so they stay on screen. The seat's cards sit
+ * beside the avatar (toward the middle), so the plate never covers them.
+ */
+export function seatPlateStyle(seat: CSSProperties | undefined, gapPx: number): CSSProperties {
+  const left = percent(seat?.left as string | number | undefined);
+  const top = percent(seat?.top as string | number | undefined);
+  if (left === null || top === null) {
+    return { position: 'absolute', left: '50%', top: '100%', transform: 'translate(-50%, 4px)', pointerEvents: 'none' };
+  }
+  const shiftX = left < 15 ? '-25%' : left > 85 ? '-75%' : '-50%';
+  return {
+    position: 'absolute',
+    left: `${left}%`,
+    top: `calc(${top}% + ${gapPx}px)`,
+    transform: `translate(${shiftX}, 0)`,
     pointerEvents: 'none',
   };
 }

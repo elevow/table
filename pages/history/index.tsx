@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import AppShell, { PageHeader } from '../../src/components/AppShell';
 import { useRouter } from 'next/router';
 import { authHeaders } from '../../src/utils/auth-headers';
 import { downloadHandHistory } from '../../src/utils/download-hand-history';
@@ -69,51 +70,61 @@ export default function HandHistoryPage() {
   }, [router.isReady, load]);
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <AppShell>
       <Head><title>Hand History - Table</title></Head>
-      <main className="container mx-auto px-4 py-8 max-w-5xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Hand History</h1>
-          <div className="flex gap-3 text-sm">
-            {roomId && <Link href={`/game/${roomId}`} className="text-blue-600 dark:text-blue-400 hover:underline">Back to table</Link>}
-            {roomId && <Link href="/history" className="text-blue-600 dark:text-blue-400 hover:underline">All tables</Link>}
-            <Link href="/stats" className="text-blue-600 dark:text-blue-400 hover:underline">My results</Link>
-            <Link href="/dashboard" className="text-blue-600 dark:text-blue-400 hover:underline">Dashboard</Link>
+      <main className="page">
+        <PageHeader
+          title="Hand history"
+          subtitle={roomId ? <>Hands from table <span className="font-mono">{roomId}</span>. Select a hand to replay it.</> : 'Every hand you played. Select one to replay it step by step.'}
+          actions={<>
+            {roomId && <Link href={`/game/${roomId}`} className="btn btn-secondary">Back to table</Link>}
+            {roomId && <Link href="/history" className="btn btn-ghost">All tables</Link>}
             {hands.length > 0 && (
               <button
                 onClick={() => exportHands('all', roomId ? { roomId } : {})}
                 disabled={exporting === 'all'}
-                className="text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-60"
+                className="btn btn-secondary"
                 title={`Download ${roomId ? 'hands at this table' : 'your latest 1000 hands'} in PokerStars hand-history format`}
               >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></svg>
                 {exporting === 'all' ? 'Exporting…' : 'Export .txt'}
               </button>
             )}
-          </div>
-        </div>
-        {roomId && <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Showing hands from table {roomId}.</p>}
+          </>}
+        />
 
-        {error && <div className="p-3 mb-4 rounded bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-200 text-sm">{error}</div>}
+        {error && <div role="alert" className="p-3 mb-4 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 text-sm">{error}</div>}
+
+        {loading && hands.length === 0 && (
+          <div className="surface p-6 space-y-3 animate-pulse" aria-label="Loading">
+            <div className="h-4 w-1/3 rounded bg-gray-200 dark:bg-white/[0.06]" />
+            <div className="h-4 w-1/2 rounded bg-gray-200 dark:bg-white/[0.06]" />
+          </div>
+        )}
 
         {!error && !loading && hands.length === 0 && (
-          <div className="p-6 rounded-lg bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300">
-            No hands yet. Hands you play are saved here when they finish.
+          <div className="surface px-6 py-14 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/[0.05] dark:text-gray-500">
+              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.8L3 8M3 3v5h5M12 7v5l3 2" /></svg>
+            </div>
+            <p className="text-base font-semibold text-gray-900 dark:text-white">No hands yet</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Hands you play are saved here when they finish.</p>
           </div>
         )}
 
         {hands.length > 0 && (
-          <div className="overflow-x-auto rounded-lg shadow bg-white dark:bg-gray-800">
-            <table className="w-full text-sm">
-              <thead className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+          <div className="surface overflow-x-auto">
+            <table className="data-table">
+              <thead>
                 <tr>
-                  <th className="px-3 py-2">Hand</th>
-                  <th className="px-3 py-2">When</th>
-                  <th className="px-3 py-2">Game</th>
-                  <th className="px-3 py-2">Your cards</th>
-                  <th className="px-3 py-2">Winner</th>
-                  <th className="px-3 py-2 text-right">Pot</th>
-                  <th className="px-3 py-2 text-right">You</th>
-                  <th className="px-3 py-2"><span className="sr-only">Export</span></th>
+                  <th>Hand</th>
+                  <th>When</th>
+                  <th>Game</th>
+                  <th>Your cards</th>
+                  <th>Winner</th>
+                  <th className="!text-right">Pot</th>
+                  <th className="!text-right">You</th>
+                  <th className="!text-right">Export</th>
                 </tr>
               </thead>
               <tbody>
@@ -122,32 +133,33 @@ export default function HandHistoryPage() {
                   return (
                     <tr
                       key={h.id}
-                      className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer text-gray-900 dark:text-gray-100"
+                      className="cursor-pointer text-gray-900 dark:text-gray-100"
                       onClick={() => router.push(`/history/${h.id}`)}
                     >
-                      <td className="px-3 py-2">
-                        <Link href={`/history/${h.id}`} className="text-blue-600 dark:text-blue-400 hover:underline" onClick={e => e.stopPropagation()}>
+                      <td>
+                        <Link href={`/history/${h.id}`} className="font-medium tabular-nums text-gray-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300" onClick={e => e.stopPropagation()}>
                           #{h.handNumber}
                         </Link>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">{new Date(h.endedAt).toLocaleString()}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{variantLabel(h.variant)}</td>
-                      <td className="px-3 py-2">
+                      <td className="whitespace-nowrap text-gray-600 dark:text-gray-300">{new Date(h.endedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                      <td className="whitespace-nowrap text-gray-600 dark:text-gray-300">{variantLabel(h.variant)}</td>
+                      <td>
                         <div className="flex gap-0.5">{cards.map((c, i) => <MiniCard key={i} card={c} />)}</div>
                       </td>
-                      <td className="px-3 py-2">{h.winners.map(w => w.name).join(', ') || '—'}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">${h.pot}</td>
-                      <td className={`px-3 py-2 text-right tabular-nums font-semibold ${h.myNet > 0 ? 'text-emerald-600 dark:text-emerald-400' : h.myNet < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>
-                        {h.myNet > 0 ? '+' : ''}{h.myNet}
+                      <td className="text-gray-600 dark:text-gray-300">{h.winners.map(w => w.name).join(', ') || '—'}</td>
+                      <td className="text-right tabular-nums">${h.pot}</td>
+                      <td className={`text-right tabular-nums font-semibold ${h.myNet > 0 ? 'text-emerald-600 dark:text-emerald-400' : h.myNet < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                        {h.myNet > 0 ? '+' : h.myNet < 0 ? '\u2212' : ''}{Math.abs(h.myNet)}
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="text-right">
                         <button
                           onClick={e => { e.stopPropagation(); exportHands(h.id, { handId: h.id }); }}
                           disabled={exporting === h.id}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-60"
+                          className="btn btn-ghost btn-sm !h-8 !px-2 disabled:opacity-60"
+                          title="Export this hand"
                           aria-label={`Export hand #${h.handNumber}`}
                         >
-                          .txt
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></svg>
                         </button>
                       </td>
                     </tr>
@@ -159,18 +171,13 @@ export default function HandHistoryPage() {
         )}
 
         {nextBefore && (
-          <div className="mt-4 text-center">
-            <button
-              onClick={() => load(nextBefore)}
-              disabled={loading}
-              className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm"
-            >
+          <div className="mt-6 text-center">
+            <button onClick={() => load(nextBefore)} disabled={loading} className="btn btn-secondary">
               {loading ? 'Loading…' : 'Older hands'}
             </button>
           </div>
         )}
-        {loading && hands.length === 0 && <p className="text-gray-500 dark:text-gray-400">Loading…</p>}
       </main>
-    </div>
+    </AppShell>
   );
 }

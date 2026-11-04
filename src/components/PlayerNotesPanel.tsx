@@ -79,8 +79,8 @@ export default function PlayerNotesPanel({ players, notes, onNotesChange }: Prop
   if (players.length === 0) return null;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Player notes</h3>
+    <div className="surface p-5">
+      <h3 className="section-title mb-1">Player notes</h3>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Private to you. Tags show VPIP/PFR · hands played together.</p>
       <ul className="space-y-1">
         {players.map(p => {
@@ -90,7 +90,7 @@ export default function PlayerNotesPanel({ players, notes, onNotesChange }: Prop
             <li key={p.id}>
               <button
                 onClick={() => setEditing(editing === p.id ? null : p.id)}
-                className="w-full flex items-center gap-2 text-left text-sm px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100"
+                className="w-full flex items-center gap-2 text-left text-sm px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-white/[0.08] text-gray-900 dark:text-gray-100"
                 aria-expanded={editing === p.id}
               >
                 <span className={`inline-block w-3 h-3 rounded-full border border-gray-300 dark:border-gray-600 ${swatch || 'bg-transparent'}`} aria-hidden="true" />

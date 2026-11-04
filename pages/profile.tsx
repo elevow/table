@@ -5,10 +5,12 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import ProfileDisplaySettings from '../src/components/ProfileDisplaySettings';
 import { useUserAvatar } from '../src/hooks/useUserAvatar';
 import Avatar from '../src/components/Avatar';
+import AppShell, { useStoredUsername } from '../src/components/AppShell';
 import { useTheme } from '../src/contexts/ThemeContext';
 
 const Profile: NextPage = () => {
   const router = useRouter();
+  const username = useStoredUsername();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -181,164 +183,108 @@ const Profile: NextPage = () => {
     fileInputRef.current?.click();
   }, []);
 
+  const Row = ({ label, onClick, right }: { label: string; onClick?: () => void; right?: React.ReactNode }) => (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center justify-between px-5 py-3.5 text-left text-sm text-gray-800 transition-colors hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/[0.03]"
+    >
+      <span className="font-medium">{label}</span>
+      <span className="flex items-center gap-2 text-gray-400 dark:text-gray-500">
+        {right}
+        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M7.2 14.8a1 1 0 010-1.4L10.6 10 7.2 6.6a1 1 0 111.4-1.4l4.1 4.1a1 1 0 010 1.4l-4.1 4.1a1 1 0 01-1.4 0z" clipRule="evenodd" /></svg>
+      </span>
+    </button>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <AppShell>
       <Head>
         <title>Profile - Table</title>
         <meta name="description" content="User profile - Table poker platform" />
-        <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      {/* Header with back button */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => router.back()}
-              className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Profile
-            </h1>
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
-        <div className="max-w-2xl mx-auto">
-          {/* Profile Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <div className="flex items-center space-x-6 mb-6">
-              <div className="relative">
-                <Avatar 
-                  src={avatarData?.url}
-                  size="lg"
-                  className="ring-4 ring-indigo-500 ring-offset-4 ring-offset-white dark:ring-offset-gray-800"
+      <main className="page-narrow space-y-6">
+        {/* Identity */}
+        <section className="surface relative overflow-hidden p-6 sm:p-8">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-500/10 to-transparent" />
+          <div className="relative flex flex-col items-start gap-5 sm:flex-row sm:items-center">
+            <div className="relative">
+              <Avatar
+                src={avatarData?.url}
+                size="lg"
+                className="!h-20 !w-20 ring-4 ring-white dark:ring-gray-800 shadow-card"
+              />
+              {isUploading && (
+                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              )}
+            </div>
+            <div className="flex-1">
+              <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">
+                {username || 'Guest'}
+              </h1>
+              <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+                {username ? 'Your public name at every table.' : 'Sign in to keep your name, stats and avatar.'}
+              </p>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  disabled={isUploading}
                 />
-                {isUploading && (
-                  <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
-                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  </div>
-                )}
+                <button
+                  onClick={triggerFileSelect}
+                  disabled={isUploading}
+                  className="btn btn-secondary btn-sm"
+                >
+                  {isUploading ? 'Uploading...' : 'Change avatar'}
+                </button>
+                <span className="text-xs text-gray-500 dark:text-gray-400">JPG, PNG or GIF, up to 5MB</span>
               </div>
-              <div className="flex-1">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                  Guest User
-                </h2>
-                <p className="text-gray-600 dark:text-gray-300 mb-3">
-                  Welcome to Table!
-                </p>
-                
-                {/* Avatar upload controls */}
-                <div className="space-y-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    disabled={isUploading}
-                  />
-                  
-                  <button 
-                    onClick={triggerFileSelect}
-                    disabled={isUploading}
-                    className={`px-3 py-1 text-sm rounded transition-colors ${
-                      isUploading 
-                        ? 'bg-gray-400 cursor-not-allowed' 
-                        : 'bg-indigo-600 hover:bg-indigo-700'
-                    } text-white`}
-                  >
-                    {isUploading ? 'Uploading...' : 'Change Avatar'}
-                  </button>
-                  
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Upload an image (max 5MB)
-                  </p>
+              {uploadError && (
+                <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">
+                  {uploadError}
                 </div>
-                
-                {/* Upload status messages */}
-                {uploadError && (
-                  <div className="mt-2 p-2 bg-red-100 border border-red-400 text-red-700 rounded text-xs">
-                    {uploadError}
-                  </div>
-                )}
-                {uploadSuccess && (
-                  <div className="mt-2 p-2 bg-green-100 border border-green-400 text-green-700 rounded text-xs">
-                    {uploadSuccess}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Profile Actions */}
-            <div className="space-y-4">
-              <div className="border-t dark:border-gray-700 pt-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                  Quick Actions
-                </h3>
-                
-                <div className="space-y-2">
-                  <button
-                    onClick={() => router.push('/dashboard')}
-                    className="w-full text-left px-4 py-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    <span className="text-gray-900 dark:text-gray-100">Return to Dashboard</span>
-                  </button>
-                  
-                  {canCreateRoom && (
-                    <button
-                      onClick={() => router.push('/game/create')}
-                      className="w-full text-left px-4 py-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                    >
-                      <span className="text-gray-900 dark:text-gray-100">Create New Game</span>
-                    </button>
-                  )}
+              )}
+              {uploadSuccess && (
+                <div className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                  {uploadSuccess}
                 </div>
-              </div>
-
-              <ProfileDisplaySettings />
-
-              {/* Settings Section */}
-              <div className="border-t dark:border-gray-700 pt-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                  Settings
-                </h3>
-                
-                <div className="space-y-2">
-                  <button 
-                    onClick={() => router.push('/account-settings')}
-                    className="w-full text-left px-4 py-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    <span className="text-gray-900 dark:text-gray-100">Account Settings</span>
-                  </button>
-                  
-                  <button className="w-full text-left px-4 py-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                    <span className="text-gray-900 dark:text-gray-100">Privacy Settings</span>
-                  </button>
-                  
-                  <button 
-                    onClick={toggleTheme}
-                    className="w-full text-left px-4 py-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-900 dark:text-gray-100">Theme Settings</span>
-                      <span className="text-sm text-gray-600 dark:text-gray-400">
-                        {theme === 'dark' ? '🌙 Dark Mode' : '☀️ Light Mode'}
-                      </span>
-                    </div>
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
           </div>
-        </div>
+        </section>
+
+        {/* Quick actions */}
+        <section>
+          <h2 className="eyebrow mb-2 px-1">Quick actions</h2>
+          <div className="surface divide-y divide-gray-100 overflow-hidden dark:divide-white/[0.05]">
+            <Row label="Back to the lobby" onClick={() => router.push('/dashboard')} />
+            {canCreateRoom && <Row label="Create a table" onClick={() => router.push('/game/create')} />}
+          </div>
+        </section>
+
+        <ProfileDisplaySettings />
+
+        {/* Settings */}
+        <section>
+          <h2 className="eyebrow mb-2 px-1">Settings</h2>
+          <div className="surface divide-y divide-gray-100 overflow-hidden dark:divide-white/[0.05]">
+            <Row label="Account settings" onClick={() => router.push('/account-settings')} />
+            <Row label="Privacy settings" />
+            <Row
+              label="Theme"
+              onClick={toggleTheme}
+              right={<span className="text-xs">{theme === 'dark' ? 'Dark' : 'Light'}</span>}
+            />
+          </div>
+        </section>
       </main>
-    </div>
+    </AppShell>
   );
 };
 

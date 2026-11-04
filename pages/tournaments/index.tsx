@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import AppShell, { PageHeader } from '../../src/components/AppShell';
 import { authHeaders } from '../../src/utils/auth-headers';
 import { formatMoney } from '../../src/lib/tournament/format';
 import { loadPermissions, postTournamentAction } from '../../src/lib/tournament/client';
@@ -26,7 +27,7 @@ const statusText = (t: TournamentSummary) => {
   return `Level ${t.level}${state ? `, ${state}` : ''}`;
 };
 
-const button = 'px-3 py-1 rounded text-sm text-white disabled:opacity-50';
+
 
 export default function TournamentLobbyPage() {
   const [filter, setFilter] = useState<Filter>('upcoming');
@@ -67,80 +68,99 @@ export default function TournamentLobbyPage() {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-5xl">
-      <Head><title>Tournaments</title></Head>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Tournaments</h1>
-        {canCreate && (
-          <Link href="/tournaments/create" className="px-4 py-2 bg-blue-600 text-white rounded">Create tournament</Link>
+    <AppShell>
+    <main className="page">
+      <Head><title>Tournaments - Table</title></Head>
+      <PageHeader
+        title="Tournaments"
+        subtitle="Scheduled events with rising blinds. Register, then take your seat when it starts."
+        actions={canCreate && (
+          <Link href="/tournaments/create" className="btn btn-primary">Create tournament</Link>
         )}
-      </div>
+      />
 
-      <div role="tablist" className="flex gap-2 mb-4">
+      <div role="tablist" className="segmented mb-5">
         {TABS.map(tab => (
           <button key={tab.key} role="tab" aria-selected={filter === tab.key}
-            className={`px-3 py-1 rounded text-sm ${filter === tab.key ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
             onClick={() => { setTournaments(null); setFilter(tab.key); }}>
             {tab.label}
           </button>
         ))}
       </div>
 
-      {error && <p role="alert" className="mb-3 text-sm text-red-600">{error}</p>}
-      {!signedIn && <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">Sign in to register.</p>}
-      {tournaments === null && !error && <p>Loading…</p>}
-      {tournaments?.length === 0 && <p className="text-gray-600 dark:text-gray-400">No {filter} tournaments.</p>}
+      {error && <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {!signedIn && <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">Sign in to register.</p>}
+      {tournaments === null && !error && (
+        <div className="surface p-6 space-y-3 animate-pulse" aria-label="Loading">
+          <div className="h-4 w-1/3 rounded bg-gray-200 dark:bg-white/[0.06]" />
+          <div className="h-4 w-1/2 rounded bg-gray-200 dark:bg-white/[0.06]" />
+        </div>
+      )}
+      {tournaments?.length === 0 && (
+        <div className="surface px-6 py-14 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-400/10 text-amber-500 dark:text-amber-300">
+            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM7 6H4v1a3 3 0 003 3M17 6h3v1a3 3 0 01-3 3" /></svg>
+          </div>
+          <p className="text-base font-semibold text-gray-900 dark:text-white">No {filter} tournaments</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {filter === 'upcoming' ? 'When one is scheduled, it will show up here for registration.' : 'Check the other tabs for more events.'}
+          </p>
+          {canCreate && filter === 'upcoming' && (
+            <Link href="/tournaments/create" className="btn btn-secondary mt-5">Create tournament</Link>
+          )}
+        </div>
+      )}
 
       {tournaments && tournaments.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="surface overflow-x-auto">
+          <table className="data-table">
             <thead>
-              <tr className="text-left text-gray-600 dark:text-gray-400">
-                <th className="py-2 pr-3">Tournament</th>
-                <th className="py-2 pr-3">Status</th>
-                <th className="py-2 pr-3">Players</th>
-                <th className="py-2 pr-3">Buy-in</th>
-                <th className="py-2 pr-3">Stack</th>
-                <th className="py-2" />
+              <tr>
+                <th>Tournament</th>
+                <th>Status</th>
+                <th>Players</th>
+                <th>Buy-in</th>
+                <th>Stack</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {tournaments.map(t => (
-                <tr key={t.id} className="border-t border-gray-200 dark:border-gray-700">
-                  <td className="py-2 pr-3">
-                    <Link href={`/tournaments/${t.id}`} className="font-medium text-blue-600 dark:text-blue-400 hover:underline">{t.name}</Link>
-                    {t.visibility === 'private' && <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200">Private</span>}
+                <tr key={t.id}>
+                  <td>
+                    <Link href={`/tournaments/${t.id}`} className="font-medium text-gray-900 hover:text-emerald-600 dark:text-white dark:hover:text-emerald-300">{t.name}</Link>
+                    {t.visibility === 'private' && <span className="badge ml-2">Private</span>}
                     {t.reentry && (
-                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200">Re-entry</span>
+                      <span className="badge badge-emerald ml-2">Re-entry</span>
                     )}
                     {t.bounty && (
-                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200">
+                      <span className="badge badge-amber ml-2">
                         {t.bounty === 'progressive' ? 'PKO' : 'Knockout'}
                       </span>
                     )}
                   </td>
-                  <td className="py-2 pr-3">{statusText(t)}</td>
-                  <td className="py-2 pr-3 tabular-nums">
+                  <td className="text-gray-600 dark:text-gray-300">{statusText(t)}</td>
+                  <td className="tabular-nums">
                     {t.status === 'setup' ? t.entrants : `${t.remaining} / ${t.entrants}`}{t.maxPlayers && t.status === 'setup' ? ` / ${t.maxPlayers}` : ''}
                   </td>
-                  <td className="py-2 pr-3">{t.costs.entry > 0 ? formatMoney(t.costs.entry) : 'Free'}</td>
-                  <td className="py-2 pr-3 tabular-nums">{t.startingStack.toLocaleString()}</td>
-                  <td className="py-2 whitespace-nowrap space-x-2 text-right">
+                  <td>{t.costs.entry > 0 ? formatMoney(t.costs.entry) : 'Free'}</td>
+                  <td className="tabular-nums">{t.startingStack.toLocaleString()}</td>
+                  <td className="whitespace-nowrap space-x-2 text-right">
                     {signedIn && t.you && !t.you.registered && t.registrationOpen && (
-                      <button className={`${button} bg-green-600`} disabled={busy === t.id} onClick={() => act('register', t.id)}
+                      <button className="btn btn-primary btn-sm" disabled={busy === t.id} onClick={() => act('register', t.id)}
                         aria-label={`Register for ${t.name}`}>
                         {t.status === 'setup' ? 'Register' : 'Late register'}
                       </button>
                     )}
                     {t.you?.registered && t.status === 'setup' && (
-                      <button className={`${button} bg-gray-500`} disabled={busy === t.id} onClick={() => act('unregister', t.id)}
+                      <button className="btn btn-secondary btn-sm" disabled={busy === t.id} onClick={() => act('unregister', t.id)}
                         aria-label={`Unregister from ${t.name}`}>
                         Unregister
                       </button>
                     )}
-                    {t.you?.registered && t.status !== 'setup' && <span className="text-xs text-gray-600 dark:text-gray-400">{t.you.eliminated ? 'Out' : 'Playing'}</span>}
+                    {t.you?.registered && t.status !== 'setup' && <span className="text-xs text-gray-500 dark:text-gray-400">{t.you.eliminated ? 'Out' : 'Playing'}</span>}
                     {t.canManage && (
-                      <Link href={`/tournaments/${t.id}/manage`} className="text-blue-600 dark:text-blue-400 hover:underline">Manage</Link>
+                      <Link href={`/tournaments/${t.id}/manage`} className="btn btn-ghost btn-sm">Manage</Link>
                     )}
                   </td>
                 </tr>
@@ -149,6 +169,7 @@ export default function TournamentLobbyPage() {
           </table>
         </div>
       )}
-    </div>
+    </main>
+    </AppShell>
   );
 }

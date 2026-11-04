@@ -12,39 +12,83 @@ function stakes(t: LobbyTable): string {
 function TablesList({ title, empty, tables, showHost }: { title: string; empty: string; tables: LobbyTable[]; showHost: boolean }) {
   const router = useRouter();
   return (
-    <section className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">{title}</h3>
+    <section className="surface overflow-hidden">
+      <div className="flex items-center justify-between px-6 pt-6 pb-3">
+        <h3 className="section-title">{title}</h3>
+        {tables.length > 0 && <span className="badge">{tables.length} {tables.length === 1 ? 'table' : 'tables'}</span>}
+      </div>
       {tables.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">{empty}</p>
+        <div className="px-6 pb-8 pt-4 text-center">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/[0.05] dark:text-gray-500">
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true"><ellipse cx="12" cy="12" rx="9" ry="6" /></svg>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{empty}</p>
+        </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left text-gray-800 dark:text-gray-200">
-            <thead className="text-xs uppercase text-gray-500 dark:text-gray-400">
+        <>
+        {/* Phones: one card-like row per table */}
+        <ul className="sm:hidden divide-y divide-gray-100 dark:divide-white/[0.05] border-t border-gray-100 dark:border-white/[0.05]">
+          {tables.map(t => {
+            const full = t.seated >= t.maxPlayers;
+            return (
+              <li key={t.id} className="flex items-center gap-3 px-6 py-3.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium text-gray-900 dark:text-white">{t.name}</span>
+                    {t.isHost && <span className="badge badge-amber">Host</span>}
+                  </div>
+                  <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+                    <div className="truncate">{t.game} · {stakes(t)}</div>
+                    <div>{t.seated}/{t.maxPlayers} seated</div>
+                  </div>
+                </div>
+                <button
+                  className={`btn btn-sm ${full ? 'btn-secondary' : 'btn-primary'}`}
+                  onClick={() => router.push(`/game/${t.id}`)}
+                >
+                  {full ? 'Watch' : 'Join'}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="hidden sm:block overflow-x-auto">
+          <table className="data-table text-gray-800 dark:text-gray-200">
+            <thead>
               <tr>
-                <th className="py-2 pr-3 font-medium">Table</th>
-                <th className="py-2 pr-3 font-medium">Game</th>
-                <th className="py-2 pr-3 font-medium">Stakes</th>
-                <th className="py-2 pr-3 font-medium">Players</th>
-                {showHost && <th className="py-2 pr-3 font-medium">Host</th>}
-                <th className="py-2 font-medium"><span className="sr-only">Open</span></th>
+                <th>Table</th>
+                <th>Game</th>
+                <th>Stakes</th>
+                <th>Seats</th>
+                {showHost && <th>Host</th>}
+                <th><span className="sr-only">Open</span></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+            <tbody>
               {tables.map(t => {
                 const full = t.seated >= t.maxPlayers;
                 return (
                   <tr key={t.id}>
-                    <td className="py-2 pr-3 font-medium">
-                      {t.name}
-                      {t.isHost && <span className="ml-2 text-xs text-amber-700 dark:text-amber-400">You host</span>}
+                    <td className="font-medium text-gray-900 dark:text-white">
+                      <span className="inline-flex items-center gap-2">
+                        {t.name}
+                        {t.isHost && <span className="badge badge-amber">Host</span>}
+                      </span>
                     </td>
-                    <td className="py-2 pr-3">{t.game}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{stakes(t)}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{t.seated}/{t.maxPlayers}</td>
-                    {showHost && <td className="py-2 pr-3">{t.host || '–'}</td>}
-                    <td className="py-2 text-right">
+                    <td className="text-gray-600 dark:text-gray-300">{t.game}</td>
+                    <td className="whitespace-nowrap tabular-nums">{stakes(t)}</td>
+                    <td className="whitespace-nowrap">
+                      <span className="inline-flex items-center gap-2 tabular-nums">
+                        <span className="relative h-1.5 w-12 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10" aria-hidden="true">
+                          <span className="absolute inset-y-0 left-0 rounded-full bg-emerald-500" style={{ width: `${Math.min(100, (t.seated / Math.max(1, t.maxPlayers)) * 100)}%` }} />
+                        </span>
+                        {t.seated}/{t.maxPlayers}
+                      </span>
+                    </td>
+                    {showHost && <td className="text-gray-600 dark:text-gray-300">{t.host || '–'}</td>}
+                    <td className="text-right">
                       <button
-                        className="px-3 py-1 rounded-md text-white text-xs font-medium bg-indigo-500 hover:bg-indigo-600"
+                        className={`btn btn-sm ${full ? 'btn-secondary' : 'btn-primary'}`}
                         onClick={() => router.push(`/game/${t.id}`)}
                       >
                         {full ? 'Watch' : 'Join'}
@@ -56,6 +100,7 @@ function TablesList({ title, empty, tables, showHost }: { title: string; empty: 
             </tbody>
           </table>
         </div>
+        </>
       )}
     </section>
   );
@@ -90,7 +135,7 @@ export default function LobbyTables() {
   }, [load]);
 
   return (
-    <div className="w-full max-w-4xl space-y-4">
+    <div className="w-full space-y-6">
       {mine.length > 0 && (
         <TablesList title="My private tables" empty="" tables={mine} showHost />
       )}

@@ -94,20 +94,20 @@ test.describe('Roles and permissions', () => {
       for (const n of [1, 2]) {
         const page = await signedInPage(browser, users[n]);
         await page.goto('/dashboard');
-        await expect(page.getByRole('button', { name: 'Leaderboard & achievements' })).toBeVisible({ timeout: 30_000 });
-        const create = page.getByRole('button', { name: /create room/i });
+        await expect(page.getByRole('button', { name: 'Tournaments' })).toBeVisible({ timeout: 30_000 });
+        const create = page.getByRole('button', { name: /create a table/i });
         if (n === 1) await expect(create, 'TEST_USER1').toHaveCount(0);
         else await expect(create.first(), 'TEST_USER2').toBeVisible();
         await page.context().close();
       }
     });
 
-    test('only hosts see Create New Game on the profile page', async ({ browser }) => {
+    test('only hosts see Create a table on the profile page', async ({ browser }) => {
       for (const n of [1, 2]) {
         const page = await signedInPage(browser, users[n]);
         await page.goto('/profile');
-        await expect(page.getByRole('button', { name: 'Return to Dashboard' })).toBeVisible({ timeout: 30_000 });
-        const create = page.getByRole('button', { name: 'Create New Game' });
+        await expect(page.getByRole('button', { name: 'Back to the lobby' })).toBeVisible({ timeout: 30_000 });
+        const create = page.getByRole('button', { name: 'Create a table' });
         if (n === 1) await expect(create, 'TEST_USER1').toHaveCount(0);
         else await expect(create, 'TEST_USER2').toBeVisible();
         // There's no join page; joining is by room code or invite link from the dashboard
@@ -120,7 +120,7 @@ test.describe('Roles and permissions', () => {
       for (const n of [1, 2]) {
         const page = await signedInPage(browser, users[n]);
         await page.goto('/game/create');
-        await expect(page.getByRole('heading', { name: 'Create Game Room' })).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByRole('heading', { name: 'Create a table' })).toBeVisible({ timeout: 30_000 });
         const notice = page.getByText('Your account can\'t create rooms');
         const form = page.getByText('Who can join');
         if (n === 1) {
@@ -262,7 +262,7 @@ test.describe('Roles and permissions', () => {
         const page = await signedInPage(browser, users[n]);
         await page.goto('/dashboard');
         // Wait for the dashboard's own links, so a missing admin link isn't just a slow load
-        await expect(page.getByRole('button', { name: 'Leaderboard & achievements' })).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByRole('button', { name: 'Tournaments' })).toBeVisible({ timeout: 30_000 });
         const link = page.getByRole('button', { name: 'Roles & permissions' });
         if (n === 4) await expect(link, `TEST_USER${n}`).toBeVisible();
         else await expect(link, `TEST_USER${n}`).toHaveCount(0);

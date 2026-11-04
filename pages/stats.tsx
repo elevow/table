@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import AppShell, { PageHeader } from '../src/components/AppShell';
 import { authHeaders } from '../src/utils/auth-headers';
 import { downloadHandHistory } from '../src/utils/download-hand-history';
 import ProfitChart from '../src/components/ProfitChart';
@@ -14,7 +15,7 @@ interface ProfitData {
   truncated: boolean;
 }
 
-const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '-' : ''}$${Math.abs(Math.round(n * 100) / 100).toLocaleString()}`;
+const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}$${Math.abs(Math.round(n * 100) / 100).toLocaleString()}`;
 const netClass = (n: number) => (n > 0 ? 'text-emerald-600 dark:text-emerald-400' : n < 0 ? 'text-red-600 dark:text-red-400' : '');
 
 export default function StatsPage() {
@@ -92,24 +93,17 @@ export default function StatsPage() {
   const wins = data?.sessions.filter(s => s.net > 0).length ?? 0;
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <AppShell>
       <Head><title>My Results - Table</title></Head>
-      <main className="container mx-auto px-4 py-8 max-w-5xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">My Results</h1>
-          <div className="flex gap-3 text-sm">
-            <Link href="/history" className="text-blue-600 dark:text-blue-400 hover:underline">Hand history</Link>
-            <Link href="/leaderboard" className="text-blue-600 dark:text-blue-400 hover:underline">Leaderboard</Link>
-            <Link href="/dashboard" className="text-blue-600 dark:text-blue-400 hover:underline">Dashboard</Link>
-          </div>
-        </div>
+      <main className="page">
+        <PageHeader title="Results" subtitle="Your profit and sessions across every cash table." />
 
-        {error && <div className="p-3 mb-4 rounded bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-200 text-sm">{error}</div>}
-        {notice && <div role="status" className="p-3 mb-4 rounded bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 text-sm">{notice}</div>}
+        {error && <div className="p-3 mb-4 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 text-sm">{error}</div>}
+        {notice && <div role="status" className="p-3 mb-4 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-200 text-sm">{notice}</div>}
         {!data && !error && <p className="text-gray-500 dark:text-gray-400">Loading…</p>}
 
         {data && data.totals.hands === 0 && (
-          <div className="p-6 rounded-lg bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+          <div className="surface p-8 text-center text-sm text-gray-500 dark:text-gray-400">
             No hands yet. Your results appear here once you have played a few hands.
           </div>
         )}
@@ -123,24 +117,24 @@ export default function StatsPage() {
                 { label: 'Sessions', value: data.sessions.length.toLocaleString(), cls: '' },
                 { label: 'Winning sessions', value: `${wins} of ${data.sessions.length}`, cls: '' },
               ].map(t => (
-                <div key={t.label} className="rounded-lg bg-white dark:bg-gray-800 shadow p-3">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">{t.label}</div>
-                  <div className={`text-xl font-semibold tabular-nums text-gray-900 dark:text-gray-100 ${t.cls}`}>{t.value}</div>
+                <div key={t.label} className="surface px-5 py-4">
+                  <div className="text-[13px] font-medium text-gray-500 dark:text-gray-400">{t.label}</div>
+                  <div className={`mt-1 text-2xl font-semibold tracking-tight tabular-nums ${t.cls || 'text-gray-900 dark:text-white'}`}>{t.value}</div>
                 </div>
               ))}
             </div>
 
-            <section className="rounded-lg bg-white dark:bg-gray-800 shadow p-4 mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">Profit over time</h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            <section className="surface p-5 sm:p-6 mb-6">
+              <h2 className="section-title mb-1">Profit over time</h2>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400 mb-3">
                 Running total, one step per hand{data.truncated ? ` (your latest ${data.totals.hands.toLocaleString()} hands)` : ''}.
               </p>
               <ProfitChart points={data.series} />
             </section>
 
-            <section className="rounded-lg bg-white dark:bg-gray-800 shadow overflow-x-auto">
-              <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Sessions</h2>
+            <section className="surface overflow-x-auto">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-6 pt-6">
+                <h2 className="section-title">Sessions</h2>
                 {canDelete && data.sessions.length > 0 && (
                   <button
                     onClick={() => deleteSessions('all')}
@@ -151,46 +145,48 @@ export default function StatsPage() {
                   </button>
                 )}
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 px-4 mb-2">A break of more than two hours at a table starts a new session.</p>
-              <table className="w-full text-sm">
-                <thead className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+              <p className="text-[13px] text-gray-500 dark:text-gray-400 px-6 mt-1 mb-3">A break of more than two hours at a table starts a new session.</p>
+              <table className="data-table">
+                <thead>
                   <tr>
-                    <th className="px-3 py-2">Date</th>
-                    <th className="px-3 py-2">Table</th>
-                    <th className="px-3 py-2 text-right">Hands</th>
-                    <th className="px-3 py-2 text-right">Duration</th>
-                    <th className="px-3 py-2 text-right">Net</th>
-                    <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
+                    <th>Date</th>
+                    <th>Table</th>
+                    <th className="!text-right">Hands</th>
+                    <th className="!text-right">Duration</th>
+                    <th className="!text-right">Net</th>
+                    <th className="!text-right">Export</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.sessions.map(s => {
                     const key = `${s.roomId}:${s.start}`;
                     return (
-                      <tr key={key} className="border-b border-gray-100 dark:border-gray-700 text-gray-900 dark:text-gray-100">
-                        <td className="px-3 py-2 whitespace-nowrap">{new Date(s.start).toLocaleString()}</td>
-                        <td className="px-3 py-2">
-                          <Link href={`/history?room=${encodeURIComponent(s.roomId)}`} className="text-blue-600 dark:text-blue-400 hover:underline">
+                      <tr key={key} className="text-gray-900 dark:text-gray-100">
+                        <td className="whitespace-nowrap text-gray-600 dark:text-gray-300">{new Date(s.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                        <td>
+                          <Link href={`/history?room=${encodeURIComponent(s.roomId)}`} className={`${data.roomNames[s.roomId] ? 'text-gray-700 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'} hover:text-emerald-600 dark:hover:text-emerald-300`}>
                             {data.roomNames[s.roomId] || s.roomId}
                           </Link>
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{s.hands}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatDuration(s.durationMs)}</td>
-                        <td className={`px-3 py-2 text-right tabular-nums font-semibold ${netClass(s.net)}`}>{signed(s.net)}</td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <td className="text-right tabular-nums">{s.hands}</td>
+                        <td className="text-right tabular-nums text-gray-600 dark:text-gray-300">{formatDuration(s.durationMs)}</td>
+                        <td className={`text-right tabular-nums font-semibold ${netClass(s.net)}`}>{signed(s.net)}</td>
+                        <td className="text-right whitespace-nowrap">
                           <button
                             onClick={() => exportSession(s)}
                             disabled={exporting === key}
-                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-60"
+                            className="btn btn-ghost btn-sm !h-8 !px-2 disabled:opacity-60"
+                            title="Export this session"
+                            aria-label={exporting === key ? 'Exporting…' : 'Export'}
                           >
-                            {exporting === key ? 'Exporting…' : 'Export'}
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></svg>
                           </button>
                           {canDelete && (
                             <button
                               onClick={() => deleteSessions(s)}
                               disabled={deleting !== null}
                               aria-label={`Delete the session at ${data.roomNames[s.roomId] || s.roomId} on ${new Date(s.start).toLocaleString()}`}
-                              className="ml-3 text-xs text-red-600 dark:text-red-400 hover:underline disabled:opacity-60"
+                              className="btn btn-ghost btn-sm text-red-600 dark:text-red-400 disabled:opacity-60"
                             >
                               {deleting === key ? 'Deleting…' : 'Delete'}
                             </button>
@@ -205,6 +201,6 @@ export default function StatsPage() {
           </>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }

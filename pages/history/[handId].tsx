@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import AppShell, { PageHeader } from '../../src/components/AppShell';
 import { useRouter } from 'next/router';
 import { authHeaders } from '../../src/utils/auth-headers';
 import { downloadHandHistory } from '../../src/utils/download-hand-history';
@@ -59,122 +60,140 @@ export default function HandReplayPage() {
   const names = useMemo(() => new Map((hand?.players || []).map(p => [p.id, p.name])), [hand]);
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <AppShell>
       <Head><title>{hand ? `Hand #${hand.handNumber}` : 'Hand'} - Table</title></Head>
-      <main className="container mx-auto px-4 py-8 max-w-5xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+      <main className="page">
+        <Link href={hand ? `/history?room=${encodeURIComponent(hand.roomId)}` : '/history'} className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">
+          <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M12.8 5.2a1 1 0 010 1.4L9.4 10l3.4 3.4a1 1 0 01-1.4 1.4l-4.1-4.1a1 1 0 010-1.4l4.1-4.1a1 1 0 011.4 0z" clipRule="evenodd" /></svg>
+          {hand ? 'Hands at this table' : 'All hands'}
+        </Link>
+        <PageHeader
+          title={<span className="inline-flex items-center gap-3">
             {hand ? `Hand #${hand.handNumber}` : 'Hand'}
-            {hand?.kind === 'bomb-pot' && <span className="ml-2 text-sm px-2 py-0.5 rounded bg-orange-600 text-white align-middle">Bomb pot</span>}
-          </h1>
-          <div className="flex gap-3 text-sm">
-            {hand && <Link href={`/history?room=${encodeURIComponent(hand.roomId)}`} className="text-blue-600 dark:text-blue-400 hover:underline">Hands at this table</Link>}
-            <Link href="/history" className="text-blue-600 dark:text-blue-400 hover:underline">All hands</Link>
+            {hand?.kind === 'bomb-pot' && <span className="badge badge-amber">Bomb pot</span>}
+          </span>}
+          subtitle={hand ? <span className="tabular-nums">{new Date(hand.endedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} · Blinds ${hand.smallBlind}/${hand.bigBlind} · Pot ${hand.pot}</span> : undefined}
+          actions={<>
+            <Link href="/history" className="btn btn-ghost">All hands</Link>
             {hand && (
               <button
                 onClick={() => downloadHandHistory({ handId: hand.id }).catch(e => setError(e?.message || 'Could not export hand'))}
-                className="text-blue-600 dark:text-blue-400 hover:underline"
+                className="btn btn-secondary"
                 title="Download in PokerStars hand-history format"
               >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></svg>
                 Export .txt
               </button>
             )}
+          </>}
+        />
+        {error && <div role="alert" className="p-3 mb-4 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 text-sm">{error}</div>}
+        {!hand && !error && (
+          <div className="surface p-6 space-y-3 animate-pulse" aria-label="Loading">
+            <div className="h-40 rounded-xl bg-gray-200 dark:bg-white/[0.06]" />
+            <div className="h-4 w-1/2 rounded bg-gray-200 dark:bg-white/[0.06]" />
           </div>
-        </div>
-        {error && <div className="p-3 rounded bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-200 text-sm">{error}</div>}
-        {!hand && !error && <p className="text-gray-500 dark:text-gray-400">Loading…</p>}
+        )}
 
         {hand && frame && (
-          <>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-              {new Date(hand.endedAt).toLocaleString()} · Blinds ${hand.smallBlind}/${hand.bigBlind} · Pot ${hand.pot}
-            </p>
-
-            {/* Table */}
-            <div className="rounded-2xl p-4 sm:p-6 mb-4 shadow-inner" style={{ background: 'radial-gradient(ellipse at center, #16a34a 0%, #15803d 60%, #14532d 100%)' }}>
-              <div className="flex flex-col items-center gap-2 mb-5">
-                {frame.result && hand.runBoards?.length ? (
-                  // Run more than once: every run's board on the result
-                  hand.runBoards.map((board, r) => (
-                    <div key={r} className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-amber-100 w-12">Run {r + 1}</span>
-                      <div className="flex gap-1">{board.map((c, i) => <MiniCard key={i} card={c} size="md" />)}</div>
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2 space-y-4">
+              {/* Table */}
+              <div className="table-rail rounded-[28px] p-3">
+                <div className="table-felt rounded-[20px] p-4 sm:p-6">
+                  <div className="flex flex-col items-center gap-3 mb-6">
+                    {frame.result && hand.runBoards?.length ? (
+                      // Run more than once: every run's board on the result
+                      hand.runBoards.map((board, r) => (
+                        <div key={r} className="flex items-center gap-2">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider text-white/70 w-12">Run {r + 1}</span>
+                          <div className="flex gap-1">{board.map((c, i) => <MiniCard key={i} card={c} size="md" />)}</div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex gap-1 min-h-[3.5rem]">
+                        {hand.board.slice(0, frame.boardCount).map((c, i) => <MiniCard key={i} card={c} size="md" />)}
+                      </div>
+                    )}
+                    <div className="inline-flex items-center gap-1.5 bg-black/35 ring-1 ring-white/10 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-semibold tabular-nums text-white">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-white/60">Pot</span>
+                      {money(frame.pot)}
                     </div>
-                  ))
-                ) : (
-                  <div className="flex gap-1 min-h-[3.5rem]">
-                    {hand.board.slice(0, frame.boardCount).map((c, i) => <MiniCard key={i} card={c} size="md" />)}
                   </div>
-                )}
-                <div className="px-3 py-1 rounded bg-gray-900/70 text-white text-sm font-semibold">Pot {money(frame.pot)}</div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {hand.players.map(p => {
+                      const isWinner = !!frame.result?.some(w => w.playerId === p.id);
+                      const out = frame.folded.has(p.id);
+                      const act = frame.lastAction[p.id];
+                      const cards = p.cards;
+                      const hole = cards?.hole;
+                      const up = (cards?.up || []).slice(0, frame.upCount);
+                      const down = cards?.down;
+                      return (
+                        <div
+                          key={p.id}
+                          className={`rounded-xl border p-3 bg-gray-950/80 backdrop-blur-sm text-gray-100 transition-opacity ${out ? 'opacity-50' : ''} ${isWinner ? 'border-amber-300/70 shadow-[0_0_0_3px_rgba(252,211,77,0.25)]' : 'border-white/10'}`}
+                        >
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium text-gray-200 truncate">{p.name}</span>
+                            <span className="tabular-nums text-emerald-300 font-semibold">{money(frame.stacks[p.id] ?? 0)}</span>
+                          </div>
+                          <div className="flex gap-0.5 my-2 min-h-[3rem]">
+                            {hole && hole.map((c, i) => <MiniCard key={i} card={c} />)}
+                            {!hole && down && down.map((c, i) => <MiniCard key={`d${i}`} card={c} />)}
+                            {!hole && !down && !up.length && [0, 1].map(i => <MiniCard key={i} />)}
+                            {up.map((c, i) => <MiniCard key={`u${i}`} card={c} />)}
+                          </div>
+                          <div className="text-xs text-gray-400 min-h-[1rem]">
+                            {isWinner
+                              ? <span className="font-semibold text-amber-300">Wins {money(frame.result!.find(w => w.playerId === p.id)!.amount)}</span>
+                              : act ? describeAction(act, '', money).trim() : out ? 'Folded' : ''}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {hand.players.map(p => {
-                  const isWinner = !!frame.result?.some(w => w.playerId === p.id);
-                  const out = frame.folded.has(p.id);
-                  const act = frame.lastAction[p.id];
-                  const cards = p.cards;
-                  const hole = cards?.hole;
-                  const up = (cards?.up || []).slice(0, frame.upCount);
-                  const down = cards?.down;
-                  return (
-                    <div
-                      key={p.id}
-                      className={`rounded-lg p-3 bg-white/95 dark:bg-gray-800/95 shadow ${out ? 'opacity-50' : ''} ${isWinner ? 'ring-4 ring-yellow-400' : ''}`}
-                    >
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-semibold text-gray-900 dark:text-gray-100">{p.name}</span>
-                        <span className="tabular-nums text-emerald-700 dark:text-emerald-400 font-semibold">{money(frame.stacks[p.id] ?? 0)}</span>
-                      </div>
-                      <div className="flex gap-0.5 my-2 min-h-[3rem]">
-                        {hole && hole.map((c, i) => <MiniCard key={i} card={c} />)}
-                        {!hole && down && down.map((c, i) => <MiniCard key={`d${i}`} card={c} />)}
-                        {!hole && !down && !up.length && [0, 1].map(i => <MiniCard key={i} />)}
-                        {up.map((c, i) => <MiniCard key={`u${i}`} card={c} />)}
-                      </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-300 min-h-[1rem]">
-                        {isWinner
-                          ? <span className="font-semibold text-yellow-700 dark:text-yellow-300">Wins {money(frame.result!.find(w => w.playerId === p.id)!.amount)}</span>
-                          : act ? describeAction(act, '', money).trim() : out ? 'Folded' : ''}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
 
-            {/* Controls */}
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              <button className="px-3 py-1.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100" onClick={() => { setPlaying(false); setFrameIndex(0); }} aria-label="First step">⏮</button>
-              <button className="px-3 py-1.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100" onClick={() => setFrameIndex(i => Math.max(0, i - 1))} aria-label="Previous step">◀</button>
-              <button
-                className="px-4 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-medium"
-                onClick={() => {
-                  if (frameIndex >= last) setFrameIndex(0);
-                  setPlaying(p => !p);
-                }}
-              >
-                {playing ? 'Pause' : frameIndex >= last ? 'Replay' : 'Play'}
-              </button>
-              <button className="px-3 py-1.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100" onClick={() => setFrameIndex(i => Math.min(last, i + 1))} aria-label="Next step">▶</button>
-              <button className="px-3 py-1.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100" onClick={() => { setPlaying(false); setFrameIndex(last); }} aria-label="Last step">⏭</button>
-              <span className="text-sm text-gray-700 dark:text-gray-200 ml-2">{frame.caption}</span>
+              {/* Controls */}
+              <div className="surface p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button className="btn btn-secondary btn-sm !px-2.5" onClick={() => { setPlaying(false); setFrameIndex(0); }} aria-label="First step" title="First step"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5 4a1 1 0 011 1v4.2l7.4-4.9A1 1 0 0115 5.1v9.8a1 1 0 01-1.6.8L6 10.8V15a1 1 0 11-2 0V5a1 1 0 011-1z" /></svg></button>
+                  <button className="btn btn-secondary btn-sm !px-2.5" onClick={() => setFrameIndex(i => Math.max(0, i - 1))} aria-label="Previous step" title="Previous step"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M13.4 4.3A1 1 0 0115 5.1v9.8a1 1 0 01-1.6.8l-7-4.9a1 1 0 010-1.6l7-4.9z" /></svg></button>
+                  <button
+                    className="btn btn-primary btn-sm min-w-[84px]"
+                    onClick={() => {
+                      if (frameIndex >= last) setFrameIndex(0);
+                      setPlaying(p => !p);
+                    }}
+                  >
+                    {playing ? 'Pause' : frameIndex >= last ? 'Replay' : 'Play'}
+                  </button>
+                  <button className="btn btn-secondary btn-sm !px-2.5" onClick={() => setFrameIndex(i => Math.min(last, i + 1))} aria-label="Next step" title="Next step"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6.6 4.3A1 1 0 005 5.1v9.8a1 1 0 001.6.8l7-4.9a1 1 0 000-1.6l-7-4.9z" /></svg></button>
+                  <button className="btn btn-secondary btn-sm !px-2.5" onClick={() => { setPlaying(false); setFrameIndex(last); }} aria-label="Last step" title="Last step"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M15 4a1 1 0 00-1 1v4.2L6.6 4.3A1 1 0 005 5.1v9.8a1 1 0 001.6.8L14 10.8V15a1 1 0 102 0V5a1 1 0 00-1-1z" /></svg></button>
+                  <span className="ml-2 text-sm text-gray-700 dark:text-gray-200">{frame.caption}</span>
+                </div>
+                <div className="mt-3 h-1 rounded-full bg-gray-200 dark:bg-white/[0.08] overflow-hidden" aria-hidden="true">
+                  <div className="h-full bg-emerald-500 transition-[width] duration-200" style={{ width: `${frames.length > 1 ? (frameIndex / last) * 100 : 100}%` }} />
+                </div>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Step {frameIndex + 1} of {frames.length}. Arrow keys step through the hand.</p>
+              </div>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Step {frameIndex + 1} of {frames.length}. Arrow keys step through the hand.</p>
 
             {/* Action log */}
-            <div className="rounded-lg bg-white dark:bg-gray-800 shadow p-3">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Actions</h2>
-              <ol className="text-sm space-y-0.5">
+            <div className="surface p-5 self-start">
+              <h2 className="section-title mb-3">Actions</h2>
+              <ol className="text-[13px] leading-5 space-y-0.5">
                 {hand.actions.map((a, i) => {
                   const newStreet = i === 0 || hand.actions[i - 1].stage !== a.stage;
                   return (
                     <React.Fragment key={i}>
-                      {newStreet && <li className="pt-1 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{streetLabel(a.stage, hand.variant)}</li>}
+                      {newStreet && <li className="pt-2 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 first:pt-0">{streetLabel(a.stage, hand.variant)}</li>}
                       <li>
                         <button
                           onClick={() => { setPlaying(false); setFrameIndex(i + 1); }}
-                          className={`text-left w-full px-2 py-0.5 rounded ${frame.step === i ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-900 dark:text-blue-100' : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                          className={`text-left w-full px-2 py-1 rounded-md transition-colors ${frame.step === i ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-400/10 dark:text-emerald-100' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.04]'}`}
                         >
                           {describeAction(a, names.get(a.playerId) || 'Player', money, pid => names.get(pid))}
                         </button>
@@ -182,19 +201,19 @@ export default function HandReplayPage() {
                     </React.Fragment>
                   );
                 })}
-                <li>
+                <li className="pt-1">
                   <button
                     onClick={() => { setPlaying(false); setFrameIndex(last); }}
-                    className={`text-left w-full px-2 py-0.5 rounded font-semibold ${frameIndex === last ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-900 dark:text-yellow-100' : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    className={`text-left w-full px-2 py-1 rounded-md font-semibold transition-colors ${frameIndex === last ? 'bg-amber-50 text-amber-900 dark:bg-amber-400/10 dark:text-amber-200' : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04]'}`}
                   >
                     {frames[last].caption}
                   </button>
                 </li>
               </ol>
             </div>
-          </>
+          </div>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }

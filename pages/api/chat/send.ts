@@ -8,6 +8,7 @@ import {
 } from '../../../src/lib/auth/access-control';
 import { loadRoom } from '../../../src/lib/server/room-config';
 import { PRIVATE_TABLE_RESPONSE, canEnterRoom } from '../../../src/lib/server/room-privacy';
+import { withSenderNames } from '../../../src/lib/server/chat-senders';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -37,7 +38,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (room && !canEnterRoom(access, room)) return res.status(403).json(PRIVATE_TABLE_RESPONSE);
     }
     const svc = new ChatService(pool);
-    const msg = await svc.send({ ...(req.body || {}), senderId });
+    const sent = await svc.send({ ...(req.body || {}), senderId });
+    // The sender's name goes out with the message so others can see who wrote it, and mute them
+    const msg = sent?.roomId ? (await withSenderNames([sent]))[0] : sent;
     // Broadcast via Supabase Realtime
     try {
       if (msg?.roomId) {

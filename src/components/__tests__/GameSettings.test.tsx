@@ -1,165 +1,36 @@
-/**
- * GameSettings Component Tests
- *
- * Tests for the game settings component, focusing on pot odds toggle functionality
- */
-
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import GameSettings from '../GameSettings';
+import { DEFAULT_DISPLAY_SETTINGS } from '../../lib/shared/display-settings';
 
 describe('GameSettings', () => {
-  const defaultProps = {
-    gameId: 'test-game-123',
-  };
-
-  beforeEach(() => {
-    localStorage.clear();
+  test('offers only the settings the table uses, showing the current values', () => {
+    render(<GameSettings settings={{ ...DEFAULT_DISPLAY_SETTINGS, showStackInBB: true }} onChange={jest.fn()} />);
+    expect(screen.getAllByRole('checkbox').map(c => c.parentElement?.textContent?.trim())).toEqual([
+      'High Contrast Cards', 'Show Pot Odds', 'Show Stack in Big Blinds',
+    ]);
+    expect(screen.getByLabelText('High Contrast Cards')).not.toBeChecked();
+    expect(screen.getByLabelText('Show Pot Odds')).toBeChecked();
+    expect(screen.getByLabelText('Show Stack in Big Blinds')).toBeChecked();
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+    expect(screen.getByText(/These are your profile settings/)).toBeInTheDocument();
   });
 
-  afterEach(() => {
-    localStorage.clear();
+  test('reports each change', () => {
+    const onChange = jest.fn();
+    render(<GameSettings settings={DEFAULT_DISPLAY_SETTINGS} onChange={onChange} />);
+    fireEvent.click(screen.getByLabelText('Show Pot Odds'));
+    expect(onChange).toHaveBeenCalledWith('showPotOdds', false);
+    fireEvent.click(screen.getByLabelText('High Contrast Cards'));
+    expect(onChange).toHaveBeenCalledWith('highContrastCards', true);
   });
 
-  it('should render game settings', () => {
-    render(<GameSettings {...defaultProps} />);
-    expect(screen.getByText('Game Settings')).toBeInTheDocument();
-  });
-
-  it('should show pot odds toggle', () => {
-    render(<GameSettings {...defaultProps} />);
-    expect(screen.getByText('Show Pot Odds')).toBeInTheDocument();
-  });
-
-  it('should have pot odds enabled by default', () => {
-    render(<GameSettings {...defaultProps} />);
-    const checkbox = screen.getByLabelText(/Show Pot Odds/i) as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
-  });
-
-  it('should toggle pot odds setting when checkbox is clicked', () => {
-    render(<GameSettings {...defaultProps} />);
-    const checkbox = screen.getByLabelText(/Show Pot Odds/i) as HTMLInputElement;
-    
-    expect(checkbox.checked).toBe(true);
-    
-    fireEvent.click(checkbox);
-    expect(checkbox.checked).toBe(false);
-    
-    fireEvent.click(checkbox);
-    expect(checkbox.checked).toBe(true);
-  });
-
-  it('should persist pot odds setting to localStorage', async () => {
-    render(<GameSettings {...defaultProps} />);
-    const checkbox = screen.getByLabelText(/Show Pot Odds/i) as HTMLInputElement;
-    
-    fireEvent.click(checkbox);
-    
-    await waitFor(() => {
-      const saved = localStorage.getItem(`game_settings_${defaultProps.gameId}`);
-      expect(saved).toBeTruthy();
-      const parsed = JSON.parse(saved!);
-      expect(parsed.showPotOdds).toBe(false);
-    });
-  });
-
-  it('should load pot odds setting from localStorage', () => {
-    const savedSettings = {
-      showPotOdds: false,
-      soundEnabled: true,
-      chatEnabled: true,
-    };
-    localStorage.setItem(
-      `game_settings_${defaultProps.gameId}`,
-      JSON.stringify(savedSettings)
-    );
-    
-    render(<GameSettings {...defaultProps} />);
-    const checkbox = screen.getByLabelText(/Show Pot Odds/i) as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
-  });
-
-  it('should call onSettingsChange callback with pot odds setting', async () => {
-    const mockCallback = jest.fn();
-    render(<GameSettings {...defaultProps} onSettingsChange={mockCallback} />);
-    
-    const checkbox = screen.getByLabelText(/Show Pot Odds/i) as HTMLInputElement;
-    fireEvent.click(checkbox);
-    
-    await waitFor(() => {
-      expect(mockCallback).toHaveBeenCalled();
-      const lastCall = mockCallback.mock.calls[mockCallback.mock.calls.length - 1][0];
-      expect(lastCall.showPotOdds).toBe(false);
-    });
-  });
-
-  it('should display pot odds description', () => {
-    render(<GameSettings {...defaultProps} />);
-    expect(
-      screen.getByText(/Display the ratio between the pot size and the bet you are facing/i)
-    ).toBeInTheDocument();
-  });
-
-  it('should show stack in BB toggle', () => {
-    render(<GameSettings {...defaultProps} />);
-    expect(screen.getByText('Show Stack in Big Blinds')).toBeInTheDocument();
-  });
-
-  it('should have stack in BB disabled by default', () => {
-    render(<GameSettings {...defaultProps} />);
-    const checkbox = screen.getByLabelText(/Show Stack in Big Blinds/i) as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
-  });
-
-  it('should toggle stack in BB setting when checkbox is clicked', () => {
-    render(<GameSettings {...defaultProps} />);
-    const checkbox = screen.getByLabelText(/Show Stack in Big Blinds/i) as HTMLInputElement;
-    
-    expect(checkbox.checked).toBe(false);
-    
-    fireEvent.click(checkbox);
-    expect(checkbox.checked).toBe(true);
-    
-    fireEvent.click(checkbox);
-    expect(checkbox.checked).toBe(false);
-  });
-
-  it('should persist stack in BB setting to localStorage', async () => {
-    render(<GameSettings {...defaultProps} />);
-    const checkbox = screen.getByLabelText(/Show Stack in Big Blinds/i) as HTMLInputElement;
-    
-    fireEvent.click(checkbox);
-    
-    await waitFor(() => {
-      const saved = localStorage.getItem(`game_settings_${defaultProps.gameId}`);
-      expect(saved).toBeTruthy();
-      const parsed = JSON.parse(saved!);
-      expect(parsed.showStackInBB).toBe(true);
-    });
-  });
-
-  it('should load stack in BB setting from localStorage', () => {
-    const savedSettings = {
-      showStackInBB: true,
-      soundEnabled: true,
-      chatEnabled: true,
-    };
-    localStorage.setItem(
-      `game_settings_${defaultProps.gameId}`,
-      JSON.stringify(savedSettings)
-    );
-    
-    render(<GameSettings {...defaultProps} />);
-    const checkbox = screen.getByLabelText(/Show Stack in Big Blinds/i) as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
-  });
-
-  it('should display stack in BB description', () => {
-    render(<GameSettings {...defaultProps} />);
-    expect(
-      screen.getByText(/Display chip stacks in Big Blinds \(BB\) instead of raw chip counts/i)
-    ).toBeInTheDocument();
+  test('a table with its own changes can go back to the profile settings', () => {
+    const onReset = jest.fn();
+    render(<GameSettings settings={DEFAULT_DISPLAY_SETTINGS} onChange={jest.fn()} hasOverrides onReset={onReset} />);
+    expect(screen.getByText(/Changed for this table only/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Use my profile settings' }));
+    expect(onReset).toHaveBeenCalled();
   });
 });

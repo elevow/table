@@ -19,7 +19,21 @@ interface ChatPanelProps {
   isAdmin?: boolean;
 }
 
+// Players this viewer has muted, by ID with the name they had, kept in this browser for every table
+const MUTED_KEY = 'chatMutedPlayers';
+function loadMuted(): Record<string, string> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MUTED_KEY) || '{}');
+    return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+  } catch {
+    return {};
+  }
+}
+
 function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
+  const [muted, setMuted] = useState<Record<string, string>>({});
+  // The tournament director, if this is a tournament table: always heard, so never mutable
+  const [directorId, setDirectorId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -39,6 +53,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
       const res = await fetch(`/api/chat/room/list?roomId=${encodeURIComponent(gameId)}&limit=50`, { headers: authHeaders() });
       const json = await res.json();
       const items = Array.isArray(json.items) ? (json.items as ChatMessage[]) : [];
+      setDirectorId(typeof json.directorId === 'string' ? json.directorId : null);
       // messages come newest-first; show oldest-first for chat readability
       setMessages(items.slice().reverse());
       // Preload reactions per message (minimal demo)
@@ -147,6 +162,24 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
   useEffect(() => {
     fetchMessages();
   }, [gameId, fetchMessages]);
+
+  useEffect(() => { setMuted(loadMuted()); }, []);
+
+  const setMutedFor = (senderId: string, name: string | null) => {
+    setMuted(prev => {
+      const next = { ...prev };
+      if (name === null) delete next[senderId];
+      else next[senderId] = name;
+      try { localStorage.setItem(MUTED_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const canMute = (m: ChatMessage) => !!playerId && m.senderId !== playerId && m.senderId !== directorId;
+  const isMuted = (senderId: string) => senderId in muted && senderId !== directorId && senderId !== playerId;
+  const visibleMessages = messages.filter(m => !isMuted(m.senderId));
+  const hiddenCount = messages.length - visibleMessages.length;
+  const mutedHere = Object.entries(muted).filter(([id]) => isMuted(id));
 
   const handleSendMessage = async () => {
     const text = input.trim();
@@ -323,8 +356,26 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
     <div className="chat-panel">
       <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">Chat</h2>
       <div className="messages space-y-2 max-h-80 overflow-auto p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700">
-        {messages.map((m) => (
+        {visibleMessages.map((m) => (
           <div key={m.id} className="message group relative">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-semibold text-gray-700 dark:text-gray-200">
+                {m.senderId === playerId ? 'You' : m.senderName || 'Player'}
+              </span>
+              {m.senderId === directorId && (
+                <span className="rounded bg-indigo-100 px-1 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">Director</span>
+              )}
+              {canMute(m) && (
+                <button
+                  type="button"
+                  onClick={() => setMutedFor(m.senderId, m.senderName || 'Player')}
+                  className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                  title="Hide this player's messages from you"
+                >
+                  Mute
+                </button>
+              )}
+            </div>
             <div className="text-sm text-gray-900 dark:text-gray-100">{m.message}</div>
             <div className="flex items-center gap-2 mt-1">
         {emojis.map((e) => (
@@ -361,7 +412,30 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
         {messages.length === 0 && (
           <div className="text-sm text-gray-500 dark:text-gray-400">No messages yet.</div>
         )}
+        {hiddenCount > 0 && (
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            {hiddenCount === 1 ? '1 message' : `${hiddenCount} messages`} from muted players hidden
+          </div>
+        )}
       </div>
+      {mutedHere.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300" aria-label="Muted players">
+          <span>Muted:</span>
+          {mutedHere.map(([id, name]) => (
+            <span key={id} className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 dark:bg-gray-700">
+              {name}
+              <button
+                type="button"
+                onClick={() => setMutedFor(id, null)}
+                className="text-blue-600 hover:underline dark:text-blue-400"
+                aria-label={`Unmute ${name}`}
+              >
+                Unmute
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="chat-input mt-3 flex gap-2">
         <input
           type="text"

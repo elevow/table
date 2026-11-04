@@ -160,7 +160,7 @@ describe('Chat API (US-023)', () => {
     const res = resHelper();
     await listRoomHandler(req as NextApiRequest, res as NextApiResponse);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ items: [{ id: 'm1' }] });
+    expect(res.json).toHaveBeenCalledWith({ items: [{ id: 'm1' }], directorId: null });
   });
 
   it('GET /api/chat/private/list returns items', async () => {

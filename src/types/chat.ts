@@ -22,6 +22,8 @@ export interface ChatMessage {
   isModerated: boolean;
   moderatedAt: string | null;
   moderatorId: string | null;
+  /** The sender's username, added by the room chat routes */
+  senderName?: string;
 }
 
 export interface SendChatInput {

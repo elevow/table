@@ -21,12 +21,6 @@ const mockPlayer: Player = {
 };
 
 const mockSettings: GameSettings = {
-  soundEnabled: true,
-  chatEnabled: true,
-  notificationsEnabled: true,
-  autoFoldEnabled: false,
-  rabbitHuntEnabled: false,
-  timeBank: 30,
   highContrastCards: false,
   showPotOdds: true,
   showStackInBB: false,

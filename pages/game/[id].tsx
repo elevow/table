@@ -15,7 +15,7 @@ import { useCheckTurn } from '../../src/hooks/useCheckTurn';
 import { Card, Player, GameVariant } from '../../src/types/poker';
 import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
-import type { GameSettings as GameSettingsType } from '../../src/components/GameSettings';
+import { useDisplaySettings } from '../../src/hooks/useDisplaySettings';
 import { formatChips } from '../../src/utils/chip-display';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../src/lib/shared/feature-flags';
 import { authHeaders } from '../../src/utils/auth-headers';
@@ -582,9 +582,9 @@ export default function GamePage() {
   const pendingActionRef = useRef<boolean>(false);
   // Auto next-hand fallback timer ref
   // Visual accessibility options
-  const [highContrastCards, setHighContrastCards] = useState<boolean>(false);
-  const [showPotOdds, setShowPotOdds] = useState<boolean>(true);
-  const [showStackInBB, setShowStackInBB] = useState<boolean>(false);
+  // The player's profile display settings, with any changes made at this table
+  const display = useDisplaySettings(id ? String(id) : null);
+  const { highContrastCards, showPotOdds, showStackInBB } = display.settings;
   // Dealer's Choice: pending choice prompt from server
   const [awaitingDealerChoice, setAwaitingDealerChoice] = useState<null | { dealerId?: string; allowedVariants?: string[]; current?: string }>(null);
   const [selectedVariantDC, setSelectedVariantDC] = useState<string>('texas-holdem');
@@ -634,26 +634,6 @@ export default function GamePage() {
       current: 'texas-holdem',
     };
   }, []);
-
-  // Initialize high-contrast setting from localStorage and keep in sync when room changes
-  useEffect(() => {
-    try {
-      if (!id) return;
-      const raw = localStorage.getItem(`game_settings_${id}`);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        if (typeof saved?.highContrastCards === 'boolean') {
-          setHighContrastCards(!!saved.highContrastCards);
-        }
-        if (typeof saved?.showPotOdds === 'boolean') {
-          setShowPotOdds(saved.showPotOdds);
-        }
-        if (typeof saved?.showStackInBB === 'boolean') {
-          setShowStackInBB(saved.showStackInBB);
-        }
-      }
-    } catch {}
-  }, [id]);
 
   // Helper: suit -> Tailwind text color class, considering high contrast setting
   const suitColorClass = useCallback((suit: string) => {
@@ -3774,11 +3754,7 @@ export default function GamePage() {
             )}
             {showSettings && (
               <div className="mt-4">
-                <GameSettings gameId={String(id)} onSettingsChange={(s: GameSettingsType) => {
-                  setHighContrastCards(!!s?.highContrastCards);
-                  setShowPotOdds(s?.showPotOdds ?? true);
-                  setShowStackInBB(s?.showStackInBB ?? false);
-                }} />
+                <GameSettings settings={display.settings} onChange={display.change} hasOverrides={display.hasOverrides} onReset={display.reset} />
               </div>
             )}
           </div>

@@ -260,10 +260,15 @@ describe('playing at a private table', () => {
     expect(mockSeatClaim).toHaveBeenCalledTimes(1);
   });
 
-  test('a member without table.join_private can watch but not sit', async () => {
-    signIn('member', PLAYER.filter(p => p !== 'table.join_private'));
+  test('an invited member sits without table.join_private, which is for staff without an invite', async () => {
+    const noJoinPrivate = PLAYER.filter(p => p !== 'table.join_private');
+    signIn('member', noJoinPrivate);
+    expect((await call(claimHandler, { method: 'POST', body: seat })).status).toBe(200);
+    signIn('moderator', [...noJoinPrivate, 'table.view_private']);
     const r = await call(claimHandler, { method: 'POST', body: seat });
     expect(r).toEqual({ status: 403, body: expect.objectContaining({ code: 'PERMISSION_DENIED' }) });
+    signIn('moderator', [...PLAYER, 'table.view_private']);
+    expect((await call(claimHandler, { method: 'POST', body: seat })).status).toBe(200);
   });
 
   test('the waitlist and table chat are for members', async () => {

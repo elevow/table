@@ -109,6 +109,7 @@ export default function TournamentLobbyPage() {
                 <tr key={t.id} className="border-t border-gray-200 dark:border-gray-700">
                   <td className="py-2 pr-3">
                     <Link href={`/tournaments/${t.id}`} className="font-medium text-blue-600 dark:text-blue-400 hover:underline">{t.name}</Link>
+                    {t.visibility === 'private' && <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200">Private</span>}
                     {t.reentry && (
                       <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200">Re-entry</span>
                     )}

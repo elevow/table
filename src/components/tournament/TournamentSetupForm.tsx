@@ -223,22 +223,12 @@ export default function TournamentSetupForm({
 
       <section>
         <h2 className="text-lg font-semibold mb-2">Blind levels</h2>
-        <div role="radiogroup" aria-label="Levels change" className="mb-1 flex flex-wrap gap-4 text-sm">
-          <label className="inline-flex items-center gap-2">
-            <input type="radio" name="levelControl" checked={config.levelControl === 'director'}
-              onChange={() => setConfig({ ...config, levelControl: 'director' })} />
-            When the director moves them on
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <input type="radio" name="levelControl" checked={config.levelControl !== 'director'}
-              onChange={() => setConfig({ ...config, levelControl: 'clock' })} />
-            Automatically when time runs out
-          </label>
-        </div>
+        {/* Levels only move on when the director says so; automatic levels aren't offered for now.
+            The server still runs them for any tournament already set up that way. */}
         <p className="mb-3 text-xs text-gray-600 dark:text-gray-400">
-          {config.levelControl === 'director'
-            ? 'The minutes are a guide: the clock counts down, then waits for you to start the next level or break, and to end each break.'
-            : 'Levels and breaks move on by themselves when their time runs out.'}
+          {config.levelControl === 'clock'
+            ? 'Levels and breaks move on by themselves when their time runs out.'
+            : 'The minutes are a guide: the clock counts down, then waits for you to start the next level or break, and to end each break.'}
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -382,7 +372,7 @@ export default function TournamentSetupForm({
             </p>
           )}
           {config.rebuys?.enabled && (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end text-sm">
               <label className="block">
                 Cost ($)
                 <input type="number" min={0} step="0.01" className={inputClass} value={config.rebuys.cost}
@@ -426,7 +416,7 @@ export default function TournamentSetupForm({
           </label>
           {config.breaks.length === 0 && <p className="text-xs text-gray-600 dark:text-gray-400">Add a break to offer an add-on.</p>}
           {config.addOn?.enabled && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 items-end text-sm">
               <label className="block">
                 Cost ($)
                 <input type="number" min={0} step="0.01" className={inputClass} value={config.addOn.cost}

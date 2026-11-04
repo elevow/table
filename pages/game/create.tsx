@@ -18,7 +18,8 @@ type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 's
 export default function CreateGameRoomPage() {
   const router = useRouter();
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
-  // Assumed until permissions load; the API refuses a private table without room.create_private anyway
+  // Both assumed until permissions load; the API refuses either without the permission anyway
+  const [canCreateRoom, setCanCreateRoom] = useState(true);
   const [canCreatePrivate, setCanCreatePrivate] = useState(true);
   const [maxPlayers, setMaxPlayers] = useState(6);
   const [smallBlind, setSmallBlind] = useState(1);
@@ -58,6 +59,7 @@ export default function CreateGameRoomPage() {
         .then(r => (r.ok ? r.json() : null))
         .then(data => {
           if (!data) return;
+          setCanCreateRoom((data.permissions || []).includes('room.create'));
           const allowed = (data.permissions || []).includes('room.create_private');
           setCanCreatePrivate(allowed);
           if (!allowed) setVisibility('public');
@@ -200,6 +202,24 @@ export default function CreateGameRoomPage() {
       setIsNavigating(false);
     }
   };
+
+  // Reached by typing the URL or from an old link: say why instead of showing a form that will be refused
+  if (!canCreateRoom) {
+    return (
+      <div className="container mx-auto p-6">
+        <Head>
+          <title>Create Game Room</title>
+        </Head>
+        <h1 className="text-2xl font-semibold mb-4">Create Game Room</h1>
+        <p role="alert" className="mb-4 text-gray-700 dark:text-gray-300">
+          Your account can&apos;t create rooms. Ask an admin if you&apos;d like to host games.
+        </p>
+        <Link href="/dashboard" className="text-blue-600 dark:text-blue-400 hover:underline">
+          Back to the dashboard
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-6">

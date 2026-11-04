@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { sendTournamentError } from '../../../src/lib/tournament/api-errors';
+import { withoutTournamentInvite } from '../../../src/lib/tournament/tournament-privacy';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { tournamentManager } from '../../../src/lib/tournament/manager-instance';
 import { syncTournamentRooms } from '../../../src/lib/tournament/table-rooms';
@@ -19,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const t = await tournamentManager.closeRebuys(tournamentId);
     // Tables learn the tournament is over before their next hand
     await syncTournamentRooms(t.id);
-    return res.status(200).json(t);
+    return res.status(200).json(withoutTournamentInvite(t));
   } catch (err) {
     return sendTournamentError(res, err);
   }

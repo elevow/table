@@ -102,6 +102,40 @@ test.describe('Roles and permissions', () => {
       }
     });
 
+    test('only hosts see Create New Game on the profile page', async ({ browser }) => {
+      for (const n of [1, 2]) {
+        const page = await signedInPage(browser, users[n]);
+        await page.goto('/profile');
+        await expect(page.getByRole('button', { name: 'Return to Dashboard' })).toBeVisible({ timeout: 30_000 });
+        const create = page.getByRole('button', { name: 'Create New Game' });
+        if (n === 1) await expect(create, 'TEST_USER1').toHaveCount(0);
+        else await expect(create, 'TEST_USER2').toBeVisible();
+        // There's no join page; joining is by room code or invite link from the dashboard
+        await expect(page.getByRole('button', { name: 'Join Game' })).toHaveCount(0);
+        await page.context().close();
+      }
+    });
+
+    test('players who open the create page directly are turned away', async ({ browser }) => {
+      for (const n of [1, 2]) {
+        const page = await signedInPage(browser, users[n]);
+        await page.goto('/game/create');
+        await expect(page.getByRole('heading', { name: 'Create Game Room' })).toBeVisible({ timeout: 30_000 });
+        const notice = page.getByText('Your account can\'t create rooms');
+        const form = page.getByText('Who can join');
+        if (n === 1) {
+          await expect(notice, 'TEST_USER1').toBeVisible();
+          await expect(form, 'TEST_USER1').toHaveCount(0);
+        } else {
+          // The form shows before permissions load, so wait for the notice to have had its chance
+          await page.waitForLoadState('networkidle');
+          await expect(form, 'TEST_USER2').toBeVisible();
+          await expect(notice, 'TEST_USER2').toHaveCount(0);
+        }
+        await page.context().close();
+      }
+    });
+
     test('hosts can correct the ledger; players can\'t', async () => {
       for (const n of USERS) {
         const me = await (await users[n].get('/api/auth/check-admin')).json();

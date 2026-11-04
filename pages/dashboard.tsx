@@ -8,6 +8,7 @@ import Avatar from '../src/components/Avatar';
 import AdminRoomsPanel from '../src/components/AdminRoomsPanel';
 import CombinedPlayerStats from '../src/components/CombinedPlayerStats';
 import { authHeaders } from '../src/utils/auth-headers';
+import { inviteDestination } from '../src/utils/invite-destination';
 import LobbyTables from '../src/components/LobbyTables';
 
 const Dashboard: NextPage = () => {
@@ -107,7 +108,7 @@ const Dashboard: NextPage = () => {
         });
         const joined = await joinResp.json().catch(() => ({}));
         if (joinResp.ok) {
-          router.push(`/game/${joined.roomId}`);
+          router.push(inviteDestination(joined) || '/dashboard');
         } else {
           setValidationMessage(joined.error || 'Invite code not found');
         }

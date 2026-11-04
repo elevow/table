@@ -1,22 +1,18 @@
 import React, { useEffect, useRef } from 'react';
-import { describeAction } from '../lib/shared/hand-replay';
+import { describeAction, streetLabel } from '../lib/shared/hand-replay';
 import type { GameStage, HandActionEntry } from '../types/poker';
 
 interface Props {
   actions?: HandActionEntry[];
   players: Array<{ id: string; name?: string }>;
   handNumber?: number;
+  variant?: string;
 }
-
-const STREET: Partial<Record<GameStage, string>> = {
-  preflop: 'Preflop', flop: 'Flop', turn: 'Turn', river: 'River',
-  third: '3rd street', fourth: '4th street', fifth: '5th street', sixth: '6th street', seventh: '7th street',
-};
 
 const money = (n: number) => `$${n}`;
 
 /** What has happened so far in the current hand, newest at the bottom. */
-export default function HandActionLog({ actions = [], players, handNumber }: Props) {
+export default function HandActionLog({ actions = [], players, handNumber, variant }: Props) {
   const listRef = useRef<HTMLOListElement>(null);
   const names = new Map(players.map(p => [p.id, p.name || 'Player']));
 
@@ -33,7 +29,7 @@ export default function HandActionLog({ actions = [], players, handNumber }: Pro
       stage = a.stage;
       rows.push(
         <li key={`s${i}`} className="pt-1 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 first:border-t-0 first:pt-0">
-          {STREET[a.stage] || a.stage}
+          {streetLabel(a.stage, variant)}
         </li>
       );
     }

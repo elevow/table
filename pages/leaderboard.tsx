@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { authHeaders } from '../src/utils/auth-headers';
@@ -29,11 +29,15 @@ export default function LeaderboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [earned, setEarned] = useState<Record<string, string>>({});
+  // Staff with admin.leaderboard can take players (test accounts) off the board and put them back
+  const [canManage, setCanManage] = useState(false);
+  const [hiddenPlayers, setHiddenPlayers] = useState<Array<{ userId: string; username: string | null; handsPlayed: number }>>([]);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadBoard = useCallback(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/stats/leaderboard?metric=${metric}&limit=25`)
+    return fetch(`/api/stats/leaderboard?metric=${metric}&limit=25`)
       .then(async resp => {
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(data?.error || 'Could not load the leaderboard');
@@ -42,6 +46,49 @@ export default function LeaderboardPage() {
       .catch(e => setError(e?.message || 'Could not load the leaderboard'))
       .finally(() => setLoading(false));
   }, [metric]);
+
+  useEffect(() => { loadBoard(); }, [loadBoard]);
+
+  const loadHidden = useCallback(() => {
+    return fetch('/api/admin/leaderboard', { headers: authHeaders() })
+      .then(resp => (resp.ok ? resp.json() : null))
+      .then(data => { if (data) setHiddenPlayers(data.hidden || []); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const headers = authHeaders();
+    if (!headers.Authorization) return;
+    fetch('/api/auth/check-admin', { headers })
+      .then(r => (r.ok ? r.json() : null))
+      .then(me => {
+        const allowed = !!me?.permissions?.includes('admin.leaderboard');
+        setCanManage(allowed);
+        if (allowed) loadHidden();
+      })
+      .catch(() => {});
+  }, [loadHidden]);
+
+  const setHidden = async (target: { userId: string; username?: string | null }, hidden: boolean) => {
+    const name = target.username || `Player ${target.userId.slice(0, 6)}`;
+    if (hidden && !window.confirm(`Remove ${name} from the leaderboard? Their own results stay as they are, and you can put them back.`)) return;
+    setBusy(target.userId);
+    setError(null);
+    try {
+      const resp = await fetch('/api/admin/leaderboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ userId: target.userId, hidden }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.error || 'Could not change the leaderboard');
+      await Promise.all([loadBoard(), loadHidden()]);
+    } catch (e: any) {
+      setError(e?.message || 'Could not change the leaderboard');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   useEffect(() => {
     resolveSessionUserId().then(id => {
@@ -100,12 +147,13 @@ export default function LeaderboardPage() {
                 <th className="px-3 py-2">Player</th>
                 <th className="px-3 py-2 text-right">{current.label}</th>
                 <th className="px-3 py-2 text-right">Hands</th>
+                {canManage && <th className="px-3 py-2"><span className="sr-only">Manage</span></th>}
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={4} className="px-3 py-4 text-gray-500 dark:text-gray-400">Loading…</td></tr>}
+              {loading && <tr><td colSpan={canManage ? 5 : 4} className="px-3 py-4 text-gray-500 dark:text-gray-400">Loading…</td></tr>}
               {!loading && entries.length === 0 && (
-                <tr><td colSpan={4} className="px-3 py-4 text-gray-500 dark:text-gray-400">No hands played yet.</td></tr>
+                <tr><td colSpan={canManage ? 5 : 4} className="px-3 py-4 text-gray-500 dark:text-gray-400">No hands played yet.</td></tr>
               )}
               {!loading && entries.map(e => (
                 <tr
@@ -116,11 +164,43 @@ export default function LeaderboardPage() {
                   <td className="px-3 py-2">{e.username || `Player ${e.userId.slice(0, 6)}`}{e.userId === userId ? ' (you)' : ''}</td>
                   <td className={`px-3 py-2 text-right tabular-nums ${current.money && e.value < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>{format(e.value)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{(e.handsPlayed ?? 0).toLocaleString()}</td>
+                  {canManage && (
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        onClick={() => setHidden(e, true)}
+                        disabled={busy !== null}
+                        aria-label={`Remove ${e.username || `Player ${e.userId.slice(0, 6)}`} from the leaderboard`}
+                        className="text-xs font-normal text-red-600 dark:text-red-400 hover:underline disabled:opacity-60"
+                      >
+                        {busy === e.userId ? 'Removing…' : 'Remove'}
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+
+        {canManage && hiddenPlayers.length > 0 && (
+          <section aria-label="Removed from the leaderboard" className="rounded-lg shadow bg-white dark:bg-gray-800 p-4 mb-10 -mt-6">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Removed from the leaderboard</h2>
+            <ul className="text-sm divide-y divide-gray-100 dark:divide-gray-700">
+              {hiddenPlayers.map(p => (
+                <li key={p.userId} className="flex items-center justify-between py-1.5 text-gray-900 dark:text-gray-100">
+                  <span>{p.username || `Player ${p.userId.slice(0, 6)}`} <span className="text-xs text-gray-500 dark:text-gray-400">· {p.handsPlayed.toLocaleString()} hands</span></span>
+                  <button
+                    onClick={() => setHidden(p, false)}
+                    disabled={busy !== null}
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-60"
+                  >
+                    {busy === p.userId ? 'Restoring…' : 'Put back'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">Achievements</h2>
         <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">

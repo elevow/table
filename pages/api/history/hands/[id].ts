@@ -21,7 +21,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const result = await getPool().query('SELECT * FROM hand_records WHERE id = $1', [id]);
     const row = result.rows[0];
     // Not found and not yours look the same, so hand ids can't be probed
-    if (!row || !Array.isArray(row.player_ids) || !row.player_ids.includes(userId)) {
+    // A hand the player deleted from their results is gone for them too
+    const hidden = Array.isArray(row?.hidden_for) && row.hidden_for.includes(userId);
+    if (!row || !Array.isArray(row.player_ids) || !row.player_ids.includes(userId) || hidden) {
       return res.status(404).json({ error: 'Hand not found' });
     }
     return res.status(200).json({ hand: redactHandRecord(rowToHandRecord(row), userId) });

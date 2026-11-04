@@ -3794,7 +3794,7 @@ export default function GamePage() {
             />
           )}
           {gameStarted && pokerGameState && (
-            <HandActionLog actions={pokerGameState.handActions} players={pokerGameState.players || []} handNumber={pokerGameState.handNumber} />
+            <HandActionLog actions={pokerGameState.handActions} players={pokerGameState.players || []} handNumber={pokerGameState.handNumber} variant={pokerGameState.variant} />
           )}
           {playerId && (isSeated || amInGame) && (
             <MobileCollapsible title="Session">

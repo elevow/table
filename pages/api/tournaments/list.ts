@@ -7,6 +7,9 @@ import { canManageTournament } from '../../../src/lib/tournament/require-organiz
 import { syncTournamentRooms } from '../../../src/lib/tournament/table-rooms';
 import { getRequestAccess, hasPermission, sendPermissionDenied } from '../../../src/lib/auth/access-control';
 import type { TournamentStatus } from '../../../src/types/tournament-management';
+import { canSeeTournament } from '../../../src/lib/tournament/tournament-privacy';
+
+const LIMIT = 50;
 
 // Opening or waking a tournament's tables can take a while with many of them
 export const config = { maxDuration: 60 };
@@ -29,7 +32,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (filter && !FILTERS[filter]) return res.status(400).json({ error: 'filter must be upcoming, running or finished' });
     const statuses = filter ? FILTERS[filter] : [...FILTERS.upcoming, ...FILTERS.running];
     const now = Date.now();
-    const listed = await tournamentManager.list(statuses);
+    // Private tournaments the viewer can't see are dropped below, so read more than are shown
+    const listed = (await tournamentManager.list(statuses, LIMIT * 4)).filter(t => canSeeTournament(access, t)).slice(0, LIMIT);
     // Tournaments whose start time has come start (or are called off) now
     for (const [i, t] of listed.entries()) {
       if (t.status !== 'setup' || t.config.startsAt === undefined || t.config.startsAt > now) continue;

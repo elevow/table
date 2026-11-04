@@ -3,6 +3,7 @@ import { amountsPaid, bountyEnabled, bountyPool, chipsInPlay, entryCount, forfei
 import { rebuyPeriodOpen, registrationOpen, whyNoAddOn, whyNoRebuy, whyNoReentry } from './tournament-manager';
 import type { BlindLevel, TournamentConfig } from '../../types/tournament';
 import type { TournamentState, TournamentStatus } from '../../types/tournament-management';
+import { directorInviteCode } from './tournament-privacy';
 
 export interface LevelView {
   number: number;
@@ -37,6 +38,8 @@ export interface TournamentView {
   chipCounts: { userId: string; name: string; chips: number }[];
   entrants: { userId: string; name: string; out: boolean }[]; // everyone registered, by name
   canManage: boolean; // the viewer runs this tournament
+  visibility: 'public' | 'private';
+  inviteCode: string | null; // for the director of a private tournament, with its dash
   // For the director: the latest elimination, while it can still be undone
   undo: null | { userId: string; name: string };
   cancelled: null | { at: number; reason: string | null };
@@ -197,6 +200,8 @@ export function buildTournamentView(
       players: tb.seats.flatMap((id, i) => (id ? [{ seat: i + 1, userId: id, name: nameOf(id) }] : [])),
     })),
     canManage: !!options.canManage,
+    visibility: t.visibility ?? 'public',
+    inviteCode: options.canManage ? directorInviteCode(t) : null,
     undo: options.canManage && t.lastElimination
       ? (() => {
           const last = (t.eliminationRecords || [])[(t.eliminationRecords || []).length - 1];
@@ -239,6 +244,7 @@ export interface TournamentSummary {
   registrationOpen: boolean;
   you: null | { registered: boolean; eliminated: boolean };
   canManage: boolean;
+  visibility: 'public' | 'private';
 }
 
 /** A tournament as the lobby lists it. */
@@ -262,5 +268,6 @@ export function buildTournamentSummary(t: TournamentState, now: number, viewerId
     registrationOpen: registrationOpen(t, now) && !isFull(t),
     you: viewerId ? { registered: t.registeredPlayers.includes(viewerId), eliminated: t.eliminatedPlayers.includes(viewerId) } : null,
     canManage,
+    visibility: t.visibility ?? 'public',
   };
 }

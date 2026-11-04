@@ -11,6 +11,8 @@ export interface TournamentStore {
   update(id: string, apply: (t: TournamentState) => void): Promise<TournamentState>;
   /** Tournaments in any of `statuses`, newest first. */
   list(statuses: TournamentState['status'][], limit: number): Promise<TournamentState[]>;
+  /** The private tournament an invite code (without its dash) opens, if any. */
+  findByInviteCode(code: string): Promise<TournamentState | null>;
 }
 
 /** Tournaments in process memory, for tests. Hands out copies so callers can't change stored state. */
@@ -41,6 +43,11 @@ export class MemoryTournamentStore implements TournamentStore {
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit)
       .map(copy);
+  }
+
+  async findByInviteCode(code: string): Promise<TournamentState | null> {
+    const t = [...this.tournaments.values()].find(x => x.visibility === 'private' && x.inviteCode === code);
+    return t ? copy(t) : null;
   }
 }
 

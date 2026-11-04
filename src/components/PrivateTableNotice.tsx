@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { authHeaders } from '../utils/auth-headers';
+import { inviteDestination } from '../utils/invite-destination';
 
 /**
- * Shown in place of a private table to someone who isn't allowed in: they can enter the invite
- * code the host gave them, or go back to the dashboard.
+ * Shown in place of a private table or tournament to someone who isn't allowed in: they can enter
+ * the invite code the host or director gave them, or go back to the dashboard.
  */
-export default function PrivateTableNotice() {
+export default function PrivateTableNotice({ kind = 'table' }: { kind?: 'table' | 'tournament' }) {
+  const what = kind === 'tournament' ? 'tournament' : 'table';
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,8 +29,8 @@ export default function PrivateTableNotice() {
         setError(data?.error || 'That code didn\'t work');
         return;
       }
-      // A full load, so every part of the table page fetches again now that they're allowed in
-      window.location.href = `/game/${data.roomId}`;
+      // A full load, so every part of the page fetches again now that they're allowed in
+      window.location.href = inviteDestination(data) || '/dashboard';
     } catch {
       setError('That code didn\'t work');
     } finally {
@@ -39,9 +41,11 @@ export default function PrivateTableNotice() {
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-lg bg-white dark:bg-gray-800 shadow-md p-6 text-gray-900 dark:text-gray-100">
-        <h1 className="text-xl font-semibold mb-2">This table is private</h1>
+        <h1 className="text-xl font-semibold mb-2">This {what} is private</h1>
         <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-          Only people with the host&apos;s invite link can watch or play here.
+          {kind === 'tournament'
+            ? "Only people with the director's invite link can see or register for this tournament."
+            : "Only people with the host's invite link can watch or play here."}
           {signedIn ? ' If you have the invite code, enter it below.' : ' Sign in, then open the invite link again.'}
         </p>
         {signedIn && (

@@ -5,7 +5,7 @@ import { useRouter } from 'next/router';
 import { authHeaders } from '../../src/utils/auth-headers';
 import { downloadHandHistory } from '../../src/utils/download-hand-history';
 import MiniCard from '../../src/components/MiniCard';
-import { buildReplayFrames, describeAction } from '../../src/lib/shared/hand-replay';
+import { buildReplayFrames, describeAction, streetLabel } from '../../src/lib/shared/hand-replay';
 import type { HandRecord } from '../../src/types/hand-record';
 
 const money = (n: number) => `$${n}`;
@@ -170,7 +170,7 @@ export default function HandReplayPage() {
                   const newStreet = i === 0 || hand.actions[i - 1].stage !== a.stage;
                   return (
                     <React.Fragment key={i}>
-                      {newStreet && <li className="pt-1 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{a.stage}</li>}
+                      {newStreet && <li className="pt-1 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{streetLabel(a.stage, hand.variant)}</li>}
                       <li>
                         <button
                           onClick={() => { setPlaying(false); setFrameIndex(i + 1); }}

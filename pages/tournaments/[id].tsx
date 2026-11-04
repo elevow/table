@@ -9,6 +9,7 @@ import type { TournamentEvent } from '../../src/lib/tournament/tournament-events
 import { postTournamentAction } from '../../src/lib/tournament/client';
 import { useTournamentView } from '../../src/lib/tournament/use-tournament-view';
 import TournamentClock from '../../src/components/tournament/TournamentClock';
+import PrivateTableNotice from '../../src/components/PrivateTableNotice';
 import type { TournamentView } from '../../src/lib/tournament/tournament-view';
 
 const statusLabel: Record<TournamentView['status'], string> = {
@@ -34,7 +35,7 @@ export default function TournamentPage() {
       }
     } catch { /* notifications unavailable */ }
   };
-  const { view, error, reload, levelLeft, breakLeft } = useTournamentView(id, onEvents);
+  const { view, error, errorCode, reload, levelLeft, breakLeft } = useTournamentView(id, onEvents);
   viewRef.current = view;
   const [notifyState, setNotifyState] = useState<'unavailable' | 'default' | 'granted' | 'denied'>('unavailable');
   useEffect(() => {
@@ -59,6 +60,7 @@ export default function TournamentPage() {
     }
   };
 
+  if (!view && errorCode === 'PRIVATE_TOURNAMENT') return <PrivateTableNotice kind="tournament" />;
   if (!view) {
     return (
       <div className="container mx-auto p-6">
@@ -75,6 +77,9 @@ export default function TournamentPage() {
       <div className="flex flex-wrap items-baseline gap-3">
         <h1 className="text-2xl font-semibold">{view.name}</h1>
         <span className="text-sm px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200">{statusLabel[view.status]}</span>
+        {view.visibility === 'private' && (
+          <span className="text-sm px-2 py-0.5 rounded bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200">Private</span>
+        )}
         {error && <span role="alert" className="text-sm text-amber-700 dark:text-amber-400">Couldn&apos;t refresh: {error}</span>}
       </div>
 

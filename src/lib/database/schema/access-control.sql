@@ -174,8 +174,8 @@ SELECT r.id, p FROM r, unnest(ARRAY[
   'chat.send', 'chat.private', 'chat.delete_own', 'chat.delete_any', 'chat.moderate',
   'friends.use', 'profile.upload_avatar', 'avatar.moderate',
   'history.view_own', 'history.view_any', 'history.export', 'stats.hud', 'stats.view_others',
-  'rit.verify',
-  'admin.access', 'admin.rooms.view', 'admin.rooms.manage', 'admin.users.view', 'admin.users.ban',
+  'stats.delete_sessions', 'rit.verify',
+  'admin.access', 'admin.rooms.view', 'admin.rooms.manage', 'admin.users.view', 'admin.leaderboard', 'admin.users.ban',
   'admin.users.suspend', 'admin.users.reset_password', 'admin.chips.adjust', 'admin.alerts.view',
   'admin.alerts.resolve', 'admin.security.config', 'admin.audit_log.view', 'admin.announcements',
   'roles.view', 'roles.assign'

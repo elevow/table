@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 // Mock next/router
 jest.mock('next/router', () => ({
@@ -242,5 +242,42 @@ describe('CreateGameRoomPage - Rebuy Amount Field', () => {
       fireEvent.change(rebuyAmountInput, { target: { value: '50' } });
       expect(rebuyAmountInput.value).toBe('50');
     }
+  });
+});
+
+describe('CreateGameRoomPage - permissions', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    Object.defineProperty(window, 'localStorage', {
+      value: { getItem: jest.fn(() => 'test-token'), setItem: jest.fn(), removeItem: jest.fn() },
+      writable: true,
+    });
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  const withPermissions = (permissions: string[]) => {
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ permissions }) })) as any;
+  };
+
+  it('turns away users without room.create, who can reach the page by its URL', async () => {
+    withPermissions(['table.join', 'game.play']);
+    render(<CreateGameRoomPage />);
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Your account can\'t create rooms');
+    expect(screen.queryByText('Who can join')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Back to the dashboard' }).getAttribute('href')).toBe('/dashboard');
+  });
+
+  it('shows the form to users with room.create', async () => {
+    withPermissions(['room.create', 'room.create_private']);
+    render(<CreateGameRoomPage />);
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(screen.getByText('Who can join')).toBeTruthy();
+    expect(screen.queryByText(/Your account can't create rooms/)).toBeNull();
   });
 });

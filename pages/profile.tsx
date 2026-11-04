@@ -17,6 +17,19 @@ const Profile: NextPage = () => {
   // User authentication state
   const [userId, setUserId] = useState<string>('');
   const { avatarData, refreshAvatar, updateAvatarData } = useUserAvatar(userId || 'me');
+  // Shown until permissions load (or if they can't), since the API refuses room.create anyway
+  const [canCreateRoom, setCanCreateRoom] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    fetch('/api/auth/check-admin', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data) setCanCreateRoom((data.permissions || []).includes('room.create'));
+      })
+      .catch(() => {});
+  }, []);
 
   // Get authenticated user ID on component mount
   useEffect(() => {
@@ -276,19 +289,14 @@ const Profile: NextPage = () => {
                     <span className="text-gray-900 dark:text-gray-100">Return to Dashboard</span>
                   </button>
                   
-                  <button
-                    onClick={() => router.push('/game/create')}
-                    className="w-full text-left px-4 py-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    <span className="text-gray-900 dark:text-gray-100">Create New Game</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => router.push('/game/join')}
-                    className="w-full text-left px-4 py-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    <span className="text-gray-900 dark:text-gray-100">Join Game</span>
-                  </button>
+                  {canCreateRoom && (
+                    <button
+                      onClick={() => router.push('/game/create')}
+                      className="w-full text-left px-4 py-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                    >
+                      <span className="text-gray-900 dark:text-gray-100">Create New Game</span>
+                    </button>
+                  )}
                 </div>
               </div>
 

@@ -1628,7 +1628,7 @@ export default function GamePage() {
       <React.Fragment key={seatNumber}>
         {/* Main seat */}
         <div
-          className={`absolute w-16 h-16 max-sm:w-12 max-sm:h-12 rounded-full border-2 flex flex-col items-center justify-center text-white text-xs font-semibold relative transition-colors ${position} ${
+          className={`absolute w-16 h-16 max-sm:w-12 max-sm:h-12 rounded-full border-2 flex flex-col items-center justify-center text-white text-xs font-semibold relative transition-colors ${position} ${isCurrentPlayer && actionPanelOpen ? 'max-sm:invisible' : ''} ${
             isEmpty
               ? canClaim
                 ? 'border-dashed border-white/30 bg-black/20 text-white/70 hover:border-emerald-300/80 hover:bg-emerald-400/10 hover:text-white cursor-pointer'
@@ -2603,7 +2603,7 @@ export default function GamePage() {
           </div>
         </div>
       </header>
-      <div className="mx-auto max-w-7xl px-4 pt-2 pb-6 sm:py-8">
+      <div className="mx-auto max-w-7xl px-4 pt-2 pb-6 sm:py-8 lg:pt-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-flow-row-dense gap-6">
           {seatNotice && (
             <div className="lg:col-span-3 flex items-center justify-between gap-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg p-3 text-sm text-blue-900 dark:text-blue-100" role="status">
@@ -2733,7 +2733,7 @@ export default function GamePage() {
             </div>
           )}
           {/* Poker Table - Green Felt Design; on wide screens the reaction row sits beside your seat */}
-          <div className="lg:col-span-2 relative lg:pb-24">
+          <div className="lg:col-span-2 relative lg:pb-20">
             {/* Green felt table surface */}
             <div className="table-rail relative rounded-full mx-auto max-sm:mt-7 max-sm:mb-20"
                  style={{
@@ -2866,13 +2866,29 @@ export default function GamePage() {
                     </div>
                   ))}
                 </div>
+                {/* The pot is on the felt, so phones skip this line to keep the sheet short */}
+                <div className="ml-auto flex flex-wrap justify-end gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400 tabular-nums max-sm:hidden">
+                  <span>Current bet <span className="font-semibold text-gray-800 dark:text-gray-200">{showStackInBB
+                    ? formatChips(pokerGameState.currentBet || 0, pokerGameState?.bigBlind || null, true)
+                    : `$${pokerGameState.currentBet || 0}`}</span></span>
+                  <span>Pot <span className="font-semibold text-gray-800 dark:text-gray-200">{showStackInBB
+                    ? formatChips(pokerGameState.pot || 0, pokerGameState?.bigBlind || null, true)
+                    : `$${pokerGameState.pot || 0}`}</span></span>
+                  <span>Your stack <span className="font-semibold text-gray-800 dark:text-gray-200">{(() => {
+                    const myStack = pokerGameState.players.find((p: any) => p.id === playerId)?.stack || 0;
+                    return showStackInBB
+                      ? formatChips(myStack, pokerGameState?.bigBlind || null, true)
+                      : `$${myStack}`;
+                  })()}</span></span>
+                </div>
                 <button
                   type="button"
                   onClick={() => shortcuts.setHelpOpen(true)}
-                  className="hidden sm:inline text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  className="hidden sm:inline-flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 text-xs text-gray-500 hover:text-gray-700 dark:border-white/10 dark:text-gray-400 dark:hover:text-gray-200"
                   title="Show keyboard shortcuts"
+                  aria-label="Show keyboard shortcuts"
                 >
-                  Keyboard: <kbd className="font-mono">?</kbd>
+                  <kbd className="font-mono">?</kbd>
                 </button>
               </div>
               {shortcuts.allInArmed && (
@@ -3221,21 +3237,6 @@ export default function GamePage() {
               </div>
               )}
 
-              {/* The pot is on the felt, so phones skip this line to keep the panel short */}
-              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400 tabular-nums max-sm:hidden">
-                <span>Current bet <span className="font-semibold text-gray-800 dark:text-gray-200">{showStackInBB
-                  ? formatChips(pokerGameState.currentBet || 0, pokerGameState?.bigBlind || null, true)
-                  : `$${pokerGameState.currentBet || 0}`}</span></span>
-                <span>Pot <span className="font-semibold text-gray-800 dark:text-gray-200">{showStackInBB
-                  ? formatChips(pokerGameState.pot || 0, pokerGameState?.bigBlind || null, true)
-                  : `$${pokerGameState.pot || 0}`}</span></span>
-                <span>Your stack <span className="font-semibold text-gray-800 dark:text-gray-200">{(() => {
-                  const myStack = pokerGameState.players.find((p: any) => p.id === playerId)?.stack || 0;
-                  return showStackInBB
-                    ? formatChips(myStack, pokerGameState?.bigBlind || null, true)
-                    : `$${myStack}`;
-                })()}</span></span>
-              </div>
             </div>
           )}
 

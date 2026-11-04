@@ -15,7 +15,7 @@ interface Props {
 export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMuted }: Props) {
   if (muted) {
     return (
-      <div className="mt-28 sm:mt-36 lg:mt-0 lg:absolute lg:right-0 lg:bottom-6 flex justify-center">
+      <div className="mt-28 sm:mt-36 lg:mt-0 lg:absolute lg:left-[calc(50%+84px)] lg:top-[384px] flex justify-center">
         <button
           type="button"
           onClick={() => onToggleMuted(false)}
@@ -30,7 +30,7 @@ export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMu
   }
   return (
     // The top margin clears our own seat and its name plate, which hang below the felt
-    <div className="mt-28 sm:mt-36 lg:mt-0 lg:absolute lg:right-0 lg:bottom-6 lg:max-w-[340px] lg:justify-end flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Table reactions">
+    <div className="mt-28 sm:mt-36 lg:mt-0 lg:absolute lg:left-[calc(50%+84px)] lg:top-[384px] lg:flex-nowrap lg:gap-1.5 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Table reactions">
       {TABLE_REACTIONS.map(emote => (
         <button
           key={emote}
@@ -39,7 +39,7 @@ export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMu
           disabled={coolingDown}
           aria-label={`React with ${emote}`}
           title={`React with ${emote}`}
-          className="min-w-[40px] min-h-[40px] rounded-full border border-gray-300 bg-white px-2 text-lg leading-none text-gray-900 shadow-sm hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:hover:bg-white/[0.08]"
+          className="min-w-[40px] min-h-[40px] lg:min-w-[34px] lg:min-h-[34px] lg:text-base rounded-full border border-gray-300 bg-white px-2 text-lg leading-none text-gray-900 shadow-sm hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:hover:bg-white/[0.08]"
         >
           {emote === 'GG' ? <span className="text-sm font-bold">GG</span> : emote}
         </button>
@@ -50,7 +50,7 @@ export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMu
         aria-pressed={true}
         title="Hide reactions at this table"
         aria-label="Hide reactions"
-        className="flex min-w-[40px] min-h-[40px] items-center justify-center rounded-full border border-dashed border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:border-white/15 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200"
+        className="flex min-w-[40px] min-h-[40px] lg:min-w-[34px] lg:min-h-[34px] items-center justify-center rounded-full border border-dashed border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:border-white/15 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200"
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M17.9 17.9A10 10 0 0112 20c-7 0-10-8-10-8a18 18 0 014.1-5.9M9.9 4.2A9 9 0 0112 4c7 0 10 8 10 8a18 18 0 01-2.2 3.3M14.1 14.1a3 3 0 01-4.2-4.2M2 2l20 20" />

@@ -57,7 +57,7 @@ export default function ProfileDisplaySettings() {
           <label key={key} className="flex cursor-pointer items-center justify-between gap-4 px-5 py-3.5 text-sm font-medium text-gray-800 dark:text-gray-200">
             {LABELS[key]}
             <input type="checkbox" className="peer sr-only" checked={settings[key]} disabled={!loaded} onChange={e => change(key, e.target.checked)} />
-            <span aria-hidden="true" className="relative h-5 w-9 shrink-0 rounded-full bg-gray-300 transition-colors peer-checked:bg-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/60 peer-disabled:opacity-50 dark:bg-white/15 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-4" />
+            <span aria-hidden="true" className="relative h-5 w-9 shrink-0 rounded-full bg-gray-300 transition-colors peer-checked:bg-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/60 peer-disabled:opacity-50 dark:bg-white/25 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-4" />
           </label>
         ))}
       </div>

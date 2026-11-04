@@ -220,9 +220,9 @@ export default function LeaderboardPage() {
             return (
               <div
                 key={a.type}
-                className={`min-h-[92px] flex items-center ${when ? 'surface p-4' : 'surface-muted p-4 border-dashed'}`}
+                className={`min-h-[92px] ${when ? 'surface p-4' : 'surface-muted p-4 border-dashed'}`}
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-start gap-4">
                   <span className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-2xl ${when ? 'bg-emerald-400/10' : 'bg-gray-200/60 dark:bg-white/[0.05]'}`} aria-hidden="true">
                     <span className={when ? '' : 'grayscale-[50%] opacity-75'}>{a.icon}</span>
                     {!when && (

@@ -410,7 +410,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
           </div>
         ))}
         {messages.length === 0 && (
-          <div className="flex min-h-[100px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">No messages yet.</div>
+          <div className="flex min-h-[64px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">No messages yet.</div>
         )}
         {hiddenCount > 0 && (
           <div className="text-xs text-gray-500 dark:text-gray-400">

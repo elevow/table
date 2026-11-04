@@ -101,7 +101,7 @@ export default function TournamentLobbyPage() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-400/10 text-amber-500 dark:text-amber-300">
             <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM7 6H4v1a3 3 0 003 3M17 6h3v1a3 3 0 01-3 3" /></svg>
           </div>
-          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">No {filter} tournaments</p>
+          <p className="text-base font-semibold text-gray-900 dark:text-white">No {filter} tournaments</p>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {filter === 'upcoming' ? 'When one is scheduled, it will show up here for registration.' : 'Check the other tabs for more events.'}
           </p>

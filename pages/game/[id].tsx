@@ -1607,7 +1607,7 @@ export default function GamePage() {
     // Place the current player's cards centered near the bottom of the felt,
     // lowered to just touch the top of the avatar positioned below the table.
     if (!currentPlayerSeat) return 'bottom-6 left-1/2 transform -translate-x-1/2';
-    return 'bottom-2 left-1/2 transform -translate-x-1/2';
+    return 'bottom-6 max-sm:bottom-7 left-1/2 transform -translate-x-1/2';
   };
 
   // Render seat component with adjacent player info
@@ -1695,7 +1695,7 @@ export default function GamePage() {
                 };
                 return (
                   <div
-                    className={`absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full text-[10px] leading-none font-bold border shadow-md ${styleMap[token]}`}
+                    className={`absolute -top-1.5 -right-1.5 z-30 px-1.5 py-0.5 rounded-full text-[10px] leading-none font-bold border shadow-md ${styleMap[token]}`}
                     title={token === 'D' ? 'Dealer' : token === 'SB' ? 'Small Blind' : 'Big Blind'}
                     aria-label={token === 'D' ? 'Dealer' : token === 'SB' ? 'Small Blind' : 'Big Blind'}
                     style={{ pointerEvents: 'none' }}
@@ -1776,7 +1776,7 @@ export default function GamePage() {
             const leftPercent = parseFloat(leftStr.replace('%', ''));
             const topPercent = parseFloat(topStr.replace('%', ''));
             // Move cards toward the table center (opposite side of avatar)
-            const offset = isNarrowScreen ? 36 : 46;
+            const offset = isNarrowScreen ? 42 : 46;
             const dx = leftPercent >= 50 ? -offset : offset;
             const dy = topPercent >= 50 ? -offset : offset;
             cardStyle = {
@@ -2496,7 +2496,7 @@ export default function GamePage() {
                 title={`Stand up from seat ${currentPlayerSeat}`}
                 aria-label="Stand up from seat"
               >
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg className="w-4 h-4 flex-shrink-0 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                 </svg>
                 <span className="whitespace-nowrap max-sm:sr-only">Stand up</span>
@@ -2595,7 +2595,7 @@ export default function GamePage() {
               title="Leave this game and return to dashboard"
               aria-label="Leave game"
             >
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <svg className="w-4 h-4 flex-shrink-0 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
               <span className="whitespace-nowrap max-sm:sr-only">Leave</span>
@@ -3681,7 +3681,7 @@ export default function GamePage() {
 
           {/* Right column: timer and statistics, then host controls, session and notes */}
           <div className="flex flex-col gap-4 lg:row-span-4">
-          <div className="surface p-4">
+          <div className="surface p-5">
             {id && playerId && (
               <CombinedTimerStats 
                 tableId={String(id)} 

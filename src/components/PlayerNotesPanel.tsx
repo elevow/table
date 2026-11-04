@@ -79,8 +79,8 @@ export default function PlayerNotesPanel({ players, notes, onNotesChange }: Prop
   if (players.length === 0) return null;
 
   return (
-    <div className="surface p-4">
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Player notes</h3>
+    <div className="surface p-5">
+      <h3 className="section-title mb-1">Player notes</h3>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Private to you. Tags show VPIP/PFR · hands played together.</p>
       <ul className="space-y-1">
         {players.map(p => {

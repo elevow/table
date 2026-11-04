@@ -37,10 +37,9 @@ function TablesList({ title, empty, tables, showHost }: { title: string; empty: 
                     <span className="truncate text-sm font-medium text-gray-900 dark:text-white">{t.name}</span>
                     {t.isHost && <span className="badge badge-amber">Host</span>}
                   </div>
-                  <div className="mt-0.5 flex flex-wrap gap-x-1.5 text-xs text-gray-500 dark:text-gray-400 tabular-nums">
-                    <span className="whitespace-nowrap">{t.game}</span>
-                    <span className="whitespace-nowrap">· {stakes(t)}</span>
-                    <span className="whitespace-nowrap">· {t.seated}/{t.maxPlayers} seated</span>
+                  <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+                    <div className="truncate">{t.game} · {stakes(t)}</div>
+                    <div>{t.seated}/{t.maxPlayers} seated</div>
                   </div>
                 </div>
                 <button

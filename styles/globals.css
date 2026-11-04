@@ -114,7 +114,7 @@
 		--radio-ring: 14 18 24;
 	}
 	.switch {
-		@apply relative h-5 w-9 shrink-0 cursor-pointer appearance-none rounded-full bg-gray-300 transition-colors dark:bg-white/15;
+		@apply relative h-5 w-9 shrink-0 cursor-pointer appearance-none rounded-full bg-gray-300 transition-colors dark:bg-white/25;
 		@apply checked:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50;
 	}
 	.switch::before {
@@ -187,7 +187,7 @@
 		@apply px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400;
 	}
 	.data-table tbody td {
-		@apply px-4 py-3 border-t border-gray-100 dark:border-white/[0.05];
+		@apply px-4 py-2.5 border-t border-gray-100 dark:border-white/[0.05];
 	}
 	/* Outer columns line up with the 24px padding of the card around the table */
 	.data-table th:first-child, .data-table td:first-child { @apply pl-6; }

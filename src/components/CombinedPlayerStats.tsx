@@ -244,7 +244,10 @@ function CombinedPlayerStats() {
       )}
       
       {combinedStats.totalSessions === 0 ? (
-        <div className="text-center py-8">
+        <div className="text-center py-4">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/[0.05] dark:text-gray-500">
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-6" /></svg>
+          </div>
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">No sessions yet</p>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Play a few hands and your numbers will show up here.</p>
         </div>

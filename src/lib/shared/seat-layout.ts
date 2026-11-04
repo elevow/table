@@ -32,3 +32,24 @@ export function narrowInfoBoxStyle(seat?: CSSProperties, gapPx: number = NARROW_
     pointerEvents: 'none',
   };
 }
+
+/**
+ * Where a seat's name plate goes: centred just under the avatar, the same for every seat, with
+ * plates near the left or right edge shifted inwards so they stay on screen. The seat's cards sit
+ * beside the avatar (toward the middle), so the plate never covers them.
+ */
+export function seatPlateStyle(seat: CSSProperties | undefined, gapPx: number): CSSProperties {
+  const left = percent(seat?.left as string | number | undefined);
+  const top = percent(seat?.top as string | number | undefined);
+  if (left === null || top === null) {
+    return { position: 'absolute', left: '50%', top: '100%', transform: 'translate(-50%, 4px)', pointerEvents: 'none' };
+  }
+  const shiftX = left < 15 ? '-25%' : left > 85 ? '-75%' : '-50%';
+  return {
+    position: 'absolute',
+    left: `${left}%`,
+    top: `calc(${top}% + ${gapPx}px)`,
+    transform: `translate(${shiftX}, 0)`,
+    pointerEvents: 'none',
+  };
+}

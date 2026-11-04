@@ -50,7 +50,7 @@ import { useTableReactions } from '../../src/hooks/useTableReactions';
 import TableChipAnimations from '../../src/components/TableChipAnimations';
 import MobileCollapsible from '../../src/components/MobileCollapsible';
 import { useMediaQuery, NARROW_SCREEN_QUERY } from '../../src/hooks/useMediaQuery';
-import { narrowInfoBoxStyle } from '../../src/lib/shared/seat-layout';
+import { seatPlateStyle } from '../../src/lib/shared/seat-layout';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -1712,8 +1712,8 @@ export default function GamePage() {
         {!isEmpty && assignment && (
           <div
             className="absolute z-10"
-            // Every placard sits beside its seat on the side away from the felt, so it never covers avatars or cards
-            style={narrowInfoBoxStyle(style, isNarrowScreen ? 34 : 44)}
+            // Every seat's plate sits centred under its avatar; the seat's cards sit beside the avatar instead
+            style={seatPlateStyle(style, isNarrowScreen ? 30 : 38)}
           >
             <div className={`min-w-[96px] max-w-[150px] px-3 py-1.5 max-sm:px-2 max-sm:py-1 max-sm:text-[10px] max-sm:min-w-[84px] max-sm:max-w-[120px] rounded-xl shadow-card border backdrop-blur-sm text-xs bg-gray-950/85 text-gray-100 ${
               isCurrentPlayer ? 'border-emerald-400/40' : 'border-white/10'
@@ -1731,7 +1731,7 @@ export default function GamePage() {
               {pokerGameState && (() => {
                 const gamePlayer = pokerGameState.players?.find((p: any) => p.id === assignment.playerId);
                 return gamePlayer && (
-                  <div className="text-xs max-sm:text-[10px] mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
+                  <div className="text-xs max-sm:text-[10px] mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis empty:hidden">
                     {gamePlayer.isSittingOut && (
                       <span className="text-gray-400 italic">{gamePlayer.notArrived ? 'Not here yet (posting blinds)' : pokerGameState.tournamentRules ? 'Away (posting blinds)' : 'Sitting out'}</span>
                     )}
@@ -1749,7 +1749,7 @@ export default function GamePage() {
                         }
                       </span>
                     )}
-                    <span className="ml-1"><TimeBankBadge count={gamePlayer.timeBanks} seconds={pokerGameState?.timeBankSeconds} compact /></span>
+                    {(gamePlayer.timeBanks ?? 0) > 0 && <span className="ml-1"><TimeBankBadge count={gamePlayer.timeBanks} seconds={pokerGameState?.timeBankSeconds} compact /></span>}
                     {turnClock.activePlayer === gamePlayer.id && <TurnClockBar clock={turnClock} compact />}
                   </div>
                 );
@@ -1776,9 +1776,9 @@ export default function GamePage() {
             const leftPercent = parseFloat(leftStr.replace('%', ''));
             const topPercent = parseFloat(topStr.replace('%', ''));
             // Move cards toward the table center (opposite side of avatar)
-            const offset = isNarrowScreen ? 42 : 46;
+            const offset = isNarrowScreen ? 56 : 58;
             const dx = leftPercent >= 50 ? -offset : offset;
-            const dy = topPercent >= 50 ? -offset : offset;
+            const dy = topPercent >= 50 ? -4 : 4;
             cardStyle = {
               position: 'absolute',
               left: `calc(${leftStr} + ${dx}px)`,
@@ -2911,7 +2911,7 @@ export default function GamePage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => handlePokerAction('bring-in')}
-                      className="btn btn-lg act-call max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                      className="btn btn-lg act-call max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base sm:w-[calc(30%-0.375rem)]"
                     >
                       Bring in {showStackInBB ? formatChips(bringInAmount, pokerGameState?.bigBlind || null, true) : `$${bringInAmount}`}
                     </button>
@@ -2929,7 +2929,7 @@ export default function GamePage() {
               <div className="relative flex flex-wrap gap-2">
                 <button
                   onClick={handleFold}
-                  className="btn btn-lg act-fold max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                  className="btn btn-lg act-fold max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base sm:w-[calc(30%-0.375rem)]"
                 >
                   Fold
                 </button>
@@ -2937,14 +2937,14 @@ export default function GamePage() {
                 {myOwed === 0 ? (
                   <button
                     onClick={handleCheck}
-                    className="btn btn-lg act-neutral max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                    className="btn btn-lg act-neutral max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base sm:w-[calc(30%-0.375rem)]"
                   >
                     Check
                   </button>
                 ) : (
                   <button
                     onClick={handleCall}
-                    className="btn btn-lg act-call max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                    className="btn btn-lg act-call max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base sm:w-[calc(30%-0.375rem)]"
                   >
                     Call {showStackInBB ? formatChips(myCallAmount, pokerGameState?.bigBlind || null, true) : `$${myCallAmount}`}{myCallIsAllIn ? ' (all-in)' : ''}
                   </button>
@@ -3006,7 +3006,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:min-w-[160px]">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:w-[40%]">
                                     {label}
                                   </button>
                                 );
@@ -3071,7 +3071,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:min-w-[160px]">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:w-[40%]">
                                     {label}
                                   </button>
                                 );
@@ -3142,7 +3142,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:min-w-[160px]">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:w-[40%]">
                                     {label}
                                   </button>
                                 );
@@ -3205,7 +3205,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:min-w-[160px]">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:w-[40%]">
                                     {label}
                                   </button>
                                 );

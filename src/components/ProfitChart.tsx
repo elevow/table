@@ -102,6 +102,14 @@ export default function ProfitChart({ points }: Props) {
         </text>
         {/* Above zero is green, below zero is red: the same shapes drawn twice, each clipped to its side */}
         <defs>
+          <linearGradient id="profit-above-fill" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1={PAD.top} y2={geo.y(0)}>
+            <stop offset="0%" stopColor="rgb(16 185 129)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="rgb(16 185 129)" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="profit-below-fill" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1={geo.y(0)} y2={H - PAD.bottom}>
+            <stop offset="0%" stopColor="rgb(239 68 68)" stopOpacity="0" />
+            <stop offset="100%" stopColor="rgb(239 68 68)" stopOpacity="0.28" />
+          </linearGradient>
           <clipPath id="profit-above"><rect x={0} y={0} width={W} height={geo.y(0)} /></clipPath>
           <clipPath id="profit-below"><rect x={0} y={geo.y(0)} width={W} height={H} /></clipPath>
         </defs>
@@ -109,8 +117,7 @@ export default function ProfitChart({ points }: Props) {
           <g key={side} clipPath={`url(#profit-${side})`}>
             <path
               d={`${geo.path} L${geo.x(points.length)},${geo.y(0)} L${geo.x(0)},${geo.y(0)} Z`}
-              fill={side === 'above' ? 'rgb(16 185 129)' : 'rgb(248 113 113)'}
-              fillOpacity={0.14}
+              fill={`url(#profit-${side}-fill)`}
             />
             <path
               d={geo.path}

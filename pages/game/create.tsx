@@ -384,7 +384,7 @@ export default function CreateGameRoomPage() {
               value={buyIn}
               onChange={e => setBuyIn(Number(e.target.value) || 1000)}
             />
-            <p className="hint">Chips a player starts with when sitting down for the first time.</p>
+            <p className="hint">Starting chips for each new seat.</p>
           </div>
         </div>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -403,7 +403,7 @@ export default function CreateGameRoomPage() {
                 <option key={idx} value={idx}>{idx}</option>
               ))}
             </select>
-            <p className="hint">Set 0-10 or leave as Unlimited for cash-style games.</p>
+            <p className="hint">0–10, or Unlimited for cash games.</p>
           </div>
           {numberOfRebuys !== 0 && (
             <div>
@@ -420,7 +420,7 @@ export default function CreateGameRoomPage() {
                   setRebuyAmount(Number.isFinite(parsed) && parsed > 0 ? parsed : 20);
                 }}
               />
-              <p className="hint">Chips a player receives when rebuying.</p>
+              <p className="hint">Chips added on each rebuy.</p>
             </div>
           )}
         </div>
@@ -442,7 +442,7 @@ export default function CreateGameRoomPage() {
               value={turnTimeSeconds}
               onChange={e => setTurnTimeSeconds(Number(e.target.value))}
             />
-            <p className="hint">How long each player has to act ({MIN_TURN_SECONDS}-{MAX_TURN_SECONDS}s).</p>
+            <p className="hint">Per decision, {MIN_TURN_SECONDS}–{MAX_TURN_SECONDS}s.</p>
           </div>
           <div>
             <label className="label" htmlFor="time-banks">Time banks per player</label>
@@ -455,7 +455,7 @@ export default function CreateGameRoomPage() {
               value={timeBanks}
               onChange={e => setTimeBanks(Number(e.target.value))}
             />
-            <p className="hint">Extra time a player can use once their turn time runs out; each one is used up.</p>
+            <p className="hint">Used once the turn clock runs out.</p>
           </div>
           <div>
             <label className="label" htmlFor="time-bank-seconds">Time bank length (seconds)</label>
@@ -468,7 +468,7 @@ export default function CreateGameRoomPage() {
               value={timeBankSeconds}
               onChange={e => setTimeBankSeconds(Number(e.target.value))}
             />
-            <p className="hint">How much extra time each time bank gives.</p>
+            <p className="hint">Extra seconds per time bank.</p>
           </div>
         </div>
         </section>
@@ -495,7 +495,7 @@ export default function CreateGameRoomPage() {
               value={ante}
               onChange={e => setAnte(Math.max(0, parseFloat(e.target.value || '0') || 0))}
             />
-            <p className="hint">Every player posts this before each Hold&apos;em or Omaha hand. 0 for no antes.</p>
+            <p className="hint">Posted by everyone each hand. 0 for none.</p>
           </div>
           <div>
             <label className="label">7-2 bounty (chips)</label>
@@ -507,7 +507,7 @@ export default function CreateGameRoomPage() {
               value={sevenDeuceBounty}
               onChange={e => setSevenDeuceBounty(Math.max(0, parseFloat(e.target.value || '0') || 0))}
             />
-            <p className="hint">Hold&apos;em only. Win a pot with 7-2 offsuit and show it, and every other player in the hand pays you this. 0 for off.</p>
+            <p className="hint">Paid to whoever wins with 7-2 offsuit. 0 for off.</p>
           </div>
         </div>
         <div className="mt-5 border-t border-gray-100 pt-5 dark:border-white/[0.06]">

@@ -320,11 +320,11 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
         </div>
 
         {/* Settings button placed below Session Statistics */}
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3">
           <button
             type="button"
             onClick={onShowSettings}
-            className="btn btn-secondary btn-sm"
+            className="link text-sm"
           >
             Show settings
           </button>

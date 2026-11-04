@@ -1,4 +1,4 @@
-import { NARROW_INFO_GAP_PX, narrowInfoBoxStyle } from '../seat-layout';
+import { NARROW_INFO_GAP_PX, narrowInfoBoxStyle, seatPlateStyle } from '../seat-layout';
 
 describe('narrowInfoBoxStyle', () => {
   it('puts the box above seats in the top half', () => {
@@ -25,5 +25,21 @@ describe('narrowInfoBoxStyle', () => {
   it('falls back to under the seat without coordinates', () => {
     expect(narrowInfoBoxStyle(undefined)).toMatchObject({ left: '50%', top: '100%' });
     expect(narrowInfoBoxStyle({ left: 'auto', top: '10%' })).toMatchObject({ left: '50%', top: '100%' });
+  });
+});
+
+describe('seatPlateStyle', () => {
+  it('puts the plate under the avatar for every seat', () => {
+    expect(seatPlateStyle({ left: '50%', top: '2%' }, 40)).toMatchObject({ left: '50%', top: 'calc(2% + 40px)', transform: 'translate(-50%, 0)' });
+    expect(seatPlateStyle({ left: '50%', top: '104%' }, 40)).toMatchObject({ top: 'calc(104% + 40px)' });
+  });
+
+  it('keeps plates near the edges on screen', () => {
+    expect(seatPlateStyle({ left: '5%', top: '26%' }, 40).transform).toBe('translate(-25%, 0)');
+    expect(seatPlateStyle({ left: '95%', top: '26%' }, 40).transform).toBe('translate(-75%, 0)');
+  });
+
+  it('falls back to below the seat without coordinates', () => {
+    expect(seatPlateStyle(undefined, 40)).toMatchObject({ left: '50%', top: '100%' });
   });
 });

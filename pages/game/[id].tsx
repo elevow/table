@@ -2459,7 +2459,7 @@ export default function GamePage() {
       )}
       {/* Table bar: where you are on the left, what you can do on the right */}
       <header className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/80 backdrop-blur-md dark:border-white/[0.06] dark:bg-gray-900/75">
-        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2.5 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+        <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-2 lg:py-2.5 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <Link href="/dashboard" className="btn btn-ghost btn-sm !px-2 shrink-0" aria-label="Back to the lobby" title="Back to the lobby">
               <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M12.8 5.2a1 1 0 010 1.4L9.4 10l3.4 3.4a1 1 0 01-1.4 1.4l-4.1-4.1a1 1 0 010-1.4l4.1-4.1a1 1 0 011.4 0z" clipRule="evenodd" /></svg>
@@ -2805,7 +2805,7 @@ export default function GamePage() {
                     // Show ALL of my cards face-up (no face-down backs for the current player)
                     const all = [...down, ...up];
                     return (
-                      <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
+                      <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''} ${actionPanelOpen ? 'max-sm:hidden' : ''}`}>
                         {all.map((card: any, i: number) => (
                           <div key={`me-card-${i}`} style={{ animationDelay: `${Math.min(i, 2) * 80}ms` }} className="table-card-deal playing-card text-sm w-10 h-14 rounded-lg">
                             <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
@@ -2822,9 +2822,9 @@ export default function GamePage() {
                   const holes = getCurrentPlayerCards();
                   if (!holes || holes.length === 0) return null;
                   return (
-                    <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''}`}>
+                    <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''} ${actionPanelOpen ? 'max-sm:hidden' : ''}`}>
                       {holes.map((card: any, index: number) => (
-                        <div key={index} style={{ animationDelay: `${index * 80}ms` }} className="table-card-deal playing-card text-base max-sm:text-sm w-11 h-16 max-sm:w-9 max-sm:h-[52px] rounded-lg gap-0.5 hover:-translate-y-1 transition-transform">
+                        <div key={index} style={{ animationDelay: `${index * 80}ms` }} className="table-card-deal playing-card text-[15px] max-sm:text-sm w-10 h-[58px] max-sm:w-9 max-sm:h-[52px] rounded-lg gap-0.5 ring-2 ring-emerald-400/60">
                           <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                           <div className={suitColorClass(card.suit)}>
                             {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
@@ -2926,7 +2926,7 @@ export default function GamePage() {
                   </div>
                 </div>
               ) : (
-              <div className="flex flex-wrap gap-2">
+              <div className="relative flex flex-wrap gap-2">
                 <button
                   onClick={handleFold}
                   className="btn btn-lg act-fold max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
@@ -2953,7 +2953,7 @@ export default function GamePage() {
                 {/* No-Limit betting controls */}
                 {((pokerGameState?.bettingMode || 'no-limit') === 'no-limit') && (
                   (pokerGameState.currentBet || 0) === 0 ? (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full sm:order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium max-sm:sr-only">Bet amount</div>
                       {(() => {
                         const { min, max } = getBetBounds();
@@ -3006,7 +3006,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:min-w-[160px]">
                                     {label}
                                   </button>
                                 );
@@ -3017,7 +3017,7 @@ export default function GamePage() {
                       })()}
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full sm:order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Raise to</div>
                       {(() => {
                         const { min, max } = getRaiseBounds();
@@ -3071,7 +3071,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:min-w-[160px]">
                                     {label}
                                   </button>
                                 );
@@ -3091,7 +3091,7 @@ export default function GamePage() {
                 {/* Pot-Limit betting controls */}
                 {((pokerGameState?.bettingMode || 'no-limit') === 'pot-limit') && (
                   (pokerGameState.currentBet || 0) === 0 ? (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full sm:order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Bet amount (Pot-Limit)</div>
                       {(() => {
                         const { min, max } = getPotLimitBetBounds();
@@ -3142,7 +3142,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Bet ${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`}`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:min-w-[160px]">
                                     {label}
                                   </button>
                                 );
@@ -3153,7 +3153,7 @@ export default function GamePage() {
                       })()}
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full sm:order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Raise to (Pot-Limit)</div>
                       {(() => {
                         const { min, max } = getPotLimitRaiseBounds();
@@ -3205,7 +3205,7 @@ export default function GamePage() {
                                 const bbVal = pokerGameState?.bigBlind || null;
                                 const label = `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
                                 return (
-                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise">
+                                  <button onClick={onClick} data-shortcut-submit="true" className="max-sm:w-full max-sm:min-h-[48px] ml-auto btn btn-lg act-raise sm:absolute sm:bottom-0 sm:right-0 sm:min-w-[160px]">
                                     {label}
                                   </button>
                                 );

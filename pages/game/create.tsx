@@ -275,53 +275,6 @@ export default function CreateGameRoomPage() {
           </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="label">Max players</label>
-            <input
-              type="number"
-              className="input"
-              min={2}
-              max={9}
-              value={maxPlayers}
-              onChange={e => setMaxPlayers(parseInt(e.target.value || '0', 10))}
-            />
-          </div>
-          <div>
-            <label className="label">Small blind</label>
-            <input
-              type="number"
-              className="input"
-              min={0.01}
-              step={0.01}
-              value={smallBlind}
-              onChange={e => {
-                const newSmallBlind = parseFloat(e.target.value || '0');
-                setSmallBlind(newSmallBlind);
-                if (!bigBlindManuallyUpdated) {
-                  setBigBlind(Number((newSmallBlind * 2).toFixed(2)));
-                }
-              }}
-            />
-          </div>
-          <div>
-            <label className="label">Big blind</label>
-            <input
-              type="number"
-              className="input"
-              min={Math.max(0.02, Number((smallBlind * 2).toFixed(2)))}
-              step={0.01}
-              value={bigBlind}
-              onChange={e => {
-                const newBigBlind = parseFloat(e.target.value || '0');
-                if (newBigBlind !== bigBlind) {
-                  setBigBlindManuallyUpdated(true);
-                }
-                setBigBlind(newBigBlind);
-              }}
-            />
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
             <label className="label">Variant</label>
             <select
               className="input"
@@ -375,6 +328,67 @@ export default function CreateGameRoomPage() {
             )}
           </div>
           <div>
+            <label className="label">Max players</label>
+            <input
+              type="number"
+              className="input"
+              min={2}
+              max={9}
+              value={maxPlayers}
+              onChange={e => setMaxPlayers(parseInt(e.target.value || '0', 10))}
+            />
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="label">Small blind</label>
+            <input
+              type="number"
+              className="input"
+              min={0.01}
+              step={0.01}
+              value={smallBlind}
+              onChange={e => {
+                const newSmallBlind = parseFloat(e.target.value || '0');
+                setSmallBlind(newSmallBlind);
+                if (!bigBlindManuallyUpdated) {
+                  setBigBlind(Number((newSmallBlind * 2).toFixed(2)));
+                }
+              }}
+            />
+          </div>
+          <div>
+            <label className="label">Big blind</label>
+            <input
+              type="number"
+              className="input"
+              min={Math.max(0.02, Number((smallBlind * 2).toFixed(2)))}
+              step={0.01}
+              value={bigBlind}
+              onChange={e => {
+                const newBigBlind = parseFloat(e.target.value || '0');
+                if (newBigBlind !== bigBlind) {
+                  setBigBlindManuallyUpdated(true);
+                }
+                setBigBlind(newBigBlind);
+              }}
+            />
+          </div>
+          <div>
+            <label className="label">Buy-in</label>
+            <input
+              type="number"
+              className="input"
+              min={1}
+              step={1}
+              value={buyIn}
+              onChange={e => setBuyIn(Number(e.target.value) || 1000)}
+            />
+            <p className="hint">Chips a player starts with when sitting down for the first time.</p>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
             <label className="label">Number of rebuys</label>
             <select
               className="input"
@@ -390,34 +404,6 @@ export default function CreateGameRoomPage() {
               ))}
             </select>
             <p className="hint">Set 0-10 or leave as Unlimited for cash-style games.</p>
-          </div>
-          <div className="md:col-span-3">
-            <label className="inline-flex items-center space-x-2 text-sm font-medium text-gray-800 dark:text-gray-200">
-              <input
-                type="checkbox"
-                className="checkbox"
-                checked={allowRunItTwice}
-                onChange={e => setAllowRunItTwice(e.target.checked)}
-              />
-              <span>Allow run it twice</span>
-            </label>
-            <p className="hint">
-              After an all-in, the player with the weakest hand can choose to deal the rest of the board more than once and split the pot between the runs. Hold&apos;em and Omaha only.
-            </p>
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="label">Buy-in</label>
-            <input
-              type="number"
-              className="input"
-              min={1}
-              step={1}
-              value={buyIn}
-              onChange={e => setBuyIn(Number(e.target.value) || 1000)}
-            />
-            <p className="hint">Chips a player starts with when sitting down for the first time.</p>
           </div>
           {numberOfRebuys !== 0 && (
             <div>
@@ -523,6 +509,20 @@ export default function CreateGameRoomPage() {
             />
             <p className="hint">Hold&apos;em only. Win a pot with 7-2 offsuit and show it, and every other player in the hand pays you this. 0 for off.</p>
           </div>
+        </div>
+        <div className="mt-5 border-t border-gray-100 pt-5 dark:border-white/[0.06]">
+          <label className="inline-flex items-center space-x-2 text-sm font-medium text-gray-800 dark:text-gray-200">
+            <input
+              type="checkbox"
+              className="checkbox"
+              checked={allowRunItTwice}
+              onChange={e => setAllowRunItTwice(e.target.checked)}
+            />
+            <span>Allow run it twice</span>
+          </label>
+          <p className="hint">
+            After an all-in, the player with the weakest hand can choose to deal the rest of the board more than once and split the pot between the runs. Hold&apos;em and Omaha only.
+          </p>
         </div>
         </section>
         {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}

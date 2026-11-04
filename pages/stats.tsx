@@ -164,7 +164,7 @@ export default function StatsPage() {
                       <tr key={key} className="text-gray-900 dark:text-gray-100">
                         <td className="whitespace-nowrap text-gray-600 dark:text-gray-300">{new Date(s.start).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</td>
                         <td>
-                          <Link href={`/history?room=${encodeURIComponent(s.roomId)}`} className={`${data.roomNames[s.roomId] ? '' : 'font-mono text-[13px]'} text-gray-600 hover:text-emerald-600 dark:text-gray-300 dark:hover:text-emerald-300`}>
+                          <Link href={`/history?room=${encodeURIComponent(s.roomId)}`} className={`${data.roomNames[s.roomId] ? 'text-gray-700 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'} hover:text-emerald-600 dark:hover:text-emerald-300`}>
                             {data.roomNames[s.roomId] || s.roomId}
                           </Link>
                         </td>

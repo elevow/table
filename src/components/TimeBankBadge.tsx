@@ -11,6 +11,8 @@ interface Props {
 /** How many time banks a player has left, e.g. "⏱ ×2". */
 export default function TimeBankBadge({ count, seconds, compact = false }: Props) {
   if (typeof count !== 'number') return null;
+  // On a seat's placard an empty count is just noise
+  if (compact && count <= 0) return null;
   const label = `${count} time bank${count === 1 ? '' : 's'} left${seconds ? `, ${seconds}s each` : ''}`;
   return (
     <span

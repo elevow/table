@@ -241,7 +241,7 @@ const Profile: NextPage = () => {
                   disabled={isUploading}
                   className="btn btn-secondary btn-sm"
                 >
-                  {isUploading ? 'Uploading...' : 'Change Avatar'}
+                  {isUploading ? 'Uploading...' : 'Change avatar'}
                 </button>
                 <span className="text-xs text-gray-500 dark:text-gray-400">JPG, PNG or GIF, up to 5MB</span>
               </div>

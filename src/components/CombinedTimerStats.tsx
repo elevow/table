@@ -274,7 +274,7 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="section-title">
-            Session Statistics
+            Session statistics
           </h3>
           <div className="text-sm text-gray-500 dark:text-gray-400">
             {sessionStats.timeInSession}
@@ -291,7 +291,7 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
           </div>
           
           <div className="surface-muted px-3 py-2.5">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Win Rate</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Win rate</div>
             <div className="mt-0.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
               {calculateWinRate()}%
             </div>
@@ -306,7 +306,7 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
           </div>
 
           <div className="surface-muted px-3 py-2.5">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Biggest Pot Won</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Biggest pot won</div>
             <div className="mt-0.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
               {formatCurrency(Math.max(0, sessionStats.biggestPotWon || 0))}
             </div>
@@ -326,7 +326,7 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
             onClick={onShowSettings}
             className="btn btn-secondary btn-sm"
           >
-            Show Settings
+            Show settings
           </button>
         </div>
       </div>

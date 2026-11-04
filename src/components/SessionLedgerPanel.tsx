@@ -80,7 +80,7 @@ export default function SessionLedgerPanel({ tableId, refreshKey }: { tableId: s
 
       <button
         onClick={() => setOpen(o => !o)}
-        className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+        className="link text-sm"
         aria-expanded={open}
       >
         {open ? 'Hide table ledger' : 'Show table ledger'}

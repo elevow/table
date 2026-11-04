@@ -46,7 +46,7 @@
 		@apply inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-sm font-semibold whitespace-nowrap select-none;
 		@apply transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
 	}
-	.btn-sm { @apply h-8 px-3 text-xs rounded-md; }
+	.btn-sm { @apply h-9 px-3 text-xs rounded-lg; }
 	.btn-lg { @apply h-12 px-5 text-base rounded-xl; }
 	.btn-primary {
 		@apply bg-emerald-600 text-white hover:bg-emerald-500;
@@ -88,7 +88,7 @@
 		@apply block mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300;
 	}
 	.hint {
-		@apply mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400;
+		@apply mt-1.5 text-[13px] leading-[1.4] text-gray-500 dark:text-gray-400;
 	}
 	/* Drawn checkboxes and switches, so no bright native control shows up on the dark theme */
 	.checkbox {

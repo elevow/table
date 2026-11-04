@@ -58,7 +58,7 @@ describe('CombinedTimerStats', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Session Statistics')).toBeInTheDocument();
+      expect(screen.getByText('Session statistics')).toBeInTheDocument();
     });
   });
 
@@ -71,9 +71,9 @@ describe('CombinedTimerStats', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Hands')).toBeInTheDocument();
-      expect(screen.getByText('Win Rate')).toBeInTheDocument();
+      expect(screen.getByText('Win rate')).toBeInTheDocument();
       expect(screen.getByText('Net')).toBeInTheDocument();
-      expect(screen.getByText('Biggest Pot Won')).toBeInTheDocument();
+      expect(screen.getByText('Biggest pot won')).toBeInTheDocument();
     });
   });
 
@@ -113,10 +113,10 @@ describe('CombinedTimerStats', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Show Settings')).toBeInTheDocument();
+      expect(screen.getByText('Show settings')).toBeInTheDocument();
     });
 
-    const settingsButton = screen.getByText('Show Settings');
+    const settingsButton = screen.getByText('Show settings');
     settingsButton.click();
 
     expect(onShowSettings).toHaveBeenCalledTimes(1);

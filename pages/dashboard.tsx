@@ -199,7 +199,7 @@ const Dashboard: NextPage = () => {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-5 lg:items-start">
+        <div className="grid gap-6 lg:grid-cols-5">
           {/* Welcome and the main actions */}
           <section className="surface relative overflow-hidden p-6 lg:col-span-3">
             <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
@@ -235,7 +235,7 @@ const Dashboard: NextPage = () => {
           </section>
 
           {/* Join by code */}
-          <section className="surface p-6 lg:col-span-2">
+          <section className="surface p-6 lg:col-span-2 flex flex-col justify-center">
             <h2 className="section-title">Have a code?</h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Enter a room code or a private invite code.</p>
             <form onSubmit={handleJoinByRoomCode} className="mt-4 space-y-3">

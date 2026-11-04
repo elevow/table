@@ -132,7 +132,7 @@ const Home: NextPage = () => {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label htmlFor="email" className="label">
-                Email Address
+                Email address
               </label>
               <input
                 id="email"
@@ -239,7 +239,7 @@ const Home: NextPage = () => {
                   Processing...
                 </div>
               ) : (
-                isLogin ? 'Sign In' : 'Create Account'
+                isLogin ? 'Sign in' : 'Create account'
               )}
             </button>
           </form>

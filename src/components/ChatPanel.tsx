@@ -355,7 +355,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
   return (
     <div className="chat-panel">
       <h2 className="section-title mb-3">Chat</h2>
-      <div className="messages space-y-2 max-h-80 overflow-auto p-3 surface-muted">
+      <div className="messages space-y-2 max-h-80 overflow-auto p-1">
         {visibleMessages.map((m) => (
           <div key={m.id} className="message group relative">
             <div className="flex items-center gap-2 text-xs">
@@ -410,7 +410,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
           </div>
         ))}
         {messages.length === 0 && (
-          <div className="text-sm text-gray-500 dark:text-gray-400">No messages yet.</div>
+          <div className="flex min-h-[100px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">No messages yet.</div>
         )}
         {hiddenCount > 0 && (
           <div className="text-xs text-gray-500 dark:text-gray-400">

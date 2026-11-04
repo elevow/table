@@ -2528,7 +2528,7 @@ export default function GamePage() {
                 title={me.leaveAfterHand ? 'You will stand up when this hand ends; click to stay' : 'Finish this hand, then stand up'}
                 aria-pressed={!!me.leaveAfterHand}
               >
-                <span>{me.leaveAfterHand ? 'Leaving after this hand' : <>Leave after <span className="max-sm:hidden">this </span>hand</>}</span>
+                <svg className="h-4 w-4 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg><span className="max-sm:sr-only">{me.leaveAfterHand ? 'Leaving after this hand' : 'Leave after this hand'}</span>
               </button>
             )}
             {gameStarted && me && (
@@ -2541,7 +2541,7 @@ export default function GamePage() {
                   : (me.isSittingOut ? 'You are sitting out; you will be dealt in from the next hand' : 'Keep your seat but skip hands from the next one')}
                 aria-pressed={!!me.isSittingOut}
               >
-                {me.isSittingOut ? "I'm Back" : 'Sit Out'}
+                {me.isSittingOut ? "I'm back" : <><svg className="h-4 w-4 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 010 8h-1M3 8h14v9a4 4 0 01-4 4H7a4 4 0 01-4-4V8zM6 2v2M10 2v2M14 2v2" /></svg><span className="max-sm:sr-only">Sit out</span></>}
               </button>
             )}
             {gameStarted && me && (
@@ -2735,7 +2735,7 @@ export default function GamePage() {
           {/* Poker Table - Green Felt Design */}
           <div className="lg:col-span-2 relative">
             {/* Green felt table surface */}
-            <div className="table-rail relative rounded-full mx-auto max-sm:mt-11 max-sm:mb-20"
+            <div className="table-rail relative rounded-full mx-auto max-sm:mt-7 max-sm:mb-20"
                  style={{
                    width: '100%',
                    maxWidth: '820px',
@@ -2855,7 +2855,7 @@ export default function GamePage() {
               <div className="flex items-center justify-between gap-2 mb-2">
                 <h3 className="text-base font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
-                  Your Turn
+                  Your turn
                   <TimeBankBadge count={me?.timeBanks} seconds={pokerGameState?.timeBankSeconds} />
                 </h3>
                 <button
@@ -3315,9 +3315,10 @@ export default function GamePage() {
 
           {/* Game Status Display (only before showdown); hide if only one non-folded remains; hide during Run-It-Twice prompt */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer !== playerId && !runItTwicePrompt && (
-            <div className="lg:col-span-2 surface p-4 sm:p-5 mt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="section-title">Game Status</h3>
+            <div className="lg:col-span-2 surface p-4 sm:p-5 mt-4 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:!bg-gray-50 max-sm:dark:!bg-gray-800 max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
+              {/* On phones this pins to the bottom as a slim bar: heading and tiles give way to the pre-actions */}
+              <div className="flex items-center justify-between mb-3 max-sm:hidden">
+                <h3 className="section-title">Game status</h3>
               </div>
               {me && !me.isFolded && !me.isAllIn && (
                 <div className="mb-3">
@@ -3332,7 +3333,7 @@ export default function GamePage() {
               )}
               <TurnClockBar clock={turnClock} />
               <div className="text-sm text-gray-600 dark:text-gray-300">
-                <p className="mb-3 text-gray-700 dark:text-gray-200">
+                <p className="mb-3 max-sm:mb-0 text-gray-700 dark:text-gray-200">
                   Waiting for <span className="font-semibold text-gray-900 dark:text-white">{pokerGameState.players.find((p: any) => p.id === pokerGameState.activePlayer)?.name || 'player'}</span> to act…
                 </p>
                 {(() => {
@@ -3350,7 +3351,7 @@ export default function GamePage() {
                     tiles.push({ label: 'Your hand', value: summary.primary });
                   }
                   return (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-sm:hidden">
                       {tiles.map(t => (
                         <div key={t.label} className="surface-muted px-3 py-2.5 min-w-0">
                           <div className="text-xs text-gray-500 dark:text-gray-400">{t.label}</div>

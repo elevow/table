@@ -98,6 +98,6 @@ describe('Tournament lobby', () => {
   test('says when there is nothing to show', async () => {
     lists.upcoming = [];
     render(<TournamentLobbyPage />);
-    expect(await screen.findByText('No upcoming tournaments.')).toBeInTheDocument();
+    expect(await screen.findByText(/No upcoming tournaments/)).toBeInTheDocument();
   });
 });

@@ -55,7 +55,6 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
   const pending = gameState?.pendingBlinds;
   const bomb = gameState?.bombPotNext;
   const stud = isStudVariant(gameState?.variant);
-  const button = 'px-3 py-1 rounded text-xs font-medium disabled:opacity-60';
   const can = (permission: string) => (extras.hostPermissions || []).includes(permission);
   const canConfigure = can('room.configure');
   const isPrivate = extras.visibility === 'private';
@@ -71,8 +70,8 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
   };
 
   return (
-    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg shadow-md p-4 text-sm text-gray-900 dark:text-gray-100">
-      <h3 className="font-semibold mb-3">{extras.isHost ? 'Host controls' : 'Host controls (staff)'}</h3>
+    <div className="surface p-5 text-sm text-gray-800 dark:text-gray-200">
+      <h3 className="section-title mb-4">{extras.isHost ? 'Host controls' : 'Host controls (staff)'}</h3>
       {error && <div className="mb-2 text-xs text-red-700 dark:text-red-300">{error}</div>}
 
       {canConfigure && (
@@ -82,7 +81,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             <input
               type="checkbox"
               aria-label="Private table"
-              className="h-4 w-4 accent-amber-600"
+              className="checkbox"
               checked={isPrivate}
               disabled={!!busy}
               onChange={e => send('visibility', { action: 'set-visibility', private: e.target.checked })}
@@ -96,13 +95,13 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
                   aria-label="Invite link"
                   value={inviteLink}
                   onFocus={e => e.target.select()}
-                  className="flex-1 min-w-0 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs"
+                  className="flex-1 min-w-0 input !h-8 !px-2 text-xs"
                 />
-                <button className={`${button} bg-blue-600 hover:bg-blue-700 text-white`} onClick={copyInviteLink}>
+                <button className={`btn btn-secondary btn-sm`} onClick={copyInviteLink}>
                   {copied ? 'Copied' : 'Copy'}
                 </button>
                 <button
-                  className={`${button} bg-gray-500 hover:bg-gray-600 text-white`}
+                  className={`btn btn-ghost btn-sm`}
                   disabled={!!busy}
                   title="Stop the current link working and make a new one"
                   onClick={() => {
@@ -126,7 +125,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
           <div className="flex items-center justify-between">
             <span>{paused ? 'Game is paused' : 'Game is running'}</span>
             <button
-              className={`${button} ${paused ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-700 hover:bg-gray-800'} text-white`}
+              className={`btn btn-sm ${paused ? 'btn-primary' : 'btn-secondary'}`}
               disabled={!!busy}
               onClick={() => send('pause', { action: paused ? 'resume' : 'pause' })}
             >
@@ -139,11 +138,11 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
           <div>
             <div className="mb-1">Blinds ${gameState.smallBlind}/${gameState.bigBlind}{pending ? ` → $${pending.smallBlind}/$${pending.bigBlind} next hand` : ''}</div>
             <div className="flex items-center gap-1">
-              <input aria-label="Small blind" type="number" min={1} value={sb} onChange={e => setSb(e.target.value)} placeholder="SB" className="w-16 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700" />
+              <input aria-label="Small blind" type="number" min={1} value={sb} onChange={e => setSb(e.target.value)} placeholder="SB" className="w-16 input !h-8 !px-2" />
               <span>/</span>
-              <input aria-label="Big blind" type="number" min={1} value={bb} onChange={e => setBb(e.target.value)} placeholder="BB" className="w-16 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700" />
+              <input aria-label="Big blind" type="number" min={1} value={bb} onChange={e => setBb(e.target.value)} placeholder="BB" className="w-16 input !h-8 !px-2" />
               <button
-                className={`${button} bg-blue-600 hover:bg-blue-700 text-white`}
+                className={`btn btn-secondary btn-sm`}
                 disabled={!!busy || !(Number(sb) > 0) || !(Number(bb) >= Number(sb))}
                 onClick={() => send('blinds', { action: 'set-blinds', smallBlind: Number(sb), bigBlind: Number(bb) })}
               >
@@ -159,12 +158,12 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
               <div className="flex items-center gap-1">
                 {!bomb && (
                   <>
-                    <input aria-label="Bomb pot ante in big blinds" type="number" min={1} value={anteBB} onChange={e => setAnteBB(e.target.value)} className="w-16 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700" />
+                    <input aria-label="Bomb pot ante in big blinds" type="number" min={1} value={anteBB} onChange={e => setAnteBB(e.target.value)} className="w-16 input !h-8 !px-2" />
                     <span className="text-xs">BB</span>
                   </>
                 )}
                 <button
-                  className={`${button} ${bomb ? 'bg-gray-500 hover:bg-gray-600' : 'bg-orange-600 hover:bg-orange-700'} text-white`}
+                  className={`btn btn-sm ${bomb ? 'btn-ghost' : 'btn-warning'}`}
                   disabled={!!busy || (!bomb && !(Number(anteBB) > 0))}
                   onClick={() => send('bomb', { action: 'bomb-pot', anteBB: bomb ? null : Number(anteBB) })}
                 >
@@ -182,7 +181,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             <span>Allow straddles</span>
             <input
               type="checkbox"
-              className="h-4 w-4"
+              className="checkbox"
               checked={extras.allowStraddle}
               disabled={!!busy}
               onChange={e => send('straddle', { action: 'allow-straddle', allow: e.target.checked })}
@@ -194,7 +193,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             <span>Allow run it twice</span>
             <input
               type="checkbox"
-              className="h-4 w-4"
+              className="checkbox"
               checked={extras.allowRunItTwice}
               disabled={!!busy}
               onChange={e => send('rit', { action: 'allow-run-it-twice', allow: e.target.checked })}
@@ -213,10 +212,10 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
                 value={turnSeconds}
                 onChange={e => setTurnSeconds(e.target.value)}
                 placeholder="secs"
-                className="w-16 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"
+                className="w-16 input !h-8 !px-2"
               />
               <button
-                className={`${button} bg-blue-600 hover:bg-blue-700 text-white`}
+                className={`btn btn-secondary btn-sm`}
                 disabled={!!busy || !(Number(turnSeconds) >= MIN_TURN_SECONDS && Number(turnSeconds) <= MAX_TURN_SECONDS)}
                 onClick={() => send('turn', { action: 'set-turn-time', seconds: Number(turnSeconds) }).then(() => setTurnSeconds(''))}
               >
@@ -237,14 +236,14 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
                     <span className="truncate">{p.name || 'Player'}</span>
                     <span className="flex items-center gap-1">
                       <button
-                        className={`${button} bg-gray-500 hover:bg-gray-600 text-white`}
+                        className={`btn btn-ghost btn-sm`}
                         disabled={!!busy || count <= 0}
                         aria-label={`Remove a time bank from ${who}`}
                         onClick={() => send('banks', { action: 'adjust-time-banks', targetId: p.id, delta: -1 })}
                       >−</button>
                       <span className="w-8 text-center tabular-nums" aria-label={`${count} time banks`}>{count}</span>
                       <button
-                        className={`${button} bg-sky-600 hover:bg-sky-700 text-white`}
+                        className={`btn btn-secondary btn-sm`}
                         disabled={!!busy}
                         aria-label={`Give ${who} a time bank`}
                         onClick={() => send('banks', { action: 'adjust-time-banks', targetId: p.id, delta: 1 })}
@@ -261,7 +260,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
           <span>Approve players before they sit</span>
           <input
             type="checkbox"
-            className="h-4 w-4"
+            className="checkbox"
             checked={extras.requireSeatApproval}
             disabled={!!busy}
             onChange={e => send('approval', { action: 'require-approval', required: e.target.checked })}
@@ -271,11 +270,11 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
         {can('room.approve_seat') && (extras.seatRequests || []).length > 0 && (
           <ul className="space-y-1">
             {extras.seatRequests!.map(r => (
-              <li key={r.playerId} className="flex items-center justify-between gap-2 bg-white/70 dark:bg-gray-800/70 rounded px-2 py-1">
+              <li key={r.playerId} className="flex items-center justify-between gap-2 surface-muted px-2 py-1">
                 <span>{r.playerName} wants seat {r.seatNumber}</span>
                 <span className="flex gap-1">
-                  <button className={`${button} bg-emerald-600 hover:bg-emerald-700 text-white`} disabled={!!busy} onClick={() => send('approve', { action: 'approve', targetId: r.playerId })}>Approve</button>
-                  <button className={`${button} bg-gray-500 hover:bg-gray-600 text-white`} disabled={!!busy} onClick={() => send('deny', { action: 'deny', targetId: r.playerId })}>Deny</button>
+                  <button className={`btn btn-primary btn-sm`} disabled={!!busy} onClick={() => send('approve', { action: 'approve', targetId: r.playerId })}>Approve</button>
+                  <button className={`btn btn-ghost btn-sm`} disabled={!!busy} onClick={() => send('deny', { action: 'deny', targetId: r.playerId })}>Deny</button>
                 </span>
               </li>
             ))}
@@ -289,13 +288,13 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             aria-label="Player to remove"
             value={kickId}
             onChange={e => setKickId(e.target.value)}
-            className="flex-1 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs"
+            className="flex-1 input !h-8 !px-2 text-xs"
           >
             <option value="">Remove a player…</option>
             {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <button
-            className={`${button} bg-red-600 hover:bg-red-700 text-white`}
+            className={`btn btn-danger btn-sm`}
             disabled={!!busy || !kickId}
             onClick={() => {
               const name = players.find(p => p.id === kickId)?.name || 'this player';

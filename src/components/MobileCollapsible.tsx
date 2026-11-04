@@ -20,7 +20,7 @@ export default function MobileCollapsible({ title, children, className = '', def
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className="sm:hidden w-full min-h-[44px] flex items-center justify-between rounded-lg bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-md dark:bg-gray-800 dark:text-gray-100"
+        className="sm:hidden w-full min-h-[44px] flex items-center justify-between surface px-4 py-2 text-sm font-semibold text-gray-900 dark:text-gray-100"
       >
         <span>{title}</span>
         <span aria-hidden="true" className="text-gray-500 dark:text-gray-400">{open ? '▲' : '▼'}</span>

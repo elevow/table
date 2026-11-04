@@ -79,23 +79,31 @@ export default function ProfitChart({ points }: Props) {
               x2={W - PAD.right}
               y1={geo.y(t)}
               y2={geo.y(t)}
-              className={t === 0 ? 'stroke-gray-400 dark:stroke-gray-500' : 'stroke-gray-200 dark:stroke-gray-700'}
+              className={t === 0 ? 'stroke-gray-300 dark:stroke-white/20' : 'stroke-gray-100 dark:stroke-white/[0.05]'}
+              strokeDasharray={t === 0 ? '4 4' : undefined}
               strokeWidth={1}
             />
-            <text x={PAD.left - 8} y={geo.y(t)} dy="0.32em" textAnchor="end" className="fill-gray-500 dark:fill-gray-400 text-[11px]">
+            <text x={PAD.left - 8} y={geo.y(t)} dy="0.32em" textAnchor="end" className="fill-gray-400 dark:fill-gray-500 text-[10px]">
               {money(t)}
             </text>
           </g>
         ))}
-        <text x={PAD.left} y={H - 8} className="fill-gray-500 dark:fill-gray-400 text-[11px]">Hand 1</text>
-        <text x={W - PAD.right} y={H - 8} textAnchor="end" className="fill-gray-500 dark:fill-gray-400 text-[11px]">
+        <text x={PAD.left} y={H - 8} className="fill-gray-400 dark:fill-gray-500 text-[10px]">Hand 1</text>
+        <text x={W - PAD.right} y={H - 8} textAnchor="end" className="fill-gray-400 dark:fill-gray-500 text-[10px]">
           {`Hand ${points.length}`}
         </text>
-        <path d={geo.path} fill="none" className="stroke-blue-600 dark:stroke-blue-400" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        <defs>
+          <linearGradient id="profit-fill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="rgb(16 185 129)" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="rgb(16 185 129)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={`${geo.path} L${geo.x(points.length)},${geo.y(0)} L${geo.x(0)},${geo.y(0)} Z`} fill="url(#profit-fill)" />
+        <path d={geo.path} fill="none" className="stroke-emerald-500 dark:stroke-emerald-400" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
         {hp && hover != null && (
           <g pointerEvents="none">
             <line x1={geo.x(hover + 1)} x2={geo.x(hover + 1)} y1={PAD.top} y2={H - PAD.bottom} className="stroke-gray-400 dark:stroke-gray-500" strokeWidth={1} />
-            <circle cx={geo.x(hover + 1)} cy={geo.y(hp.cumulative)} r={4} className="fill-blue-600 dark:fill-blue-400 stroke-white dark:stroke-gray-800" strokeWidth={2} />
+            <circle cx={geo.x(hover + 1)} cy={geo.y(hp.cumulative)} r={4} className="fill-emerald-500 dark:fill-emerald-400 stroke-white dark:stroke-gray-800" strokeWidth={2} />
           </g>
         )}
         <rect
@@ -110,7 +118,7 @@ export default function ProfitChart({ points }: Props) {
       </svg>
       {hp && hover != null && (
         <div
-          className="absolute top-0 pointer-events-none rounded bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow px-2 py-1 text-xs text-gray-900 dark:text-gray-100 whitespace-nowrap"
+          className="absolute top-0 pointer-events-none rounded-lg bg-white dark:bg-gray-950 border border-gray-200 dark:border-white/10 shadow-card px-2.5 py-1.5 text-xs text-gray-900 dark:text-gray-100 whitespace-nowrap"
           style={{ left: `${(geo.x(hover + 1) / W) * 100}%`, transform: `translateX(${hover > points.length / 2 ? '-105%' : '5%'})` }}
         >
           <div className="font-semibold tabular-nums">{money(hp.cumulative)}</div>

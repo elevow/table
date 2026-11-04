@@ -41,7 +41,7 @@ export default function HandActionLog({ actions = [], players, handNumber, varia
   });
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
+    <div className="surface p-4">
       <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
         Action{handNumber ? <span className="font-normal text-gray-500 dark:text-gray-400"> · Hand #{handNumber}</span> : null}
       </h3>

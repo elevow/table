@@ -3,8 +3,7 @@ import Head from 'next/head';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useComponentPerformance } from '../src/utils/performance-monitor';
-import { useUserAvatar } from '../src/hooks/useUserAvatar';
-import Avatar from '../src/components/Avatar';
+import AppShell, { useStoredUsername } from '../src/components/AppShell';
 import AdminRoomsPanel from '../src/components/AdminRoomsPanel';
 import CombinedPlayerStats from '../src/components/CombinedPlayerStats';
 import { authHeaders } from '../src/utils/auth-headers';
@@ -23,7 +22,7 @@ const Dashboard: NextPage = () => {
   // User authentication state
   // Default to 'me' so the API can resolve the authenticated user server-side.
   const [userId, setUserId] = useState<string>('me');
-  const { avatarData, loading: avatarLoading } = useUserAvatar(userId);
+  const username = useStoredUsername();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [canViewRoles, setCanViewRoles] = useState(false);
   // Shown until permissions load (or if they can't), since the API refuses room.create anyway
@@ -76,11 +75,6 @@ const Dashboard: NextPage = () => {
     
     getAuthenticatedUserId();
   }, []);
-  
-  const handleAvatarClick = () => {
-    // Navigate to profile page
-    window.location.href = '/profile';
-  };
   
   // Room code join functionality
   const handleJoinByRoomCode = async (e: React.FormEvent) => {
@@ -190,134 +184,102 @@ const Dashboard: NextPage = () => {
   }, [markInteraction]);
   
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <AppShell>
       <Head>
-        <title>Dashboard - Table</title>
-        <meta name="description" content="Table dashboard - Online poker platform" />
-        <link rel="icon" href="/favicon.ico" />
-        
-        {/* Add preload directives for critical resources */}
-        <link rel="preload" href="/fonts/main-font.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <title>Lobby - Table</title>
+        <meta name="description" content="Table lobby - Online poker platform" />
       </Head>
 
-      {/* Header with avatar in the corner */}
-      <header className="relative bg-white dark:bg-gray-800 shadow-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Table
+      <main className="page space-y-6">
+        {restriction && (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+            Your account is {restriction.kind === 'ban' ? 'banned' : 'suspended'}
+            {restriction.until ? ` until ${new Date(restriction.until).toLocaleString()}` : ''}.
+            {restriction.reason ? ` Reason: ${restriction.reason}.` : ''} You can watch tables but not play or chat.
+          </div>
+        )}
+
+        <div className="grid gap-6 lg:grid-cols-5">
+          {/* Welcome and the main actions */}
+          <section className="surface relative overflow-hidden p-6 sm:p-8 lg:col-span-3">
+            <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
+            <p className="eyebrow">Lobby</p>
+            <h1 className="mt-2 text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900 dark:text-white">
+              {username ? `Welcome back, ${username}` : 'Find a seat'}
             </h1>
-            
-            {/* Avatar in top-right corner */}
-            <div className="flex items-center space-x-4">
-              <Avatar 
-                src={avatarData?.url}
-                size="md"
-                onClick={handleAvatarClick}
-                className="ring-2 ring-indigo-500 ring-offset-2 ring-offset-gray-100 dark:ring-offset-gray-900"
-                alt="Your profile"
-              />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
-        <h2 className="text-4xl font-bold text-center mb-8 text-gray-900 dark:text-gray-100">
-          Dashboard
-        </h2>
-        
-        <div className="flex flex-col items-center space-y-6 mb-8">
-          {restriction && (
-            <div role="alert" className="w-full max-w-md p-3 rounded bg-red-100 border border-red-400 text-red-800 text-sm">
-              Your account is {restriction.kind === 'ban' ? 'banned' : 'suspended'}
-              {restriction.until ? ` until ${new Date(restriction.until).toLocaleString()}` : ''}.
-              {restriction.reason ? ` Reason: ${restriction.reason}.` : ''} You can watch tables but not play or chat.
-            </div>
-          )}
-
-          {/* Game action buttons */}
-          {canCreateRoom && (
-          <div className="flex justify-center">
-            <button
-              className={`px-6 py-2 rounded-md text-white ${isAuthenticated ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-gray-400 cursor-not-allowed'}`}
-              onClick={() => { if (isAuthenticated) router.push('/game/create'); }}
-              disabled={!isAuthenticated}
-              title={isAuthenticated ? undefined : 'Sign in to create a room'}
-              data-route="/game/create"
-            >
-              Create Room (choose variant)
-            </button>
-          </div>
-          )}
-          <div className="flex gap-4 text-sm">
-            <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/history')}>
-              Hand history
-            </button>
-            <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/stats')}>
-              My results
-            </button>
-            <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/leaderboard')}>
-              Leaderboard &amp; achievements
-            </button>
-            <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/tournaments')}>
-              Tournaments
-            </button>
-            {canViewRoles && (
-              <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => router.push('/admin/roles')}>
-                Roles &amp; permissions
+            <p className="mt-2 max-w-md text-sm text-gray-500 dark:text-gray-400">
+              Start a table for your friends, join one that&apos;s already running, or sign up for a tournament.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              {canCreateRoom && (
+                <button
+                  className="btn btn-primary"
+                  onClick={() => { if (isAuthenticated) router.push('/game/create'); }}
+                  disabled={!isAuthenticated}
+                  title={isAuthenticated ? undefined : 'Sign in to create a room'}
+                  data-route="/game/create"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 4a1 1 0 011 1v4h4a1 1 0 110 2h-4v4a1 1 0 11-2 0v-4H5a1 1 0 110-2h4V5a1 1 0 011-1z" /></svg>
+                  Create a table
+                </button>
+              )}
+              <button className="btn btn-secondary" onClick={() => router.push('/tournaments')}>
+                Tournaments
               </button>
-            )}
-          </div>
-          
-          {/* Room code join section */}
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 text-center">
-              Join with Room Code
-            </h3>
-            <form onSubmit={handleJoinByRoomCode} className="space-y-4">
-              <div>
+              {canViewRoles && (
+                <button className="btn btn-ghost" onClick={() => router.push('/admin/roles')}>
+                  Roles &amp; permissions
+                </button>
+              )}
+            </div>
+          </section>
+
+          {/* Join by code */}
+          <section className="surface p-6 lg:col-span-2 flex flex-col">
+            <h2 className="section-title">Have a code?</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Enter a room code or a private invite code.</p>
+            <form onSubmit={handleJoinByRoomCode} className="mt-auto pt-5 space-y-3">
+              <label htmlFor="room-code" className="sr-only">Room code</label>
+              <div className="flex gap-2">
                 <input
+                  id="room-code"
                   type="text"
                   value={roomCode}
                   onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                  placeholder="Room code or private invite code"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="e.g. AB12CD34"
+                  className="input font-mono tracking-wider uppercase placeholder:font-sans placeholder:normal-case placeholder:tracking-normal"
                   disabled={isValidating}
                   maxLength={12}
                 />
+                <button
+                  type="submit"
+                  disabled={isValidating || !roomCode.trim()}
+                  className="btn btn-secondary shrink-0"
+                >
+                  {isValidating ? 'Checking…' : 'Join'}
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={isValidating || !roomCode.trim()}
-                className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-md font-medium transition-colors"
-              >
-                {isValidating ? 'Validating...' : 'Join Room'}
-              </button>
               {validationMessage && (
-                <div className={`text-sm text-center p-2 rounded ${
+                <div className={`text-sm rounded-lg px-3 py-2 ${
                   validationMessage.includes('Cannot join') || validationMessage.includes('not found') || validationMessage.includes('Failed')
-                    ? 'text-red-600 bg-red-50 dark:bg-red-900/20'
-                    : 'text-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                    ? 'text-red-700 bg-red-50 dark:text-red-300 dark:bg-red-500/10'
+                    : 'text-gray-700 bg-gray-100 dark:text-gray-300 dark:bg-white/[0.05]'
                 }`}>
                   {validationMessage}
                 </div>
               )}
             </form>
-          </div>
-
-          <LobbyTables />
+          </section>
         </div>
 
-        {/* Combined Player Statistics */}
-        <div className="mb-8">
-          <CombinedPlayerStats />
-        </div>
-        
+        <LobbyTables />
+
+        <CombinedPlayerStats />
+
         {/* Admin Panel - Only visible to admin users */}
         <AdminRoomsPanel />
       </main>
-    </div>
+    </AppShell>
   );
 };
 

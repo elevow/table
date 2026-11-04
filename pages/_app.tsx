@@ -5,6 +5,9 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Script from 'next/script';
 import { Analytics } from '@vercel/analytics/react';
+import { Inter } from 'next/font/google';
+
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 // Code splitting and optimization imports
 import { dynamicImport } from '../src/utils/code-splitting';
@@ -98,7 +101,6 @@ function MyApp({ Component, pageProps }: AppProps) {
         <link rel="icon" href="/favicon.ico" />
         
         {/* Add preload hints for critical resources */}
-        <link rel="preload" href="/fonts/main-font.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://cdn.example.com" />
         <link rel="dns-prefetch" href="https://api.example.com" />
       </Head>
@@ -119,11 +121,15 @@ function MyApp({ Component, pageProps }: AppProps) {
       
       {/* Loading indicator for route changes */}
       {isRouteChanging && (
-        <div className="route-change-indicator" key={loadingKey}>
-          Loading...
-        </div>
+        <div className="route-change-indicator" key={loadingKey} role="progressbar" aria-label="Loading" />
       )}
       
+      {/* On html, not a wrapper, so portals and overlays get the font too */}
+      <style jsx global>{`
+        html {
+          --font-sans: ${inter.style.fontFamily};
+        }
+      `}</style>
       <Component {...pageProps} />
       <Analytics />
     </ThemeProvider>

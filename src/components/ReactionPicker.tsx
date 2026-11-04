@@ -21,7 +21,7 @@ export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMu
           onClick={() => onToggleMuted(false)}
           aria-pressed={false}
           title="Show reactions at this table"
-          className="min-h-[40px] rounded-lg border border-gray-300 bg-white px-3 text-xs text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          className="min-h-[40px] rounded-lg border border-gray-300 bg-white px-3 text-xs text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
         >
           Show reactions
         </button>
@@ -39,7 +39,7 @@ export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMu
           disabled={coolingDown}
           aria-label={`React with ${emote}`}
           title={`React with ${emote}`}
-          className="min-w-[40px] min-h-[40px] rounded-full border border-gray-300 bg-white px-2 text-lg leading-none text-gray-900 shadow-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+          className="min-w-[40px] min-h-[40px] rounded-full border border-gray-300 bg-white px-2 text-lg leading-none text-gray-900 shadow-sm hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:hover:bg-white/[0.08]"
         >
           {emote === 'GG' ? <span className="text-sm font-bold">GG</span> : emote}
         </button>
@@ -49,7 +49,7 @@ export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMu
         onClick={() => onToggleMuted(true)}
         aria-pressed={true}
         title="Hide reactions at this table"
-        className="min-h-[40px] rounded-lg border border-gray-300 bg-white px-3 text-xs text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+        className="min-h-[40px] rounded-lg border border-gray-300 bg-white px-3 text-xs text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.08]"
       >
         Hide reactions
       </button>

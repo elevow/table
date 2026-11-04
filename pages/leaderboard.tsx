@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Head from 'next/head';
-import Link from 'next/link';
+import AppShell, { PageHeader } from '../src/components/AppShell';
 import { authHeaders } from '../src/utils/auth-headers';
 import { resolveSessionUserId } from '../src/utils/session-identity';
 import { ACHIEVEMENTS } from '../src/lib/shared/achievements';
@@ -109,63 +109,59 @@ export default function LeaderboardPage() {
   const format = (v: number) => (current.money ? `${v < 0 ? '-' : ''}$${Math.abs(v).toLocaleString()}` : v.toLocaleString());
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <AppShell>
       <Head><title>Leaderboard - Table</title></Head>
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Leaderboard</h1>
-          <div className="flex gap-3 text-sm">
-            <Link href="/history" className="text-blue-600 dark:text-blue-400 hover:underline">Hand history</Link>
-            <Link href="/stats" className="text-blue-600 dark:text-blue-400 hover:underline">My results</Link>
-            <Link href="/dashboard" className="text-blue-600 dark:text-blue-400 hover:underline">Dashboard</Link>
-          </div>
-        </div>
+      <main className="page">
+        <PageHeader title="Leaderboard" subtitle="Who's on top across every table." />
 
-        <div className="flex flex-wrap gap-2 mb-4" role="tablist" aria-label="Rank by">
+        <div className="segmented mb-5" role="tablist" aria-label="Rank by">
           {METRICS.map(m => (
             <button
               key={m.key}
               role="tab"
               aria-selected={metric === m.key}
               onClick={() => setMetric(m.key)}
-              className={`px-4 py-1.5 rounded-full text-sm border ${metric === m.key
-                ? 'bg-blue-600 border-blue-600 text-white'
-                : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
             >
               {m.label}
             </button>
           ))}
         </div>
 
-        {error && <div className="p-3 mb-4 rounded bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-200 text-sm">{error}</div>}
+        {error && <div className="p-3 mb-4 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 text-sm">{error}</div>}
 
-        <div className="overflow-x-auto rounded-lg shadow bg-white dark:bg-gray-800 mb-10">
-          <table className="w-full text-sm">
-            <thead className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+        <div className="surface overflow-x-auto mb-12">
+          <table className="data-table">
+            <thead>
               <tr>
-                <th className="px-3 py-2 w-12">#</th>
-                <th className="px-3 py-2">Player</th>
-                <th className="px-3 py-2 text-right">{current.label}</th>
-                <th className="px-3 py-2 text-right">Hands</th>
-                {canManage && <th className="px-3 py-2"><span className="sr-only">Manage</span></th>}
+                <th className="w-14">#</th>
+                <th>Player</th>
+                <th className="!text-right">{current.label}</th>
+                <th className="!text-right">Hands</th>
+                {canManage && <th><span className="sr-only">Manage</span></th>}
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={canManage ? 5 : 4} className="px-3 py-4 text-gray-500 dark:text-gray-400">Loading…</td></tr>}
+              {loading && <tr><td colSpan={canManage ? 5 : 4} className="text-gray-500 dark:text-gray-400">Loading…</td></tr>}
               {!loading && entries.length === 0 && (
-                <tr><td colSpan={canManage ? 5 : 4} className="px-3 py-4 text-gray-500 dark:text-gray-400">No hands played yet.</td></tr>
+                <tr><td colSpan={canManage ? 5 : 4} className="!py-10 text-center text-gray-500 dark:text-gray-400">No hands played yet. Rankings appear once hands are finished.</td></tr>
               )}
               {!loading && entries.map(e => (
                 <tr
                   key={e.userId}
-                  className={`border-b border-gray-100 dark:border-gray-700 text-gray-900 dark:text-gray-100 ${e.userId === userId ? 'bg-blue-50 dark:bg-blue-900/30 font-semibold' : ''}`}
+                  className={`text-gray-900 dark:text-gray-100 ${e.userId === userId ? 'bg-emerald-50 dark:bg-emerald-400/[0.06] font-semibold' : ''}`}
                 >
-                  <td className="px-3 py-2">{e.rank <= 3 ? ['🥇', '🥈', '🥉'][e.rank - 1] : e.rank}</td>
-                  <td className="px-3 py-2">{e.username || `Player ${e.userId.slice(0, 6)}`}{e.userId === userId ? ' (you)' : ''}</td>
-                  <td className={`px-3 py-2 text-right tabular-nums ${current.money && e.value < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>{format(e.value)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{(e.handsPlayed ?? 0).toLocaleString()}</td>
+                  <td>
+                    <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold tabular-nums ${
+                      e.rank === 1 ? 'bg-amber-400/20 text-amber-600 dark:text-amber-300'
+                        : e.rank === 2 ? 'bg-gray-300/40 text-gray-700 dark:bg-gray-300/15 dark:text-gray-200'
+                        : e.rank === 3 ? 'bg-orange-400/20 text-orange-700 dark:text-orange-300'
+                        : 'text-gray-500 dark:text-gray-400'}`}>{e.rank}</span>
+                  </td>
+                  <td>{e.username || `Player ${e.userId.slice(0, 6)}`}{e.userId === userId && <span className="badge badge-emerald ml-2">You</span>}</td>
+                  <td className={`text-right tabular-nums ${current.money && e.value < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>{format(e.value)}</td>
+                  <td className="text-right tabular-nums text-gray-600 dark:text-gray-300">{(e.handsPlayed ?? 0).toLocaleString()}</td>
                   {canManage && (
-                    <td className="px-3 py-2 text-right">
+                    <td className="text-right">
                       <button
                         onClick={() => setHidden(e, true)}
                         disabled={busy !== null}
@@ -183,7 +179,7 @@ export default function LeaderboardPage() {
         </div>
 
         {canManage && hiddenPlayers.length > 0 && (
-          <section aria-label="Removed from the leaderboard" className="rounded-lg shadow bg-white dark:bg-gray-800 p-4 mb-10 -mt-6">
+          <section aria-label="Removed from the leaderboard" className="surface p-5 mb-12 -mt-6">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Removed from the leaderboard</h2>
             <ul className="text-sm divide-y divide-gray-100 dark:divide-gray-700">
               {hiddenPlayers.map(p => (
@@ -192,7 +188,7 @@ export default function LeaderboardPage() {
                   <button
                     onClick={() => setHidden(p, false)}
                     disabled={busy !== null}
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-60"
+                    className="link text-xs disabled:opacity-60"
                   >
                     {busy === p.userId ? 'Restoring…' : 'Put back'}
                   </button>
@@ -202,26 +198,36 @@ export default function LeaderboardPage() {
           </section>
         )}
 
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">Achievements</h2>
-        <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-          {userId
-            ? `${Object.keys(earned).length} of ${ACHIEVEMENTS.length} earned.`
-            : 'Sign in to track your achievements.'}
-        </p>
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">Achievements</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {userId ? 'Milestones you unlock by playing.' : 'Sign in to track your achievements.'}
+            </p>
+          </div>
+          {userId && (
+            <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
+              <span className="tabular-nums">{Object.keys(earned).length} of {ACHIEVEMENTS.length}</span>
+              <span className="relative h-1.5 w-24 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10" aria-hidden="true">
+                <span className="absolute inset-y-0 left-0 rounded-full bg-emerald-500" style={{ width: `${(Object.keys(earned).length / ACHIEVEMENTS.length) * 100}%` }} />
+              </span>
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {ACHIEVEMENTS.map(a => {
             const when = earned[a.type];
             return (
               <div
                 key={a.type}
-                className={`rounded-lg p-4 shadow ${when ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/50 opacity-60'}`}
+                className={when ? 'surface p-4' : 'surface-muted p-4 border-dashed'}
               >
-                <div className="flex items-center gap-3">
-                  <span className={`text-3xl ${when ? '' : 'grayscale'}`} aria-hidden="true">{a.icon}</span>
-                  <div>
-                    <div className="font-semibold text-gray-900 dark:text-gray-100">{a.label}</div>
-                    <div className="text-xs text-gray-600 dark:text-gray-300">{a.description}</div>
-                    {when && <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">Earned {new Date(when).toLocaleDateString()}</div>}
+                <div className="flex items-center gap-4">
+                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-2xl ${when ? 'bg-emerald-400/10' : 'bg-gray-200/60 dark:bg-white/[0.04] grayscale opacity-50'}`} aria-hidden="true">{a.icon}</span>
+                  <div className="min-w-0">
+                    <div className={`text-sm font-semibold ${when ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>{a.label}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">{a.description}</div>
+                    {when && <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-1">Earned {new Date(when).toLocaleDateString()}</div>}
                   </div>
                 </div>
               </div>
@@ -229,6 +235,6 @@ export default function LeaderboardPage() {
           })}
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }

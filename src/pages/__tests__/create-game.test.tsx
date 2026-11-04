@@ -38,7 +38,8 @@ describe('CreateGameRoomPage', () => {
     render(<CreateGameRoomPage />);
 
     expect(screen.queryByLabelText('Enable tournament structure')).toBeNull();
-    expect(screen.getByRole('link', { name: 'Tournaments' }).getAttribute('href')).toBe('/tournaments');
+    // The page links there from the form, and the top navigation links there too
+    for (const link of screen.getAllByRole('link', { name: 'Tournaments' })) expect(link.getAttribute('href')).toBe('/tournaments');
   });
 });
 

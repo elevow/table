@@ -262,8 +262,8 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
   if (statsLoading) {
     return (
       <div className="animate-pulse space-y-3">
-        <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
-        <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+        <div className="h-16 bg-gray-200 dark:bg-white/[0.05] rounded-xl"></div>
+        <div className="h-16 bg-gray-200 dark:bg-white/[0.05] rounded-xl"></div>
       </div>
     );
   }
@@ -271,9 +271,9 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
   return (
     <div className="space-y-4">
       {/* Session Statistics Section */}
-      <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+      <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h3 className="section-title">
             Session Statistics
           </h3>
           <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -283,37 +283,37 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
         
         <div className="grid grid-cols-2 gap-2 text-sm">
           {/* Top row */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
-            <div className="text-xs text-gray-600 dark:text-gray-400">Hands</div>
-            <div className="font-bold text-blue-600 dark:text-blue-400">
+          <div className="surface-muted px-3 py-2.5">
+            <div className="text-xs text-gray-500 dark:text-gray-400">Hands</div>
+            <div className="mt-0.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
               {sessionStats.handsPlayed}
             </div>
           </div>
           
-          <div className="bg-green-50 dark:bg-green-900/20 p-2 rounded">
-            <div className="text-xs text-gray-600 dark:text-gray-400">Win Rate</div>
-            <div className="font-bold text-green-600 dark:text-green-400">
+          <div className="surface-muted px-3 py-2.5">
+            <div className="text-xs text-gray-500 dark:text-gray-400">Win Rate</div>
+            <div className="mt-0.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
               {calculateWinRate()}%
             </div>
           </div>
 
           {/* Bottom row */}
-          <div className="bg-indigo-50 dark:bg-indigo-900/20 p-2 rounded">
-            <div className="text-xs text-gray-600 dark:text-gray-400">Net</div>
-            <div className={`font-bold ${calculateNetWinnings() >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+          <div className="surface-muted px-3 py-2.5">
+            <div className="text-xs text-gray-500 dark:text-gray-400">Net</div>
+            <div className={`mt-0.5 text-base font-semibold tabular-nums ${calculateNetWinnings() >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
               {formatCurrency(calculateNetWinnings())}
             </div>
           </div>
 
-          <div className="bg-purple-50 dark:bg-purple-900/20 p-2 rounded">
-            <div className="text-xs text-gray-600 dark:text-gray-400">Biggest Pot Won</div>
-            <div className="font-bold text-purple-600 dark:text-purple-400">
+          <div className="surface-muted px-3 py-2.5">
+            <div className="text-xs text-gray-500 dark:text-gray-400">Biggest Pot Won</div>
+            <div className="mt-0.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
               {formatCurrency(Math.max(0, sessionStats.biggestPotWon || 0))}
             </div>
           </div>
         </div>
 
-        <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-600">
+        <div className="mt-3 pt-2 border-t border-gray-100 dark:border-white/[0.05]">
           <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
             Started at {sessionStats.sessionStartTime.toLocaleTimeString()}
           </div>
@@ -324,7 +324,7 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
           <button
             type="button"
             onClick={onShowSettings}
-            className="px-3 py-2 rounded bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600"
+            className="btn btn-secondary btn-sm"
           >
             Show Settings
           </button>

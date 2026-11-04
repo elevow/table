@@ -7,6 +7,7 @@ import {
 const DEFAULT_TURN_SECONDS = BASE_TURN_MS / 1000;
 import Head from 'next/head';
 import Link from 'next/link';
+import AppShell, { PageHeader } from '../../src/components/AppShell';
 import { useRouter } from 'next/router';
 import type { BettingMode, MixedGameEntry } from '../../src/types/poker';
 import MixedGameSetup from '../../src/components/MixedGameSetup';
@@ -206,58 +207,78 @@ export default function CreateGameRoomPage() {
   // Reached by typing the URL or from an old link: say why instead of showing a form that will be refused
   if (!canCreateRoom) {
     return (
-      <div className="container mx-auto p-6">
+      <AppShell>
+      <main className="page-narrow">
         <Head>
-          <title>Create Game Room</title>
+          <title>Create a table - Table</title>
         </Head>
-        <h1 className="text-2xl font-semibold mb-4">Create Game Room</h1>
-        <p role="alert" className="mb-4 text-gray-700 dark:text-gray-300">
-          Your account can&apos;t create rooms. Ask an admin if you&apos;d like to host games.
-        </p>
-        <Link href="/dashboard" className="text-blue-600 dark:text-blue-400 hover:underline">
-          Back to the dashboard
-        </Link>
-      </div>
+        <PageHeader title="Create a table" />
+        <div className="surface p-6">
+          <p role="alert" className="mb-4 text-gray-700 dark:text-gray-300">
+            Your account can&apos;t create rooms. Ask an admin if you&apos;d like to host games.
+          </p>
+          <Link href="/dashboard" className="link text-sm">
+            Back to the dashboard
+          </Link>
+        </div>
+      </main>
+      </AppShell>
     );
   }
 
   return (
-    <div className="container mx-auto p-6">
+    <AppShell>
+    <main className="page-narrow">
       <Head>
-        <title>Create Game Room</title>
+        <title>Create a table - Table</title>
       </Head>
-      <h1 className="text-2xl font-semibold mb-4">Create Game Room</h1>
-      <form className="space-y-4" onSubmit={onSubmit}>
-        <div>
-          <fieldset>
-            <legend className="block text-sm font-medium">Who can join</legend>
-            <div className="mt-2 flex flex-wrap gap-4 text-sm">
-              <label className="inline-flex items-center gap-2">
-                <input type="radio" name="visibility" checked={visibility === 'public'} onChange={() => setVisibility('public')} />
-                Public: listed on the dashboard
+      <PageHeader title="Create a table" subtitle="Pick the game and stakes. You can invite people once the table is open." />
+      <form className="space-y-5" onSubmit={onSubmit}>
+        <section className="surface p-5 sm:p-6">
+          <div className="mb-5">
+            <h2 className="section-title">Who can join</h2>
+            <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">Public tables show up in the lobby. Private tables need an invite link.</p>
+          </div>
+          <fieldset aria-label="Visibility">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${visibility === 'public' ? 'border-emerald-500/60 bg-emerald-50 dark:bg-emerald-400/[0.06]' : 'border-gray-200 hover:border-gray-300 dark:border-white/10 dark:hover:border-white/20'}`}>
+                <input type="radio" name="visibility" className="mt-0.5 accent-emerald-500" checked={visibility === 'public'} onChange={() => setVisibility('public')} />
+                <span>
+                  <span className="block text-sm font-medium text-gray-900 dark:text-white">Public</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400">Listed in the lobby for anyone to join</span>
+                </span>
               </label>
-              <label className={`inline-flex items-center gap-2 ${canCreatePrivate ? '' : 'opacity-50'}`}>
+              <label className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${canCreatePrivate ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'} ${visibility === 'private' ? 'border-emerald-500/60 bg-emerald-50 dark:bg-emerald-400/[0.06]' : 'border-gray-200 hover:border-gray-300 dark:border-white/10 dark:hover:border-white/20'}`}>
                 <input
                   type="radio"
                   name="visibility"
+                  className="mt-0.5 accent-emerald-500"
                   checked={visibility === 'private'}
                   disabled={!canCreatePrivate}
                   onChange={() => setVisibility('private')}
                 />
-                Private: only people with the invite link
+                <span>
+                  <span className="block text-sm font-medium text-gray-900 dark:text-white">Private</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400">Only people with the invite link</span>
+                </span>
               </label>
             </div>
             {!canCreatePrivate && (
-              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Your account can&apos;t create private tables.</p>
+              <p className="hint">Your account can&apos;t create private tables.</p>
             )}
           </fieldset>
-        </div>
+        </section>
+        <section className="surface p-5 sm:p-6">
+          <div className="mb-5">
+            <h2 className="section-title">Game and stakes</h2>
+            <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">The variant, how betting works, and what everyone sits down with.</p>
+          </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium">Max players</label>
+            <label className="label">Max players</label>
             <input
               type="number"
-              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               min={2}
               max={9}
               value={maxPlayers}
@@ -265,10 +286,10 @@ export default function CreateGameRoomPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium">Small blind</label>
+            <label className="label">Small blind</label>
             <input
               type="number"
-              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               min={0.01}
               step={0.01}
               value={smallBlind}
@@ -282,10 +303,10 @@ export default function CreateGameRoomPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium">Big blind</label>
+            <label className="label">Big blind</label>
             <input
               type="number"
-              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               min={Math.max(0.02, Number((smallBlind * 2).toFixed(2)))}
               step={0.01}
               value={bigBlind}
@@ -299,11 +320,11 @@ export default function CreateGameRoomPage() {
             />
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium">Variant</label>
+            <label className="label">Variant</label>
             <select
-              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={variant}
               onChange={e => {
                 const next = e.target.value as Variant;
@@ -324,15 +345,15 @@ export default function CreateGameRoomPage() {
               <option value="mixed">Mixed Games (rotate every few hands)</option>
             </select>
             {variant === 'dealers-choice' && (
-              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+              <p className="hint">
                 The dealer will choose the variant before each hand. Betting mode will adapt to the chosen variant (Omaha variants default to Pot-Limit).
               </p>
             )}
           </div>
           <div>
-            <label className="block text-sm font-medium">Betting mode</label>
+            <label className="label">Betting mode</label>
             <select
-              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={bettingMode}
               onChange={e => setBettingMode(e.target.value as BettingMode)}
               disabled={variant === 'dealers-choice' || variant === 'mixed'}
@@ -342,21 +363,21 @@ export default function CreateGameRoomPage() {
               <option value="fixed-limit">Fixed Limit</option>
             </select>
             {bettingMode === 'fixed-limit' && variant !== 'dealers-choice' && variant !== 'mixed' && (
-              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+              <p className="hint">
                 Bets and raises are one big blind early in the hand and two big blinds later, up to four bets per round.
               </p>
             )}
             {variant === 'mixed' && (
-              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Each game in the mix sets its own betting.</p>
+              <p className="hint">Each game in the mix sets its own betting.</p>
             )}
             {variant === 'dealers-choice' && (
-              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Betting mode is determined by the dealer’s selected variant.</p>
+              <p className="hint">Betting mode is determined by the dealer’s selected variant.</p>
             )}
           </div>
           <div>
-            <label className="block text-sm font-medium">Number of Rebuys</label>
+            <label className="label">Number of Rebuys</label>
             <select
-              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               value={numberOfRebuys === 'unlimited' ? 'unlimited' : String(numberOfRebuys)}
               onChange={(e) => {
                 const value = e.target.value;
@@ -368,116 +389,42 @@ export default function CreateGameRoomPage() {
                 <option key={idx} value={idx}>{idx}</option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Set 0-10 or leave as Unlimited for cash-style games.</p>
+            <p className="hint">Set 0-10 or leave as Unlimited for cash-style games.</p>
           </div>
-          <div>
-            <label className="inline-flex items-center space-x-2 text-sm font-medium">
+          <div className="md:col-span-3">
+            <label className="inline-flex items-center space-x-2 text-sm font-medium text-gray-800 dark:text-gray-200">
               <input
                 type="checkbox"
-                className="w-4 h-4 accent-blue-600 dark:accent-blue-500"
+                className="checkbox"
                 checked={allowRunItTwice}
                 onChange={e => setAllowRunItTwice(e.target.checked)}
               />
               <span>Allow Run It Twice</span>
             </label>
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+            <p className="hint">
               After an all-in, the player with the weakest hand can choose to deal the rest of the board more than once and split the pot between the runs. Hold&apos;em and Omaha only.
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium" htmlFor="turn-time">Turn time (seconds)</label>
-            <input
-              id="turn-time"
-              type="number"
-              min={MIN_TURN_SECONDS}
-              max={MAX_TURN_SECONDS}
-              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              value={turnTimeSeconds}
-              onChange={e => setTurnTimeSeconds(Number(e.target.value))}
-            />
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">How long each player has to act ({MIN_TURN_SECONDS}-{MAX_TURN_SECONDS}s).</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium" htmlFor="time-banks">Time banks per player</label>
-            <input
-              id="time-banks"
-              type="number"
-              min={0}
-              max={MAX_TIME_BANKS}
-              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              value={timeBanks}
-              onChange={e => setTimeBanks(Number(e.target.value))}
-            />
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Extra time a player can use once their turn time runs out; each one is used up.</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium" htmlFor="time-bank-seconds">Time bank length (seconds)</label>
-            <input
-              id="time-bank-seconds"
-              type="number"
-              min={MIN_TIME_BANK_SECONDS}
-              max={MAX_TIME_BANK_SECONDS}
-              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              value={timeBankSeconds}
-              onChange={e => setTimeBankSeconds(Number(e.target.value))}
-            />
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">How much extra time each time bank gives.</p>
-          </div>
-        </div>
-        {variant === 'mixed' && (
-          <MixedGameSetup
-            games={mixedGames}
-            handsPerGame={handsPerGame}
-            onChange={(games, hands) => { setMixedGames(games); setHandsPerGame(hands); }}
-          />
-        )}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium">Ante (chips)</label>
+            <label className="label">Buy-In</label>
             <input
               type="number"
-              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              min={0}
-              step={0.01}
-              value={ante}
-              onChange={e => setAnte(Math.max(0, parseFloat(e.target.value || '0') || 0))}
-            />
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Every player posts this before each Hold&apos;em or Omaha hand. 0 for no antes.</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium">7-2 bounty (chips)</label>
-            <input
-              type="number"
-              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              min={0}
-              step={0.01}
-              value={sevenDeuceBounty}
-              onChange={e => setSevenDeuceBounty(Math.max(0, parseFloat(e.target.value || '0') || 0))}
-            />
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Hold&apos;em only. Win a pot with 7-2 offsuit and show it, and every other player in the hand pays you this. 0 for off.</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium">Buy-In</label>
-            <input
-              type="number"
-              className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="input"
               min={1}
               step={1}
               value={buyIn}
               onChange={e => setBuyIn(Number(e.target.value) || 1000)}
             />
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Amount of chips a player will start with when sitting down for the first time.</p>
+            <p className="hint">Chips a player starts with when sitting down for the first time.</p>
           </div>
           {numberOfRebuys !== 0 && (
             <div>
-              <label className="block text-sm font-medium">Rebuy Amount (chips)</label>
+              <label className="label">Rebuy Amount (chips)</label>
               <input
                 type="number"
-                className="border border-gray-300 dark:border-gray-600 rounded p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="input"
                 min={1}
                 step={1}
                 value={rebuyAmount}
@@ -487,26 +434,119 @@ export default function CreateGameRoomPage() {
                   setRebuyAmount(Number.isFinite(parsed) && parsed > 0 ? parsed : 20);
                 }}
               />
-              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Amount of chips a player receives when rebuying.</p>
+              <p className="hint">Chips a player receives when rebuying.</p>
             </div>
           )}
         </div>
-        <p className="border-t pt-4 text-sm text-gray-600 dark:text-gray-300">
-          Running a tournament? Set it up from the <Link href="/tournaments" className="text-blue-600 dark:text-blue-400 hover:underline">Tournaments</Link> page.
-        </p>
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50" disabled={submitting || isNavigating || !isAuthenticated}>
-          {isNavigating ? 'Joining room...' : submitting ? 'Creating…' : 'Create room'}
-        </button>
+        </section>
+        <section className="surface p-5 sm:p-6">
+          <div className="mb-5">
+            <h2 className="section-title">Clock</h2>
+            <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">How long players get to act, plus a few time banks for tough spots.</p>
+          </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="label" htmlFor="turn-time">Turn time (seconds)</label>
+            <input
+              id="turn-time"
+              type="number"
+              min={MIN_TURN_SECONDS}
+              max={MAX_TURN_SECONDS}
+              className="input"
+              value={turnTimeSeconds}
+              onChange={e => setTurnTimeSeconds(Number(e.target.value))}
+            />
+            <p className="hint">How long each player has to act ({MIN_TURN_SECONDS}-{MAX_TURN_SECONDS}s).</p>
+          </div>
+          <div>
+            <label className="label" htmlFor="time-banks">Time banks per player</label>
+            <input
+              id="time-banks"
+              type="number"
+              min={0}
+              max={MAX_TIME_BANKS}
+              className="input"
+              value={timeBanks}
+              onChange={e => setTimeBanks(Number(e.target.value))}
+            />
+            <p className="hint">Extra time a player can use once their turn time runs out; each one is used up.</p>
+          </div>
+          <div>
+            <label className="label" htmlFor="time-bank-seconds">Time bank length (seconds)</label>
+            <input
+              id="time-bank-seconds"
+              type="number"
+              min={MIN_TIME_BANK_SECONDS}
+              max={MAX_TIME_BANK_SECONDS}
+              className="input"
+              value={timeBankSeconds}
+              onChange={e => setTimeBankSeconds(Number(e.target.value))}
+            />
+            <p className="hint">How much extra time each time bank gives.</p>
+          </div>
+        </div>
+        </section>
+        {variant === 'mixed' && (
+          <MixedGameSetup
+            games={mixedGames}
+            handsPerGame={handsPerGame}
+            onChange={(games, hands) => { setMixedGames(games); setHandsPerGame(hands); }}
+          />
+        )}
+        <section className="surface p-5 sm:p-6">
+          <div className="mb-5">
+            <h2 className="section-title">Extras</h2>
+            <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">Optional rules that add a little action.</p>
+          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="label">Ante (chips)</label>
+            <input
+              type="number"
+              className="input"
+              min={0}
+              step={0.01}
+              value={ante}
+              onChange={e => setAnte(Math.max(0, parseFloat(e.target.value || '0') || 0))}
+            />
+            <p className="hint">Every player posts this before each Hold&apos;em or Omaha hand. 0 for no antes.</p>
+          </div>
+          <div>
+            <label className="label">7-2 bounty (chips)</label>
+            <input
+              type="number"
+              className="input"
+              min={0}
+              step={0.01}
+              value={sevenDeuceBounty}
+              onChange={e => setSevenDeuceBounty(Math.max(0, parseFloat(e.target.value || '0') || 0))}
+            />
+            <p className="hint">Hold&apos;em only. Win a pot with 7-2 offsuit and show it, and every other player in the hand pays you this. 0 for off.</p>
+          </div>
+        </div>
+        </section>
+        {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
+        <div className="flex flex-col-reverse gap-4 pt-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Running a tournament? Set it up from <Link href="/tournaments" className="link">Tournaments</Link>.
+          </p>
+          <div className="flex gap-2">
+            <Link href="/dashboard" className="btn btn-ghost">Cancel</Link>
+            <button type="submit" className="btn btn-primary" disabled={submitting || isNavigating || !isAuthenticated}>
+              {isNavigating ? 'Joining room...' : submitting ? 'Creating…' : 'Create room'}
+            </button>
+          </div>
+        </div>
         {!isAuthenticated && (
-          <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">Sign in to create a game room.</p>
+          <p className="hint">Sign in to create a game room.</p>
         )}
         {isNavigating && (
-          <p className="text-blue-600 text-sm mt-2 animate-pulse">
-            ✨ Room created successfully! Taking you to the game...
+          <p className="text-emerald-600 dark:text-emerald-400 text-sm mt-2 animate-pulse">
+            Room created. Taking you to the table…
           </p>
         )}
       </form>
-    </div>
+    </main>
+    </AppShell>
   );
 }

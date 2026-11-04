@@ -43,24 +43,27 @@ export default function ProfileDisplaySettings() {
   };
 
   return (
-    <div className="border-t dark:border-gray-700 pt-4">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">Table Display</h3>
-      <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-        Every table starts with these. You can still change them at a table from Show Settings.
-      </p>
-      <div className="space-y-2">
+    <section>
+      <div className="mb-2 flex items-center justify-between px-1">
+        <h3 className="eyebrow">Table Display</h3>
+        {status && (
+          <p role="status" className={`text-xs ${status.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+            {status.text}
+          </p>
+        )}
+      </div>
+      <div className="surface divide-y divide-gray-100 overflow-hidden dark:divide-white/[0.05]">
         {DISPLAY_SETTING_KEYS.map(key => (
-          <label key={key} className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
-            <input type="checkbox" checked={settings[key]} disabled={!loaded} onChange={e => change(key, e.target.checked)} />
+          <label key={key} className="flex cursor-pointer items-center justify-between gap-4 px-5 py-3.5 text-sm font-medium text-gray-800 dark:text-gray-200">
             {LABELS[key]}
+            <input type="checkbox" className="peer sr-only" checked={settings[key]} disabled={!loaded} onChange={e => change(key, e.target.checked)} />
+            <span aria-hidden="true" className="relative h-5 w-9 shrink-0 rounded-full bg-gray-300 transition-colors peer-checked:bg-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/60 peer-disabled:opacity-50 dark:bg-white/15 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-4" />
           </label>
         ))}
       </div>
-      {status && (
-        <p role="status" className={`mt-2 text-xs ${status.ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-          {status.text}
-        </p>
-      )}
-    </div>
+      <p className="mt-2 px-1 text-xs text-gray-500 dark:text-gray-400">
+        Every table starts with these. You can still change them at a table from Show Settings.
+      </p>
+    </section>
   );
 }

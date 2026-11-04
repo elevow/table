@@ -21,21 +21,206 @@
 		height: 100%;
 	}
 	body {
-		@apply bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100;
-		background-color: rgb(var(--bg));
-		color: rgb(var(--fg));
+		@apply bg-gray-50 text-gray-900 antialiased dark:bg-gray-900 dark:text-gray-100;
+		font-feature-settings: 'cv11', 'ss01';
+	}
+	/* Every page sits on the same quiet backdrop */
+	.dark body {
+		background-image: radial-gradient(1200px 600px at 50% -200px, rgba(31, 122, 85, 0.10), transparent 70%);
+		background-attachment: fixed;
+	}
+	input[type='range'] {
+		accent-color: #10b981;
+	}
+	::selection {
+		@apply bg-emerald-500/30;
+	}
+	:focus-visible {
+		@apply outline-none ring-2 ring-emerald-500/70 ring-offset-0;
+	}
+}
+
+/* Shared building blocks. Pages compose these instead of repeating long class lists. */
+@layer components {
+	.btn {
+		@apply inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-sm font-semibold whitespace-nowrap select-none;
+		@apply transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+	}
+	.btn-sm { @apply h-8 px-3 text-xs rounded-md; }
+	.btn-lg { @apply h-12 px-5 text-base rounded-xl; }
+	.btn-primary {
+		@apply bg-emerald-600 text-white hover:bg-emerald-500;
+		@apply dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400;
+	}
+	.btn-secondary {
+		@apply border border-gray-200 bg-white text-gray-800 hover:bg-gray-100;
+		@apply dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:hover:bg-white/[0.08];
+	}
+	.btn-ghost {
+		@apply text-gray-600 hover:bg-gray-100 hover:text-gray-900;
+		@apply dark:text-gray-300 dark:hover:bg-white/[0.06] dark:hover:text-white;
+	}
+	.btn-danger {
+		@apply border border-red-200 bg-red-50 text-red-700 hover:bg-red-100;
+		@apply dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20;
+	}
+	.btn-warning {
+		@apply border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100;
+		@apply dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200 dark:hover:bg-amber-400/20;
+	}
+
+	.surface {
+		@apply rounded-2xl border border-gray-200 bg-white shadow-sm;
+		@apply dark:border-white/[0.06] dark:bg-gray-800/70 dark:shadow-card;
+	}
+	.surface-muted {
+		@apply rounded-xl border border-gray-200 bg-gray-50;
+		@apply dark:border-white/[0.05] dark:bg-white/[0.03];
+	}
+
+	.input {
+		@apply block w-full h-10 px-3 rounded-lg text-sm border border-gray-300 bg-white text-gray-900 placeholder-gray-400;
+		@apply dark:border-white/10 dark:bg-gray-950/40 dark:text-gray-100 dark:placeholder-gray-500;
+		@apply focus:outline-none focus:ring-2 focus:ring-emerald-500/60 focus:border-emerald-500/60;
+		@apply disabled:opacity-60 transition-colors;
+	}
+	select.input { @apply pr-8; }
+	.label {
+		@apply block mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300;
+	}
+	.hint {
+		@apply mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400;
+	}
+	.checkbox {
+		@apply h-4 w-4 rounded border-gray-300 text-emerald-600 accent-emerald-500 focus:ring-emerald-500;
+		@apply dark:border-white/20 dark:bg-gray-950/40;
+	}
+
+	.page {
+		@apply mx-auto w-full max-w-6xl px-4 sm:px-6 py-8 sm:py-10;
+	}
+	.page-narrow {
+		@apply mx-auto w-full max-w-3xl px-4 sm:px-6 py-8 sm:py-10;
+	}
+	.page-title {
+		@apply text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900 dark:text-white;
+	}
+	.page-subtitle {
+		@apply mt-1 text-sm text-gray-500 dark:text-gray-400;
+	}
+	.section-title {
+		@apply text-base font-semibold text-gray-900 dark:text-gray-100;
+	}
+	.eyebrow {
+		@apply text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400;
+	}
+
+	.badge {
+		@apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+		@apply bg-gray-100 text-gray-700 ring-1 ring-inset ring-gray-200;
+		@apply dark:bg-white/[0.06] dark:text-gray-300 dark:ring-white/10;
+	}
+	.badge-emerald { @apply bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-400/20; }
+	.badge-amber { @apply bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-300 dark:ring-amber-400/20; }
+	.badge-violet { @apply bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-400/10 dark:text-violet-300 dark:ring-violet-400/20; }
+
+	.link {
+		@apply font-medium text-emerald-700 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300;
+	}
+
+	/* Tabs drawn as a segmented control */
+	.segmented {
+		@apply inline-flex items-center gap-1 rounded-xl p-1 bg-gray-100 dark:bg-white/[0.04] dark:ring-1 dark:ring-white/[0.06];
+	}
+	.segmented > button, .segmented > a {
+		@apply h-8 px-3 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors;
+	}
+	.segmented > [aria-selected='true'], .segmented > [aria-pressed='true'], .segmented > .is-active {
+		@apply bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-white;
+	}
+
+	/* relative: keeps sr-only header text inside the scroll box instead of widening the page */
+	.data-table {
+		@apply relative w-full text-sm;
+	}
+	.data-table thead th {
+		@apply px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400;
+	}
+	.data-table tbody td {
+		@apply px-4 py-3 border-t border-gray-100 dark:border-white/[0.05];
+	}
+	.data-table tbody tr {
+		@apply transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.02];
+	}
+
+	/* The table: a dark padded rail around a deep green felt with a soft spotlight */
+	.table-rail {
+		background: radial-gradient(ellipse at 50% 30%, #2b2620 0%, #191512 60%, #100d0b 100%);
+		box-shadow:
+			0 30px 60px -20px rgba(0, 0, 0, 0.7),
+			0 0 0 1px rgba(255, 255, 255, 0.04),
+			inset 0 1px 0 rgba(255, 255, 255, 0.08),
+			inset 0 -2px 6px rgba(0, 0, 0, 0.5);
+	}
+	.table-felt {
+		background:
+			radial-gradient(ellipse 70% 60% at 50% 42%, rgba(255, 255, 255, 0.08), transparent 70%),
+			radial-gradient(ellipse at center, #1d7a54 0%, #156043 55%, #0d4430 100%);
+		box-shadow:
+			inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+			inset 0 0 0 10px rgba(0, 0, 0, 0.06),
+			inset 0 10px 40px rgba(0, 0, 0, 0.35);
+	}
+	/* Face-down card */
+	.card-back {
+		@apply flex items-center justify-center rounded-md shadow-playing ring-1 ring-black/30;
+		background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 50%, #7f1d1d 100%);
+	}
+	.card-back-inner {
+		@apply h-[calc(100%-6px)] w-[calc(100%-6px)] rounded-[4px] border border-white/25;
+		background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.08) 0 2px, transparent 2px 6px);
+	}
+
+	/* Betting actions: one colour per intent, the same everywhere */
+	.act-fold {
+		@apply border border-white/10 bg-gray-700/80 text-gray-100 hover:bg-gray-600;
+		@apply dark:bg-white/[0.06] dark:hover:bg-red-500/15 dark:hover:text-red-200 dark:hover:border-red-400/30;
+	}
+	.act-neutral {
+		@apply border border-gray-200 bg-white text-gray-900 hover:bg-gray-50;
+		@apply dark:border-white/10 dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12];
+	}
+	.act-call {
+		@apply bg-emerald-600 text-white hover:bg-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400;
+	}
+	.act-raise {
+		@apply bg-amber-500 text-amber-950 hover:bg-amber-400;
+	}
+
+	/* A playing card face */
+	.playing-card {
+		@apply relative flex flex-col items-center justify-center rounded-md bg-white font-semibold leading-none text-gray-900 shadow-playing ring-1 ring-black/10 select-none;
+		background-image: linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%);
 	}
 }
 
 /* Small UI helpers */
 .offline-indicator {
 	@apply fixed top-0 inset-x-0 z-50 text-center text-sm py-2;
-	@apply bg-yellow-100 text-yellow-900 dark:bg-yellow-900 dark:text-yellow-100;
+	@apply bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200 backdrop-blur;
 }
 
 .route-change-indicator {
-	@apply fixed top-10 right-4 z-50 rounded px-3 py-1 text-sm shadow;
-	@apply bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200;
+	@apply fixed top-0 inset-x-0 z-50 h-0.5 overflow-hidden text-[0px] bg-emerald-500/20;
+}
+.route-change-indicator::after {
+	content: '';
+	@apply absolute inset-y-0 left-0 w-1/3 bg-emerald-400;
+	animation: route-progress 1s ease-in-out infinite;
+}
+@keyframes route-progress {
+	from { transform: translateX(-100%); }
+	to { transform: translateX(300%); }
 }
 
 /* Table reactions: a bubble pops in over the seat and fades out after its few seconds */

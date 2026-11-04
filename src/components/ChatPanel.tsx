@@ -354,8 +354,8 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
 
   return (
     <div className="chat-panel">
-      <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">Chat</h2>
-      <div className="messages space-y-2 max-h-80 overflow-auto p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700">
+      <h2 className="section-title mb-3">Chat</h2>
+      <div className="messages space-y-2 max-h-80 overflow-auto p-3 surface-muted">
         {visibleMessages.map((m) => (
           <div key={m.id} className="message group relative">
             <div className="flex items-center gap-2 text-xs">
@@ -443,12 +443,12 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           disabled={loading || !playerId}
-          className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400"
+          className="input flex-1"
         />
         <button
           onClick={handleSendMessage}
           disabled={loading || !playerId || !input.trim()}
-          className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white px-3 py-1 rounded"
+          className="btn btn-primary"
         >
           Send
         </button>

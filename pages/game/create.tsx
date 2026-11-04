@@ -242,7 +242,7 @@ export default function CreateGameRoomPage() {
           <fieldset aria-label="Visibility">
             <div className="grid gap-3 sm:grid-cols-2">
               <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${visibility === 'public' ? 'border-emerald-500/60 bg-emerald-50 dark:bg-emerald-400/[0.06]' : 'border-gray-200 hover:border-gray-300 dark:border-white/10 dark:hover:border-white/20'}`}>
-                <input type="radio" name="visibility" className="mt-0.5 accent-emerald-500" checked={visibility === 'public'} onChange={() => setVisibility('public')} />
+                <input type="radio" name="visibility" className="radio mt-0.5" checked={visibility === 'public'} onChange={() => setVisibility('public')} />
                 <span>
                   <span className="block text-sm font-medium text-gray-900 dark:text-white">Public</span>
                   <span className="block text-xs text-gray-500 dark:text-gray-400">Listed in the lobby for anyone to join</span>
@@ -252,7 +252,7 @@ export default function CreateGameRoomPage() {
                 <input
                   type="radio"
                   name="visibility"
-                  className="mt-0.5 accent-emerald-500"
+                  className="radio mt-0.5"
                   checked={visibility === 'private'}
                   disabled={!canCreatePrivate}
                   onChange={() => setVisibility('private')}

@@ -1626,7 +1626,7 @@ export default function GamePage() {
       if (isCurrentPlayer) {
         // Position info box so its left edge touches the avatar circle's right edge (w-16 => 64px, half=32px + 2px border)
         // Use calc to place left at 50% + 34px; keep vertical centering relative to avatar center
-        return 'left-[calc(50%+34px)] top-[104%] transform -translate-y-1/2';
+        return 'left-[calc(50%+54px)] max-sm:left-[calc(50%+42px)] top-[104%] transform -translate-y-1/2';
       }
 
       // If we have style coordinates, use them to determine position
@@ -1783,8 +1783,10 @@ export default function GamePage() {
         {/* Player info box - only show if seat is occupied */}
         {!isEmpty && assignment && (
           <div
-            className={isNarrowScreen ? 'absolute z-10' : `absolute ${getInfoBoxPosition(position, style)} z-10`}
-            style={isNarrowScreen ? narrowInfoBoxStyle(style) : { pointerEvents: 'none' }}
+            className={!isCurrentPlayer ? 'absolute z-10' : `absolute ${getInfoBoxPosition(position, style)} z-10`}
+            // Opponents' placards sit beside the seat on the side away from the felt, so they never cover
+            // avatars or cards; your own sits to the right of your avatar, clear of your hole cards
+            style={isCurrentPlayer ? { pointerEvents: 'none' } : narrowInfoBoxStyle(style, isNarrowScreen ? 34 : 44)}
           >
             <div className={`min-w-[88px] px-3 py-1.5 max-sm:px-2 max-sm:py-1 max-sm:text-[10px] max-sm:min-w-0 max-sm:max-w-[104px] rounded-xl shadow-card border backdrop-blur-sm text-xs bg-gray-950/85 text-gray-100 ${
               isCurrentPlayer ? 'border-emerald-400/40' : 'border-white/10'
@@ -2558,7 +2560,7 @@ export default function GamePage() {
             <GameRulesBadges state={pokerGameState} />
             </div>
           </div>
-          <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] -mx-1 px-1 pb-0.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {currentPlayerSeat && (
               <button
                 onClick={standUp}
@@ -2569,14 +2571,16 @@ export default function GamePage() {
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                 </svg>
-                <span className="whitespace-nowrap">Stand up</span>
+                <span className="whitespace-nowrap max-sm:sr-only">Stand up</span>
               </button>
             )}
             <a
               href={`/history?room=${encodeURIComponent(tableId)}`}
               className="btn btn-secondary btn-sm"
+              title="Hand history"
             >
-              Hand history
+              <svg className="h-4 w-4 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.8L3 8M3 3v5h5M12 7v5l3 2" /></svg>
+              <span className="max-sm:sr-only">Hand history</span>
             </a>
             {gameStarted && me && tableExtras?.allowStraddle && !isStudVariant() && (pokerGameState?.players?.length || 0) >= 3 && (
               <button
@@ -2596,7 +2600,7 @@ export default function GamePage() {
                 title={me.leaveAfterHand ? 'You will stand up when this hand ends; click to stay' : 'Finish this hand, then stand up'}
                 aria-pressed={!!me.leaveAfterHand}
               >
-                {me.leaveAfterHand ? 'Leaving after this hand' : 'Leave after this hand'}
+                {me.leaveAfterHand ? 'Leaving after this hand' : <>Leave after <span className="max-sm:hidden">this&nbsp;</span>hand</>}
               </button>
             )}
             {gameStarted && me && (
@@ -2616,24 +2620,34 @@ export default function GamePage() {
               <>
                 <button
                   onClick={() => turnAlerts.setSoundEnabled(!turnAlerts.soundEnabled)}
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-secondary btn-sm !px-2"
                   title={turnAlerts.soundEnabled ? 'Turn off the sound when it is your turn' : 'Play a sound when it is your turn'}
+                  aria-label={turnAlerts.soundEnabled ? 'Sound on' : 'Sound off'}
                   aria-pressed={turnAlerts.soundEnabled}
                 >
-                  {turnAlerts.soundEnabled ? 'Sound on' : 'Sound off'}
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M11 5L6 9H3v6h3l5 4V5z" />
+                    {turnAlerts.soundEnabled
+                      ? <path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13" />
+                      : <path d="M16 9l5 6M21 9l-5 6" />}
+                  </svg>
                 </button>
                 {turnAlerts.notifyPermission !== 'unsupported' && turnAlerts.notifyPermission !== 'denied' && (
                   <button
                     onClick={() => turnAlerts.setNotifyEnabled(!turnAlerts.notifyEnabled)}
-                    className="btn btn-ghost btn-sm"
+                    className={`btn btn-secondary btn-sm !px-2 ${turnAlerts.notifyEnabled ? '!text-emerald-500 dark:!text-emerald-300' : ''}`}
                     title="Get a browser notification when it is your turn and this tab is in the background"
+                    aria-label={turnAlerts.notifyEnabled ? 'Alerts on' : 'Alert me'}
                     aria-pressed={turnAlerts.notifyEnabled}
                   >
-                    {turnAlerts.notifyEnabled ? 'Alerts on' : 'Alert me'}
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0" />
+                    </svg>
                   </button>
                 )}
               </>
             )}
+            <span className="mx-1 h-5 w-px shrink-0 bg-gray-200 dark:bg-white/10 max-sm:hidden" aria-hidden="true" />
             {canStartGame() && !gameStarted && (
               <button
                 onClick={handleStartGame}
@@ -2656,12 +2670,12 @@ export default function GamePage() {
               <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
-              <span className="whitespace-nowrap">Leave</span>
+              <span className="whitespace-nowrap max-sm:sr-only">Leave</span>
             </button>
           </div>
         </div>
       </header>
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:py-8">
+      <div className="mx-auto max-w-7xl px-4 pt-2 pb-6 sm:py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-flow-row-dense gap-6">
           {seatNotice && (
             <div className="lg:col-span-3 flex items-center justify-between gap-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg p-3 text-sm text-blue-900 dark:text-blue-100" role="status">
@@ -2793,7 +2807,7 @@ export default function GamePage() {
           {/* Poker Table - Green Felt Design */}
           <div className="lg:col-span-2 relative">
             {/* Green felt table surface */}
-            <div className="table-rail relative rounded-full mx-auto max-sm:mt-12 max-sm:mb-20"
+            <div className="table-rail relative rounded-full mx-auto max-sm:mt-11 max-sm:mb-20"
                  style={{
                    width: '100%',
                    maxWidth: '820px',
@@ -2909,7 +2923,7 @@ export default function GamePage() {
 
           {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && (
-            <div className="lg:col-span-2 surface p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
+            <div className="lg:col-span-2 surface max-sm:!bg-gray-50 max-sm:dark:!bg-gray-800 p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <h3 className="text-base font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />

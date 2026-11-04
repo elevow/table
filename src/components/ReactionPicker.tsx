@@ -15,7 +15,7 @@ interface Props {
 export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMuted }: Props) {
   if (muted) {
     return (
-      <div className="mt-10 max-sm:mt-2 flex justify-center">
+      <div className="mt-10 max-sm:mt-8 flex justify-center">
         <button
           type="button"
           onClick={() => onToggleMuted(false)}
@@ -30,7 +30,7 @@ export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMu
   }
   return (
     // The top margin clears our own seat, which hangs below the felt on wide screens
-    <div className="mt-10 max-sm:mt-2 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Table reactions">
+    <div className="mt-10 max-sm:mt-8 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Table reactions">
       {TABLE_REACTIONS.map(emote => (
         <button
           key={emote}

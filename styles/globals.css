@@ -84,16 +84,56 @@
 		@apply focus:outline-none focus:ring-2 focus:ring-emerald-500/60 focus:border-emerald-500/60;
 		@apply disabled:opacity-60 transition-colors;
 	}
-	select.input { @apply pr-8; }
 	.label {
 		@apply block mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300;
 	}
 	.hint {
 		@apply mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400;
 	}
+	/* Drawn checkboxes and switches, so no bright native control shows up on the dark theme */
 	.checkbox {
-		@apply h-4 w-4 rounded border-gray-300 text-emerald-600 accent-emerald-500 focus:ring-emerald-500;
-		@apply dark:border-white/20 dark:bg-gray-950/40;
+		@apply h-4 w-4 shrink-0 cursor-pointer appearance-none rounded border border-gray-300 bg-white align-middle transition-colors;
+		@apply dark:border-white/20 dark:bg-white/[0.04];
+		@apply checked:border-emerald-500 checked:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50;
+		background-position: center;
+		background-repeat: no-repeat;
+		background-size: 12px 12px;
+	}
+	.checkbox:checked {
+		background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M3.5 8.5l3 3 6-7' stroke='%23052e1c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3e%3c/svg%3e");
+	}
+	.radio {
+		@apply h-4 w-4 shrink-0 cursor-pointer appearance-none rounded-full border border-gray-300 bg-white transition-colors;
+		@apply dark:border-white/25 dark:bg-white/[0.04] disabled:cursor-not-allowed;
+	}
+	.radio:checked {
+		@apply border-emerald-500;
+		box-shadow: inset 0 0 0 3px rgb(var(--radio-ring, 255 255 255)), inset 0 0 0 8px #10b981;
+	}
+	.dark .radio:checked {
+		--radio-ring: 14 18 24;
+	}
+	.switch {
+		@apply relative h-5 w-9 shrink-0 cursor-pointer appearance-none rounded-full bg-gray-300 transition-colors dark:bg-white/15;
+		@apply checked:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50;
+	}
+	.switch::before {
+		content: '';
+		@apply absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform;
+	}
+	.switch:checked::before {
+		@apply translate-x-4;
+	}
+	/* Selects get the same chevron in both themes */
+	select.input {
+		@apply appearance-none pr-9;
+		background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M6 8l4 4 4-4' stroke='%238d96a5' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3e%3c/svg%3e");
+		background-position: right 0.6rem center;
+		background-repeat: no-repeat;
+		background-size: 1.1rem;
+	}
+	select.input option {
+		@apply bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100;
 	}
 
 	.page {
@@ -149,6 +189,9 @@
 	.data-table tbody td {
 		@apply px-4 py-3 border-t border-gray-100 dark:border-white/[0.05];
 	}
+	/* Outer columns line up with the 24px padding of the card around the table */
+	.data-table th:first-child, .data-table td:first-child { @apply pl-6; }
+	.data-table th:last-child, .data-table td:last-child { @apply pr-6; }
 	.data-table tbody tr {
 		@apply transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.02];
 	}

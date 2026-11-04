@@ -13,12 +13,12 @@ function TablesList({ title, empty, tables, showHost }: { title: string; empty: 
   const router = useRouter();
   return (
     <section className="surface overflow-hidden">
-      <div className="flex items-center justify-between px-5 pt-5 pb-3">
+      <div className="flex items-center justify-between px-6 pt-6 pb-3">
         <h3 className="section-title">{title}</h3>
         {tables.length > 0 && <span className="badge">{tables.length} {tables.length === 1 ? 'table' : 'tables'}</span>}
       </div>
       {tables.length === 0 ? (
-        <div className="px-5 pb-8 pt-4 text-center">
+        <div className="px-6 pb-8 pt-4 text-center">
           <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/[0.05] dark:text-gray-500">
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true"><ellipse cx="12" cy="12" rx="9" ry="6" /></svg>
           </div>
@@ -31,7 +31,7 @@ function TablesList({ title, empty, tables, showHost }: { title: string; empty: 
           {tables.map(t => {
             const full = t.seated >= t.maxPlayers;
             return (
-              <li key={t.id} className="flex items-center gap-3 px-5 py-3.5">
+              <li key={t.id} className="flex items-center gap-3 px-6 py-3.5">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate text-sm font-medium text-gray-900 dark:text-white">{t.name}</span>

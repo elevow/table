@@ -220,10 +220,17 @@ export default function LeaderboardPage() {
             return (
               <div
                 key={a.type}
-                className={when ? 'surface p-4' : 'surface-muted p-4 border-dashed'}
+                className={`min-h-[92px] flex items-center ${when ? 'surface p-4' : 'surface-muted p-4 border-dashed'}`}
               >
                 <div className="flex items-center gap-4">
-                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-2xl ${when ? 'bg-emerald-400/10' : 'bg-gray-200/60 dark:bg-white/[0.04] grayscale opacity-50'}`} aria-hidden="true">{a.icon}</span>
+                  <span className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-2xl ${when ? 'bg-emerald-400/10' : 'bg-gray-200/60 dark:bg-white/[0.05]'}`} aria-hidden="true">
+                    <span className={when ? '' : 'grayscale opacity-60'}>{a.icon}</span>
+                    {!when && (
+                      <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-gray-500 ring-2 ring-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:ring-gray-900">
+                        <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 2a4 4 0 00-4 4v2H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-1V6a4 4 0 00-4-4zm2 6V6a2 2 0 10-4 0v2h4z" clipRule="evenodd" /></svg>
+                      </span>
+                    )}
+                  </span>
                   <div className="min-w-0">
                     <div className={`text-sm font-semibold ${when ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>{a.label}</div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">{a.description}</div>

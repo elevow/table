@@ -15,7 +15,7 @@ interface ProfitData {
   truncated: boolean;
 }
 
-const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '-' : ''}$${Math.abs(Math.round(n * 100) / 100).toLocaleString()}`;
+const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}$${Math.abs(Math.round(n * 100) / 100).toLocaleString()}`;
 const netClass = (n: number) => (n > 0 ? 'text-emerald-600 dark:text-emerald-400' : n < 0 ? 'text-red-600 dark:text-red-400' : '');
 
 export default function StatsPage() {
@@ -119,7 +119,7 @@ export default function StatsPage() {
               ].map(t => (
                 <div key={t.label} className="surface px-5 py-4">
                   <div className="text-xs font-medium text-gray-500 dark:text-gray-400">{t.label}</div>
-                  <div className={`mt-1 text-2xl font-semibold tracking-tight tabular-nums text-gray-900 dark:text-white ${t.cls}`}>{t.value}</div>
+                  <div className={`mt-1 text-2xl font-semibold tracking-tight tabular-nums ${t.cls || 'text-gray-900 dark:text-white'}`}>{t.value}</div>
                 </div>
               ))}
             </div>
@@ -133,7 +133,7 @@ export default function StatsPage() {
             </section>
 
             <section className="surface overflow-x-auto">
-              <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-6 pt-6">
                 <h2 className="section-title">Sessions</h2>
                 {canDelete && data.sessions.length > 0 && (
                   <button
@@ -145,7 +145,7 @@ export default function StatsPage() {
                   </button>
                 )}
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 px-5 mt-1 mb-3">A break of more than two hours at a table starts a new session.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 px-6 mt-1 mb-3">A break of more than two hours at a table starts a new session.</p>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -175,7 +175,7 @@ export default function StatsPage() {
                           <button
                             onClick={() => exportSession(s)}
                             disabled={exporting === key}
-                            className="btn btn-ghost btn-sm disabled:opacity-60"
+                            className="btn btn-secondary btn-sm disabled:opacity-60"
                           >
                             {exporting === key ? 'Exporting…' : 'Export'}
                           </button>

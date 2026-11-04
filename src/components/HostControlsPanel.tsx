@@ -81,7 +81,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             <input
               type="checkbox"
               aria-label="Private table"
-              className="checkbox"
+              className="switch"
               checked={isPrivate}
               disabled={!!busy}
               onChange={e => send('visibility', { action: 'set-visibility', private: e.target.checked })}
@@ -163,7 +163,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
                   </>
                 )}
                 <button
-                  className={`btn btn-sm ${bomb ? 'btn-ghost' : 'btn-warning'}`}
+                  className={`btn btn-sm ${bomb ? 'btn-ghost' : 'btn-secondary'}`}
                   disabled={!!busy || (!bomb && !(Number(anteBB) > 0))}
                   onClick={() => send('bomb', { action: 'bomb-pot', anteBB: bomb ? null : Number(anteBB) })}
                 >
@@ -181,7 +181,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             <span>Allow straddles</span>
             <input
               type="checkbox"
-              className="checkbox"
+              className="switch"
               checked={extras.allowStraddle}
               disabled={!!busy}
               onChange={e => send('straddle', { action: 'allow-straddle', allow: e.target.checked })}
@@ -193,7 +193,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             <span>Allow run it twice</span>
             <input
               type="checkbox"
-              className="checkbox"
+              className="switch"
               checked={extras.allowRunItTwice}
               disabled={!!busy}
               onChange={e => send('rit', { action: 'allow-run-it-twice', allow: e.target.checked })}
@@ -260,7 +260,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
           <span>Approve players before they sit</span>
           <input
             type="checkbox"
-            className="checkbox"
+            className="switch"
             checked={extras.requireSeatApproval}
             disabled={!!busy}
             onChange={e => send('approval', { action: 'require-approval', required: e.target.checked })}

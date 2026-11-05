@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { RabbitHuntService } from '../../../src/lib/services/rabbit-hunt-service';
 import { createSafeAudit } from '../../../src/lib/api/audit';
@@ -17,7 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // The caller comes from the session, never from a client-supplied header or query param
   const callerUserId = await getAuthenticatedUserId(req);
   try {
-    const pool = new Pool();
+    const pool = getPool();
     const svc = new RabbitHuntService(pool);
     const safeLog = createSafeAudit(pool);
 
@@ -37,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await safeLog(callerUserId, 'rabbit_hunt', 'preview', true, { ...meta, roomId, street });
     return res.status(200).json(result);
   } catch (err: any) {
-    const pool = new Pool();
+    const pool = getPool();
     const safeLog = createSafeAudit(pool);
     const ip = getClientIp(req);
     const userAgent = (req.headers['user-agent'] as string) || '';

@@ -32,8 +32,9 @@ describe('Database Pool', () => {
   afterEach(() => {
     // Restore original environment
     process.env = { ...originalEnv };
-    // Clear cached modules to reset pool state
+    // Clear cached modules and the dev-mode global pool to reset pool state
     jest.resetModules();
+    delete (globalThis as any).__pgPool;
   });
 
   describe('getPool()', () => {

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { FriendService } from '../../../src/lib/services/friend-service';
 
@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!userId) return res.status(400).json({ error: 'Missing userId' });
     const p = page ? parseInt(page, 10) : 1;
     const l = limit ? parseInt(limit, 10) : 20;
-    const pool = new Pool();
+    const pool = getPool();
     const service = new FriendService(pool as any);
     const resp = await service.listFriends(userId, p, l);
     return res.status(200).json(resp);

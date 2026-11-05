@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { FriendService } from '../../../src/lib/services/friend-service';
 
@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { inviterId, inviteeId, roomId } = (req.body || {}) as { inviterId?: string; inviteeId?: string; roomId?: string };
     if (!inviterId || !inviteeId || !roomId) return res.status(400).json({ error: 'Missing inviterId, inviteeId, or roomId' });
-    const pool = new Pool();
+    const pool = getPool();
     const service = new FriendService(pool as any);
     const invite = await service.inviteToGame(inviterId, inviteeId, roomId);
 

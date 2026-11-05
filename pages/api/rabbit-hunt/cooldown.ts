@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { RabbitHuntService } from '../../../src/lib/services/rabbit-hunt-service';
 
@@ -8,7 +8,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const rl = rateLimit(req, { limit: 300, windowMs: 60_000 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
   try {
-    const pool = new Pool();
+    const pool = getPool();
     const svc = new RabbitHuntService(pool);
     const { userId } = req.query as any;
     const cd = await svc.getCooldown(userId);

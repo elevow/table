@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { RabbitHuntService } from '../../../src/lib/services/rabbit-hunt-service';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const userId = await requirePlayer(req, res, req.body?.userId, 'game.rabbit_hunt');
   if (!userId) return;
   try {
-    const pool = new Pool();
+    const pool = getPool();
     const svc = new RabbitHuntService(pool);
     const record = await svc.requestReveal({ ...(req.body || {}), userId });
     return res.status(201).json(record);

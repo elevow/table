@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { FriendService } from '../../../src/lib/services/friend-service';
 
@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { userId, blockedId } = (req.body || {}) as { userId?: string; blockedId?: string };
     if (!userId || !blockedId) return res.status(400).json({ error: 'Missing userId or blockedId' });
-    const pool = new Pool();
+    const pool = getPool();
     const service = new FriendService(pool as any);
     await service.unblock(userId, blockedId);
     return res.status(200).json({ success: true });

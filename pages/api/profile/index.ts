@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { UserManager } from '../../../src/lib/database/user-manager';
 import { createUserService } from '../../../src/lib/services/user-service';
@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const ip = getClientIp(req);
   const userAgent = (req.headers['user-agent'] as string) || '';
 
-  const pool = new Pool();
+  const pool = getPool();
   const manager = new UserManager(pool);
   const userService = createUserService(manager);
   const safeLog = createSafeAudit(pool);

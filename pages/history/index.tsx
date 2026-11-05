@@ -6,6 +6,7 @@ import { useRouter } from 'next/router';
 import { authHeaders } from '../../src/utils/auth-headers';
 import { downloadHandHistory } from '../../src/utils/download-hand-history';
 import MiniCard from '../../src/components/MiniCard';
+import { useDisplaySettings } from '../../src/hooks/useDisplaySettings';
 import type { HandSummary } from '../../src/types/hand-record';
 
 const VARIANT_LABEL: Record<string, string> = {
@@ -28,6 +29,8 @@ function variantLabel(v?: string) {
 export default function HandHistoryPage() {
   const router = useRouter();
   const roomId = typeof router.query.room === 'string' ? router.query.room : '';
+  // Cards follow the player's display settings (and this table's own setting when showing one table)
+  const { highContrastCards } = useDisplaySettings(roomId || null).settings;
   const [hands, setHands] = useState<HandSummary[]>([]);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,7 +147,7 @@ export default function HandHistoryPage() {
                       <td className="whitespace-nowrap text-gray-600 dark:text-gray-300">{new Date(h.endedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</td>
                       <td className="whitespace-nowrap text-gray-600 dark:text-gray-300">{variantLabel(h.variant)}</td>
                       <td>
-                        <div className="flex gap-0.5">{cards.map((c, i) => <MiniCard key={i} card={c} />)}</div>
+                        <div className="flex gap-0.5">{cards.map((c, i) => <MiniCard key={i} card={c} highContrast={highContrastCards} />)}</div>
                       </td>
                       <td className="text-gray-600 dark:text-gray-300">{h.winners.map(w => w.name).join(', ') || '—'}</td>
                       <td className="text-right tabular-nums">${h.pot}</td>

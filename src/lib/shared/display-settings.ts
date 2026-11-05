@@ -42,3 +42,17 @@ export function writeTableOverrides(tableId: string, overrides: Partial<DisplayS
     else localStorage.setItem(tableDisplayKey(tableId), JSON.stringify(overrides));
   } catch {}
 }
+
+/**
+ * Text colour for a card's suit. High-contrast cards give each suit its own colour (hearts red,
+ * diamonds yellow, clubs blue, spades black); otherwise red suits are red and black suits near-black.
+ */
+export function suitColorClass(suit: string, highContrast: boolean): string {
+  if (highContrast) {
+    if (suit === 'hearts') return 'text-red-500';
+    if (suit === 'diamonds') return 'text-yellow-500';
+    if (suit === 'clubs') return 'text-blue-600';
+    return 'text-black';
+  }
+  return suit === 'hearts' || suit === 'diamonds' ? 'text-red-600' : 'text-gray-900';
+}

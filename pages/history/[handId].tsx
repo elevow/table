@@ -6,6 +6,7 @@ import { useRouter } from 'next/router';
 import { authHeaders } from '../../src/utils/auth-headers';
 import { downloadHandHistory } from '../../src/utils/download-hand-history';
 import MiniCard from '../../src/components/MiniCard';
+import { useDisplaySettings } from '../../src/hooks/useDisplaySettings';
 import { buildReplayFrames, describeAction, streetLabel } from '../../src/lib/shared/hand-replay';
 import type { HandRecord } from '../../src/types/hand-record';
 
@@ -19,6 +20,8 @@ export default function HandReplayPage() {
   const [error, setError] = useState<string | null>(null);
   const [frameIndex, setFrameIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  // Cards follow the player's display settings, including any change they made at that table
+  const { highContrastCards: hc } = useDisplaySettings(hand?.roomId || null).settings;
 
   useEffect(() => {
     if (!handId) return;
@@ -107,12 +110,12 @@ export default function HandReplayPage() {
                       hand.runBoards.map((board, r) => (
                         <div key={r} className="flex items-center gap-2">
                           <span className="text-[11px] font-semibold uppercase tracking-wider text-white/70 w-12">Run {r + 1}</span>
-                          <div className="flex gap-1">{board.map((c, i) => <MiniCard key={i} card={c} size="md" />)}</div>
+                          <div className="flex gap-1">{board.map((c, i) => <MiniCard key={i} card={c} size="md" highContrast={hc} />)}</div>
                         </div>
                       ))
                     ) : (
                       <div className="flex gap-1 min-h-[3.5rem]">
-                        {hand.board.slice(0, frame.boardCount).map((c, i) => <MiniCard key={i} card={c} size="md" />)}
+                        {hand.board.slice(0, frame.boardCount).map((c, i) => <MiniCard key={i} card={c} size="md" highContrast={hc} />)}
                       </div>
                     )}
                     <div className="inline-flex items-center gap-1.5 bg-black/35 ring-1 ring-white/10 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-semibold tabular-nums text-white">
@@ -139,10 +142,10 @@ export default function HandReplayPage() {
                             <span className="tabular-nums text-emerald-300 font-semibold">{money(frame.stacks[p.id] ?? 0)}</span>
                           </div>
                           <div className="flex gap-0.5 my-2 min-h-[3rem]">
-                            {hole && hole.map((c, i) => <MiniCard key={i} card={c} />)}
-                            {!hole && down && down.map((c, i) => <MiniCard key={`d${i}`} card={c} />)}
+                            {hole && hole.map((c, i) => <MiniCard key={i} card={c} highContrast={hc} />)}
+                            {!hole && down && down.map((c, i) => <MiniCard key={`d${i}`} card={c} highContrast={hc} />)}
                             {!hole && !down && !up.length && [0, 1].map(i => <MiniCard key={i} />)}
-                            {up.map((c, i) => <MiniCard key={`u${i}`} card={c} />)}
+                            {up.map((c, i) => <MiniCard key={`u${i}`} card={c} highContrast={hc} />)}
                           </div>
                           <div className="text-xs text-gray-400 min-h-[1rem]">
                             {isWinner

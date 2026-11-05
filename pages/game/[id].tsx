@@ -51,6 +51,8 @@ import TableChipAnimations from '../../src/components/TableChipAnimations';
 import MobileCollapsible from '../../src/components/MobileCollapsible';
 import { useMediaQuery, NARROW_SCREEN_QUERY } from '../../src/hooks/useMediaQuery';
 import { seatPlateStyle } from '../../src/lib/shared/seat-layout';
+import { tablePlayerName } from '../../src/utils/table-player-name';
+import { suitColorClass as suitTextClass } from '../../src/lib/shared/display-settings';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
 
 type RebuyPromptState = {
@@ -638,15 +640,7 @@ export default function GamePage() {
   }, []);
 
   // Helper: suit -> Tailwind text color class, considering high contrast setting
-  const suitColorClass = useCallback((suit: string) => {
-    if (highContrastCards) {
-      if (suit === 'hearts') return 'text-red-500';
-      if (suit === 'diamonds') return 'text-yellow-500';
-      if (suit === 'clubs') return 'text-blue-600';
-      return 'text-black'; // spades
-    }
-    return (suit === 'hearts' || suit === 'diamonds') ? 'text-red-600' : 'text-gray-900';
-  }, [highContrastCards]);
+  const suitColorClass = useCallback((suit: string) => suitTextClass(suit, highContrastCards), [highContrastCards]);
 
   // Fetch room configuration to determine variant, betting mode, and blinds
   useEffect(() => {
@@ -815,12 +809,11 @@ export default function GamePage() {
     if (currentPlayerSeat) return; // Player already has a seat
     if (claimingSeat) return; // Already claiming
 
-    // Get player name from localStorage, or generate a fallback
-    const savedPlayerName = localStorage.getItem('playerName');
-    const playerName = savedPlayerName || (() => {
+    // The name chosen in Account Settings, else the account username; a numbered name only for guests
+    const playerName = tablePlayerName((() => {
       const playerNumber = playerId.replace(/\D/g, '').slice(-2) || Math.floor(Math.random() * 99).toString().padStart(2, '0');
       return `Player ${playerNumber}`;
-    })();
+    })());
 
     setClaimingSeat(seatNumber);
 
@@ -1443,8 +1436,7 @@ export default function GamePage() {
   const tableFull = Object.entries(seatAssignments).filter(([n]) => Number(n) <= maxPlayers).every(([, a]) => !!a);
   const toggleWaitlist = useCallback(async (join: boolean) => {
     if (!tableId || !playerId) return;
-    let name = 'Player';
-    try { name = localStorage.getItem('playerName') || name; } catch {}
+    const name = tablePlayerName('Player');
     const resp = await fetch('/api/games/waitlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },

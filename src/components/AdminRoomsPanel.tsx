@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { isAdminEmail } from '../utils/roleUtils';
 import { getStoredAuthToken } from '../utils/auth-headers';
 
@@ -292,9 +293,13 @@ export default function AdminRoomsPanel() {
               {rooms.map((room) => (
                 <tr key={room.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.08]">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <Link
+                      href={`/game/${encodeURIComponent(room.id)}`}
+                      className="link text-sm font-mono"
+                      title="Open this table"
+                    >
                       {room.room_code || room.room_id || room.id}
-                    </div>
+                    </Link>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900 dark:text-gray-100">

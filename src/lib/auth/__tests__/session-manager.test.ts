@@ -2,15 +2,12 @@ import { jest } from '@jest/globals';
 import { SessionManager } from '../session-manager';
 import { Pool, PoolClient } from 'pg';
 import crypto from 'crypto';
-import { v4 as uuidv4 } from 'uuid';
 
 // Mock dependencies
 jest.mock('crypto');
-jest.mock('uuid');
 jest.mock('pg');
 
 const mockCrypto = crypto as jest.Mocked<typeof crypto>;
-const mockUuidv4 = uuidv4 as jest.MockedFunction<typeof uuidv4>;
 
 describe('SessionManager', () => {
   let sessionManager: SessionManager;
@@ -43,8 +40,8 @@ describe('SessionManager', () => {
       digest: jest.fn().mockReturnValue('mockedigest'),
     });
     
-    // Setup uuid mock
-    (mockUuidv4 as any).mockReturnValue('mocked-uuid-123');
+    // Setup randomUUID mock
+    (mockCrypto.randomUUID as any) = jest.fn().mockReturnValue('mocked-uuid-123');
   });
 
   test('should be instantiated correctly', () => {

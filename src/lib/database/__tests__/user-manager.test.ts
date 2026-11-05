@@ -11,7 +11,7 @@ const mockClient = {
   release: jest.fn(),
 };
 
-jest.mock('uuid', () => ({ v4: () => 'u-1' }));
+jest.mock('crypto', () => ({ ...jest.requireActual('crypto'), randomUUID: () => 'u-1' }));
 
 describe('UserManager (US-017)', () => {
   let manager: UserManager;

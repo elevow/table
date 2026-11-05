@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import type { AdminAlert, AlertSource, AlertStatus } from '../../types';
 import type { CollusionDetection } from '../../types/collusion';
 import type { AccountLinkage } from '../../types/multi-account';
@@ -28,7 +28,7 @@ export class AdminAlertStore {
   add(alert: Omit<AdminAlert, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): AdminAlert {
     const now = Date.now();
     const full: AdminAlert = {
-      id: alert.id || uuidv4(),
+      id: alert.id || randomUUID(),
       type: alert.type,
       severity: alert.severity,
       message: alert.message,

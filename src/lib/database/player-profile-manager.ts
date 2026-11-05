@@ -2,7 +2,7 @@
 
 import { Pool, PoolClient } from 'pg';
 import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import {
   Player,
   PlayerStats,
@@ -78,8 +78,8 @@ export class PlayerProfileManager {
       const passwordHash = await bcrypt.hash(request.password, 12);
       
       // Create player
-      const playerId = uuidv4();
-      const verificationToken = uuidv4();
+      const playerId = randomUUID();
+      const verificationToken = randomUUID();
       
       const playerQuery = `
         INSERT INTO players (

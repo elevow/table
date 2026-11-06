@@ -1,7 +1,7 @@
 // US-021: Hand History - Data Access Layer
 
 import { Pool } from 'pg';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import {
   GameHistoryRecord,
   CreateGameHistoryRequest,
@@ -25,7 +25,7 @@ export class HandHistoryManager {
       RETURNING *
     `;
 
-    const id = uuidv4();
+    const id = randomUUID();
     const values = [
       id,
       req.tableId, // mapping existing shape: tableId -> game_id
@@ -66,7 +66,7 @@ export class HandHistoryManager {
       ) VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
     `;
-    const id = uuidv4();
+    const id = randomUUID();
     const values = [
       id,
       input.handId,

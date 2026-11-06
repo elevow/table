@@ -6,7 +6,7 @@ import { UserManager } from '../../../src/lib/database/user-manager';
 import { createUserService } from '../../../src/lib/services/user-service';
 import { createSafeAudit } from '../../../src/lib/api/audit';
 import { emailService } from '../../../src/lib/services/email-service';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { generateSessionToken, hashSessionToken } from '../../../src/lib/auth/session-token';
 
 function getClientIp(req: NextApiRequest): string {
@@ -136,7 +136,7 @@ export default async function handler(
       await client.query(
         `INSERT INTO auth_tokens (id, user_id, token_hash, expires_at, type) 
          VALUES ($1, $2, $3, $4, $5)`,
-        [uuidv4(), newUser.id, hashSessionToken(sessionToken), expiresAt, 'session']
+        [randomUUID(), newUser.id, hashSessionToken(sessionToken), expiresAt, 'session']
       );
     } finally {
       client.release();

@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { validateTournamentConfig } from './tournament-utils';
 import { bountyEnabled, collectWinnerBounty, forfeitBounty, payoutTable, postBounty, prizePool, remainingPlayers, settleKnockout } from './tournament-money';
 import type { TournamentStore } from './tournament-store';
@@ -30,7 +30,7 @@ export class TournamentManager {
     const res = validateTournamentConfig(input.config);
     if (!res.valid) throw new Error(`Invalid tournament config: ${res.errors.join(', ')}`);
     if (input.config.startsAt !== undefined && input.config.startsAt < this.now() - 60_000) throw new Error('The start time has already passed');
-    const id = uuidv4();
+    const id = randomUUID();
     const now = this.now();
     const state: TournamentState = {
       id,

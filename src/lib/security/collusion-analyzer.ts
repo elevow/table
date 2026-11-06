@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import type { CollusionDetection, BettingPattern, PlayerGrouping, FoldingPattern, ChipDumpingMetric, SecurityAlert } from '../../types/collusion';
 import type { PlayerAction } from '../../types/poker';
 
@@ -23,16 +23,16 @@ export class CollusionAnalyzer {
 
     const alerts: SecurityAlert[] = [];
     for (const p of betting.filter(b => b.suspicious)) {
-      alerts.push({ id: uuidv4(), type: 'betting', severity: 'low', message: `Unusual aggression for ${p.playerId}`, at: Date.now(), involved: [p.playerId] });
+      alerts.push({ id: randomUUID(), type: 'betting', severity: 'low', message: `Unusual aggression for ${p.playerId}`, at: Date.now(), involved: [p.playerId] });
     }
     for (const g of grouping.filter(g => g.suspicious)) {
-      alerts.push({ id: uuidv4(), type: 'grouping', severity: 'medium', message: `Frequent co-play: ${g.players[0]} & ${g.players[1]}`, at: Date.now(), involved: [...g.players] });
+      alerts.push({ id: randomUUID(), type: 'grouping', severity: 'medium', message: `Frequent co-play: ${g.players[0]} & ${g.players[1]}`, at: Date.now(), involved: [...g.players] });
     }
     for (const f of folding.filter(f => f.suspicious)) {
-      alerts.push({ id: uuidv4(), type: 'folding', severity: 'medium', message: `High fold-to-agg: ${f.target} vs ${f.vsPlayer}`, at: Date.now(), involved: [f.target, f.vsPlayer] });
+      alerts.push({ id: randomUUID(), type: 'folding', severity: 'medium', message: `High fold-to-agg: ${f.target} vs ${f.vsPlayer}`, at: Date.now(), involved: [f.target, f.vsPlayer] });
     }
     for (const c of chipDumping.filter(c => c.suspicious)) {
-      alerts.push({ id: uuidv4(), type: 'chip-dump', severity: 'high', message: `Chip flow ${c.from} -> ${c.to}: ${c.totalAmount}`, at: Date.now(), involved: [c.from, c.to] });
+      alerts.push({ id: randomUUID(), type: 'chip-dump', severity: 'high', message: `Chip flow ${c.from} -> ${c.to}: ${c.totalAmount}`, at: Date.now(), involved: [c.from, c.to] });
     }
 
     const suspicionSignals = alerts.length;

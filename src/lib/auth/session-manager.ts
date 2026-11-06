@@ -1,7 +1,6 @@
 // Session Management Service
 
 import { Pool } from 'pg';
-import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { AuthSession, SessionCleanupOptions } from '../../types/auth';
 import { AuthTokenRecord } from '../../types/user';
@@ -29,7 +28,7 @@ export class SessionManager {
       const token = this.generateSecureToken();
       const tokenHash = this.hashToken(token);
       
-      const sessionId = uuidv4();
+      const sessionId = crypto.randomUUID();
       const now = new Date();
       const expiresAt = new Date(now.getTime() + (expirationHours * 60 * 60 * 1000));
 

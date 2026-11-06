@@ -1,19 +1,16 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiRequest } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
-import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { RabbitHuntService } from '../../../src/lib/services/rabbit-hunt-service';
 import { createSafeAudit } from '../../../src/lib/api/audit';
 import { getAuthenticatedUserId } from '../../../src/lib/auth/auth-utils';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
   return (fwd.split(',').map(s => s.trim())[0]) || (req.socket.remoteAddress || 'unknown');
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const rl = rateLimit(req, { limit: 300, windowMs: 60_000 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
+export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 300, message: 'Too many requests' } }, async (req, res) => {
   // The caller comes from the session, never from a client-supplied header or query param
   const callerUserId = await getAuthenticatedUserId(req);
   try {
@@ -47,4 +44,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const status = err?.message === 'No active game for room' ? 403 : 400;
     return res.status(status).json({ error: err?.message || 'Bad request' });
   }
-}
+});

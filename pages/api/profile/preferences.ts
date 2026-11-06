@@ -1,8 +1,8 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { getPool } from '../../../src/lib/database/pool';
 import { DEFAULT_DISPLAY_SETTINGS, pickDisplaySettings } from '../../../src/lib/shared/display-settings';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 /**
  * GET /api/profile/preferences -> { display }
@@ -11,7 +11,7 @@ import { DEFAULT_DISPLAY_SETTINGS, pickDisplaySettings } from '../../../src/lib/
  * The signed-in user's table display settings, which every table starts from. A PUT changes only
  * the settings it sends.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default apiHandler({ methods: ['GET', 'PUT'] }, async (req, res) => {
   if (req.method !== 'GET' && req.method !== 'PUT') {
     res.setHeader('Allow', 'GET, PUT');
     return res.status(405).json({ error: 'Method not allowed' });
@@ -46,4 +46,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error with display preferences:', err);
     return res.status(500).json({ error: 'Unable to load your settings' });
   }
-}
+});

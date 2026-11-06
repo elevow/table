@@ -1,7 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
 import { getAuthenticatedUserId } from '../../../../src/lib/auth/auth-utils';
 import { redactHandRecord, rowToHandRecord } from '../../../../src/lib/server/hand-records';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
 /**
  * GET /api/history/hands/:id
@@ -9,8 +9,7 @@ import { redactHandRecord, rowToHandRecord } from '../../../../src/lib/server/ha
  * One hand for the replayer. Only players dealt into the hand can see it, with their own cards
  * and any cards shown at the table.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
@@ -31,4 +30,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error loading hand:', err);
     return res.status(500).json({ error: 'Unable to load hand' });
   }
-}
+});

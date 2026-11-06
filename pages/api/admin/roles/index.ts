@@ -1,4 +1,3 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
 import { logAdminAction, requireAnyPermission, requirePermission } from '../../../../src/lib/auth/access-control';
 import { LIMIT_DEFS, PERMISSION_GROUPS, isLimitKey, isPermissionKey } from '../../../../src/lib/auth/permissions';
@@ -8,10 +7,11 @@ import {
   permissionsBeyondActor,
   roleKeyFromName,
 } from '../../../../src/lib/auth/role-admin';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
 // GET: every role with its permissions, limits and member count, plus the permission and limit catalogs.
 // POST: create a custom role.
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default apiHandler({ methods: ['GET', 'POST'] }, async (req, res) => {
   if (req.method === 'GET') {
     // Staff who look up users (to suspend them, say) also see the roles
     const actor = await requireAnyPermission(req, res, ['roles.view', 'admin.users.view']);
@@ -90,4 +90,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
-}
+});

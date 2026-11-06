@@ -1,4 +1,3 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { publishRebuyResult, publishSeatState, publishSeatVacated, publishGameStateUpdate } from '../../../src/lib/realtime/publisher';
 import {
   BASE_REBUY_CHIPS,
@@ -16,6 +15,7 @@ import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { recordLedger } from '../../../src/lib/server/chip-ledger';
 import { syncWaitlist } from '../../../src/lib/server/seat-actions';
 import { sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 /**
  * After a rebuy decision, check if we can start the next hand.
@@ -78,11 +78,7 @@ async function maybeStartNextHand(tableId: string, engine: any): Promise<boolean
   return false;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   try {
     const { tableId, playerId: claimedPlayerId, decision } = req.body;
 
@@ -217,4 +213,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error processing rebuy decision:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
-}
+});

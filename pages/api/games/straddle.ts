@@ -1,16 +1,15 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import { broadcastGameState } from '../../../src/lib/server/game-action-pipeline';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 /**
  * POST /api/games/straddle { tableId, wants }
  *
  * Ask to straddle next hand (posted only if you are under the gun then), or cancel the request.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   const { tableId, playerId: claimedPlayerId, wants } = (req.body || {}) as { tableId?: string; playerId?: string; wants?: boolean };
   const playerId = await requirePlayer(req, res, claimedPlayerId, wants === true ? 'game.straddle' : undefined);
   if (!playerId) return;
@@ -31,4 +30,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error updating straddle:', err);
     return res.status(500).json({ error: 'Unable to update straddle' });
   }
-}
+});

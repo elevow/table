@@ -1,5 +1,3 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { ChatService } from '../../../src/lib/services/chat-service';
 import { publishChatMessage } from '../../../src/lib/realtime/publisher';
 import { getPool } from '../../../src/lib/database/pool';
@@ -9,11 +7,9 @@ import {
 import { loadRoom } from '../../../src/lib/server/room-config';
 import { PRIVATE_TABLE_RESPONSE, canEnterRoom } from '../../../src/lib/server/room-privacy';
 import { withSenderNames } from '../../../src/lib/server/chat-senders';
+import { apiHandler } from '../../../src/lib/api/handler';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const rl = rateLimit(req, { limit: 300, windowMs: 60_000 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
+export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max: 300, message: 'Too many requests' } }, async (req, res) => {
   // Messages are sent as the signed-in user; a senderId in the body must match the session
   const access = await requirePlayerAccess(req, res, req.body?.senderId);
   if (!access) return;
@@ -51,4 +47,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });
   }
-}
+});

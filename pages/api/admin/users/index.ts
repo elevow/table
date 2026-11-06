@@ -1,8 +1,8 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
 import { requireAnyPermission } from '../../../../src/lib/auth/access-control';
 import { PERMISSION_KEYS, isLimitKey } from '../../../../src/lib/auth/permissions';
 import { getAdminEmails, isAdminEmail } from '../../../../src/utils/roleUtils';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
 export const USER_SEARCH_LIMIT = 200;
 
@@ -18,8 +18,7 @@ export function userSearchPattern(q: string): string {
 
 // GET ?q=: users matching an email or username, with their extra roles, overrides, own limits
 // and active ban or suspension. With no q, lists everyone who has any of those or is in ADMIN_EMAILS.
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   // Staff who look up users (to suspend them, say) also see the roles
   const actor = await requireAnyPermission(req, res, ['roles.view', 'admin.users.view']);
   if (!actor) return;
@@ -74,4 +73,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error listing users:', error);
     return res.status(500).json({ error: 'Failed to load users' });
   }
-}
+});

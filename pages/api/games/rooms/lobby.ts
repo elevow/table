@@ -1,10 +1,9 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
-import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { getSessionUser } from '../../../../src/lib/auth/auth-utils';
 import { getUserAccess, hasPermission } from '../../../../src/lib/auth/access-control';
 import { countSeatedInConfig } from '../../../../src/lib/shared/game-seats';
 import { BETTING_MODE_LABELS, isBettingMode, variantLabel } from '../../../../src/lib/poker/variant-rules';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
 export interface LobbyTable {
   id: string;
@@ -63,11 +62,7 @@ function toLobbyTable(row: any, userId: string | null): LobbyTable {
  *   first (needs lobby.view)
  * - mine: the signed-in user's private tables, ones they host or joined through an invite link
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const rl = rateLimit(req, { limit: 120, windowMs: 60_000 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
-
+export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 120, message: 'Too many requests' } }, async (req, res) => {
   try {
     const user = await getSessionUser(req);
     const access = await getUserAccess(user);
@@ -113,4 +108,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error loading lobby:', err);
     return res.status(500).json({ error: 'Unable to load tables' });
   }
-}
+});

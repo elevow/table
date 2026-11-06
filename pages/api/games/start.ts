@@ -1,4 +1,4 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiResponse } from 'next';
 import { BASE_TURN_MS, DEFAULT_TIME_BANKS, DEFAULT_TIME_BANK_SECONDS } from '../../../src/lib/shared/turn-clock';
 import { PokerEngine } from '../../../src/lib/poker/poker-engine';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
@@ -13,6 +13,7 @@ import { getLastActionAt, getOrRestoreEngine, persistEngineState } from '../../.
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import type { MixedGameEntry, TableState } from '../../../src/types/poker';
 import { ALL_VARIANTS, HORSE_GAMES, parseHandsPerGame, parseMixedGames } from '../../../src/lib/poker/variant-rules';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -103,9 +104,7 @@ function getIo(res: NextApiResponse): SocketIOServer | null {
   }
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   // Game type, betting mode and blinds come from the room record; any sent in the body are ignored
   const { tableId, playerId: claimedPlayerId, seatedPlayers: clientSeatedPlayers } = (req.body || {}) as {
     tableId?: string;
@@ -370,4 +369,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     return res.status(400).json({ error: errorMessage });
   }
-}
+});

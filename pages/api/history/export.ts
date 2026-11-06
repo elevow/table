@@ -1,10 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
 import { getAuthenticatedUserId } from '../../../src/lib/auth/auth-utils';
 import { redactHandRecord, rowToHandRecord } from '../../../src/lib/server/hand-records';
 import { fetchRoomNames } from '../../../src/lib/server/room-names';
 import { formatPokerStarsHands } from '../../../src/lib/shared/pokerstars-export';
 import { PLAYER_HANDS_SQL } from '../../../src/lib/server/hidden-hands';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 export const EXPORT_HAND_LIMIT = 1000;
 
@@ -17,8 +17,7 @@ const isTime = (v: unknown): v is string => typeof v === 'string' && !!v && !Num
  * Hands the signed-in player was dealt into, as a PokerStars-format .txt download. Each hand is
  * redacted for the viewer first, so only their own cards and cards shown at the table appear.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
@@ -72,4 +71,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error exporting hands:', err);
     return res.status(500).json({ error: 'Unable to export hands' });
   }
-}
+});

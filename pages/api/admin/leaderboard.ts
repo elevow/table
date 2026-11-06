@@ -1,7 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
 import { logAdminAction, requirePermission } from '../../../src/lib/auth/access-control';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 /**
  * Players taken off the leaderboard, with admin.leaderboard. Hiding only affects the leaderboard:
@@ -9,7 +9,7 @@ import { rateLimit } from '../../../src/lib/api/rate-limit';
  *   GET                         the hidden players
  *   POST { userId, hidden }     hide or restore one
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default apiHandler({ methods: ['GET', 'POST'] }, async (req, res) => {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const rl = rateLimit(req, { limit: 60, windowMs: 60_000 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
@@ -45,4 +45,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error changing the leaderboard:', err);
     return res.status(500).json({ error: 'Unable to change the leaderboard' });
   }
-}
+});

@@ -1,4 +1,3 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
 import { logAdminAction, requirePlayerAccess, sendPermissionDenied } from '../../../src/lib/auth/access-control';
 import { canOnTable, isTableOwner } from '../../../src/lib/auth/table-access';
@@ -14,6 +13,7 @@ import { publishTableEvent } from '../../../src/lib/realtime/publisher';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { MIN_TURN_SECONDS, MAX_TURN_SECONDS } from '../../../src/lib/shared/turn-clock';
 import { isStudVariant } from '../../../src/lib/poker/variant-rules';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 type HostAction =
   | { action: 'pause' }
@@ -57,8 +57,7 @@ const ACTION_PERMISSIONS: Record<HostAction['action'], string> = {
  * make the table public or private, and replace a private table's invite link.
  * Each needs its host permission; staff with admin.rooms.manage can use them on any table.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   const body = (req.body || {}) as { tableId?: string; playerId?: string } & HostAction;
   const access = await requirePlayerAccess(req, res, body.playerId);
   if (!access) return;
@@ -235,4 +234,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error handling host action:', err);
     return res.status(500).json({ error: 'Unable to complete host action' });
   }
-}
+});

@@ -1,24 +1,19 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiRequest } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
-import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { GameService } from '../../../../src/lib/services/game-service';
 import { createSafeAudit } from '../../../../src/lib/api/audit';
 import {
   getLimit, hasPermission, requirePlayerAccess, sendLimitReached, sendPermissionDenied,
 } from '../../../../src/lib/auth/access-control';
 import { newInviteCode, stripPrivacyKeys } from '../../../../src/lib/server/room-privacy';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
   return (fwd.split(',').map(s => s.trim())[0]) || (req.socket.remoteAddress || 'unknown');
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const rl = rateLimit(req, { limit: 60, windowMs: 60_000 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
-
+export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max: 60, message: 'Too many requests' } }, async (req, res) => {
   // Signed-out visitors (including guests without a session) and users without room.create can't create rooms
   const access = await requirePlayerAccess(req, res);
   if (!access) return;
@@ -79,4 +74,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
     return res.status(400).json({ error: err.message || 'Bad request' });
   }
-}
+});

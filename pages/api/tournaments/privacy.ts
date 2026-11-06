@@ -1,9 +1,8 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { sendTournamentError } from '../../../src/lib/tournament/api-errors';
-import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { tournamentManager } from '../../../src/lib/tournament/manager-instance';
 import { requireOrganizer } from '../../../src/lib/tournament/require-organizer';
 import { directorInviteCode } from '../../../src/lib/tournament/tournament-privacy';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 /**
  * POST /api/tournaments/privacy, for the director:
@@ -11,10 +10,7 @@ import { directorInviteCode } from '../../../src/lib/tournament/tournament-priva
  *   { tournamentId, action: 'new-invite-code' }: the old link stops working
  * Returns { visibility, inviteCode } (the code with its dash, null when public).
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const rl = rateLimit(req, { limit: 30, windowMs: 60_000 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
+export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max: 30, message: 'Too many requests' } }, async (req, res) => {
   const { tournamentId, action, visibility } = req.body || {};
   const organizer = await requireOrganizer(req, res, 'tournament.manage', tournamentId);
   if (!organizer) return;
@@ -34,4 +30,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (err) {
     return sendTournamentError(res, err);
   }
-}
+});

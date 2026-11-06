@@ -1,6 +1,6 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 /**
  * GET /api/games/check-turn?tableId=xxx&playerId=yyy
@@ -11,11 +11,7 @@ import { requirePlayer } from '../../../src/lib/auth/auth-utils';
  * This is used by clients to poll every 10 seconds when waiting for their turn,
  * complementing the existing Supabase Realtime notifications.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
   const tableId = String(req.query.tableId || '');
@@ -56,4 +52,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         : 'Internal server error';
     return res.status(500).json({ error: errorMessage });
   }
-}
+});

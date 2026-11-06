@@ -1,9 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiResponse } from 'next';
 import { getPool } from '../../../../../src/lib/database/pool';
 import {
   UserAccess, clearAccessCache, getUserAccess, hasPermission, logAdminAction, requirePermission,
   requirePlayerAccess, sendPermissionDenied,
 } from '../../../../../src/lib/auth/access-control';
+import { apiHandler } from '../../../../../src/lib/api/handler';
 
 type Kind = 'ban' | 'suspend';
 
@@ -40,7 +41,7 @@ async function loadTarget(res: NextApiResponse, actor: UserAccess & { userId: st
 // POST { kind: 'ban' | 'suspend', reason?, until? (ISO; required for a suspension) }
 //   Bans or suspends a user, replacing any active ban or suspension. A ban also signs them out.
 // DELETE: lifts the user's active ban or suspension.
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default apiHandler({ methods: ['DELETE', 'POST'] }, async (req, res) => {
   if (req.method !== 'POST' && req.method !== 'DELETE') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -123,4 +124,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } finally {
     client.release();
   }
-}
+});

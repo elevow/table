@@ -1,10 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiRequest } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
-import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { UserManager } from '../../../src/lib/database/user-manager';
 import { createUserService } from '../../../src/lib/services/user-service';
 import { createSafeAudit } from '../../../src/lib/api/audit';
 import { hashSessionToken } from '../../../src/lib/auth/session-token';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -29,20 +29,7 @@ interface ChangePasswordResponse {
   message: string;
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse<ChangePasswordResponse | { error: string }>
-) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  // Rate limiting - be strict with password changes
-  const rl = rateLimit(req, { limit: 5, windowMs: 60_000 });
-  if (!rl.allowed) {
-    return res.status(429).json({ error: 'Too many password change attempts. Please try again later.' });
-  }
-
+export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max: 5, message: 'Too many password change attempts. Please try again later.' } }, async (req, res) => {
   const pool = getPool();
   const safeLog = createSafeAudit(pool);
   const ip = getClientIp(req);
@@ -134,4 +121,4 @@ export default async function handler(
     // Generic error response
     res.status(500).json({ error: 'Password change failed. Please try again.' });
   }
-}
+});

@@ -1,4 +1,4 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiResponse } from 'next';
 import { publishGameStateUpdate } from '../../../src/lib/realtime/publisher';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
@@ -9,6 +9,7 @@ import type { GameVariant } from '../../../src/types/poker';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { getDealerChoiceChooserId } from '../../../src/lib/poker/dealer-choice';
 import { ALL_VARIANTS } from '../../../src/lib/poker/variant-rules';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 const ALLOWED_VARIANTS: GameVariant[] = [...ALL_VARIANTS];
 
@@ -40,11 +41,7 @@ function getIo(res: NextApiResponse): SocketIOServer | null {
  *
  * Body: { tableId, playerId, variant }
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   const { tableId, playerId: claimedPlayerId, variant: rawVariant } = req.body ?? {};
 
   const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.play');
@@ -155,4 +152,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         : 'Internal server error';
     return res.status(500).json({ error: errorMessage });
   }
-}
+});

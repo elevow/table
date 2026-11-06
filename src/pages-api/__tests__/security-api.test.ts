@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import collusionHandler from '../../../pages/api/security/collusion';
 import multiHandler from '../../../pages/api/security/multi-account';
 
+jest.mock('../../../src/lib/database/pool', () => ({ getPool: jest.fn(() => ({})) }));
+
 // Mock rate limiter
 jest.mock('../../../src/lib/api/rate-limit', () => ({
   rateLimit: jest.fn().mockReturnValue({ allowed: 1 })

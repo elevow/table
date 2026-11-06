@@ -1,10 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { adminAlertStore } from '../../../../src/lib/security/admin-alert-store';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { requirePermission } from '../../../../src/lib/auth/access-control';
 import { adminAlertRepository } from '../../../../src/lib/security/admin-alert-repository';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default apiHandler({ methods: ['GET', 'PATCH'] }, async (req, res) => {
   const rl = rateLimit(req, { limit: 120, windowMs: 60_000 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
   if (!(await requirePermission(req, res, req.method === 'PATCH' ? 'admin.alerts.resolve' : 'admin.alerts.view'))) return;
@@ -37,4 +37,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
   return res.status(405).json({ error: 'Method not allowed' });
-}
+});

@@ -1,15 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { ChatService } from '../../../../src/lib/services/chat-service';
 import { getPool } from '../../../../src/lib/database/pool';
 import { guardRoomEntry } from '../../../../src/lib/server/room-privacy';
 import { loadRoom } from '../../../../src/lib/server/room-config';
 import { tableDirectorId, withSenderNames } from '../../../../src/lib/server/chat-senders';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const rl = rateLimit(req, { limit: 300, windowMs: 60_000 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
+export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 300, message: 'Too many requests' } }, async (req, res) => {
   try {
     const { roomId, limit, before } = req.query;
     if (!(await guardRoomEntry(req, res, String(roomId || '')))) return;
@@ -22,4 +18,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });
   }
-}
+});

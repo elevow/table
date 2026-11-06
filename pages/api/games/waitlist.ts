@@ -1,10 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../src/lib/server/room-config';
 import { syncWaitlist } from '../../../src/lib/server/seat-actions';
 import { publishTableEvent } from '../../../src/lib/realtime/publisher';
 import { PRIVATE_TABLE_RESPONSE, isPrivateRoom, isRoomMember } from '../../../src/lib/server/room-privacy';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 /**
  * POST /api/games/waitlist { tableId, join, playerName }
@@ -12,8 +12,7 @@ import { PRIVATE_TABLE_RESPONSE, isPrivateRoom, isRoomMember } from '../../../sr
  * Join or leave a table's waitlist. When a seat opens it is held for the first player in line
  * for a minute.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   const { tableId, playerId: claimedPlayerId, join, playerName } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
@@ -55,4 +54,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error updating waitlist:', err);
     return res.status(500).json({ error: 'Unable to update the waitlist' });
   }
-}
+});

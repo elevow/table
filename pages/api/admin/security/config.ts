@@ -1,9 +1,9 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { requirePermission } from '../../../../src/lib/auth/access-control';
 import { getLiveSecurityConfig } from '../../../../src/lib/security/security-config';
 import { getSecurityOverrides, updateSecurityOverrides, clearSecurityOverrides } from '../../../../src/lib/security/security-config-runtime';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default apiHandler({ methods: ['GET', 'PATCH'] }, async (req, res) => {
   if (!(await requirePermission(req, res, 'admin.security.config'))) return;
 
   if (req.method === 'GET') {
@@ -31,4 +31,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
-}
+});

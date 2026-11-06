@@ -1,16 +1,15 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
 import { AvatarService } from '../../../src/lib/services/avatar-service';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { requireAuth } from '../../../src/lib/auth/auth-utils';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 // Temporarily disable SSL certificate verification for development
 if (process.env.NODE_ENV === 'development') {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'anon';
   const rl = rateLimit(`POST /api/avatars/upload:${ip}`, { windowMs: 60 * 60 * 1000, max: 5 });
   if (!rl.allowed) return res.status(429).json({ error: 'Upload limit exceeded. Try again later.' });
@@ -44,4 +43,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || 'Internal error' });
   }
-}
+});

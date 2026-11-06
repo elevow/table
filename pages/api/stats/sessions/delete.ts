@@ -1,8 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
 import { requirePermission } from '../../../../src/lib/auth/access-control';
-import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { deleteSessions, type SessionSelection } from '../../../../src/lib/server/hidden-hands';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
 /**
  * POST /api/stats/sessions/delete, with stats.delete_sessions:
@@ -11,10 +10,7 @@ import { deleteSessions, type SessionSelection } from '../../../../src/lib/serve
  * Removes the hands from the signed-in player's own results, hand history and leaderboard
  * totals. Other players at the table keep them. Returns { hands, net } removed.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const rl = rateLimit(req, { limit: 30, windowMs: 60_000 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
+export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max: 30, message: 'Too many requests' } }, async (req, res) => {
   const access = await requirePermission(req, res, 'stats.delete_sessions');
   if (!access) return;
 
@@ -38,4 +34,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error deleting sessions:', err);
     return res.status(500).json({ error: 'Unable to delete the sessions' });
   }
-}
+});

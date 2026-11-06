@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import type { TableMove, TournamentTable } from '../../types/tournament-management';
 
 export const DEFAULT_SEATS_PER_TABLE = 9;
@@ -88,7 +88,7 @@ export function balanceTables(
 }
 
 function newTable(number: number, seatsPerTable: number): TournamentTable {
-  return { id: `tbl-${uuidv4()}`, number, maxSeats: seatsPerTable, seats: Array(seatsPerTable).fill(null) };
+  return { id: `tbl-${randomUUID()}`, number, maxSeats: seatsPerTable, seats: Array(seatsPerTable).fill(null) };
 }
 
 /** Put a player in a random empty seat; returns the seat number. */

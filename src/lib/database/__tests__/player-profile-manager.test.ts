@@ -39,8 +39,8 @@ jest.mock('bcryptjs', () => ({
   hash: jest.fn(),
 }));
 
-jest.mock('uuid', () => {
-  return { v4: (...args: any[]) => mockUuidv4(...args) };
+jest.mock('crypto', () => {
+  return { ...jest.requireActual('crypto'), randomUUID: (...args: any[]) => mockUuidv4(...args) };
 });
 
 describe('PlayerProfileManager', () => {

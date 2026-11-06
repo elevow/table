@@ -1,7 +1,7 @@
 // US-018: Avatar Management - Data Access Layer
 
 import { Pool } from 'pg';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import {
   AvatarRecord,
   AvatarVersionRecord,
@@ -28,7 +28,7 @@ export class AvatarManager {
   constructor(private pool: Pool) {}
 
   async createAvatar(req: CreateAvatarRequest): Promise<AvatarRecord> {
-    const id = uuidv4();
+    const id = randomUUID();
     const res = await this.pool.query(
       `INSERT INTO avatars (id, user_id, status, original_url, variants)
        VALUES ($1,$2,'active',$3,$4::jsonb) RETURNING *`,

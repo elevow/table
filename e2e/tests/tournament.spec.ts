@@ -1,5 +1,5 @@
-import { test, expect, APIResponse, Browser } from '@playwright/test';
-import { GameState, TestPlayer, byId, chipsInPlay, hasTestUser, loginAs, logoutAll, MAX_TEST_USERS } from '../helpers/players';
+import { test, expect, APIResponse } from '@playwright/test';
+import { GameState, TestPlayer, byId, chipsInPlay, hasTestUser, loginAs, logoutAll, MAX_TEST_USERS, signedInPage } from '../helpers/players';
 
 /**
  * A whole tournament against the real API and database, with all six test accounts playing and
@@ -355,13 +355,3 @@ test.describe('A tournament from start to finish', () => {
     expect(v.finishers.slice(2).every((f: any) => f.prize === 0)).toBe(true);
   });
 });
-
-/** A browser page signed in as the user, through the token the app keeps in localStorage. */
-async function signedInPage(browser: Browser, u: TestPlayer) {
-  const context = await browser.newContext();
-  await context.addInitScript(([token, user]) => {
-    localStorage.setItem('auth_token', token);
-    localStorage.setItem('user', user);
-  }, [u.token, JSON.stringify({ id: u.id, username: u.username })]);
-  return context.newPage();
-}

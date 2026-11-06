@@ -1,4 +1,4 @@
-import { APIRequestContext, APIResponse, expect, request } from '@playwright/test';
+import { APIRequestContext, APIResponse, Browser, Page, expect, request } from '@playwright/test';
 
 /**
  * Helpers for multi-player tests that drive real tables through the API.
@@ -6,6 +6,9 @@ import { APIRequestContext, APIResponse, expect, request } from '@playwright/tes
  * Credentials come from TEST_USER1_EMAIL/TEST_USER1_PASSWORD … TEST_USER6_* (see .env.local).
  * These accounts have fake email addresses, so nothing here may call a route that sends mail
  * (register, forgot/reset password, invites, /api/test/email).
+ *
+ * Optional: TEST_ADMIN_EMAIL/TEST_ADMIN_PASSWORD, an account with admin.rooms.manage, lets specs
+ * delete the tables they create (see deleteTables). Without it those tables are left behind.
  */
 
 export const MAX_TEST_USERS = 6;
@@ -105,6 +108,10 @@ export class TestPlayer {
 
   get(path: string): Promise<APIResponse> {
     return this.api.get(path, { headers: this.headers() });
+  }
+
+  delete(path: string): Promise<APIResponse> {
+    return this.api.delete(path, { headers: this.headers() });
   }
 
   /** Creates a table with a name that marks it as test data. */
@@ -218,6 +225,35 @@ export async function clearTable(tableId: string | undefined, players: TestPlaye
   for (const p of players) await p.stand(tableId).catch(() => undefined);
 }
 
+/** Whether TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD are both set. */
+export function hasTestAdmin(): boolean {
+  return !!process.env.TEST_ADMIN_EMAIL && !!process.env.TEST_ADMIN_PASSWORD;
+}
+
+/**
+ * Removes tables a spec created: stands the players up, then deletes the tables when a
+ * TEST_ADMIN_* account is configured. Without one the empty tables are left behind (the lobby
+ * stops listing empty rooms after a few hours).
+ */
+export async function deleteTables(tableIds: Array<string | undefined>, players: TestPlayer[] = []): Promise<void> {
+  const ids = tableIds.filter((id): id is string => !!id);
+  for (const id of ids) await clearTable(id, players);
+  if (!ids.length || !hasTestAdmin()) return;
+  const admin = await login(
+    { email: process.env.TEST_ADMIN_EMAIL!, password: process.env.TEST_ADMIN_PASSWORD! },
+    'TEST_ADMIN',
+  );
+  try {
+    for (const id of ids) {
+      const res = await admin.delete(`/api/admin/rooms/${encodeURIComponent(id)}`);
+      // 404: already gone
+      expect([200, 404], `delete table ${id}: ${JSON.stringify(await json(res))}`).toContain(res.status());
+    }
+  } finally {
+    await logoutAll([admin]);
+  }
+}
+
 export function byId(players: TestPlayer[], id: string): TestPlayer {
   const p = players.find(x => x.id === id);
   if (!p) throw new Error(`No test player with id ${id}`);
@@ -283,4 +319,14 @@ export function allVisibleCards(state: GameState): string[] {
     for (const p of state.players) cards.push(...(p.holeCards || []));
   }
   return cards.map(cardKey);
+}
+
+/** A browser page signed in as the player, through the token the app keeps in localStorage. */
+export async function signedInPage(browser: Browser, u: TestPlayer): Promise<Page> {
+  const context = await browser.newContext();
+  await context.addInitScript(([token, user]) => {
+    localStorage.setItem('auth_token', token);
+    localStorage.setItem('user', user);
+  }, [u.token, JSON.stringify({ id: u.id, username: u.username })]);
+  return context.newPage();
 }

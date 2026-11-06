@@ -1,5 +1,5 @@
-import { test, expect, APIResponse, Browser, Page } from '@playwright/test';
-import { TestPlayer, hasTestUser, loginAs, logoutAll } from '../helpers/players';
+import { test, expect, APIResponse } from '@playwright/test';
+import { TestPlayer, deleteTables, hasTestUser, loginAs, logoutAll, signedInPage } from '../helpers/players';
 
 /**
  * Roles and permissions against the real API, with the test accounts set up as:
@@ -10,7 +10,8 @@ import { TestPlayer, hasTestUser, loginAs, logoutAll } from '../helpers/players'
  *
  * Wherever possible a request is one the route refuses after its permission check (a missing
  * field, suspending yourself), so allowed and denied are told apart by 400 vs 403 and nothing
- * changes. The only data left behind is one private table named "E2E permissions …".
+ * changes. The only data left behind is one private table named "E2E permissions …", and
+ * not even that when a TEST_ADMIN_* account is configured to delete it.
  */
 
 const ROLE_KEYS = ['host', 'tournament_director', 'moderator'] as const;
@@ -35,16 +36,6 @@ test.describe('Roles and permissions', () => {
   test.afterAll(async () => {
     await logoutAll(Object.values(users));
   });
-
-  /** A browser page signed in as the user, through the token the app keeps in localStorage. */
-  async function signedInPage(browser: Browser, u: TestPlayer): Promise<Page> {
-    const context = await browser.newContext();
-    await context.addInitScript(([token, user]) => {
-      localStorage.setItem('auth_token', token);
-      localStorage.setItem('user', user);
-    }, [u.token, JSON.stringify({ id: u.id, username: u.username })]);
-    return context.newPage();
-  }
 
   async function body(res: APIResponse): Promise<any> {
     try { return await res.json(); } catch { return {}; }
@@ -214,6 +205,10 @@ test.describe('Roles and permissions', () => {
         });
         expect(res.status(), `create private room: ${JSON.stringify(await body(res))}`).toBe(201);
         roomId = (await res.json()).id;
+      });
+
+      test.afterAll(async () => {
+        await deleteTables([roomId]);
       });
 
       test('only the host and moderators can open it without the invite link', async () => {

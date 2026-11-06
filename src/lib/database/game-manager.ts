@@ -1,7 +1,7 @@
 // US-020: Active Games & Game Rooms - Data Access Layer
 
 import { Pool } from 'pg';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { ActiveGameRecord, CreateRoomInput, GameRoomRecord, Paginated, StartGameInput, UpdateActiveGameInput } from '../../types/game';
 import { generateUniqueRoomCode } from '../utils/room-code-generator';
 
@@ -114,7 +114,7 @@ export class GameManager {
 
   // Active Games
   async startGame(input: StartGameInput): Promise<ActiveGameRecord> {
-    const id = uuidv4();
+    const id = randomUUID();
     const res = await this.pool.query(
       `INSERT INTO active_games (id, room_id, current_hand_id, dealer_position, current_player_position, pot, state)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,

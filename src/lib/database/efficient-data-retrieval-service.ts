@@ -12,6 +12,7 @@ import { DatabasePool, DatabaseClient } from './database-connection';
 import { DataAccessOptimizer, DataAccessOptimizerFactory, DataAccessConfig } from './data-access-optimizer';
 import { DatabasePerformanceMonitor, DatabasePerformanceMonitorFactory, MonitoringConfig } from './database-performance-monitor';
 import { QueryOptimizationService, QueryOptimizationServiceFactory } from './query-optimization-service';
+import { runtime } from '../config/env';
 
 export interface EfficientDataRetrievalConfig {
   dataAccess?: Partial<DataAccessConfig>;
@@ -434,7 +435,7 @@ export class EfficientDataRetrievalService {
     const recommendations = await this.getOptimizationRecommendations();
     
     // Log recommendations for manual review (skip in CI)
-    if (!process.env.CI) {
+    if (!runtime.isCI) {
       // eslint-disable-next-line no-console
       console.log('Optimization recommendations generated:', {
         dataAccess: recommendations.dataAccess.suggestions.length,

@@ -3,11 +3,6 @@ import { getPool } from '../../../src/lib/database/pool';
 import { AvatarService } from '../../../src/lib/services/avatar-service';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 
-// Temporarily disable SSL certificate verification for development
-if (process.env.NODE_ENV === 'development') {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'anon';
   const avatarId = (req.query as any).avatarId as string;

@@ -11,6 +11,7 @@
 import { createHash, randomBytes, pbkdf2Sync, createCipheriv, createDecipheriv } from 'crypto';
 import { Pool, PoolClient } from 'pg';
 import { TransactionManager, TransactionContext } from './transaction-manager';
+import { dataProtectionKey } from '../config/env';
 
 // Security Configuration Interface
 export interface SecurityConfig {
@@ -510,8 +511,7 @@ export class DataProtectionService {
 
   private deriveMasterKey(): Buffer {
     // In production, this should come from a secure key management system
-    const keyMaterial = process.env.DATA_PROTECTION_KEY || 'default-key-change-in-production';
-    return createHash('sha256').update(keyMaterial).digest();
+    return createHash('sha256').update(dataProtectionKey()).digest();
   }
 
   private initializeDefaultRoles(): void {

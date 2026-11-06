@@ -127,7 +127,6 @@ npx playwright show-report
 Required environment variables in `.env.local`:
 ```
 USE_MOCK_DB=true
-NEXT_PUBLIC_SHOW_DB_HEALTH=false
 ```
 
 ## Key Achievements

@@ -1,5 +1,5 @@
 import type { NextApiRequest } from 'next';
-import { apiHandler, ApiError, assertSelf, clientIp } from '../handler';
+import { apiHandler, ApiError, assertSelf, clientIp, routeKey } from '../handler';
 
 const mockRateLimit = jest.fn();
 jest.mock('../rate-limit', () => ({ rateLimit: (...args: any[]) => mockRateLimit(...args) }));
@@ -76,9 +76,39 @@ describe('apiHandler', () => {
     };
     expect((await run(new ApiError(418, 'teapot'))).status).toHaveBeenCalledWith(418);
     expect((await run(Object.assign(new Error('gone'), { code: 'NOT_FOUND' }))).status).toHaveBeenCalledWith(404);
-    const r = await run(new Error('boom'));
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const r = await run(new Error('connection to db.internal refused'));
     expect(r.status).toHaveBeenCalledWith(500);
-    expect(r.json).toHaveBeenCalledWith({ error: 'boom' });
+    // Internal details are logged, not sent
+    expect(r.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it('hands other errors to onError when given', async () => {
+    const onError = jest.fn((r: any) => r.status(409).json({ error: 'conflict' }));
+    const r = res();
+    await apiHandler({ methods: 'GET', onError }, () => { throw new Error('domain'); })(req(), r);
+    expect(onError).toHaveBeenCalledWith(r, expect.objectContaining({ message: 'domain' }));
+    expect(r.status).toHaveBeenCalledWith(409);
+  });
+
+  it('uses a custom rate-limit message', async () => {
+    mockRateLimit.mockReturnValue({ allowed: false });
+    const r = res();
+    await apiHandler({ methods: 'GET', rateLimit: { windowMs: 1000, max: 1, message: 'Slow down' } }, jest.fn())(req(), r);
+    expect(r.json).toHaveBeenCalledWith({ error: 'Slow down' });
+  });
+});
+
+describe('routeKey', () => {
+  it('names dynamic segments so every ID shares one limit', () => {
+    expect(routeKey(req({ url: '/api/avatars/abc-123?x=1', query: { avatarId: 'abc-123', x: '1' } }))).toBe('/api/avatars/[avatarId]');
+    expect(routeKey(req({ url: '/api/users/u%201/access', query: { id: 'u 1' } }))).toBe('/api/users/[id]/access');
+  });
+
+  it('leaves static paths alone', () => {
+    expect(routeKey(req({ url: '/api/thing?x=1', query: { x: '1' } }))).toBe('/api/thing');
   });
 });
 

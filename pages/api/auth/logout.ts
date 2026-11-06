@@ -1,8 +1,8 @@
-import type { NextApiRequest } from 'next';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
+import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { createSafeAudit } from '../../../src/lib/api/audit';
 import { hashSessionToken } from '../../../src/lib/auth/session-token';
-import { apiHandler } from '../../../src/lib/api/handler';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -22,7 +22,20 @@ interface LogoutResponse {
   message: string;
 }
 
-export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max: 30, message: 'Too many requests' } }, async (req, res) => {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<LogoutResponse | { error: string }>
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Rate limiting
+  const rl = rateLimit(req, { limit: 30, windowMs: 60_000 });
+  if (!rl.allowed) {
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+
   const pool = getPool();
   const safeLog = createSafeAudit(pool);
   const ip = getClientIp(req);
@@ -91,4 +104,4 @@ export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max:
 
     res.status(500).json({ error: 'Logout failed. Please try again.' });
   }
-});
+}

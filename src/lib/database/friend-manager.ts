@@ -1,7 +1,7 @@
 // US-019: Friend Relationships - Data Access Layer
 
 import { Pool } from 'pg';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import {
   FriendRelationshipRecord,
   FriendRequestInput,
@@ -57,7 +57,7 @@ export class FriendManager {
       return this.mapFriend(upd.rows[0]);
     }
 
-    const id = uuidv4();
+    const id = randomUUID();
     const res = await this.pool.query(
       `INSERT INTO friend_relationships (id, user_id, friend_id, status) VALUES ($1,$2,$3,'pending') RETURNING *`,
       [id, requesterId, recipientId]
@@ -121,7 +121,7 @@ export class FriendManager {
   }
 
   async block(userId: string, blockedId: string, reason?: string): Promise<BlockRecord> {
-    const id = uuidv4();
+    const id = randomUUID();
     const res = await this.pool.query(
       `INSERT INTO blocked_users (id, user_id, blocked_id, reason) VALUES ($1,$2,$3,$4) RETURNING *`,
       [id, userId, blockedId, reason || null]
@@ -159,7 +159,7 @@ export class FriendManager {
     );
     if (block.rows.length) throw new FriendError('Either user has blocked the other', 'BLOCKED');
 
-    const id = uuidv4();
+    const id = randomUUID();
     const res = await this.pool.query(
       `INSERT INTO friend_game_invites (id, inviter_id, invitee_id, room_id, status) VALUES ($1,$2,$3,$4,'pending') RETURNING *`,
       [id, inviterId, inviteeId, roomId]
@@ -167,11 +167,12 @@ export class FriendManager {
     return this.mapInvite(res.rows[0]);
   }
 
-  async respondToGameInvite(id: string, accept: boolean): Promise<FriendInviteRecord> {
+  /** Only the invitee can respond; an invite addressed to someone else reads as not found. */
+  async respondToGameInvite(id: string, accept: boolean, inviteeId: string): Promise<FriendInviteRecord> {
     const status = accept ? 'accepted' : 'declined';
     const res = await this.pool.query(
-      `UPDATE friend_game_invites SET status = $1, responded_at = NOW() WHERE id = $2 RETURNING *`,
-      [status, id]
+      `UPDATE friend_game_invites SET status = $1, responded_at = NOW() WHERE id = $2 AND invitee_id = $3 RETURNING *`,
+      [status, id, inviteeId]
     );
     if (!res.rows[0]) throw new FriendError('Invite not found', 'NOT_FOUND');
     return this.mapInvite(res.rows[0]);

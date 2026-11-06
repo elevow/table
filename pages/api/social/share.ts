@@ -1,11 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { SocialService } from '../../../src/lib/services/social-service';
-import { getDbPool } from '../../../src/lib/database/database-connection';
+import { getPool } from '../../../src/lib/database/pool';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
-    const pool = getDbPool();
+    const pool = getPool();
     const svc = new SocialService(pool as any);
     const body = req.body || {};
     const result = await svc.createShare({

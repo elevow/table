@@ -68,10 +68,11 @@ export class FriendService {
     return this.manager.createGameInvite(inviterId, inviteeId, roomId);
   }
 
-  async respondToInvite(id: string, action: 'accept' | 'decline'): Promise<FriendInviteRecord> {
+  async respondToInvite(id: string, action: 'accept' | 'decline', inviteeId: string): Promise<FriendInviteRecord> {
     this.requireId(id, 'id');
+    this.requireId(inviteeId, 'inviteeId');
     const accept = action === 'accept';
-    return this.manager.respondToGameInvite(id, accept);
+    return this.manager.respondToGameInvite(id, accept, inviteeId);
   }
 
   async listInvites(userId: string, kind: 'incoming' | 'outgoing' = 'incoming', page = 1, limit = 20): Promise<Paginated<FriendInviteRecord>> {

@@ -4,7 +4,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import handler from '../../../pages/api/profile';
 
 // Mocks: pg Pool, rate limiter, user manager/service factories, and DataProtectionFactory
-jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({})) }));
+jest.mock('../../../src/lib/database/pool', () => ({ getPool: jest.fn(() => ({})) }));
 
 jest.mock('../../../src/lib/api/rate-limit', () => ({
   rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 })

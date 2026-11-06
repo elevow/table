@@ -2,7 +2,7 @@ import { describe, it, beforeEach, expect, jest } from '@jest/globals';
 import { HandHistoryManager } from '../hand-history-manager';
 
 // Fix UUID for deterministic assertions
-jest.mock('uuid', () => ({ v4: () => 'hid-1' }));
+jest.mock('crypto', () => ({ ...jest.requireActual('crypto'), randomUUID: () => 'hid-1' }));
 
 describe('HandHistoryManager (US-021)', () => {
   let mgr: HandHistoryManager;

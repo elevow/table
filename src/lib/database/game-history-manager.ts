@@ -1,7 +1,7 @@
 // US-010: Game History Recording - Data Access Layer Implementation
 
 import { Pool, PoolClient } from 'pg';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import {
   GameHistoryRecord,
   GameAction,
@@ -49,7 +49,7 @@ export class GameHistoryManager {
       // Validate the request
       this.validateGameHistoryRequest(request);
 
-      const gameId = uuidv4();
+      const gameId = randomUUID();
       const query = `
         INSERT INTO game_history (
           id, table_id, hand_id, action_sequence, community_cards, 
@@ -319,7 +319,7 @@ export class GameHistoryManager {
     `;
     
     for (const action of actions) {
-      const actionId = uuidv4();
+      const actionId = randomUUID();
       await client.query(query, [
         actionId,
         gameId,

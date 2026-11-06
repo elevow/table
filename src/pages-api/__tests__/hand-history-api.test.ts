@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 import listRitHandler from '../../../pages/api/history/run-it-twice/list';
 
-jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({})) }));
+jest.mock('../../../src/lib/database/pool', () => ({ getPool: jest.fn(() => ({})) }));
 
 jest.mock('../../../src/lib/api/rate-limit', () => ({
   rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 })

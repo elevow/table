@@ -1,7 +1,7 @@
 // US-017: Core User Profile - Data Access Layer
 
 import { Pool } from 'pg';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import {
   UserRecord,
   CreateUserRequest,
@@ -41,7 +41,7 @@ export class UserManager {
       if (emailCheck.rows.length) throw new UserError('Email already exists', 'EMAIL_EXISTS');
       if (usernameCheck.rows.length) throw new UserError('Username already exists', 'USERNAME_EXISTS');
 
-      const id = uuidv4();
+      const id = randomUUID();
       const insert = await client.query(
         `INSERT INTO public.users (id, email, username, password_hash, auth_provider, auth_provider_id, metadata)
          VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, email, username, password_hash, auth_provider, auth_provider_id, metadata, created_at, last_login, is_verified`,

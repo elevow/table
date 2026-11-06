@@ -26,7 +26,7 @@ describe('PlayerProfileManager Integration Tests', () => {
 
     // Mock the external dependencies
     jest.doMock('bcryptjs', () => mockBcrypt);
-    jest.doMock('uuid', () => ({ v4: mockUuid.v4 }));
+    jest.doMock('crypto', () => ({ ...(jest.requireActual('crypto') as object), randomUUID: mockUuid.v4 }));
     jest.doMock('pg', () => ({
       Pool: jest.fn()
     }));

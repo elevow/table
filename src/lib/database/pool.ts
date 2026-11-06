@@ -218,10 +218,14 @@ function buildPool(): Pool {
   return new Pool(cfg);
 }
 
+// Next.js dev re-evaluates modules on hot reload, which would reset `pool` and
+// orphan the old one's connections; keep the dev pool on globalThis instead.
+const devCache = globalThis as unknown as { __pgPool?: Pool | null };
+
 export function getPool(): Pool {
-  // Force rebuild pool in development to pick up configuration changes
   if (process.env.NODE_ENV !== 'production') {
-    pool = null;
+    if (!devCache.__pgPool) devCache.__pgPool = buildPool();
+    return devCache.__pgPool;
   }
   if (!pool) pool = buildPool();
   return pool;

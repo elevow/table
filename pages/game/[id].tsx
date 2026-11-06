@@ -19,7 +19,7 @@ import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import { useDisplaySettings } from '../../src/hooks/useDisplaySettings';
 import { formatChips } from '../../src/utils/chip-display';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../src/lib/shared/feature-flags';
-import { authHeaders } from '../../src/utils/auth-headers';
+import { api, unwrap } from '../../src/utils/api-client';
 import { resolveSessionUserId } from '../../src/utils/session-identity';
 import { useTurnClock } from '../../src/hooks/useTurnClock';
 import { useTurnAlerts } from '../../src/hooks/useTurnAlerts';
@@ -164,9 +164,8 @@ export default function GamePage() {
     inFlightAvatarLoadsRef.current.add(playerIdToLoad);
 
     try {
-      const response = await fetch(`/api/avatars/user/${playerIdToLoad}`);
-      if (response.ok) {
-        const data = await response.json();
+      const { ok, data } = await api.get(`/api/avatars/user/${encodeURIComponent(playerIdToLoad)}`);
+      if (ok) {
         if (data?.url) {
           setPlayerAvatars(prev => {
             const next = { ...prev, [playerIdToLoad]: data.url };
@@ -313,13 +312,8 @@ export default function GamePage() {
           const reachedSeventh = gameState.stage === 'seventh' && pokerStageRef.current !== 'seventh';
           if ((isNewHand || reachedSeventh) && missingMyCards && isParticipant && shouldShowCards && effectivePlayerId && id) {
             console.log('🎴 New hand detected without cards, fetching player-specific state...');
-            fetch(`/api/games/state?tableId=${id}&playerId=${effectivePlayerId}`, { headers: authHeaders() })
-              .then(resp => {
-                if (!resp.ok) {
-                  throw new Error(`HTTP ${resp.status}`);
-                }
-                return resp.json();
-              })
+            api.get('/api/games/state', { query: { tableId: String(id), playerId: effectivePlayerId } })
+              .then(unwrap)
               .then(data => {
                 if (data.gameState) {
                   setPokerGameState(data.gameState);
@@ -561,11 +555,8 @@ export default function GamePage() {
           typeof id === 'string' &&
           playerId
         ) {
-          fetch(`/api/games/state?tableId=${encodeURIComponent(id)}&playerId=${encodeURIComponent(playerId)}`, { headers: authHeaders() })
-            .then(response => {
-              if (!response.ok) throw new Error(`HTTP ${response.status}`);
-              return response.json();
-            })
+          api.get('/api/games/state', { query: { tableId: id, playerId } })
+            .then(unwrap)
             .then(data => {
               if (data.gameState?.stage === status.tableState) {
                 setPokerGameState(data.gameState);
@@ -648,14 +639,12 @@ export default function GamePage() {
     const fetchRoom = async () => {
       try {
         if (!id || typeof id !== 'string') return;
-        const resp = await fetch(`/api/games/rooms/${id}`, { headers: authHeaders() });
-        if (resp.status === 403) {
-          const body = await resp.json().catch(() => ({}));
-          if (alive && body?.code === 'PRIVATE_TABLE') setPrivateTableBlocked(true);
+        const { ok, status, data } = await api.get(`/api/games/rooms/${encodeURIComponent(id)}`);
+        if (status === 403) {
+          if (alive && data?.code === 'PRIVATE_TABLE') setPrivateTableBlocked(true);
           return;
         }
-        if (!resp.ok) return;
-        const data = await resp.json();
+        if (!ok) return;
         if (!alive) return;
         const cfg = (data?.configuration || {}) as any;
         const blinds = (data?.blindLevels || {}) as any;
@@ -704,12 +693,8 @@ export default function GamePage() {
       if (cancelled || pokerStageRef.current !== 'showdown') return;
       attempts += 1;
       try {
-        const response = await fetch('/api/games/next-hand', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders() },
-          body: JSON.stringify({ tableId: id, playerId }),
-        });
-        const data = await response.json().catch(() => ({}));
+        const response = await api.post('/api/games/next-hand', { tableId: id, playerId });
+        const data = response.data;
         if (cancelled) return;
         if (response.ok && data?.awaitingRebuyDecisions) {
           const waiting: Array<{ playerId: string; playerName?: string; baseChips: number; rebuysUsed: number; rebuyLimit: any; remaining: any }> =
@@ -761,9 +746,9 @@ export default function GamePage() {
 
     const fetchSeats = async () => {
       try {
-        const resp = await fetch(`/api/games/seats/state?tableId=${id}`, { headers: authHeaders() });
+        const resp = await api.get('/api/games/seats/state', { query: { tableId: String(id) } });
         if (!resp.ok) return;
-        const data = await resp.json();
+        const data = resp.data;
         if (!alive) return;
 
         if (data.gameState) {
@@ -818,11 +803,7 @@ export default function GamePage() {
     setClaimingSeat(seatNumber);
 
     try {
-      const resp = await fetch('/api/games/seats/claim', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ tableId: id, seatNumber, playerId, playerName })
-      });
+      const resp = await api.post('/api/games/seats/claim', { tableId: id, seatNumber, playerId, playerName });
       if (resp.status === 202) {
         // The host approves who sits at this table
         setSeatNotice('Seat requested. Waiting for the host to approve.');
@@ -831,14 +812,14 @@ export default function GamePage() {
         return;
       }
       if (!resp.ok) {
-        const e = await resp.json().catch(() => ({}));
+        const e = resp.data;
         console.warn('Seat claim failed:', e);
         if (e?.code === 'SEAT_HELD' || e?.code === 'PERMISSION_DENIED' || e?.code === 'LIMIT_REACHED') setSeatNotice(e.error);
         setClaimingSeat(null);
         return;
       }
       setSeatNotice(null);
-      const data = await resp.json();
+      const data = resp.data;
       // The server sets the stack from the room's buy-in
       const startingChips = Number(data?.chips) || roomConfig?.buyIn || 1000;
       // Update local state and storage
@@ -880,11 +861,7 @@ export default function GamePage() {
 
     // Notify server via HTTP
     try {
-      fetch('/api/games/seats/stand', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ tableId: id, seatNumber: seatToVacate, playerId })
-      }).catch(() => {});
+      api.post('/api/games/seats/stand', { tableId: id, seatNumber: seatToVacate, playerId }).catch(() => {});
     } catch {}
   };
 
@@ -908,23 +885,18 @@ export default function GamePage() {
       }));
     // HTTP API for game start; the server takes the game type and blinds from the room
     try {
-      const response = await fetch(`/api/games/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({
-          tableId: id,
-          playerId,
-          seatedPlayers: seated,
-        }),
+      const response = await api.post('/api/games/start', {
+        tableId: id,
+        playerId,
+        seatedPlayers: seated,
       });
 
       if (!response.ok) {
-        const err = await response.json();
-        console.error('Start game failed:', err);
+        console.error('Start game failed:', response.data);
       } else {
         // Use the API response to set initial game state
         // The API returns a sanitized state that includes the current player's hole cards
-        const data = await response.json();
+        const data = response.data;
         if (data.gameState) {
           setPokerGameState(data.gameState);
           console.log('🎴 Initial game state set with player cards from API');
@@ -958,31 +930,24 @@ export default function GamePage() {
     console.log(`Performing ${action}${amount ? ` for ${amount}` : ''}`);
     
     try {
-      const response = await fetch('/api/games/action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({
-          tableId: id,
-          playerId,
-          action,
-          amount,
-          // The decision this click answers; the server refuses it if the game has moved on
-          expectedTurnSeq: typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
-        }),
+      const response = await api.post('/api/games/action', {
+        tableId: id,
+        playerId,
+        action,
+        amount,
+        // The decision this click answers; the server refuses it if the game has moved on
+        expectedTurnSeq: typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
       });
 
       if (!response.ok) {
-        const err = await response.json();
+        const err = response.data;
         console.error('Poker action failed:', err);
         if (err?.code === 'PERMISSION_DENIED') setSeatNotice(err.error);
         if (err?.code === 'STALE_GAME_STATE') {
           // This view was behind the server; refresh it so the next action uses the current state
           try {
-            const latest = await fetch(`/api/games/state?tableId=${id}`, { headers: authHeaders() });
-            if (latest.ok) {
-              const latestData = await latest.json();
-              if (latestData?.gameState) setPokerGameState(latestData.gameState);
-            }
+            const latest = await api.get('/api/games/state', { query: { tableId: String(id) } });
+            if (latest.ok && latest.data?.gameState) setPokerGameState(latest.data.gameState);
           } catch (refreshError) {
             console.warn('Failed to refresh game state after a stale action:', refreshError);
           }
@@ -990,7 +955,7 @@ export default function GamePage() {
       } else {
         // Use the API response to update game state
         // The API returns a sanitized state that includes the current player's hole cards
-        const data = await response.json();
+        const data = response.data;
         if (data.gameState) {
           setPokerGameState(data.gameState);
           console.log('🎴 Game state updated with player cards from action API');
@@ -1359,15 +1324,9 @@ export default function GamePage() {
     
     // Use HTTP REST API
     try {
-      const response = await fetch('/api/games/enable-rit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ tableId: id, playerId, runs }),
-      });
-      
+      const response = await api.post('/api/games/enable-rit', { tableId: id, playerId, runs });
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Failed to process Run-It-Twice decision:', errorData);
+        console.error('Failed to process Run-It-Twice decision:', response.data);
       }
     } catch (error) {
       console.error('Error sending Run-It-Twice decision:', error);
@@ -1437,28 +1396,16 @@ export default function GamePage() {
   const toggleWaitlist = useCallback(async (join: boolean) => {
     if (!tableId || !playerId) return;
     const name = tablePlayerName('Player');
-    const resp = await fetch('/api/games/waitlist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ tableId, playerId, join, playerName: name }),
-    }).catch(() => null);
-    if (resp?.status === 403) {
-      const e = await resp.json().catch(() => ({}));
-      if (e?.code === 'PERMISSION_DENIED') setSeatNotice(e.error);
-    }
+    const resp = await api.post('/api/games/waitlist', { tableId, playerId, join, playerName: name }).catch(() => null);
+    if (resp?.status === 403 && resp.data?.code === 'PERMISSION_DENIED') setSeatNotice(resp.data.error);
     refreshTableExtras();
   }, [tableId, playerId, refreshTableExtras]);
 
   // Straddle next hand
   const toggleStraddle = useCallback(async () => {
     if (!tableId || !playerId || !me) return;
-    const resp = await fetch('/api/games/straddle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ tableId, playerId, wants: !me.wantsStraddle }),
-    }).catch(() => null);
-    const data = await resp?.json().catch(() => ({}));
-    if (resp?.ok && data?.gameState) setPokerGameState(data.gameState);
+    const resp = await api.post('/api/games/straddle', { tableId, playerId, wants: !me.wantsStraddle }).catch(() => null);
+    if (resp?.ok && resp.data?.gameState) setPokerGameState(resp.data.gameState);
   }, [tableId, playerId, me]);
 
   // Pre-action queued for when it becomes our turn (current betting round only)
@@ -1521,12 +1468,8 @@ export default function GamePage() {
     if (!tableId || !playerId) return;
     setSeatOptionPending(true);
     try {
-      const resp = await fetch('/api/games/seat-options', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ tableId, playerId, option, value }),
-      });
-      const data = await resp.json().catch(() => ({}));
+      const resp = await api.post('/api/games/seat-options', { tableId, playerId, option, value });
+      const data = resp.data;
       if (resp.ok && data?.gameState) setPokerGameState(data.gameState);
       else console.warn('Seat option request failed:', data);
     } catch (err) {
@@ -1545,12 +1488,8 @@ export default function GamePage() {
     if (!tableId || !playerId || !me) return;
     setSitOutPending(true);
     try {
-      const resp = await fetch('/api/games/sit-out', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ tableId, playerId, sittingOut: !me.isSittingOut }),
-      });
-      const data = await resp.json().catch(() => ({}));
+      const resp = await api.post('/api/games/sit-out', { tableId, playerId, sittingOut: !me.isSittingOut });
+      const data = resp.data;
       if (resp.ok && data?.gameState) setPokerGameState(data.gameState);
       else console.warn('Sit out request failed:', data);
     } catch (err) {
@@ -1567,12 +1506,8 @@ export default function GamePage() {
   useEffect(() => {
     if (!notArrived || !tableId || !playerId || arriving.current) return;
     arriving.current = true;
-    fetch('/api/games/sit-out', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ tableId, playerId, sittingOut: false }),
-    })
-      .then(r => r.json().catch(() => ({})).then(data => { if (r.ok && data?.gameState) setPokerGameState(data.gameState); }))
+    api.post('/api/games/sit-out', { tableId, playerId, sittingOut: false })
+      .then(r => { if (r.ok && r.data?.gameState) setPokerGameState(r.data.gameState); })
       .catch(err => console.warn('Could not sit in at the tournament table:', err))
       .finally(() => { arriving.current = false; });
   }, [notArrived, tableId, playerId, pokerGameState]);
@@ -1581,12 +1516,8 @@ export default function GamePage() {
   const showMyCards = useCallback(async () => {
     if (!tableId || !playerId) return;
     try {
-      const resp = await fetch('/api/games/show-cards', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ tableId, playerId }),
-      });
-      const data = await resp.json().catch(() => ({}));
+      const resp = await api.post('/api/games/show-cards', { tableId, playerId });
+      const data = resp.data;
       if (resp.ok && data?.gameState) setPokerGameState(data.gameState);
       else console.warn('Show cards failed:', data);
     } catch (err) {
@@ -1943,9 +1874,9 @@ export default function GamePage() {
       if (!id) return;
       
       try {
-        const response = await fetch(`/api/games/rooms/${id}`, { headers: authHeaders() });
+        const response = await api.get(`/api/games/rooms/${encodeURIComponent(String(id))}`);
         if (response.ok) {
-          const roomData = await response.json();
+          const roomData = response.data;
           const roomMaxPlayers = roomData.maxPlayers || 6;
           setMaxPlayers(roomMaxPlayers);
           console.log(`Room ${id} supports ${roomMaxPlayers} players`);
@@ -2096,15 +2027,11 @@ export default function GamePage() {
         
         // Call the server-side API to check admin status
         // (environment variables like ADMIN_EMAILS are only available server-side)
-        const res = await fetch('/api/auth/check-admin', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        
+        const res = await api.get('/api/auth/check-admin', { headers: { Authorization: `Bearer ${token}` } });
+
         if (res.ok) {
-          const data = await res.json();
-          
+          const data = res.data;
+
           if (data.isAdmin) {
             setUserRole('admin');
           } else {
@@ -2130,9 +2057,9 @@ export default function GamePage() {
 
     const initSeatState = async () => {
       try {
-        const resp = await fetch(`/api/games/seats/state?tableId=${id}`, { headers: authHeaders() });
+        const resp = await api.get('/api/games/seats/state', { query: { tableId: String(id) } });
         if (resp.ok) {
-          const data = await resp.json();
+          const data = resp.data;
           if (!alive) return;
           if (data?.seats) {
             setSeatAssignments(data.seats);
@@ -2165,9 +2092,9 @@ export default function GamePage() {
       // Restore active game state on reload so players are returned to their seat mid-hand
       if (!alive) return;
       try {
-        const gsResp = await fetch(`/api/games/state?tableId=${id}&playerId=${playerId}`, { headers: authHeaders() });
+        const gsResp = await api.get('/api/games/state', { query: { tableId: String(id), playerId } });
         if (gsResp.ok) {
-          const gsData = await gsResp.json();
+          const gsData = gsResp.data;
           if (!alive) return;
           const gs = gsData?.gameState;
           if (gs) {
@@ -2327,14 +2254,9 @@ export default function GamePage() {
     
     // Use HTTP endpoint
     try {
-      const response = await fetch('/api/games/rebuy-decision', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ tableId: id, playerId, decision }),
-      });
-      const data = await response.json();
+      const response = await api.post('/api/games/rebuy-decision', { tableId: id, playerId, decision });
       if (!response.ok) {
-        console.error('Rebuy decision failed:', data);
+        console.error('Rebuy decision failed:', response.data);
       }
     } catch (error) {
       console.error('Rebuy decision error:', error);
@@ -2380,13 +2302,9 @@ export default function GamePage() {
         
         // Wait for server notification so other players see the seat vacated
         try {
-          const response = await fetch('/api/games/seats/stand', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...authHeaders() },
-            body: JSON.stringify({ tableId: id, seatNumber: seatToVacate, playerId })
-          });
+          const response = await api.post('/api/games/seats/stand', { tableId: id, seatNumber: seatToVacate, playerId });
           if (!response.ok) {
-            console.warn(`Failed to notify server of seat vacation: ${response.status} ${response.statusText}`);
+            console.warn(`Failed to notify server of seat vacation: ${response.status} ${response.error}`);
           }
         } catch (fetchErr) {
           console.warn('Failed to notify server of seat vacation:', fetchErr);
@@ -2689,13 +2607,9 @@ export default function GamePage() {
                           onClick={async () => {
                             try {
                               if (!id || !playerId) return;
-                              const response = await fetch('/api/games/next-hand', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', ...authHeaders() },
-                                body: JSON.stringify({ tableId: id, playerId, variant: selectedVariantDC }),
-                              });
+                              const response = await api.post('/api/games/next-hand', { tableId: id, playerId, variant: selectedVariantDC });
                               if (!response.ok) {
-                                console.warn('Dealer choice failed:', await response.text());
+                                console.warn('Dealer choice failed:', response.error);
                               }
                             } catch (err) {
                               console.warn('Dealer choice failed:', err);

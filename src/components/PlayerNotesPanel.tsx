@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { usePolling } from '../hooks/usePolling';
 import { authHeaders } from '../utils/auth-headers';
 import { NOTE_COLORS, NOTE_COLOR_CLASSES, type NoteColor } from '../lib/shared/note-colors';
 import HudBadge, { fetchHudStats, type HudMap } from './HudBadge';
@@ -35,17 +36,16 @@ export default function PlayerNotesPanel({ players, notes, onNotesChange }: Prop
   const [hud, setHud] = useState<HudMap>({});
   const playerKey = players.map(p => p.id).sort().join(',');
 
-  useEffect(() => {
-    if (!playerKey) return;
-    let cancelled = false;
-    const load = () => fetchHudStats(playerKey.split(',')).then(s => { if (!cancelled) setHud(s); }).catch(() => {});
-    load();
-    const t = setInterval(load, HUD_REFRESH_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(t);
-    };
+  const playerKeyRef = useRef(playerKey);
+  playerKeyRef.current = playerKey;
+  const loadHud = useCallback(() => {
+    const key = playerKey;
+    return fetchHudStats(key.split(',')).then(s => { if (playerKeyRef.current === key) setHud(s); }).catch(() => {});
   }, [playerKey]);
+  useEffect(() => {
+    if (playerKey) loadHud();
+  }, [playerKey, loadHud]);
+  usePolling(loadHud, HUD_REFRESH_MS, { enabled: !!playerKey, runOnStart: false });
 
   useEffect(() => {
     if (!editing) return;

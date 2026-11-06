@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { usePolling } from '../hooks/usePolling';
 import { useRouter } from 'next/router';
 import { authHeaders } from '../utils/auth-headers';
 import type { LobbyTable } from '../../pages/api/games/rooms/lobby';
@@ -128,11 +129,7 @@ export default function LobbyTables() {
       .catch(() => setError(true));
   }, []);
 
-  useEffect(() => {
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [load]);
+  usePolling(load, REFRESH_MS);
 
   return (
     <div className="w-full space-y-6">

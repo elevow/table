@@ -28,6 +28,7 @@ import PreActionBar from '../../src/components/PreActionBar';
 import { resolvePreAction } from '../../src/lib/shared/pre-action';
 import type { PreAction } from '../../src/lib/shared/pre-action';
 import { useTableExtras } from '../../src/hooks/useTableExtras';
+import { usePolling } from '../../src/hooks/usePolling';
 import TimeBankBadge from '../../src/components/TimeBankBadge';
 import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
 import HandActionLog from '../../src/components/HandActionLog';
@@ -680,6 +681,19 @@ export default function GamePage() {
   // one failed request (or a rebuy prompt someone never saw) used to leave the table stuck.
   const rebuyPromptRef = useRef(rebuyPrompt);
   rebuyPromptRef.current = rebuyPrompt;
+  // One tab drives this: the player in the lowest-numbered seat asks promptly, everyone else only as
+  // a slow backup (in case that player has left), so a table makes one request every few seconds
+  // rather than one per player.
+  const nextHandLeaderId = useMemo(() => {
+    const seatNumbers = Object.keys(seatAssignments).map(Number).sort((a, b) => a - b);
+    for (const n of seatNumbers) {
+      const seat = seatAssignments[n];
+      if (seat?.playerId) return seat.playerId;
+    }
+    return null;
+  }, [seatAssignments]);
+  const isNextHandLeaderRef = useRef(false);
+  isNextHandLeaderRef.current = !nextHandLeaderId || nextHandLeaderId === playerId;
   useEffect(() => {
     if (!id || typeof id !== 'string') return;
     if (pokerGameState?.stage !== 'showdown') {
@@ -726,9 +740,14 @@ export default function GamePage() {
         console.warn('Auto next-hand request failed:', e);
       }
       // Still at showdown: try again, less often after the first minute
-      if (!cancelled && attempts < 120) timer = setTimeout(attempt, attempts < 12 ? 5000 : 15000);
+      if (cancelled) return;
+      if (isNextHandLeaderRef.current) {
+        if (attempts < 120) timer = setTimeout(attempt, attempts < 12 ? 5000 : 15000);
+      } else if (attempts < 60) {
+        timer = setTimeout(attempt, 30000);
+      }
     };
-    timer = setTimeout(attempt, 5000);
+    timer = setTimeout(attempt, isNextHandLeaderRef.current ? 5000 : 20000);
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
@@ -736,56 +755,45 @@ export default function GamePage() {
     // Re-run for each new hand, and when players sit in or out
   }, [pokerGameState?.stage, pokerGameState?.handNumber, id, playerId, sittingInCount, seatedCount]);
 
-  // Periodic seat polling to reflect other players (only when game is NOT active)
-  useEffect(() => {
-    if (!id) return;
-    // Don't poll seats if game is active - seats come from game state
-    if (gameStarted || pokerGameState) return;
-    let alive = true;
-    let timer: any = null;
+  // Seat polling shows other players sitting down before a game starts; once one is running, seats
+  // come from game state. A fallback for missed live updates, so it pauses for hidden or idle tabs.
+  const seatPollEnabled = !!id && !gameStarted && !pokerGameState;
+  const seatPollEnabledRef = useRef(seatPollEnabled);
+  seatPollEnabledRef.current = seatPollEnabled;
+  const fetchSeats = async () => {
+    try {
+      const resp = await api.get('/api/games/seats/state', { query: { tableId: String(id) } });
+      if (!resp.ok) return;
+      const data = resp.data;
+      if (!seatPollEnabledRef.current) return;
 
-    const fetchSeats = async () => {
-      try {
-        const resp = await api.get('/api/games/seats/state', { query: { tableId: String(id) } });
-        if (!resp.ok) return;
-        const data = resp.data;
-        if (!alive) return;
-
-        if (data.gameState) {
-            setPokerGameState(data.gameState);
-            const derivedDc = computeDealerChoicePrompt(data.gameState);
-            if (derivedDc) {
-              const incomingDealerId = derivedDc.dealerId;
-              const prevDealerId = lastAwaitingDealerIdRef.current;
-              const isNewSession = incomingDealerId && incomingDealerId !== prevDealerId;
-              if (isNewSession) {
-                userChangedVariantRef.current = false;
-                lastAwaitingDealerIdRef.current = incomingDealerId;
-                setSelectedVariantDC(derivedDc.current || 'texas-holdem');
-              } else if (!userChangedVariantRef.current && derivedDc.current) {
-                setSelectedVariantDC(derivedDc.current);
-              }
-              setAwaitingDealerChoice(derivedDc);
-            } else if (data.gameState.stage !== 'awaiting-dealer-choice') {
-              setAwaitingDealerChoice(null);
-              setSelectedVariantDC('texas-holdem');
+      if (data.gameState) {
+          setPokerGameState(data.gameState);
+          const derivedDc = computeDealerChoicePrompt(data.gameState);
+          if (derivedDc) {
+            const incomingDealerId = derivedDc.dealerId;
+            const prevDealerId = lastAwaitingDealerIdRef.current;
+            const isNewSession = incomingDealerId && incomingDealerId !== prevDealerId;
+            if (isNewSession) {
               userChangedVariantRef.current = false;
-              lastAwaitingDealerIdRef.current = undefined;
+              lastAwaitingDealerIdRef.current = incomingDealerId;
+              setSelectedVariantDC(derivedDc.current || 'texas-holdem');
+            } else if (!userChangedVariantRef.current && derivedDc.current) {
+              setSelectedVariantDC(derivedDc.current);
             }
-        }
-      } catch (err) {
-        console.warn('Failed to fetch seats state:', err);
+            setAwaitingDealerChoice(derivedDc);
+          } else if (data.gameState.stage !== 'awaiting-dealer-choice') {
+            setAwaitingDealerChoice(null);
+            setSelectedVariantDC('texas-holdem');
+            userChangedVariantRef.current = false;
+            lastAwaitingDealerIdRef.current = undefined;
+          }
       }
-    };
-
-    // Initial and interval fetch
-    fetchSeats();
-    timer = setInterval(fetchSeats, 3000);
-    return () => {
-      alive = false;
-      if (timer) clearInterval(timer);
-    };
-  }, [id, playerId, seatAssignments, gameStarted, pokerGameState, computeDealerChoicePrompt]);
+    } catch (err) {
+      console.warn('Failed to fetch seats state:', err);
+    }
+  };
+  usePolling(fetchSeats, 10_000, { enabled: seatPollEnabled });
 
   // Seat management functions
   const claimSeat = async (seatNumber: number) => {

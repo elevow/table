@@ -1,22 +1,15 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
-import { rateLimit } from '../../../src/lib/api/rate-limit';
+import { getPool } from '../../../src/lib/database/pool';
+import { apiHandler, ApiError } from '../../../src/lib/api/handler';
 import { FriendService } from '../../../src/lib/services/friend-service';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'anon';
-  const rl = rateLimit(`GET /api/friends/status:${ip}`, { windowMs: 60 * 1000, max: 240 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests. Please slow down.' });
-
-  try {
+export default apiHandler(
+  { methods: 'GET', auth: true, rateLimit: { windowMs: 60 * 1000, max: 240 } },
+  async (req, res, ctx) => {
     const { a, b } = req.query as { a?: string; b?: string };
-    if (!a || !b) return res.status(400).json({ error: 'Missing a or b' });
-    const pool = new Pool();
-    const service = new FriendService(pool as any);
-    const status = await service.relationshipStatus(a, b);
+    if (!a || !b) throw new ApiError(400, 'Missing a or b');
+    // Only a party to the relationship may look it up
+    if (ctx.userId !== a && ctx.userId !== b) throw new ApiError(403, 'Not a party to this relationship');
+    const status = await new FriendService(getPool()).relationshipStatus(a, b);
     return res.status(200).json(status);
-  } catch (e: any) {
-    return res.status(500).json({ error: e?.message || 'Internal error' });
   }
-}
+);

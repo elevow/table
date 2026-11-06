@@ -359,9 +359,9 @@ describe('FriendService', () => {
     it('should accept game invite', async () => {
       mockFriendManager.respondToGameInvite.mockResolvedValue(mockInvite);
 
-      const result = await friendService.respondToInvite('invite123', 'accept');
+      const result = await friendService.respondToInvite('invite123', 'accept', 'user456');
 
-      expect(mockFriendManager.respondToGameInvite).toHaveBeenCalledWith('invite123', true);
+      expect(mockFriendManager.respondToGameInvite).toHaveBeenCalledWith('invite123', true, 'user456');
       expect(result).toEqual(mockInvite);
     });
 
@@ -369,14 +369,14 @@ describe('FriendService', () => {
       const declinedInvite = { ...mockInvite, status: 'declined' as const };
       mockFriendManager.respondToGameInvite.mockResolvedValue(declinedInvite);
 
-      const result = await friendService.respondToInvite('invite123', 'decline');
+      const result = await friendService.respondToInvite('invite123', 'decline', 'user456');
 
-      expect(mockFriendManager.respondToGameInvite).toHaveBeenCalledWith('invite123', false);
+      expect(mockFriendManager.respondToGameInvite).toHaveBeenCalledWith('invite123', false, 'user456');
       expect(result).toEqual(declinedInvite);
     });
 
     it('should throw error for invalid id', async () => {
-      await expect(friendService.respondToInvite('', 'accept'))
+      await expect(friendService.respondToInvite('', 'accept', 'user456'))
         .rejects.toThrow('Missing or invalid id');
     });
   });

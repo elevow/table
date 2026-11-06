@@ -4,7 +4,7 @@ import listHandler from '../../../pages/api/rabbit-hunt/list';
 import cooldownHandler from '../../../pages/api/rabbit-hunt/cooldown';
 import previewHandler from '../../../pages/api/rabbit-hunt/preview';
 
-jest.mock('pg', () => ({ Pool: jest.fn().mockImplementation(() => ({})) }));
+jest.mock('../../../src/lib/database/pool', () => ({ getPool: jest.fn(() => ({})) }));
 jest.mock('../../../src/lib/api/rate-limit', () => ({ rateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 1, resetAt: Date.now() + 60000 }) }));
 
 // Signed in as u1

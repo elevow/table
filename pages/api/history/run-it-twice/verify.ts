@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../../src/lib/database/pool';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { HandHistoryService } from '../../../../src/lib/services/hand-history-service';
 import { verifyRngSecurity, RNGSecurity } from '../../../../src/lib/poker/rng-security';
@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const handId = String((req.query as any).handId || '');
     if (!handId) return res.status(400).json({ error: 'Missing handId' });
 
-    const pool = new Pool();
+    const pool = getPool();
     const service = new HandHistoryService(pool);
     const outcomes = await service.listRunItTwiceOutcomes(handId);
 

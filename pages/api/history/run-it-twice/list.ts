@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import { getPool } from '../../../../src/lib/database/pool';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { HandHistoryService } from '../../../../src/lib/services/hand-history-service';
 
@@ -9,7 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
   try {
     const handId = String((req.query as any).handId || '');
-    const pool = new Pool();
+    const pool = getPool();
     const service = new HandHistoryService(pool);
     const list = await service.listRunItTwiceOutcomes(handId);
     return res.status(200).json(list);

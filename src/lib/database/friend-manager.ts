@@ -167,11 +167,12 @@ export class FriendManager {
     return this.mapInvite(res.rows[0]);
   }
 
-  async respondToGameInvite(id: string, accept: boolean): Promise<FriendInviteRecord> {
+  /** Only the invitee can respond; an invite addressed to someone else reads as not found. */
+  async respondToGameInvite(id: string, accept: boolean, inviteeId: string): Promise<FriendInviteRecord> {
     const status = accept ? 'accepted' : 'declined';
     const res = await this.pool.query(
-      `UPDATE friend_game_invites SET status = $1, responded_at = NOW() WHERE id = $2 RETURNING *`,
-      [status, id]
+      `UPDATE friend_game_invites SET status = $1, responded_at = NOW() WHERE id = $2 AND invitee_id = $3 RETURNING *`,
+      [status, id, inviteeId]
     );
     if (!res.rows[0]) throw new FriendError('Invite not found', 'NOT_FOUND');
     return this.mapInvite(res.rows[0]);

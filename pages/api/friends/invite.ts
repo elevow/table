@@ -1,24 +1,14 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
-import { rateLimit } from '../../../src/lib/api/rate-limit';
+import { getPool } from '../../../src/lib/database/pool';
+import { apiHandler, ApiError, assertSelf } from '../../../src/lib/api/handler';
 import { FriendService } from '../../../src/lib/services/friend-service';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'anon';
-  const rl = rateLimit(`POST /api/friends/invite:${ip}`, { windowMs: 60 * 60 * 1000, max: 120 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests. Please slow down.' });
-
-  try {
-    const { inviterId, inviteeId, roomId } = (req.body || {}) as { inviterId?: string; inviteeId?: string; roomId?: string };
-    if (!inviterId || !inviteeId || !roomId) return res.status(400).json({ error: 'Missing inviterId, inviteeId, or roomId' });
-    const pool = new Pool();
-    const service = new FriendService(pool as any);
-    const invite = await service.inviteToGame(inviterId, inviteeId, roomId);
-
+export default apiHandler(
+  { methods: 'POST', auth: true, rateLimit: { windowMs: 60 * 60 * 1000, max: 120 }, errorStatus: { BLOCKED: 400 } },
+  async (req, res, ctx) => {
+    const { inviterId: claimed, inviteeId, roomId } = (req.body || {}) as { inviterId?: string; inviteeId?: string; roomId?: string };
+    const inviterId = assertSelf(ctx, claimed, 'inviterId');
+    if (!inviteeId || !roomId) throw new ApiError(400, 'Missing inviteeId or roomId');
+    const invite = await new FriendService(getPool()).inviteToGame(inviterId, inviteeId, roomId);
     return res.status(201).json(invite);
-  } catch (e: any) {
-    const status = e?.code === 'BLOCKED' ? 400 : 500;
-    return res.status(status).json({ error: e?.message || 'Internal error' });
   }
-}
+);

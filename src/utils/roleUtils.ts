@@ -1,21 +1,13 @@
 // Role management utilities for admin access control
 
 import { UserRole } from '../types/user';
+import { adminEmails } from '../lib/config/env';
 
 /**
  * Parse admin emails from environment variable
  */
 export function getAdminEmails(): string[] {
-  const adminEmails = process.env.ADMIN_EMAILS;
-  
-  if (!adminEmails) {
-    return [];
-  }
-  
-  return adminEmails
-    .split(',')
-    .map(email => email.trim().toLowerCase())
-    .filter(email => email.length > 0);
+  return adminEmails();
 }
 
 /**

@@ -6,6 +6,7 @@ type SocketLike = {
 };
 import { TableState } from '../types/poker';
 import { StateUpdate, StateReconciliation } from '../types/state-update';
+import { runtime } from './config/env';
 
 export class ClientStateManager {
   private state: TableState | null = null;
@@ -47,7 +48,7 @@ export class ClientStateManager {
 
     this.socket.on('connect_error', (error: Error) => {
       // Only log in non-CI environments
-      if (!process.env.CI) {
+      if (!runtime.isCI) {
         console.error('Connection error:', error);
       }
       this.handleConnectionError();

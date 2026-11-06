@@ -3,6 +3,10 @@ import collusionHandler from '../../../pages/api/security/collusion';
 import multiHandler from '../../../pages/api/security/multi-account';
 
 jest.mock('../../../src/lib/database/pool', () => ({ getPool: jest.fn(() => ({})) }));
+const mockRequirePermission = jest.fn();
+jest.mock('../../../src/lib/auth/access-control', () => ({
+  requirePermission: (...args: any[]) => mockRequirePermission(...args)
+}));
 
 // Mock rate limiter
 jest.mock('../../../src/lib/api/rate-limit', () => ({
@@ -27,6 +31,25 @@ function createReq(method: string, body?: any): Partial<NextApiRequest> {
 }
 
 describe('Security API (US-060/US-061)', () => {
+  beforeEach(() => {
+    mockRequirePermission.mockReset();
+    mockRequirePermission.mockResolvedValue({ userId: 'staff' });
+  });
+
+  it('only staff with admin.security.config can run an analysis', async () => {
+    mockRequirePermission.mockImplementation(async (_req: any, res: any) => {
+      res.status(403).json({ error: 'Forbidden' });
+      return null;
+    });
+    for (const [handler, body] of [[collusionHandler, { hands: [] }], [multiHandler, { logins: [] }]] as const) {
+      const res = createRes();
+      await (handler as any)(createReq('POST', body) as any, res as any);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.status).not.toHaveBeenCalledWith(200);
+    }
+    expect(mockRequirePermission).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'admin.security.config');
+  });
+
   it('returns analysis for valid input', async () => {
     const res = createRes();
   await collusionHandler(createReq('POST', { hands: [{ handId: 'h1', players: ['a','b'], actions: [], pot: 0, winners: ['a'] }] }) as any, res as any);

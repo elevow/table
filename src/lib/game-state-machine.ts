@@ -1,5 +1,6 @@
 import { GameState, StateTransition, RecoveryPoint, ActionValidator, GameStateMachine } from '../types/state';
 import { GameAction, TableState } from '../types/poker';
+import { runtime } from './config/env';
 
 export class PokerGameStateMachine implements GameStateMachine {
   private static instance: PokerGameStateMachine;
@@ -182,7 +183,7 @@ export class PokerGameStateMachine implements GameStateMachine {
 
   private handleError(error: Error, isErrorTransition: boolean = false): void {
     // Only log in non-CI environments
-    if (!process.env.CI) {
+    if (!runtime.isCI) {
       console.error(`State Machine Error: ${error.message}`);
     }
     if (!isErrorTransition) {

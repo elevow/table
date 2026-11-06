@@ -4,11 +4,6 @@ import { getPool } from '../../../../src/lib/database/pool';
 import { requireAuth } from '../../../../src/lib/auth/auth-utils';
 import { apiHandler } from '../../../../src/lib/api/handler';
 
-// Temporarily disable SSL certificate verification for development
-if (process.env.NODE_ENV === 'development') {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
-
 export default apiHandler({ methods: 'GET' }, async (req, res) => {
   const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'anon';
   const rl = rateLimit(`GET /api/avatars/user/:userId:${ip}`, { windowMs: 60 * 1000, max: 60 });

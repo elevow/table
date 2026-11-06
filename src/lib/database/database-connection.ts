@@ -1,3 +1,4 @@
+import { mockDatabaseEnabled } from '../config/env';
 // US-009: Player Profile Storage - Database Connection and Initialization
 
 export interface DatabaseConfig {
@@ -131,7 +132,7 @@ class PostgresDatabasePool implements DatabasePool {
 // Database connection factory
 export function createDatabasePool(config: DatabaseConfig): DatabasePool {
   // US-043: Create a real PostgreSQL pool when not in test/mock mode
-  const useMock = process.env.NODE_ENV === 'test' || process.env.USE_MOCK_DB === 'true';
+  const useMock = mockDatabaseEnabled();
   if (useMock) {
     return new MockDatabasePool();
   }

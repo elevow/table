@@ -21,7 +21,8 @@ const mockServiceInstance: any = {
   uploadAvatar: jest.fn(),
   getLatestForUser: jest.fn(),
   manager: {
-    updateAvatar: jest.fn()
+    updateAvatar: jest.fn(),
+    getAvatarById: jest.fn()
   }
 };
 
@@ -30,9 +31,10 @@ jest.mock('../../../src/lib/services/avatar-service', () => ({
 }));
 
 // Mock auth utils
+const mockGetAuthenticatedUserId = jest.fn();
 jest.mock('../../../src/lib/auth/auth-utils', () => ({
   requireAuth: jest.fn(() => Promise.resolve('authenticated-user-123')),
-  getAuthenticatedUserId: jest.fn(() => Promise.resolve('authenticated-user-123')),
+  getAuthenticatedUserId: (...args: any[]) => mockGetAuthenticatedUserId(...args),
   getAuthToken: jest.fn(() => 'mock-token')
 }));
 
@@ -57,6 +59,7 @@ function createReq(method: string, body?: any, query?: any): Partial<NextApiRequ
 describe('Avatar API routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetAuthenticatedUserId.mockResolvedValue('authenticated-user-123');
   });
 
   test('POST /api/avatars/upload success', async () => {
@@ -106,8 +109,9 @@ describe('Avatar API routes', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Not found' });
   });
 
-  test('DELETE /api/avatars/[avatarId] archives avatar', async () => {
+  test("DELETE /api/avatars/[avatarId] archives the caller's own avatar", async () => {
     const archived = { id: 'a4', status: 'archived' } as any;
+    mockServiceInstance.manager.getAvatarById.mockResolvedValue({ id: 'a4', userId: 'authenticated-user-123' });
     mockServiceInstance.manager.updateAvatar.mockResolvedValue(archived);
 
     const req = createReq('DELETE', undefined, { avatarId: 'a4' });
@@ -117,5 +121,21 @@ describe('Avatar API routes', () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ success: true, id: 'a4', status: 'archived' });
+  });
+
+  test('DELETE /api/avatars/[avatarId] refuses signed-out callers', async () => {
+    mockGetAuthenticatedUserId.mockResolvedValue(null);
+    const res = createRes();
+    await updateHandler(createReq('DELETE', undefined, { avatarId: 'a4' }) as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(mockServiceInstance.manager.updateAvatar).not.toHaveBeenCalled();
+  });
+
+  test("DELETE /api/avatars/[avatarId] won't archive someone else's avatar", async () => {
+    mockServiceInstance.manager.getAvatarById.mockResolvedValue({ id: 'a5', userId: 'someone-else' });
+    const res = createRes();
+    await updateHandler(createReq('DELETE', undefined, { avatarId: 'a5' }) as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(mockServiceInstance.manager.updateAvatar).not.toHaveBeenCalled();
   });
 });

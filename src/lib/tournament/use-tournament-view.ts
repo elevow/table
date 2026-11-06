@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authHeaders } from '../../utils/auth-headers';
+import { usePolling } from '../../hooks/usePolling';
 import { getSupabaseBrowser } from '../realtime/supabaseClient';
 import type { TournamentEvent } from './tournament-events';
 import type { TournamentView } from './tournament-view';
 
 // Live updates reload the view as soon as anything changes; polling is the fallback
-const POLL_MS = 10_000;
+const POLL_MS = 30_000;
 
 /**
  * A tournament's view, reloaded whenever the tournament changes (and every few seconds as a
@@ -42,12 +43,11 @@ export function useTournamentView(id: string | null, onEvents?: (events: Tournam
     }
   }, [id]);
 
+  usePolling(reload, POLL_MS, { enabled: !!id });
   useEffect(() => {
-    reload();
-    const poll = setInterval(reload, POLL_MS);
     const tick = setInterval(() => setNow(Date.now()), 1000);
-    return () => { clearInterval(poll); clearInterval(tick); };
-  }, [reload]);
+    return () => clearInterval(tick);
+  }, []);
 
   useEffect(() => {
     if (!id) return;

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { authHeaders } from '../utils/auth-headers';
+import { usePolling } from './usePolling';
 
 interface TurnStatus {
   isMyTurn: boolean;
@@ -46,7 +47,10 @@ export function useCheckTurn(
   const [error, setError] = useState<string | null>(null);
   
   const previousTurnStatusRef = useRef<TurnStatus | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Kept in a ref: callers pass an inline function, and a new one each render must not restart
+  // polling (it used to, which fired a request on every render)
+  const onTurnChangeRef = useRef(onTurnChange);
+  onTurnChangeRef.current = onTurnChange;
   const isCheckingRef = useRef(false);
   const isMountedRef = useRef(true);
 
@@ -99,7 +103,7 @@ export function useCheckTurn(
           prev.paused !== newStatus.paused ||
           prev.turnSeq !== newStatus.turnSeq
         )) {
-          onTurnChange?.(newStatus);
+          onTurnChangeRef.current?.(newStatus);
         }
         
         previousTurnStatusRef.current = newStatus;
@@ -120,45 +124,17 @@ export function useCheckTurn(
       }
       isCheckingRef.current = false;
     }
-  }, [tableId, playerId, onTurnChange]);
+  }, [tableId, playerId]);
 
   useEffect(() => {
-    // Set mounted flag
     isMountedRef.current = true;
-    
-    // Don't poll if disabled or missing required params
-    if (!enabled || !tableId || !playerId) {
-      return;
-    }
-
-    // Initial check
-    checkTurn();
-
-    // Set up polling interval
-    const startPolling = () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      
-      timeoutRef.current = setTimeout(() => {
-        checkTurn().then(() => {
-          // Continue polling
-          startPolling();
-        });
-      }, interval);
-    };
-
-    startPolling();
-
-    // Cleanup
     return () => {
       isMountedRef.current = false;
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
     };
-  }, [tableId, playerId, enabled, interval, checkTurn]);
+  }, []);
+
+  // Paused while the tab is hidden or the user is idle
+  usePolling(checkTurn, interval, { enabled: enabled && !!tableId && !!playerId });
 
   return {
     turnStatus,

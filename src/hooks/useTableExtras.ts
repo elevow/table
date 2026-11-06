@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { usePolling } from './usePolling';
 import { authHeaders } from '../utils/auth-headers';
 
 export interface TableExtras {
@@ -34,11 +35,8 @@ export function useTableExtras(tableId: string): { extras: TableExtras | null; r
       .catch(() => {});
   }, [tableId]);
 
-  useEffect(() => {
-    refresh();
-    const timer = setInterval(refresh, 15_000);
-    return () => clearInterval(timer);
-  }, [refresh]);
+  // A fallback: changes made at this table call refresh() straight away
+  usePolling(refresh, 60_000, { enabled: !!tableId });
 
   return { extras, refresh };
 }

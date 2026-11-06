@@ -296,6 +296,22 @@ describe('useCheckTurn', () => {
     });
   });
 
+  it('does not refetch when re-rendered with a new inline onTurnChange', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, isMyTurn: false, activePlayer: 'player2', tableState: 'flop', handNumber: 5 })
+    });
+
+    const { rerender } = renderHook(() => useCheckTurn('table1', 'player1', { onTurnChange: () => {} }));
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    for (let i = 0; i < 10; i++) rerender();
+    await Promise.resolve();
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
   it('should cleanup timeout on unmount', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,

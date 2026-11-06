@@ -1,3 +1,4 @@
+import { runtime } from '../config/env';
 // US-050: Performance Alerts
 
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
@@ -153,7 +154,7 @@ export class DatabaseAlertingService {
     const chans = channels ?? this.config.notifications.channels;
     alert.notifications.push(...chans);
     // For this implementation we log; in production, integrate with actual notifiers
-    if (!process.env.CI) {
+    if (!runtime.isCI) {
       console.warn(`ALERT [${alert.severity}] ${alert.name}: ${alert.message} (channels: ${chans.join(',')})`);
     }
   }

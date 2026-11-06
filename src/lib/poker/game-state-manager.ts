@@ -1,6 +1,7 @@
 import { TableState, GameStage, Player } from '../../types/poker';
 import { isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { HandEvaluator } from './hand-evaluator';
+import { debugFlags } from '../config/env';
 
 /**
  * Not dealt into hands: sitting out, or waiting for the big blind to reach them. Under tournament
@@ -61,7 +62,7 @@ export class GameStateManager {
           activePlayer = bringInPlayer;
         } else if (bringInPlayer) {
           activePlayer = this.findNextActivePlayer(bringInPlayer.position) || (isActive(bringInPlayer) ? bringInPlayer : actives[0]);
-          if (process.env.DEBUG_POKER === 'true') {
+          if (debugFlags.poker) {
             const up = this.state.studState?.playerCards[activePlayer.id]?.upCards?.[0];
             // eslint-disable-next-line no-console
             console.log(`[DEBUG] Stud third street firstToAct=bring-in ${activePlayer.id} up=${up?.rank}${up?.suit?.[0]}`);
@@ -83,7 +84,7 @@ export class GameStateManager {
             }
           }
           activePlayer = chosen || actives[0];
-          if (process.env.DEBUG_POKER === 'true' && activePlayer) {
+          if (debugFlags.poker && activePlayer) {
             const up = this.state.studState?.playerCards[activePlayer.id]?.upCards?.[0];
             // eslint-disable-next-line no-console
             console.log(`[DEBUG] Stud third street firstToAct=computed ${activePlayer.id} up=${up?.rank}${up?.suit?.[0]}`);
@@ -126,7 +127,7 @@ export class GameStateManager {
         }
         activePlayer = chosen || actives[0];
       }
-      if (process.env.DEBUG_POKER === 'true') {
+      if (debugFlags.poker) {
         // eslint-disable-next-line no-console
         console.log(`[DEBUG] Stud first-to-act (${stage}) -> ${activePlayer?.id}`);
       }
@@ -158,7 +159,7 @@ export class GameStateManager {
     }
 
     if (!activePlayer) throw new Error('Could not find active player');
-    if (process.env.DEBUG_POKER === 'true') {
+    if (debugFlags.poker) {
       const n = this.state.players.length;
       const mode = n === 2 ? 'HU' : 'RING';
       // eslint-disable-next-line no-console
@@ -225,7 +226,7 @@ export class GameStateManager {
       next = (next + 1) % n;
     }
     this.state.dealerPosition = next;
-    if (process.env.DEBUG_POKER === 'true') {
+    if (debugFlags.poker) {
       // eslint-disable-next-line no-console
       console.log(`[DEBUG] Dealer rotated -> new dealerIdx=${this.state.dealerPosition} (playerId=${this.state.players[this.state.dealerPosition]?.id})`);
     }
@@ -233,7 +234,7 @@ export class GameStateManager {
   }
 
   public findNextActivePlayer(startPosition: number): Player | undefined {
-    if (process.env.DEBUG_POKER === 'true') {
+    if (debugFlags.poker) {
       // eslint-disable-next-line no-console
       console.log(`[DEBUG] findNextActivePlayer: startPos=${startPosition}, numPlayers=${this.state.players.length}, currentBet=${this.state.currentBet}`);
       // eslint-disable-next-line no-console
@@ -245,7 +246,7 @@ export class GameStateManager {
     // Find the index of the player with startPosition
     const startIndex = this.state.players.findIndex(p => p.position === startPosition);
     if (startIndex === -1) {
-      if (process.env.DEBUG_POKER === 'true') {
+      if (debugFlags.poker) {
         // eslint-disable-next-line no-console
         console.log(`[DEBUG]   -> Start position ${startPosition} not found in players array`);
       }
@@ -257,14 +258,14 @@ export class GameStateManager {
       const currentIndex = (startIndex + i) % numPlayers;
       const player = this.state.players[currentIndex];
       
-      if (process.env.DEBUG_POKER === 'true') {
+      if (debugFlags.poker) {
         // eslint-disable-next-line no-console
         console.log(`[DEBUG]   Loop iteration ${i}: arrayIndex=${currentIndex}, pos=${player.position}, player=${player.id}, hasActed=${player.hasActed}, currentBet=${player.currentBet}, isFolded=${player.isFolded}, isAllIn=${player.isAllIn}`);
       }
       
       if (player && !player.isFolded && !player.isAllIn && 
           (!player.hasActed || player.currentBet < this.state.currentBet)) {
-        if (process.env.DEBUG_POKER === 'true') {
+        if (debugFlags.poker) {
           // eslint-disable-next-line no-console
           console.log(`[DEBUG]   -> Found next player: ${player.id} at pos=${player.position}`);
         }
@@ -272,7 +273,7 @@ export class GameStateManager {
       }
     }
 
-    if (process.env.DEBUG_POKER === 'true') {
+    if (debugFlags.poker) {
       // eslint-disable-next-line no-console
       console.log(`[DEBUG]   -> No next player found`);
     }

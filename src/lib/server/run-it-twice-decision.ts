@@ -7,6 +7,7 @@ import type { PokerEngine } from '../poker/poker-engine';
 import type { TableState } from '../../types/poker';
 import { finishHand } from './hand-records';
 import { broadcastGameState, getIo } from './game-action-pipeline';
+import { debugFlags } from '../config/env';
 
 const revealAllHoleCards = (engine: any, state: TableState): TableState => {
   try {
@@ -44,7 +45,7 @@ export async function resolveRunItTwiceDecision(opts: {
   reason?: string;
 }): Promise<{ status: 'ok'; state: TableState } | { status: 'conflict' } | { status: 'rejected'; error: string }> {
   const { tableId, engine, res, playerId, runs, reason } = opts;
-  const autoRunoutDebug = !!process.env.AUTO_RUNOUT_DEBUG;
+  const autoRunoutDebug = debugFlags.autoRunout;
   const gameState = engine.getState();
   clearSupabaseAutoRunout(tableId);
 

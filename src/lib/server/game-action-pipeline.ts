@@ -13,6 +13,7 @@ import type { PokerEngine } from '../poker/poker-engine';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../shared/feature-flags';
 import type { Card, GameStage, TableState } from '../../types/poker';
 import { finishHand } from './hand-records';
+import { debugFlags } from '../config/env';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -116,7 +117,7 @@ export async function runGameAction(opts: {
   let gameState = engine.getState();
 
   // Check if we should issue a Run-It-Twice prompt
-  const autoRunoutDebug = !!process.env.AUTO_RUNOUT_DEBUG;
+  const autoRunoutDebug = debugFlags.autoRunout;
   const autoEligible = isAutoRunoutEligible(gameState);
   let issuedPrompt = null;
   if (autoEligible && RUN_IT_TWICE_DECISIONS_ENABLED && gameState.allowRunItTwice) {

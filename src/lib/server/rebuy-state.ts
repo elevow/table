@@ -1,5 +1,6 @@
 import { fetchRoomRebuyLimit } from '../shared/rebuy-limit';
 import { getPlayerRebuyInfo } from '../shared/rebuy-tracker';
+import { envNumber } from '../config/env';
 
 export type RebuyLimitValue = number | 'unlimited';
 
@@ -20,8 +21,8 @@ if (!globalObj[globalKey]) {
 
 const pendingRebuys = globalObj[globalKey]!;
 
-const DEFAULT_BUYIN = Number(process.env.NEXT_PUBLIC_DEFAULT_BUYIN);
-export const BASE_REBUY_CHIPS = Number.isFinite(DEFAULT_BUYIN) && DEFAULT_BUYIN > 0 ? DEFAULT_BUYIN : 20;
+const DEFAULT_BUYIN = envNumber('NEXT_PUBLIC_DEFAULT_BUYIN', 20);
+export const BASE_REBUY_CHIPS = DEFAULT_BUYIN > 0 ? DEFAULT_BUYIN : 20;
 
 export function getPendingRebuys(tableId: string): Map<string, PendingRebuyEntry> | undefined {
   return pendingRebuys.get(tableId);

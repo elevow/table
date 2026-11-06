@@ -2,6 +2,7 @@ import { BettingMode, Player } from '../../types/poker';
 import { PlayerAction } from '../../types/poker-engine';
 import { PotLimitCalculator } from './pot-limit';
 import { FIXED_LIMIT_CAP, fixedLimitRaiseTarget } from './fixed-limit';
+import { debugFlags } from '../config/env';
 
 export class BettingManager {
   private mode: BettingMode = 'no-limit';
@@ -68,7 +69,7 @@ export class BettingManager {
     if (!smallBlindPlayer) throw new Error('Could not find small blind player');
     if (!bigBlindPlayer) throw new Error('Could not find big blind player');
 
-    if (process.env.DEBUG_POKER === 'true') {
+    if (debugFlags.poker) {
       const mode = players.length === 2 ? 'HU' : 'RING';
       // eslint-disable-next-line no-console
       console.log(`[DEBUG] Blinds (${mode}) dealerIdx=${typeof dealerPosition==='number'?dealerPosition:'n/a'} | SB=${smallBlindPlayer.id} (pos=${smallBlindPlayer.position}) BB=${bigBlindPlayer.id} (pos=${bigBlindPlayer.position})`);
@@ -77,7 +78,7 @@ export class BettingManager {
     const sbAmount = this.placeBet(smallBlindPlayer, this.smallBlind);
     const bbAmount = this.placeBet(bigBlindPlayer, this.bigBlind);
 
-    if (process.env.DEBUG_POKER === 'true') {
+    if (debugFlags.poker) {
       // eslint-disable-next-line no-console
       console.log(`[DEBUG] Posted blinds: SB ${smallBlindPlayer.id}=${sbAmount} BB ${bigBlindPlayer.id}=${bbAmount} -> potDelta=${sbAmount+bbAmount}`);
     }

@@ -14,6 +14,7 @@ import {
 import { holeCardCount, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { fixedLimitBetSize } from './fixed-limit';
 import { revealedPlayerIds } from './state-sanitizer';
+import { debugFlags, runtime } from '../config/env';
 
 export class PokerEngine {
   private state: TableState;
@@ -40,7 +41,7 @@ export class PokerEngine {
   };
 
   constructor(tableId: string, players: Player[], smallBlind: number, bigBlind: number, options?: Partial<typeof PokerEngine.defaultOptions>) {
-    this.debugEnabled = process.env.DEBUG_POKER === 'true';
+    this.debugEnabled = debugFlags.poker;
     const opts = { ...PokerEngine.defaultOptions, ...(options || {}) };
     this.state = {
       tableId,
@@ -93,7 +94,7 @@ export class PokerEngine {
   
   private error(message: string, ...args: any[]): void {
     // Only log errors in non-CI environments or when DEBUG_POKER is set
-    if (!process.env.CI || this.debugEnabled) {
+    if (!runtime.isCI || this.debugEnabled) {
       console.error(`[ERROR] ${message}`, ...args);
     }
   }
@@ -1364,7 +1365,7 @@ export class PokerEngine {
       // Nothing is posted yet: the bring-in player acts first and chooses to bring it in for
       // this amount or complete to a full bet (see decideBringIn)
       this.state.studState!.bringIn = { amount: Math.min(amount, player.stack), player: player.id, pending: true };
-      if (process.env.DEBUG_POKER === 'true') {
+      if (debugFlags.poker) {
         // eslint-disable-next-line no-console
         console.log(`[DEBUG] Stud bring-in computed: player=${player.id} amount=${amount} upcards=`, debug);
       }
@@ -2045,7 +2046,7 @@ export class PokerEngine {
         };
         // Do not await to keep engine synchronous; log errors if any
         onOutcome(input).catch(err => {
-          if (!process.env.CI || this.debugEnabled) {
+          if (!runtime.isCI || this.debugEnabled) {
             console.error('RIT persistence failed:', err);
           }
         });

@@ -1,4 +1,3 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
 import { getSessionUser } from '../../../src/lib/auth/auth-utils';
 import { getUserAccess } from '../../../src/lib/auth/access-control';
@@ -6,6 +5,7 @@ import { canOnTable } from '../../../src/lib/auth/table-access';
 import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
 import { ledgerToCsv, loadLedger, settlementPayments, summarizeLedger } from '../../../src/lib/server/chip-ledger';
 import { loadRoom } from '../../../src/lib/server/room-config';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 /**
  * GET /api/games/ledger?tableId=&format=csv
@@ -23,8 +23,7 @@ async function canSeeAsStaffOrHost(tableId: string, user: { id: string; email: s
   return !!room && canOnTable(access, room, 'room.view_ledger').allowed;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   const user = await getSessionUser(req);
   if (!user) return res.status(401).json({ error: 'Authentication required' });
   const userId = user.id;
@@ -87,4 +86,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error loading ledger:', err);
     return res.status(500).json({ error: 'Unable to load the ledger' });
   }
-}
+});

@@ -7,12 +7,14 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 export interface ApiHandlerOptions {
   /** Allowed HTTP method(s); anything else gets 405. */
   methods: Method | Method[];
-  /** Per-client limit for this route; over it gets 429. */
-  rateLimit?: { windowMs: number; max: number };
+  /** Per-client limit for this route; over it gets 429 (with `message`, if given). */
+  rateLimit?: { windowMs: number; max: number; message?: string };
   /** Require a signed-in session; without one the route gets 401. */
   auth?: boolean;
   /** Map a thrown error's `code` (e.g. FriendError codes) to an HTTP status. */
   errorStatus?: Record<string, number>;
+  /** Sends the response for any other thrown error, e.g. a domain's own error-to-status mapping. */
+  onError?: (res: NextApiResponse, error: unknown) => unknown;
 }
 
 export interface ApiContext {
@@ -33,6 +35,24 @@ export function clientIp(req: NextApiRequest): string {
   const forwarded = req.headers['x-forwarded-for'];
   const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
   return first || req.socket?.remoteAddress || 'anon';
+}
+
+/**
+ * The route's path with dynamic segments named, e.g. /api/avatars/[avatarId] for /api/avatars/abc,
+ * so a rate limit covers the route and can't be dodged by varying the ID.
+ */
+export function routeKey(req: NextApiRequest): string {
+  const path = (req.url || '').split('?')[0];
+  const params = Object.entries(req.query || {});
+  return path
+    .split('/')
+    .map(segment => {
+      let decoded = segment;
+      try { decoded = decodeURIComponent(segment); } catch { /* keep as is */ }
+      const param = params.find(([, v]) => (Array.isArray(v) ? v.includes(decoded) : v === decoded));
+      return segment && param ? `[${param[0]}]` : segment;
+    })
+    .join('/');
 }
 
 /**
@@ -65,9 +85,9 @@ export function apiHandler(
     }
 
     if (options.rateLimit) {
-      const path = (req.url || '').split('?')[0];
-      const rl = rateLimit(`${req.method} ${path}:${clientIp(req)}`, options.rateLimit);
-      if (!rl.allowed) return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+      const { message: _message, ...limit } = options.rateLimit;
+      const rl = rateLimit(`${req.method} ${routeKey(req)}:${clientIp(req)}`, limit);
+      if (!rl.allowed) return res.status(429).json({ error: options.rateLimit.message || 'Too many requests. Please slow down.' });
     }
 
     const ctx: ApiContext = { userId: null };
@@ -81,7 +101,11 @@ export function apiHandler(
     } catch (e: any) {
       if (e instanceof ApiError) return res.status(e.status).json({ error: e.message });
       const mapped = e?.code != null ? options.errorStatus?.[e.code] : undefined;
-      return res.status(mapped ?? 500).json({ error: e?.message || 'Internal error' });
+      if (mapped) return res.status(mapped).json({ error: e?.message || 'Request failed' });
+      if (options.onError) return options.onError(res, e);
+      // Unexpected: log the details here and keep them out of the response
+      console.error(`${req.method} ${(req.url || '').split('?')[0]} failed:`, e);
+      return res.status(500).json({ error: 'Internal server error' });
     }
   };
 }

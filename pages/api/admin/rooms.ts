@@ -1,7 +1,6 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
-import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { requirePermission } from '../../../src/lib/auth/access-control';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 interface AdminRoomsResponse {
   success: boolean;
@@ -11,20 +10,7 @@ interface AdminRoomsResponse {
   limit: number;
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse<AdminRoomsResponse | { error: string }>
-) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  // Rate limiting
-  const rl = rateLimit(req, { limit: 60, windowMs: 60_000 });
-  if (!rl.allowed) {
-    return res.status(429).json({ error: 'Too many requests' });
-  }
-
+export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 60, message: 'Too many requests' } }, async (req, res) => {
   // Check admin privileges
   if (!(await requirePermission(req, res, 'admin.rooms.view'))) return;
 
@@ -88,4 +74,4 @@ export default async function handler(
     console.error('Error fetching admin rooms:', error);
     return res.status(500).json({ error: 'Failed to fetch rooms' });
   }
-}
+});

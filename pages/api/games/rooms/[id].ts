@@ -1,4 +1,3 @@
-import { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
 import { GameService } from '../../../../src/lib/services/game-service';
 import { getSessionUser } from '../../../../src/lib/auth/auth-utils';
@@ -6,12 +5,9 @@ import { getUserAccess } from '../../../../src/lib/auth/access-control';
 import {
   PRIVATE_TABLE_RESPONSE, canEnterRoom, isPrivateRoom, withoutPrivateFields,
 } from '../../../../src/lib/server/room-privacy';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   const { id } = req.query;
   
   if (!id || typeof id !== 'string') {
@@ -53,4 +49,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error fetching room info:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
-}
+});

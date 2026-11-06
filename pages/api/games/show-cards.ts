@@ -1,9 +1,9 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import { broadcastGameState } from '../../../src/lib/server/game-action-pipeline';
 import { markCardsShown, recordLateSevenDeuceBounty } from '../../../src/lib/server/hand-records';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 /**
  * POST /api/games/show-cards  { tableId }
@@ -11,9 +11,7 @@ import { requirePlayer } from '../../../src/lib/auth/auth-utils';
  * After a hand ends, the signed-in player turns their cards face up for the table. Without this,
  * a player who lost at showdown, folded, or won uncontested keeps their cards hidden.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   const { tableId, playerId: claimedPlayerId } = (req.body || {}) as { tableId?: string; playerId?: string };
 
   const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.show_cards');
@@ -55,4 +53,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         : 'Internal server error';
     return res.status(500).json({ error: errorMessage });
   }
-}
+});

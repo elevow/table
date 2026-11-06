@@ -1,7 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
 import { getAuthenticatedUserId } from '../../../src/lib/auth/auth-utils';
 import { computeHudStats, type HudStats } from '../../../src/lib/shared/hud-stats';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 // Recent shared hands per player: enough for stable numbers, small enough to stay quick
 export const HUD_HAND_LIMIT = 500;
@@ -14,8 +14,7 @@ const MAX_SUBJECTS = 12;
  * player was dealt into with each of them. Only the action lists are read, never cards, and a
  * player you never shared a hand with comes back with an empty sample.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
@@ -50,7 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error computing HUD stats:', err);
     return res.status(500).json({ error: 'Unable to load player stats' });
   }
-}
+});
 
 function safeParse(s: string): unknown {
   try { return JSON.parse(s); } catch { return []; }

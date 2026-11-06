@@ -1,6 +1,4 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { sendTournamentError } from '../../../src/lib/tournament/api-errors';
-import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { tournamentManager } from '../../../src/lib/tournament/manager-instance';
 import { loadPlayerNames } from '../../../src/lib/tournament/pg-tournament-store';
 import { buildTournamentView } from '../../../src/lib/tournament/tournament-view';
@@ -8,15 +6,13 @@ import { getRequestAccess, hasPermission, sendPermissionDenied } from '../../../
 import { canManageTournament } from '../../../src/lib/tournament/require-organizer';
 import { keepTablesMoving, syncTournamentRooms } from '../../../src/lib/tournament/table-rooms';
 import { PRIVATE_TOURNAMENT_RESPONSE, canSeeTournament } from '../../../src/lib/tournament/tournament-privacy';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 // Opening or waking a tournament's tables can take a while with many of them
 export const config = { maxDuration: 60 };
 
 /** What players see during a tournament: clock, blinds, prize pool and payouts, average stack, bounties and their own seat. */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const rl = rateLimit(req, { limit: 240, windowMs: 60_000 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
+export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 240, message: 'Too many requests' } }, async (req, res) => {
   const access = await getRequestAccess(req);
   if (!hasPermission(access, 'tournament.view')) return sendPermissionDenied(res, 'tournament.view', access);
   try {
@@ -36,4 +32,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (err) {
     return sendTournamentError(res, err);
   }
-}
+});

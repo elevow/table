@@ -1,8 +1,8 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
 import { guardRoomEntry } from '../../../../src/lib/server/room-privacy';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   try {
     if (req.method !== 'GET') {
       res.setHeader('Allow', 'GET');
@@ -22,4 +22,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('seats/state error:', e);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
-}
+});

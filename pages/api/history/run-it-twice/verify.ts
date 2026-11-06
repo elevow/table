@@ -1,8 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
-import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { HandHistoryService } from '../../../../src/lib/services/hand-history-service';
 import { verifyRngSecurity, RNGSecurity } from '../../../../src/lib/poker/rng-security';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
 function parseHashChain(input: any): string[] {
   if (!input) return [];
@@ -15,11 +14,7 @@ function parseHashChain(input: any): string[] {
   return s.split(',').map(v => v.trim()).filter(Boolean);
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const rl = rateLimit(req, { limit: 120, windowMs: 60_000 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
-
+export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 120, message: 'Too many requests' } }, async (req, res) => {
   try {
     const handId = String((req.query as any).handId || '');
     if (!handId) return res.status(400).json({ error: 'Missing handId' });
@@ -81,4 +76,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Bad request' });
   }
-}
+});

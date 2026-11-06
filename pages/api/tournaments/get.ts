@@ -1,15 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { sendTournamentError } from '../../../src/lib/tournament/api-errors';
-import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { tournamentManager } from '../../../src/lib/tournament/manager-instance';
 import { getRequestAccess, hasPermission, sendPermissionDenied } from '../../../src/lib/auth/access-control';
 import { canManageTournament } from '../../../src/lib/tournament/require-organizer';
 import { PRIVATE_TOURNAMENT_RESPONSE, canSeeTournament, withoutTournamentInvite } from '../../../src/lib/tournament/tournament-privacy';
+import { apiHandler } from '../../../src/lib/api/handler';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const rl = rateLimit(req, { limit: 120, windowMs: 60_000 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
+export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 120, message: 'Too many requests' } }, async (req, res) => {
   const access = await getRequestAccess(req);
   if (!hasPermission(access, 'tournament.view')) return sendPermissionDenied(res, 'tournament.view', access);
   try {
@@ -24,4 +20,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (err) {
     return sendTournamentError(res, err);
   }
-}
+});

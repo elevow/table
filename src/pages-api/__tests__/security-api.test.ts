@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import collusionHandler from '../../../pages/api/security/collusion';
 import multiHandler from '../../../pages/api/security/multi-account';
 
+jest.mock('../../../src/lib/database/pool', () => ({ getPool: jest.fn(() => ({})) }));
 const mockRequirePermission = jest.fn();
 jest.mock('../../../src/lib/auth/access-control', () => ({
   requirePermission: (...args: any[]) => mockRequirePermission(...args)

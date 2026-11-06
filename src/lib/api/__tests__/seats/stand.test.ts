@@ -65,7 +65,7 @@ describe('/api/games/seats/stand', () => {
     
     expect(res.setHeader).toHaveBeenCalledWith('Allow', 'POST');
     expect(statusMock).toHaveBeenCalledWith(405);
-    expect(jsonMock).toHaveBeenCalledWith({ error: 'Method Not Allowed' });
+    expect(jsonMock).toHaveBeenCalledWith({ error: 'Method not allowed' });
   });
 
   test('returns 400 when tableId is missing', async () => {

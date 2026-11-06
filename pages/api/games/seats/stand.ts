@@ -1,11 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import * as GameSeats from '../../../../src/lib/shared/game-seats';
 import { requirePlayer } from '../../../../src/lib/auth/auth-utils';
 import { leaveTable } from '../../../../src/lib/server/seat-actions';
 import { loadRoom } from '../../../../src/lib/server/room-config';
 import { tournamentTableOf } from '../../../../src/lib/tournament/table-rooms';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   try {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
@@ -75,4 +75,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('seats/stand error:', e);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
-}
+});

@@ -1,4 +1,3 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { publishGameStateUpdate, publishAwaitingDealerChoice, publishRebuyPrompt } from '../../../src/lib/realtime/publisher';
 import { nextSeq } from '../../../src/lib/realtime/sequence';
 import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
@@ -24,6 +23,7 @@ import type { BettingMode, GameVariant } from '../../../src/types/poker';
 import { ALL_VARIANTS } from '../../../src/lib/poker/variant-rules';
 import { loadRoom } from '../../../src/lib/server/room-config';
 import { keepTablesMoving, prepareTournamentHand, tournamentTableOf } from '../../../src/lib/tournament/table-rooms';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 // Type definitions for room configuration from database
 interface RoomConfiguration {
@@ -65,11 +65,7 @@ function getNextHandLocks(): Set<string> {
   return g[NEXT_HAND_LOCK_KEY] as Set<string>;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   try {
     const { tableId, playerId: claimedPlayerId, variant: rawVariant } = req.body;
 
@@ -365,4 +361,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error starting next hand:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
-}
+});

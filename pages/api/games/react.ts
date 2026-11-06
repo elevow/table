@@ -1,10 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { publishTableEvent } from '../../../src/lib/realtime/publisher';
 import { getRoomSeats, loadPersistedRoomSeats, type GameSeats } from '../../../src/lib/shared/game-seats';
 import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
 import { isTableReaction, REACTION_COOLDOWN_MS } from '../../../src/lib/shared/reactions';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 const hasSeat = (seats: GameSeats | null, playerId: string) =>
   !!seats && Object.values(seats).some(seat => seat?.playerId === playerId);
@@ -27,11 +27,7 @@ async function isAtTable(tableId: string, playerId: string): Promise<boolean> {
  * Show a quick reaction (from a fixed list) over your seat for everyone at the table.
  * Only seated players can react, at most once every two seconds.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   const { tableId, playerId: claimedPlayerId, emote } = (req.body || {}) as { tableId?: unknown; playerId?: string; emote?: unknown };
   const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.react');
   if (!playerId) return;
@@ -55,4 +51,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error publishing reaction:', err);
     return res.status(500).json({ error: 'Unable to send reaction' });
   }
-}
+});

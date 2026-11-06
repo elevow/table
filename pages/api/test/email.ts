@@ -1,6 +1,6 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { emailService } from '../../../src/lib/services/email-service';
 import { getEmailConfig } from '../../../src/lib/config/email-config';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 interface TestEmailRequest {
   email: string;
@@ -24,10 +24,7 @@ interface TestEmailResponse {
   };
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse<TestEmailResponse | { error: string }>
-) {
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   // Only allow in development mode for security
   if (process.env.NODE_ENV === 'production') {
     return res.status(404).json({ error: 'Not found' });
@@ -112,4 +109,4 @@ export default async function handler(
     console.error('Email test error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
-}
+});

@@ -1,4 +1,3 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../src/lib/database/pool';
 import { clearAccessCache, logAdminAction, requirePermission } from '../../../../src/lib/auth/access-control';
 import { isPermissionKey } from '../../../../src/lib/auth/permissions';
@@ -11,10 +10,11 @@ import {
   parsePermissionList,
   permissionsBeyondActor,
 } from '../../../../src/lib/auth/role-admin';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
 // PATCH: rename, re-rank or change a role's permissions or limits ([{ key, value }], replacing all).
 // DELETE: remove a custom role.
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default apiHandler({ methods: ['DELETE', 'PATCH'] }, async (req, res) => {
   if (req.method !== 'PATCH' && req.method !== 'DELETE') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -151,4 +151,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } finally {
     client.release();
   }
-}
+});

@@ -1,9 +1,9 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiRequest } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
-import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { UserManager } from '../../../src/lib/database/user-manager';
 import { createUserService } from '../../../src/lib/services/user-service';
 import { createSafeAudit } from '../../../src/lib/api/audit';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -22,20 +22,7 @@ interface ResetPasswordResponse {
   message: string;
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse<ResetPasswordResponse | { error: string }>
-) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  // Rate limiting for password reset - 5 attempts per hour
-  const rl = rateLimit(req, { limit: 5, windowMs: 60 * 60 * 1000 });
-  if (!rl.allowed) {
-    return res.status(429).json({ error: 'Too many password reset attempts. Please try again later.' });
-  }
-
+export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60 * 60 * 1000, max: 5, message: 'Too many password reset attempts. Please try again later.' } }, async (req, res) => {
   const pool = getPool();
   const safeLog = createSafeAudit(pool);
   const ip = getClientIp(req);
@@ -149,4 +136,4 @@ export default async function handler(
 
     return res.status(500).json({ error: 'Internal server error' });
   }
-}
+});

@@ -1,10 +1,9 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
 import { requirePermission } from '../../../src/lib/auth/access-control';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 // GET: the 100 most recent admin actions, newest first.
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   if (!(await requirePermission(req, res, 'admin.audit_log.view'))) return;
   try {
     const { rows } = await getPool().query(
@@ -20,4 +19,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error loading audit log:', error);
     return res.status(500).json({ error: 'Failed to load audit log' });
   }
-}
+});

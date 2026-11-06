@@ -1,9 +1,9 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { enrichStateWithRunIt } from '../../../src/lib/poker/run-it-twice-manager';
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
 import { getAuthenticatedUserId } from '../../../src/lib/auth/auth-utils';
 import { guardRoomEntry } from '../../../src/lib/server/room-privacy';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 /**
  * GET /api/games/state?tableId=xxx
@@ -12,11 +12,7 @@ import { guardRoomEntry } from '../../../src/lib/server/room-privacy';
  * The state is sanitized to only show the requesting player's hole cards
  * (unless it's showdown or an all-in situation).
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   const tableId = String(req.query.tableId || '');
 
   if (!tableId) {
@@ -54,4 +50,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         : 'Internal server error';
     return res.status(500).json({ error: errorMessage });
   }
-}
+});

@@ -1,9 +1,9 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
 import { getAuthenticatedUserId } from '../../../src/lib/auth/auth-utils';
 import { fetchRoomNames } from '../../../src/lib/server/room-names';
 import { PLAYER_HANDS_SQL } from '../../../src/lib/server/hidden-hands';
 import { buildProfitSeries, groupSessions, type ProfitHand } from '../../../src/lib/shared/profit-sessions';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 // Most recent hands used for the graph and sessions
 export const PROFIT_HAND_LIMIT = 5000;
@@ -14,8 +14,7 @@ export const PROFIT_HAND_LIMIT = 5000;
  * The signed-in player's results over time: a running total by hand and their sessions
  * (per table, split by breaks of more than two hours). Only their own net per hand is read.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
@@ -52,4 +51,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error loading profit history:', err);
     return res.status(500).json({ error: 'Unable to load your results' });
   }
-}
+});

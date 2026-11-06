@@ -1,4 +1,3 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { publishTableEvent } from '../../../../src/lib/realtime/publisher';
 import {
   getLimit, hasPermission, requirePlayerAccess, sendLimitReached, sendPermissionDenied,
@@ -8,8 +7,9 @@ import { tablesSeatedAt } from '../../../../src/lib/shared/game-seats';
 import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../../src/lib/server/room-config';
 import { PRIVATE_TABLE_RESPONSE, canEnterRoom, isPrivateRoom, isRoomMember } from '../../../../src/lib/server/room-privacy';
 import { tournamentTableOf } from '../../../../src/lib/tournament/table-rooms';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   try {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
@@ -79,4 +79,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('seats/claim error:', e);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
-}
+});

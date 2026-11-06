@@ -1,15 +1,13 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import { runGameAction } from '../../../src/lib/server/game-action-pipeline';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 // An all-in runs the board out, with pauses between streets
 export const config = { maxDuration: 60 };
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
+export default apiHandler({ methods: 'POST' }, async (req, res) => {
   const { tableId, playerId: claimedPlayerId, action, amount, expectedTurnSeq } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
@@ -90,4 +88,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         : 'Internal server error';
     return res.status(500).json({ error: errorMessage });
   }
-}
+});

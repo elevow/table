@@ -1,7 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../src/lib/database/pool';
 import { getAuthenticatedUserId } from '../../../src/lib/auth/auth-utils';
 import { NOTE_COLORS } from '../../../src/lib/shared/note-colors';
+import { apiHandler } from '../../../src/lib/api/handler';
 const MAX_NOTE_LENGTH = 2000;
 
 /**
@@ -10,7 +10,7 @@ const MAX_NOTE_LENGTH = 2000;
  * GET  /api/notes?subjects=id1,id2   -> { notes: { [subjectId]: { note, color } } }
  * PUT  /api/notes { subjectId, note, color } -> saves; an empty note with no color deletes it
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default apiHandler({ methods: ['GET', 'PUT'] }, async (req, res) => {
   const ownerId = await getAuthenticatedUserId(req);
   if (!ownerId) return res.status(401).json({ error: 'Authentication required' });
 
@@ -54,4 +54,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error handling notes:', err);
     return res.status(500).json({ error: 'Unable to save notes' });
   }
-}
+});

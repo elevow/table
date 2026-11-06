@@ -1,19 +1,15 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { sendTournamentError } from '../../../src/lib/tournament/api-errors';
-import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { tournamentManager } from '../../../src/lib/tournament/manager-instance';
 import { syncTournamentRooms } from '../../../src/lib/tournament/table-rooms';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { getRequestAccess } from '../../../src/lib/auth/access-control';
 import { PRIVATE_TOURNAMENT_RESPONSE, canRegisterForTournament, withoutTournamentInvite } from '../../../src/lib/tournament/tournament-privacy';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 // Opening or waking a tournament's tables can take a while with many of them
 export const config = { maxDuration: 60 };
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const rl = rateLimit(req, { limit: 120, windowMs: 60_000 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests' });
+export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max: 120, message: 'Too many requests' } }, async (req, res) => {
   try {
     const { tournamentId, userId: claimedUserId } = req.body || {};
     const userId = await requirePlayer(req, res, claimedUserId, 'tournament.register');
@@ -30,4 +26,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (err) {
     return sendTournamentError(res, err);
   }
-}
+});

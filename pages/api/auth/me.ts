@@ -1,11 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { requireAuth } from '../../../src/lib/auth/auth-utils';
+import { apiHandler } from '../../../src/lib/api/handler';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   try {
     // Get authenticated user ID from session
     const userId = await requireAuth(req);
@@ -20,4 +16,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       authenticated: false 
     });
   }
-}
+});

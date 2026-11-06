@@ -1,7 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { requirePermission } from '../../../src/lib/auth/access-control';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { getRoomRebuySnapshot } from '../../../src/lib/shared/rebuy-tracker';
+import { apiHandler } from '../../../src/lib/api/handler';
 
 interface RoomStats {
   roomId: string;
@@ -20,10 +20,7 @@ interface RoomStats {
   }>;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
 
   if (!(await requirePermission(req, res, 'admin.rooms.view'))) return;
 
@@ -57,6 +54,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       message: 'Failed to fetch room statistics'
     });
   }
-}
+});
 
 // Keeping RoomStats type alignment via shared module methods

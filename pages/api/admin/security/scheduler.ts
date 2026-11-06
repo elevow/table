@@ -1,10 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { SecurityScheduler } from '../../../../src/lib/security/security-scheduler';
 import { initSecuritySchedulerDb } from '../../../../src/lib/security/security-scheduler-db';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { requirePermission } from '../../../../src/lib/auth/access-control';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default apiHandler({ methods: ['GET', 'POST'] }, async (req, res) => {
   // Ensure the scheduler uses DB-backed fetcher in this runtime
   initSecuritySchedulerDb();
   const rl = rateLimit(req, { limit: 60, windowMs: 60_000 });
@@ -21,4 +21,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ lastRun: SecurityScheduler.getLastRun() });
   }
   return res.status(405).json({ error: 'Method not allowed' });
-}
+});

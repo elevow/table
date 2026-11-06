@@ -1,8 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { getSessionUser } from '../../../../src/lib/auth/auth-utils';
 import { addRoomMember, findRoomByInviteCode, normalizeInviteCode } from '../../../../src/lib/server/room-privacy';
 import { tournamentManager } from '../../../../src/lib/tournament/manager-instance';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
 /**
  * POST /api/games/rooms/join { code }
@@ -12,11 +11,8 @@ import { tournamentManager } from '../../../../src/lib/tournament/manager-instan
  * for the tournament, from then on. Returns { roomId } or { tournamentId } to open.
  * 404 when the code doesn't open anything, including a link the host has since replaced.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max: 20, message: 'Too many attempts. Try again in a minute.' } }, async (req, res) => {
   // Low, since every request is a guess at a code
-  const rl = rateLimit(req, { limit: 20, windowMs: 60_000 });
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many attempts. Try again in a minute.' });
 
   const user = await getSessionUser(req);
   if (!user) return res.status(401).json({ error: 'Sign in to join this table', code: 'SIGN_IN_REQUIRED' });
@@ -41,4 +37,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error joining by invite code:', err);
     return res.status(500).json({ error: 'Unable to join the table' });
   }
-}
+});

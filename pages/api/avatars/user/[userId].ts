@@ -1,11 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { AvatarService } from '../../../../src/lib/services/avatar-service';
 import { rateLimit } from '../../../../src/lib/api/rate-limit';
 import { getPool } from '../../../../src/lib/database/pool';
 import { requireAuth } from '../../../../src/lib/auth/auth-utils';
+import { apiHandler } from '../../../../src/lib/api/handler';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'GET' }, async (req, res) => {
   const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'anon';
   const rl = rateLimit(`GET /api/avatars/user/:userId:${ip}`, { windowMs: 60 * 1000, max: 60 });
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests. Please slow down.' });
@@ -57,4 +56,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     return res.status(500).json({ error: e?.message || 'Internal error' });
   }
-}
+});

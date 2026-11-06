@@ -1,10 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../../../../../src/lib/database/pool';
 import { clearAccessCache, getUserAccess, logAdminAction, requirePermission } from '../../../../../src/lib/auth/access-control';
 import { PERMISSION_KEYS } from '../../../../../src/lib/auth/permissions';
 import {
   IMPLICIT_ROLES, LimitInput, canManageRank, changedLimitKeys, parseLimits, permissionsBeyondActor,
 } from '../../../../../src/lib/auth/role-admin';
+import { apiHandler } from '../../../../../src/lib/api/handler';
 
 interface OverrideInput {
   permission: string;
@@ -31,8 +31,7 @@ function parseOverrides(value: unknown): { overrides: OverrideInput[] } | { erro
 
 // PUT { roles: string[], overrides?: [{ permission, effect, reason }], limits?: [{ key, value, reason }] }
 // Replaces a user's extra roles (and overrides and limits, when given).
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'PUT') return res.status(405).json({ error: 'Method not allowed' });
+export default apiHandler({ methods: 'PUT' }, async (req, res) => {
   const actor = await requirePermission(req, res, 'roles.assign');
   if (!actor) return;
   const userId = String(req.query.id || '');
@@ -159,4 +158,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } finally {
     client.release();
   }
-}
+});

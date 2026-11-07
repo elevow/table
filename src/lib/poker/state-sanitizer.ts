@@ -151,7 +151,7 @@ function sanitizeState(state: TableState, viewerId: string | null): TableState {
     for (const [playerId, cards] of Object.entries(state.studState.playerCards)) {
       sanitizedPlayerCards[playerId] = canSeePrivateCards(playerId, viewerId, revealedIds)
         ? cards
-        : { downCards: [], upCards: cards.upCards, downCount: cards.downCards.length };
+        : { downCards: [], upCards: cards.upCards, downCount: cards.downCards.length || cards.downCount || 0 };
     }
     sanitizedStudState = {
       ...state.studState,

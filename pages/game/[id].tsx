@@ -42,6 +42,8 @@ import PrivateTableNotice from '../../src/components/PrivateTableNotice';
 import WaitlistPanel from '../../src/components/WaitlistPanel';
 import { NOTE_COLOR_CLASSES, type NoteColor } from '../../src/lib/shared/note-colors';
 import BetPresetButtons from '../../src/components/BetPresetButtons';
+import BetSlider from '../../src/components/BetSlider';
+import { betSliderStep } from '../../src/lib/shared/bet-sizing';
 import ShortcutHelpOverlay from '../../src/components/ShortcutHelpOverlay';
 import { useTableShortcuts } from '../../src/hooks/useTableShortcuts';
 import TableAnnouncer from '../../src/components/TableAnnouncer';
@@ -989,8 +991,14 @@ export default function GamePage() {
       handlePokerAction('call', callAmount);
     }
   }, [pokerGameState, playerId, handlePokerAction]);
-  const handleBet = useCallback((amount: number) => handlePokerAction('bet', amount), [handlePokerAction]);
-  const handleRaise = useCallback((amount: number) => handlePokerAction('raise', amount), [handlePokerAction]);
+  const handleBet = useCallback((amount: number) => {
+    setLastBet(amount);
+    return handlePokerAction('bet', amount);
+  }, [handlePokerAction]);
+  const handleRaise = useCallback((amount: number) => {
+    setLastBet(amount);
+    return handlePokerAction('raise', amount);
+  }, [handlePokerAction]);
 
   // Get current player's hole cards
   const getCurrentPlayerCards = () => {
@@ -1384,6 +1392,13 @@ export default function GamePage() {
   // Local state for inputs
   const [betInput, setBetInput] = useState<number>(0);
   const [raiseInput, setRaiseInput] = useState<number>(0);
+  // What this player last bet or raised to, offered as a quick pick
+  const [lastBet, setLastBet] = useState<number>(0);
+  // Every turn starts from the minimum (0 clamps up to it) rather than the amount used last time
+  useEffect(() => {
+    setBetInput(0);
+    setRaiseInput(0);
+  }, [myTurnKey]);
   // Private notes about the other seated players
   const [playerNotes, setPlayerNotes] = useState<NotesMap>({});
   const otherSeated = useMemo(
@@ -2891,14 +2906,7 @@ export default function GamePage() {
                         const pot = Number(pokerGameState.pot || 0) || 0;
                         return (
                           <>
-                            <input
-                              type="range"
-                              min={min}
-                              max={Math.max(min, max)}
-                              step={0.01}
-                              value={clamp(betInput, min, max)}
-                              onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
-                            />
+                            <BetSlider min={min} max={max} step={betSliderStep(pokerGameState.smallBlind, pokerGameState.bigBlind)} value={clamp(betInput, min, max)} onChange={setBetInput} />
                             {showStackInBB && bb > 0 && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(betInput, min, max), bb, true)}</div>
                             )}
@@ -2923,6 +2931,7 @@ export default function GamePage() {
                                 max={max}
                                 bigBlind={bb}
                                 value={clamp(betInput, min, max)}
+                                lastBet={lastBet}
                                 onChange={setBetInput}
                               />
                               {(() => {
@@ -2956,14 +2965,7 @@ export default function GamePage() {
                         const curr = Number(pokerGameState.currentBet || 0) || 0;
                         return (
                           <>
-                            <input
-                              type="range"
-                              min={min}
-                              max={Math.max(min, max)}
-                              step={0.01}
-                              value={clamp(raiseInput, min, max)}
-                              onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
-                            />
+                            <BetSlider min={min} max={max} step={betSliderStep(pokerGameState.smallBlind, pokerGameState.bigBlind)} value={clamp(raiseInput, min, max)} onChange={setRaiseInput} />
                             {showStackInBB && bb > 0 && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(raiseInput, min, max), bb, true)}</div>
                             )}
@@ -2988,6 +2990,7 @@ export default function GamePage() {
                                 max={max}
                                 bigBlind={bb}
                                 value={clamp(raiseInput, min, max)}
+                                lastBet={lastBet}
                                 onChange={setRaiseInput}
                               />
                               {(() => {
@@ -3029,14 +3032,7 @@ export default function GamePage() {
                         const pot = Number(pokerGameState.pot || 0) || 0;
                         return (
                           <>
-                            <input
-                              type="range"
-                              min={min}
-                              max={Math.max(min, max)}
-                              step={0.01}
-                              value={clamp(betInput, min, max)}
-                              onChange={e => setBetInput(clamp(parseFloat(e.target.value || '0'), min, max))}
-                            />
+                            <BetSlider min={min} max={max} step={betSliderStep(pokerGameState.smallBlind, pokerGameState.bigBlind)} value={clamp(betInput, min, max)} onChange={setBetInput} />
                             {showStackInBB && bb > 0 && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(betInput, min, max), bb, true)}</div>
                             )}
@@ -3061,6 +3057,7 @@ export default function GamePage() {
                                 max={max}
                                 bigBlind={bb}
                                 value={clamp(betInput, min, max)}
+                                lastBet={lastBet}
                                 onChange={setBetInput}
                               />
                               {(() => {
@@ -3092,14 +3089,7 @@ export default function GamePage() {
                         const curr = Number(pokerGameState.currentBet || 0) || 0;
                         return (
                           <>
-                            <input
-                              type="range"
-                              min={min}
-                              max={Math.max(min, max)}
-                              step={0.01}
-                              value={clamp(raiseInput, min, max)}
-                              onChange={e => setRaiseInput(clamp(parseFloat(e.target.value || '0'), min, max))}
-                            />
+                            <BetSlider min={min} max={max} step={betSliderStep(pokerGameState.smallBlind, pokerGameState.bigBlind)} value={clamp(raiseInput, min, max)} onChange={setRaiseInput} />
                             {showStackInBB && bb > 0 && (
                               <div className="text-xs text-gray-500 dark:text-gray-400">{formatChips(clamp(raiseInput, min, max), bb, true)}</div>
                             )}
@@ -3124,6 +3114,7 @@ export default function GamePage() {
                                 max={max}
                                 bigBlind={bb}
                                 value={clamp(raiseInput, min, max)}
+                                lastBet={lastBet}
                                 onChange={setRaiseInput}
                               />
                               {(() => {

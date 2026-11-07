@@ -94,3 +94,36 @@ export function nudgeAmount(current: number, direction: 1 | -1, bigBlind: number
   const next = Number((base + direction * step).toFixed(2));
   return Math.max(lo, Math.min(hi, next));
 }
+
+/**
+ * How far one notch of the bet slider moves: the small blind, so $1/$2 moves in dollars and
+ * 0.25/0.50 in quarters. Tables without a small blind fall back to half the big blind.
+ */
+export function betSliderStep(smallBlind: unknown, bigBlind: unknown): number {
+  const sb = Number(smallBlind) || 0;
+  if (sb > 0) return sb;
+  const bb = Number(bigBlind) || 0;
+  return bb > 0 ? bb / 2 : 0.01;
+}
+
+/**
+ * The slider moves through notches rather than amounts, because a native range input stops at the
+ * last whole step and a stack that isn't a multiple of it could never reach all-in. The notches
+ * run up from min one step at a time, and the last one is always max.
+ */
+export function betSliderNotches(min: number, max: number, step: number): number {
+  if (max <= min || step <= 0) return 0;
+  return Math.ceil(Number(((max - min) / step).toFixed(6)));
+}
+
+export function betSliderAmount(notch: number, min: number, max: number, step: number): number {
+  if (notch >= betSliderNotches(min, max, step)) return Math.max(min, max);
+  return Number((min + notch * step).toFixed(2));
+}
+
+export function betSliderNotch(amount: number, min: number, max: number, step: number): number {
+  const notches = betSliderNotches(min, max, step);
+  if (notches === 0) return 0;
+  if (amount >= max) return notches;
+  return Math.max(0, Math.min(notches, Math.round((amount - min) / step)));
+}

@@ -12,7 +12,7 @@ interface ChangePasswordRequest {
 /** Changes the signed-in user's password; the current one must be given. */
 export default apiHandler(
   // Strict: each attempt is a password guess
-  { methods: 'POST', rateLimit: { windowMs: 60_000, max: 5 }, auth: true },
+  { methods: 'POST', rateLimit: { windowMs: 60_000, max: 5, shared: true }, auth: true },
   async (req, res, ctx) => {
     const userId = ctx.userId!;
     const { currentPassword, newPassword }: ChangePasswordRequest = req.body || {};

@@ -100,6 +100,31 @@ export class HandEvaluator {
     return a.length - b.length;
   }
 
+  /**
+   * Key for ranking stud up cards when deciding who acts first: how many of each rank in order
+   * (so quads, trips, two pair, a pair, then high cards), followed by those ranks. Straights and
+   * flushes don't count on up cards. Keys for the same number of cards compare left to right.
+   */
+  static studShowingKey(cards: Card[]): number[] {
+    const weight: Record<Card['rank'], number> = {
+      'A': 14, 'K': 13, 'Q': 12, 'J': 11, '10': 10, '9': 9, '8': 8, '7': 7, '6': 6, '5': 5, '4': 4, '3': 3, '2': 2,
+    };
+    const counts = new Map<number, number>();
+    for (const card of cards || []) {
+      if (!card?.rank) continue;
+      counts.set(weight[card.rank], (counts.get(weight[card.rank]) || 0) + 1);
+    }
+    const groups = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0]);
+    return [...groups.map(([, count]) => count), ...groups.map(([rank]) => rank)];
+  }
+
+  /** Compare two showing hands: positive when a is the better (higher) hand, 0 when they tie. */
+  static compareStudShowing(a: number[], b: number[]): number {
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) if (a[i] !== b[i]) return a[i] - b[i];
+    return a.length - b.length;
+  }
+
   /** The best razz hand from these cards: its five cards, key and a description such as "7-5-4-2-A low". */
   static evaluateRazzLow(cards: Card[]): { lowCards: Card[]; key: number[]; description: string } {
     const valid = (cards || []).filter((c: any) => c && c.rank && c.suit);

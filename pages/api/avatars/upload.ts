@@ -20,14 +20,19 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     
     const { originalUrl, variants } = req.body;
 
-    if (!originalUrl || !variants) {
+    if (!originalUrl) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
     const pool = getPool();
     
     const service = new AvatarService(pool as any);
-    const avatar = await service.uploadAvatar({ userId: authenticatedUserId, originalUrl, variants });
+    const avatar = await service.uploadAvatar({
+      userId: authenticatedUserId,
+      originalUrl,
+      // The profile page uploads one small image, which serves every size
+      variants: variants || { small: originalUrl, medium: originalUrl, large: originalUrl },
+    });
     
     return res.status(201).json({ 
       id: avatar.id, 

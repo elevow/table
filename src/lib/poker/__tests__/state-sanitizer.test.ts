@@ -141,6 +141,36 @@ describe('state-sanitizer', () => {
     });
   });
 
+  describe('hidden hole card count', () => {
+    const fourCards = [
+      { suit: 'hearts', rank: 'A' },
+      { suit: 'spades', rank: 'K' },
+      { suit: 'clubs', rank: 'Q' },
+      { suit: 'diamonds', rank: 'J' }
+    ] as Player['holeCards'];
+
+    it('shares how many cards an opponent holds, not which', () => {
+      const state = createState({ players: [createPlayer('p1'), createPlayer('p2', { holeCards: fourCards })] });
+      const p2 = sanitizeStateForPlayer(state, 'p1').players[1];
+      expect(p2.holeCount).toBe(4);
+      expect(p2.holeCards).toBeUndefined();
+    });
+
+    it('is zero for a player who was not dealt in', () => {
+      const state = createState({ players: [createPlayer('p1'), createPlayer('p2', { holeCards: undefined }), createPlayer('p3', { holeCards: [] })] });
+      const { players } = sanitizeStateForPlayer(state, 'p1');
+      expect(players[1].holeCount).toBe(0);
+      expect(players[2].holeCount).toBe(0);
+    });
+
+    it('survives a second pass, as broadcasts are sanitized twice', () => {
+      const state = createState({ players: [createPlayer('p1'), createPlayer('p2', { holeCards: fourCards })] });
+      const twice = sanitizeStateForBroadcast(sanitizeStateForBroadcast(state));
+      expect(twice.players[1].holeCount).toBe(4);
+      expect(twice.players[1].holeCards).toBeUndefined();
+    });
+  });
+
   describe('sanitizeStateForPlayer', () => {
     it('should always show own hole cards', () => {
       const state = createState({ stage: 'flop' });
@@ -311,6 +341,13 @@ describe('state-sanitizer', () => {
       
       // Other players' down cards should be hidden
       expect(sanitized.studState?.playerCards.p2.downCards).toHaveLength(0);
+      // Only how many they hold is shared, so the table can draw the card backs
+      expect(sanitized.studState?.playerCards.p2.downCount).toBe(2);
+      expect(JSON.stringify(sanitized.studState?.playerCards.p2)).not.toContain('clubs');
+      // Broadcasts are sanitized by the caller and again by the publisher; the count must survive
+      const twice = sanitizeStateForBroadcast(sanitizeStateForBroadcast(studState));
+      expect(twice.studState?.playerCards.p2.downCount).toBe(2);
+      expect(JSON.stringify(twice.studState?.playerCards.p2)).not.toContain('clubs');
       // Other players' up cards should be visible
       expect(sanitized.studState?.playerCards.p2.upCards).toHaveLength(1);
     });

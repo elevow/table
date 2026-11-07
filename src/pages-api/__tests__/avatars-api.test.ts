@@ -75,6 +75,21 @@ describe('Avatar API routes', () => {
     expect(res.json).toHaveBeenCalledWith({ id: 'a1', url: 'http://img/orig.jpg', thumbnails: { thumb: 'http://img/t.jpg' }, status: 'active' });
   });
 
+  test('POST /api/avatars/upload uses the one image for every size when none are sent', async () => {
+    const url = 'data:image/webp;base64,AAAA';
+    mockServiceInstance.uploadAvatar.mockResolvedValue({ id: 'a3', originalUrl: url, variants: {}, status: 'active' } as any);
+    const req = createReq('POST', { originalUrl: url });
+    const res = createRes();
+
+    await uploadHandler(req as any, res as any);
+
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(mockServiceInstance.uploadAvatar).toHaveBeenCalledWith(expect.objectContaining({
+      originalUrl: url,
+      variants: { small: url, medium: url, large: url },
+    }));
+  });
+
   test('POST /api/avatars/upload validation error', async () => {
     const req = createReq('POST', { /* missing originalUrl and variants */ });
     const res = createRes();

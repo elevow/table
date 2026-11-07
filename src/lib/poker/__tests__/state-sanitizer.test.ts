@@ -141,6 +141,36 @@ describe('state-sanitizer', () => {
     });
   });
 
+  describe('hidden hole card count', () => {
+    const fourCards = [
+      { suit: 'hearts', rank: 'A' },
+      { suit: 'spades', rank: 'K' },
+      { suit: 'clubs', rank: 'Q' },
+      { suit: 'diamonds', rank: 'J' }
+    ] as Player['holeCards'];
+
+    it('shares how many cards an opponent holds, not which', () => {
+      const state = createState({ players: [createPlayer('p1'), createPlayer('p2', { holeCards: fourCards })] });
+      const p2 = sanitizeStateForPlayer(state, 'p1').players[1];
+      expect(p2.holeCount).toBe(4);
+      expect(p2.holeCards).toBeUndefined();
+    });
+
+    it('is zero for a player who was not dealt in', () => {
+      const state = createState({ players: [createPlayer('p1'), createPlayer('p2', { holeCards: undefined }), createPlayer('p3', { holeCards: [] })] });
+      const { players } = sanitizeStateForPlayer(state, 'p1');
+      expect(players[1].holeCount).toBe(0);
+      expect(players[2].holeCount).toBe(0);
+    });
+
+    it('survives a second pass, as broadcasts are sanitized twice', () => {
+      const state = createState({ players: [createPlayer('p1'), createPlayer('p2', { holeCards: fourCards })] });
+      const twice = sanitizeStateForBroadcast(sanitizeStateForBroadcast(state));
+      expect(twice.players[1].holeCount).toBe(4);
+      expect(twice.players[1].holeCards).toBeUndefined();
+    });
+  });
+
   describe('sanitizeStateForPlayer', () => {
     it('should always show own hole cards', () => {
       const state = createState({ stage: 'flop' });

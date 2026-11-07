@@ -267,8 +267,8 @@ describe('publisher', () => {
       const complexPayload = {
         gameState: {
           players: [
-            { id: 'p1', stack: 100, cards: ['Ah', 'Kh'] },
-            { id: 'p2', stack: 200, cards: ['Qd', 'Jd'] },
+            { id: 'p1', stack: 100, cards: ['Ah', 'Kh'], holeCount: 0 },
+            { id: 'p2', stack: 200, cards: ['Qd', 'Jd'], holeCount: 0 },
           ],
           communityCards: ['Th', '9h', '8h'],
           pot: 50,

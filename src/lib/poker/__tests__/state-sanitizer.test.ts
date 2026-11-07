@@ -314,6 +314,10 @@ describe('state-sanitizer', () => {
       // Only how many they hold is shared, so the table can draw the card backs
       expect(sanitized.studState?.playerCards.p2.downCount).toBe(2);
       expect(JSON.stringify(sanitized.studState?.playerCards.p2)).not.toContain('clubs');
+      // Broadcasts are sanitized by the caller and again by the publisher; the count must survive
+      const twice = sanitizeStateForBroadcast(sanitizeStateForBroadcast(studState));
+      expect(twice.studState?.playerCards.p2.downCount).toBe(2);
+      expect(JSON.stringify(twice.studState?.playerCards.p2)).not.toContain('clubs');
       // Other players' up cards should be visible
       expect(sanitized.studState?.playerCards.p2.upCards).toHaveLength(1);
     });

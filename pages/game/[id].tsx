@@ -22,6 +22,7 @@ import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../src/lib/shared/feature-fla
 import { api, unwrap } from '../../src/utils/api-client';
 import { resolveSessionUserId } from '../../src/utils/session-identity';
 import { useTurnClock } from '../../src/hooks/useTurnClock';
+import { useRevealWhen } from '../../src/hooks/useRevealWhen';
 import { useTurnAlerts } from '../../src/hooks/useTurnAlerts';
 import TurnClockBar from '../../src/components/TurnClockBar';
 import PreActionBar from '../../src/components/PreActionBar';
@@ -35,7 +36,7 @@ import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
-import { ALL_VARIANTS, VARIANT_LABELS, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
+import { ALL_VARIANTS, VARIANT_LABELS, gameLabel, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
 import { studCardOrder } from '../../src/lib/shared/stud-cards';
 import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/components/PlayerNotesPanel';
 import HostControlsPanel from '../../src/components/HostControlsPanel';
@@ -591,6 +592,9 @@ export default function GamePage() {
   const userChangedVariantRef = useRef<boolean>(false);
   const lastAwaitingDealerIdRef = useRef<string | undefined>(undefined);
   const allowedDealerChoiceVariants = useRef<string[]>([...ALL_VARIANTS]);
+  // The panel sits above the table, so a dealer scrolled down to the action buttons on a short
+  // screen would otherwise never see it
+  const dealerChoicePanelRef = useRevealWhen<HTMLDivElement>(gameStarted && !!playerId && awaitingDealerChoice?.dealerId === playerId);
 
   const applyDealerChoicePrompt = useCallback((prompt: { dealerId?: string; allowedVariants?: string[]; current?: string } | null) => {
     if (!prompt) {
@@ -1699,7 +1703,7 @@ export default function GamePage() {
                       </span>
                     )}
                     {(gamePlayer.timeBanks ?? 0) > 0 && <span className="ml-1"><TimeBankBadge count={gamePlayer.timeBanks} seconds={pokerGameState?.timeBankSeconds} compact /></span>}
-                    {turnClock.activePlayer === gamePlayer.id && !(isCurrentPlayer && actionPanelOpen) && <TurnClockBar clock={turnClock} compact />}
+                    {turnClock.activePlayer === gamePlayer.id && <TurnClockBar clock={turnClock} compact />}
                   </div>
                 );
               })()}
@@ -2410,6 +2414,13 @@ export default function GamePage() {
               <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                 <span className="font-mono tracking-wide">{id}</span>
                 {roomConfig?.sb && roomConfig?.bb ? <span className="tabular-nums">· ${roomConfig.sb}/${roomConfig.bb}</span> : null}
+                {gameStarted && pokerGameState && roomConfig?.variant === 'dealers-choice' && (
+                  <span className="truncate font-medium text-gray-700 dark:text-gray-200">
+                    · {pokerGameState.stage === 'awaiting-dealer-choice'
+                      ? "Dealer's Choice"
+                      : gameLabel({ variant: pokerGameState.variant, bettingMode: pokerGameState.bettingMode || 'no-limit' })}
+                  </span>
+                )}
               </div>
             </div>
             <div className="hidden sm:flex flex-wrap items-center gap-1.5">
@@ -2600,7 +2611,7 @@ export default function GamePage() {
           {gameStarted && <SevenDeuceBountyBanner state={pokerGameState} />}
           {/* Dealer's Choice selection banner */}
           {gameStarted && awaitingDealerChoice && (
-            <div className="lg:col-span-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 rounded-lg shadow-md p-4">
+            <div ref={dealerChoicePanelRef} className="lg:col-span-2 scroll-mt-20 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 rounded-lg shadow-md p-4">
               {(() => {
                 const dealerId = awaitingDealerChoice?.dealerId;
                 const allowed = Array.isArray(awaitingDealerChoice?.allowedVariants)

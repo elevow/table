@@ -266,6 +266,7 @@ export class PokerEngine {
     delete this.state.handWinners;
     delete this.state.shownCards;
     delete this.state.handResult;
+    delete this.state.lastHiLoResult;
     delete this.state.straddle;
     delete this.state.sevenDeuceResult;
     this.state.handId = randomUUID();

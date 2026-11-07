@@ -143,9 +143,10 @@ export default function HandReplayPage() {
                           </div>
                           <div className="flex gap-0.5 my-2 min-h-[3rem]">
                             {hole && hole.map((c, i) => <MiniCard key={i} card={c} highContrast={hc} />)}
-                            {!hole && down && down.map((c, i) => <MiniCard key={`d${i}`} card={c} highContrast={hc} />)}
+                            {!hole && down && down.slice(0, 2).map((c, i) => <MiniCard key={`d${i}`} card={c} highContrast={hc} />)}
                             {!hole && !down && !up.length && [0, 1].map(i => <MiniCard key={i} />)}
                             {up.map((c, i) => <MiniCard key={`u${i}`} card={c} highContrast={hc} />)}
+                            {!hole && down && down.slice(2).map((c, i) => <MiniCard key={`d${i + 2}`} card={c} highContrast={hc} />)}
                           </div>
                           <div className="text-xs text-gray-400 min-h-[1rem]">
                             {isWinner

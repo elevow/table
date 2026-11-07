@@ -1,4 +1,4 @@
-import { TableState, GameStage, Player } from '../../types/poker';
+import { Card, TableState, GameStage, Player } from '../../types/poker';
 import { isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { HandEvaluator } from './hand-evaluator';
 import { debugFlags } from '../config/env';
@@ -47,7 +47,7 @@ export class GameStateManager {
     // Default legacy mapping (fallback): preflop -> position 1; postflop -> position 2
     let activePlayer: Player | undefined;
     if (isStudVariant(this.state.variant)) {
-      // Stud rules: on third street, the player after the bring-in (lowest upcard) acts first; on later streets, highest showing upcards acts first.
+      // Stud rules: on third street, the player after the bring-in (lowest upcard) acts first; on later streets, the best showing hand acts first.
   const isActive = (p: Player) => !(p as any).folded && !p.isFolded && !p.isAllIn;
   const actives = this.state.players.filter(isActive);
   const weight: Record<any, number> = { '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14 };
@@ -102,24 +102,25 @@ export class GameStateManager {
         }
         activePlayer = chosen || actives[0];
       } else {
-        // Later streets: choose highest upcard among active players; tie-breaker by lowest position
+        // Later streets: the best showing hand acts first; ties go to the highest suit of the
+        // lead card, then to the lowest position
+        const upsOf = (p: Player) => this.state.studState?.playerCards[p.id]?.upCards || [];
+        const leadCard = (ups: Card[], key: number[]) => ups.find(u => weight[u?.rank as any] === key[key.length / 2]);
         let chosen: Player | undefined;
-        let maxVal = -1;
         for (const p of actives) {
-          const ups = this.state.studState?.playerCards[p.id]?.upCards || [];
-          const best = ups.reduce((m, c) => Math.max(m, weight[(c?.rank as any)] ?? -1), -1);
-          if (best > maxVal) { maxVal = best; chosen = p; }
-          else if (best === maxVal && chosen) {
-            // Tie-break by suit of highest upcard; if still tied, fallback to seat position
-            const bestUpP = ups.find(u => weight[(u?.rank as any)] === best);
-            const upsChosen = this.state.studState?.playerCards[chosen.id]?.upCards || [];
-            const bestUpChosen = upsChosen.find(u => weight[(u?.rank as any)] === best);
-            if (bestUpP && bestUpChosen) {
-              const swP = suitWeight[String(bestUpP.suit)];
-              const swC = suitWeight[String(bestUpChosen.suit)];
-              if (swP > swC) {
-                chosen = p;
-              } else if (swP === swC && typeof p.position === 'number' && p.position < (chosen.position as number)) {
+          if (!chosen) { chosen = p; continue; }
+          const key = HandEvaluator.studShowingKey(upsOf(p));
+          const chosenKey = HandEvaluator.studShowingKey(upsOf(chosen));
+          const cmp = HandEvaluator.compareStudShowing(key, chosenKey);
+          if (cmp > 0) {
+            chosen = p;
+          } else if (cmp === 0) {
+            const lead = leadCard(upsOf(p), key);
+            const chosenLead = leadCard(upsOf(chosen), chosenKey);
+            if (lead && chosenLead) {
+              const swP = suitWeight[String(lead.suit)];
+              const swC = suitWeight[String(chosenLead.suit)];
+              if (swP > swC || (swP === swC && typeof p.position === 'number' && p.position < (chosen.position as number))) {
                 chosen = p;
               }
             }

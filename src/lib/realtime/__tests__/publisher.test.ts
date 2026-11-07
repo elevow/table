@@ -93,6 +93,18 @@ describe('publisher', () => {
       });
     });
 
+    it('publishGameStateUpdate keeps the hidden card count when the caller already sanitized', async () => {
+      const gameState = {
+        stage: 'fifth',
+        players: [],
+        currentBet: 0,
+        studState: { playerCards: { p1: { downCards: [], upCards: [], downCount: 2 } } },
+      };
+      await publishGameStateUpdate('table-123', { gameState, seq: 3 });
+
+      expect(mockSend.mock.calls[0][0].payload.gameState.studState.playerCards.p1.downCount).toBe(2);
+    });
+
     it('publishGameStateUpdate never sends hidden hole cards, even if the caller did not sanitize', async () => {
       const player = (id: string) => ({
         id, name: id, position: 0, stack: 100, currentBet: 0, hasActed: false, isFolded: false, isAllIn: false, timeBank: 30,
@@ -255,8 +267,8 @@ describe('publisher', () => {
       const complexPayload = {
         gameState: {
           players: [
-            { id: 'p1', stack: 100, cards: ['Ah', 'Kh'] },
-            { id: 'p2', stack: 200, cards: ['Qd', 'Jd'] },
+            { id: 'p1', stack: 100, cards: ['Ah', 'Kh'], holeCount: 0 },
+            { id: 'p2', stack: 200, cards: ['Qd', 'Jd'], holeCount: 0 },
           ],
           communityCards: ['Th', '9h', '8h'],
           pot: 50,

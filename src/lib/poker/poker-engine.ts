@@ -1303,7 +1303,7 @@ export class PokerEngine {
     }
     for (let k = 0; k < count; k++) {
       for (const p of this.state.players) {
-        if (sitsOutOfHand(p, this.state)) continue;
+        if (p.isFolded || sitsOutOfHand(p, this.state)) continue;
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
@@ -1321,7 +1321,7 @@ export class PokerEngine {
     }
     for (let k = 0; k < count; k++) {
       for (const p of this.state.players) {
-        if (sitsOutOfHand(p, this.state)) continue;
+        if (p.isFolded || sitsOutOfHand(p, this.state)) continue;
         const c = this.deckManager.dealCard();
         if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
         if (c) this.state.studState!.playerCards[p.id].downCards.push(c);

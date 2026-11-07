@@ -38,6 +38,8 @@ export interface Player {
   position: number;
   stack: number;
   holeCards?: Card[];
+  // Replaces holeCards for other players: how many they hold, not which
+  holeCount?: number;
   currentBet: number;
   hasActed: boolean;
   isFolded: boolean;

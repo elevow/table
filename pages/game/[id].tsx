@@ -35,7 +35,7 @@ import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
-import { ALL_VARIANTS, VARIANT_LABELS, holeCardCount, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
+import { ALL_VARIANTS, VARIANT_LABELS, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
 import { studCardOrder } from '../../src/lib/shared/stud-cards';
 import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/components/PlayerNotesPanel';
 import HostControlsPanel from '../../src/components/HostControlsPanel';
@@ -1716,6 +1716,8 @@ export default function GamePage() {
           const shownAfterFold = hasFolded && pokerGameState?.stage === 'showdown'
             && ((Array.isArray(gamePlayer?.holeCards) && gamePlayer.holeCards.length > 0) || studShown);
           if (!gamePlayer || (hasFolded && !shownAfterFold)) return null;
+          // Nobody holds cards while the dealer is choosing the next game
+          if (pokerGameState?.stage === 'awaiting-dealer-choice') return null;
 
           // Compute position offset based on seat location (push cards slightly further from table center)
           let cardStyle: React.CSSProperties | undefined = undefined;
@@ -1794,13 +1796,17 @@ export default function GamePage() {
             );
           }
 
+          // Only players dealt into this hand hold cards: not those sitting out or waiting for the big blind
+          const holeCount = Number(gamePlayer.holeCount) || 0;
+          if (holeCount === 0) return null;
+
           return (
             <div key={`opp-backs-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (hidden)">
               <div className="flex gap-1">
-                {Array.from({ length: holeCardCount(pokerGameState?.variant) }, (_, i) => (
+                {Array.from({ length: holeCount }, (_, i) => (
                   <div
                     key={i}
-                    className={`table-card-deal card-back w-8 h-12 ${i === 0 ? '' : holeCardCount(pokerGameState?.variant) > 2 ? '-ml-5' : '-ml-3 rotate-6'}`}
+                    className={`table-card-deal card-back w-8 h-12 ${i === 0 ? '' : holeCount > 2 ? '-ml-5' : '-ml-3 rotate-6'}`}
                     style={{ animationDelay: `${i * 80}ms` }}
                   >
                     <div className="card-back-inner"></div>

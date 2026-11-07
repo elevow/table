@@ -141,7 +141,10 @@ function sanitizeState(state: TableState, viewerId: string | null): TableState {
   const sanitizedPlayers = state.players.map(player => {
     if (canSeePrivateCards(player.id, viewerId, revealedIds)) return player;
     const { holeCards: _, ...playerWithoutCards } = player;
-    return { ...playerWithoutCards, holeCards: undefined };
+    // How many they hold is public, so the table can draw the backs; broadcasts pass through here
+    // twice, and by the second pass the count is all that's left
+    const holeCount = player.holeCards?.length || player.holeCount || 0;
+    return { ...playerWithoutCards, holeCards: undefined, holeCount };
   });
 
   // Stud: down cards are private; up cards are face up for everyone at the table

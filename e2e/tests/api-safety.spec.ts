@@ -46,6 +46,15 @@ test.describe('Removed and signed-in-only routes', () => {
     }
   });
 
+  test('the database diagnostics route is gone', async () => {
+    const api = await anonymous();
+    try {
+      expect((await api.get('/api/health/db')).status()).toBe(404);
+    } finally {
+      await api.dispose();
+    }
+  });
+
   test('friends routes turn away signed-out callers', async () => {
     const api = await anonymous();
     try {

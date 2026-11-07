@@ -33,7 +33,7 @@ interface RegisterResponse {
   message?: string;
 }
 
-export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max: 10, message: 'Too many registration attempts. Please try again later.' } }, async (req, res) => {
+export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max: 10, message: 'Too many registration attempts. Please try again later.', shared: true } }, async (req, res) => {
   const pool = getPool();
   const safeLog = createSafeAudit(pool);
   const ip = getClientIp(req);

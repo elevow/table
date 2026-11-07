@@ -7,6 +7,7 @@ import { useUserAvatar } from '../src/hooks/useUserAvatar';
 import Avatar from '../src/components/Avatar';
 import AppShell, { useStoredUsername } from '../src/components/AppShell';
 import { useTheme } from '../src/contexts/ThemeContext';
+import { MAX_AVATAR_FILE_BYTES, shrinkAvatar, uploadErrorMessage } from '../src/utils/avatar-image';
 
 const Profile: NextPage = () => {
   const router = useRouter();
@@ -81,13 +82,8 @@ const Profile: NextPage = () => {
     setUploadSuccess(null);
     
     try {
-      // Convert file to base64
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      // Shrink it first: the upload limit is far smaller than a phone photo
+      const image = await shrinkAvatar(file);
       
       // Get the current user ID from authentication
       // This will be handled by the server-side authentication in the upload endpoint
@@ -104,13 +100,6 @@ const Profile: NextPage = () => {
       console.log('File size:', file.size, 'bytes');
       console.log('=== Upload Starting ===');
       
-      // Create variants (different sizes) - in a real app, you might generate these on the server
-      const variants = {
-        small: base64, // 32x32
-        medium: base64, // 64x64
-        large: base64  // 128x128
-      };
-      
       if (!authToken) {
         throw new Error('Please log in to upload an avatar');
       }
@@ -122,15 +111,11 @@ const Profile: NextPage = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
-        body: JSON.stringify({
-          originalUrl: base64,
-          variants
-        }),
+        body: JSON.stringify({ originalUrl: image }),
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Upload failed');
+        throw new Error(await uploadErrorMessage(response));
       }
       
       const result = await response.json();
@@ -170,7 +155,7 @@ const Profile: NextPage = () => {
       }
       
       // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
+      if (file.size > MAX_AVATAR_FILE_BYTES) {
         setUploadError('File size must be less than 5MB');
         return;
       }

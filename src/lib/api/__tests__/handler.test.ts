@@ -4,6 +4,9 @@ import { apiHandler, ApiError, assertSelf, clientIp, routeKey } from '../handler
 const mockRateLimit = jest.fn();
 jest.mock('../rate-limit', () => ({ rateLimit: (...args: any[]) => mockRateLimit(...args) }));
 
+const mockSharedRateLimit = jest.fn();
+jest.mock('../shared-rate-limit', () => ({ sharedRateLimit: (...args: any[]) => mockSharedRateLimit(...args) }));
+
 const mockGetUserId = jest.fn();
 jest.mock('../../auth/auth-utils', () => ({
   getAuthenticatedUserId: (...args: any[]) => mockGetUserId(...args)
@@ -91,6 +94,15 @@ describe('apiHandler', () => {
     await apiHandler({ methods: 'GET', onError }, () => { throw new Error('domain'); })(req(), r);
     expect(onError).toHaveBeenCalledWith(r, expect.objectContaining({ message: 'domain' }));
     expect(r.status).toHaveBeenCalledWith(409);
+  });
+
+  it('keeps shared limits in the shared store, keyed the same way', async () => {
+    mockSharedRateLimit.mockResolvedValue({ allowed: false });
+    const r = res();
+    await apiHandler({ methods: 'POST', rateLimit: { windowMs: 1000, max: 1, shared: true } }, jest.fn())(req({ method: 'POST' }), r);
+    expect(mockSharedRateLimit).toHaveBeenCalledWith('POST /api/thing:10.0.0.1', { windowMs: 1000, max: 1 });
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(r.status).toHaveBeenCalledWith(429);
   });
 
   it('uses a custom rate-limit message', async () => {

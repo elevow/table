@@ -188,7 +188,8 @@ export interface TableState {
   lowHandQualifier?: 8;
   // US-053: Seven-card Stud per-player cards and bring-in tracking
   studState?: {
-    playerCards: Record<string, { downCards: Card[]; upCards: Card[] }>;
+    // downCount replaces downCards for other players: how many they hold, not which
+    playerCards: Record<string, { downCards: Card[]; upCards: Card[]; downCount?: number }>;
     // pending: the bring-in player has yet to choose between bringing it in and completing
     bringIn?: { amount: number; player: string; pending?: boolean };
   };

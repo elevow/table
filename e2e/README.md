@@ -283,7 +283,6 @@ e2e-tests:
     - name: Create .env.local for tests
       run: |
         echo "USE_MOCK_DB=true" > .env.local
-        echo "NEXT_PUBLIC_SHOW_DB_HEALTH=false" >> .env.local
 
     - name: Run Playwright tests
       run: npm run test:e2e

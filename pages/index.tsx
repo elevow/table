@@ -13,9 +13,6 @@ const Home: NextPage = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [healthLoading, setHealthLoading] = useState(false);
-  const [healthResult, setHealthResult] = useState<any>(null);
-  const showDbHealth = (process.env.NEXT_PUBLIC_SHOW_DB_HEALTH === '1' || process.env.NEXT_PUBLIC_SHOW_DB_HEALTH === 'true');
 
   // Where to go after signing in: a page that sent the visitor here (an invite link), else the dashboard.
   // Only paths on this site, so a crafted link can't send someone elsewhere.
@@ -88,20 +85,6 @@ const Home: NextPage = () => {
 
   const handleGuestAccess = () => {
     router.push('/dashboard');
-  };
-
-  const testDbHealth = async () => {
-    setHealthLoading(true);
-    setHealthResult(null);
-    try {
-      const resp = await fetch('/api/health/db');
-      const json = await resp.json();
-      setHealthResult({ status: resp.status, body: json });
-    } catch (e: any) {
-      setHealthResult({ status: 'network-error', body: { ok: false, error: e?.message || 'network error' } });
-    } finally {
-      setHealthLoading(false);
-    }
   };
 
   return (
@@ -276,27 +259,6 @@ const Home: NextPage = () => {
                 {isLogin ? 'Sign up' : 'Sign in'}
               </button>
             </p>
-          </div>
-
-          <div>
-            {/* DB Health Check (hidden unless NEXT_PUBLIC_SHOW_DB_HEALTH is set) */}
-            {showDbHealth && (
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={testDbHealth}
-                  disabled={healthLoading}
-                  className="btn btn-ghost btn-sm w-full"
-                >
-                  {healthLoading ? 'Testing DB Connection…' : 'Test DB Connection'}
-                </button>
-                {healthResult && (
-                  <pre className="mt-3 max-h-64 overflow-auto text-xs surface-muted text-gray-800 dark:text-gray-200 p-3">
-{JSON.stringify(healthResult, null, 2)}
-                  </pre>
-                )}
-              </div>
-            )}
           </div>
       </main>
     </div>

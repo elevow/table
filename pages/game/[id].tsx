@@ -515,7 +515,6 @@ export default function GamePage() {
   });
   const isMyTurn = gameStarted && !!playerId && pokerGameState?.activePlayer === playerId && pokerGameState?.stage !== 'showdown';
   const myTurnKey = isMyTurn ? `${pokerGameState?.turnSeq ?? ''}:${playerId}:${pokerGameState?.stage ?? ''}` : null;
-  const turnAlerts = useTurnAlerts(isMyTurn, turnClock.remainingMs, myTurnKey);
   const me = amInGame ? pokerGameState.players.find((p: any) => p.id === playerId) : null;
   // Someone sitting down between hands joins the next one, so a new seat is worth another try
   const seatedCount = getSeatedPlayersCount();
@@ -594,7 +593,10 @@ export default function GamePage() {
   const allowedDealerChoiceVariants = useRef<string[]>([...ALL_VARIANTS]);
   // The panel sits above the table, so a dealer scrolled down to the action buttons on a short
   // screen would otherwise never see it
-  const dealerChoicePanelRef = useRevealWhen<HTMLDivElement>(gameStarted && !!playerId && awaitingDealerChoice?.dealerId === playerId);
+  const amChoosingGame = gameStarted && !!playerId && awaitingDealerChoice?.dealerId === playerId;
+  const dealerChoicePanelRef = useRevealWhen<HTMLDivElement>(amChoosingGame);
+  // Nobody is the active player during dealer's choice, but the table is waiting on the dealer
+  const turnAlerts = useTurnAlerts(isMyTurn || amChoosingGame, turnClock.remainingMs, myTurnKey);
 
   const applyDealerChoicePrompt = useCallback((prompt: { dealerId?: string; allowedVariants?: string[]; current?: string } | null) => {
     if (!prompt) {
@@ -2516,7 +2518,7 @@ export default function GamePage() {
                   <button
                     onClick={() => turnAlerts.setNotifyEnabled(!turnAlerts.notifyEnabled)}
                     className={`btn btn-ghost btn-sm !px-2 ${turnAlerts.notifyEnabled ? '!text-emerald-500 dark:!text-emerald-300' : ''}`}
-                    title="Get a browser notification when it is your turn and this tab is in the background"
+                    title="Get a browser notification when it is your turn and you are in another tab or app"
                     aria-label={turnAlerts.notifyEnabled ? 'Alerts on' : 'Alert me'}
                     aria-pressed={turnAlerts.notifyEnabled}
                   >

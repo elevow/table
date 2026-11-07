@@ -69,7 +69,6 @@ const Profile: NextPage = () => {
   useEffect(() => {
     console.log('=== Profile Page Avatar Debug ===');
     console.log('Profile page userId:', userId);
-    console.log('Auth token in localStorage:', localStorage.getItem('auth_token')?.slice(0, 20) + '...');
     console.log('Avatar data for this userId:', avatarData);
     console.log('=== End Profile Page Debug ===');
   }, [userId, avatarData]);
@@ -96,7 +95,6 @@ const Profile: NextPage = () => {
       console.log('Starting avatar upload...');
       console.log('Client-side userId (placeholder):', userId);
       console.log('Auth token exists:', !!authToken);
-      console.log('Auth token preview:', authToken?.slice(0, 20) + '...');
       console.log('File size:', file.size, 'bytes');
       console.log('=== Upload Starting ===');
       

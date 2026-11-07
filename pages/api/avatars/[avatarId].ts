@@ -5,7 +5,7 @@ import { apiHandler } from '../../../src/lib/api/handler';
 export default apiHandler(
   {
     methods: 'DELETE',
-    rateLimit: { windowMs: 60 * 60 * 1000, max: 5, message: 'Delete limit exceeded. Try again later.' },
+    rateLimit: { windowMs: 60 * 60 * 1000, max: 5, message: 'Delete limit exceeded. Try again later.', shared: true },
     auth: true,
   },
   async (req, res, { userId }) => {

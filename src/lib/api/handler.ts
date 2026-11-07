@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { rateLimit } from './rate-limit';
+import { sharedRateLimit } from './shared-rate-limit';
 import { getAuthenticatedUserId } from '../auth/auth-utils';
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -7,8 +8,12 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 export interface ApiHandlerOptions {
   /** Allowed HTTP method(s); anything else gets 405. */
   methods: Method | Method[];
-  /** Per-client limit for this route; over it gets 429 (with `message`, if given). */
-  rateLimit?: { windowMs: number; max: number; message?: string };
+  /**
+   * Per-client limit for this route; over it gets 429 (with `message`, if given). With `shared`,
+   * the count is kept in Redis so it holds across serverless instances; use it for low-traffic,
+   * abuse-prone routes, since each check is a billed Redis command.
+   */
+  rateLimit?: { windowMs: number; max: number; message?: string; shared?: boolean };
   /** Require a signed-in session; without one the route gets 401. */
   auth?: boolean;
   /** Map a thrown error's `code` (e.g. FriendError codes) to an HTTP status. */
@@ -85,8 +90,9 @@ export function apiHandler(
     }
 
     if (options.rateLimit) {
-      const { message: _message, ...limit } = options.rateLimit;
-      const rl = rateLimit(`${req.method} ${routeKey(req)}:${clientIp(req)}`, limit);
+      const { message: _message, shared, ...limit } = options.rateLimit;
+      const key = `${req.method} ${routeKey(req)}:${clientIp(req)}`;
+      const rl = shared ? await sharedRateLimit(key, limit) : rateLimit(key, limit);
       if (!rl.allowed) return res.status(429).json({ error: options.rateLimit.message || 'Too many requests. Please slow down.' });
     }
 

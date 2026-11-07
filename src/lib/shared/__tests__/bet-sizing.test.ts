@@ -1,4 +1,4 @@
-import { chipUnit, computePresetAmount, nudgeAmount, supportsBetPresets, type BetSizingInput } from '../bet-sizing';
+import { betSliderAmount, betSliderNotch, betSliderNotches, betSliderStep, chipUnit, computePresetAmount, nudgeAmount, supportsBetPresets, type BetSizingInput } from '../bet-sizing';
 
 const base: Omit<BetSizingInput, 'preset'> = {
   kind: 'bet',
@@ -116,5 +116,45 @@ describe('nudgeAmount', () => {
 
   it('falls back to the chip size without a big blind', () => {
     expect(nudgeAmount(5, 1, 0, 0, 10)).toBe(5.01);
+  });
+});
+
+describe('bet slider', () => {
+  it('moves by the small blind', () => {
+    expect(betSliderStep(1, 2)).toBe(1);
+    expect(betSliderStep(0.25, 0.5)).toBe(0.25);
+  });
+
+  it('falls back to half the big blind, then to a cent', () => {
+    expect(betSliderStep(0, 2)).toBe(1);
+    expect(betSliderStep(undefined, undefined)).toBe(0.01);
+  });
+
+  it('runs in steps up from the minimum', () => {
+    expect([0, 1, 2].map(n => betSliderAmount(n, 2, 100, 1))).toEqual([2, 3, 4]);
+    expect([0, 1, 2].map(n => betSliderAmount(n, 0.5, 10, 0.25))).toEqual([0.5, 0.75, 1]);
+  });
+
+  it('always reaches the maximum, even when it is not a whole number of steps away', () => {
+    const notches = betSliderNotches(2, 97.25, 1);
+    expect(notches).toBe(96);
+    expect(betSliderAmount(notches, 2, 97.25, 1)).toBe(97.25);
+    expect(betSliderAmount(notches - 1, 2, 97.25, 1)).toBe(97);
+  });
+
+  it('is not thrown off by floating point steps', () => {
+    expect(betSliderNotches(0.1, 0.4, 0.1)).toBe(3);
+  });
+
+  it('finds the notch for an amount set another way, such as a preset', () => {
+    expect(betSliderNotch(6, 2, 100, 1)).toBe(4);
+    expect(betSliderNotch(97.25, 2, 97.25, 1)).toBe(96);
+    expect(betSliderNotch(0, 2, 100, 1)).toBe(0);
+  });
+
+  it('has a single notch when the only legal amount is all-in', () => {
+    expect(betSliderNotches(50, 50, 1)).toBe(0);
+    expect(betSliderAmount(0, 50, 50, 1)).toBe(50);
+    expect(betSliderNotch(50, 50, 50, 1)).toBe(0);
   });
 });

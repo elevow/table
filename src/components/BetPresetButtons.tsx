@@ -12,6 +12,8 @@ interface Props {
   max: number;
   bigBlind: number;
   value: number;
+  /** What this player last bet or raised to, if they have this session. */
+  lastBet?: number;
   onChange: (amount: number) => void;
 }
 
@@ -29,10 +31,11 @@ const buttonClass = 'btn btn-sm btn-secondary !px-2.5 shrink-0 sm:flex-1 max-sm:
 /**
  * Quick amounts for the bet and raise controls. Hidden for betting modes without free sizing.
  */
-export default function BetPresetButtons({ kind, bettingMode, pot, currentBet, myBet, min, max, bigBlind, value, onChange }: Props) {
+export default function BetPresetButtons({ kind, bettingMode, pot, currentBet, myBet, min, max, bigBlind, value, lastBet, onChange }: Props) {
   if (!supportsBetPresets(bettingMode)) return null;
+  const hasLastBet = !!lastBet && lastBet > 0;
   return (
-    <div className="flex flex-wrap gap-1.5 sm:flex-1 sm:flex-nowrap max-sm:grid max-sm:w-full max-sm:grid-cols-7 max-sm:gap-1" role="group" aria-label={kind === 'bet' ? 'Bet size presets' : 'Raise size presets'}>
+    <div className={`flex flex-wrap gap-1.5 sm:flex-1 sm:flex-nowrap max-sm:grid max-sm:w-full max-sm:gap-1 ${hasLastBet ? 'max-sm:grid-cols-8' : 'max-sm:grid-cols-7'}`} role="group" aria-label={kind === 'bet' ? 'Bet size presets' : 'Raise size presets'}>
       {BET_PRESETS.map(({ preset, label, title }) => (
         <button
           key={preset}
@@ -45,6 +48,16 @@ export default function BetPresetButtons({ kind, bettingMode, pot, currentBet, m
           {label}
         </button>
       ))}
+      {hasLastBet && (
+        <button
+          type="button"
+          className={buttonClass}
+          title={`Your last bet: $${lastBet}`}
+          onClick={() => onChange(Math.max(min, Math.min(max, lastBet as number)))}
+        >
+          Last
+        </button>
+      )}
       <button
         type="button"
         className={buttonClass}

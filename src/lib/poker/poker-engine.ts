@@ -1581,12 +1581,7 @@ export class PokerEngine {
         const eligibleLow = eligible.filter(id => lowEvals.has(id));
         let lowWinners: string[] = [];
         if (eligibleLow.length > 0) {
-          // Find minimal lexicographic ranks
-          const cmp = (a: number[], b: number[]) => {
-            const n = Math.min(a.length, b.length);
-            for (let i = 0; i < n; i++) { if (a[i] !== b[i]) return a[i] - b[i]; }
-            return a.length - b.length;
-          };
+          const cmp = HandEvaluator.compareAceToFiveLow;
           let bestRanks: number[] | null = null;
           for (const id of eligibleLow) {
             const r = lowEvals.get(id)!.ranks;
@@ -1703,7 +1698,7 @@ export class PokerEngine {
         const eligibleLow = eligible.filter(id => lowEvals.has(id));
         let lowWinners: string[] = [];
         if (eligibleLow.length > 0) {
-          const cmp = (a: number[], b: number[]) => { const n = Math.min(a.length, b.length); for (let i = 0; i < n; i++) { if (a[i] !== b[i]) return a[i] - b[i]; } return a.length - b.length; };
+          const cmp = HandEvaluator.compareAceToFiveLow;
           let best: number[] | null = null;
           for (const id of eligibleLow) { const r = lowEvals.get(id)!.ranks; if (!best || cmp(r, best) < 0) best = r; }
           lowWinners = eligibleLow.filter(id => cmp(lowEvals.get(id)!.ranks, best!) === 0);
@@ -1976,10 +1971,7 @@ export class PokerEngine {
           if (low) lows.set(p.id, low);
         });
       }
-      const cmpLow = (x: number[], y: number[]) => {
-        for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] - y[i];
-        return x.length - y.length;
-      };
+      const cmpLow = HandEvaluator.compareAceToFiveLow;
       const sides = new Map<string, Set<'high' | 'low'>>();
       const pay = (ids: string[], amount: number, side: 'high' | 'low', into: Map<string, number>) => {
         const per = Math.floor(amount / ids.length);

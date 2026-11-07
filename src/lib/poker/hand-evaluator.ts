@@ -34,6 +34,18 @@ export class HandEvaluator {
     return cards.map(card => this.cardToString(card));
   }
 
+  /**
+   * Compare two ace-to-five lows given as ascending ranks (ace = 1), e.g. [1, 2, 3, 4, 7] for 7-4-3-2-A.
+   * Negative when a is the better (lower) hand, 0 when they tie. Lows are read from the highest card
+   * down, so 6-5-4-3-2 beats 7-4-3-2-A even though the latter holds the ace.
+   */
+  static compareAceToFiveLow(a: number[], b: number[]): number {
+    for (let i = a.length - 1, j = b.length - 1; i >= 0 && j >= 0; i--, j--) {
+      if (a[i] !== b[j]) return a[i] - b[j];
+    }
+    return a.length - b.length;
+  }
+
   // Generic Ace-to-Five low evaluator (8-or-better). Returns lowest 5-card set or null if no qualify.
   static evaluateAceToFiveLow(cards: Card[]): { lowCards: Card[]; ranks: number[] } | null {
     const weight: Record<Card['rank'], number> = {
@@ -56,14 +68,7 @@ export class HandEvaluator {
       const vals = ranksOnly(five);
       if (!isLowQual(vals)) continue;
       const sorted = [...vals].sort((a, b) => a - b);
-      if (!best) best = { lowCards: five, ranks: sorted };
-      else {
-        const a = best.ranks, b = sorted;
-        const n = Math.min(a.length, b.length);
-        let cmp = 0;
-        for (let i = 0; i < n; i++) { if (a[i] !== b[i]) { cmp = a[i] - b[i]; break; } }
-        if (cmp > 0) best = { lowCards: five, ranks: sorted };
-      }
+      if (!best || this.compareAceToFiveLow(sorted, best.ranks) < 0) best = { lowCards: five, ranks: sorted };
     }
     return best;
   }
@@ -426,14 +431,7 @@ export class HandEvaluator {
         const ranks = five.map(c => weight[c.rank]);
         if (!isLowQual(ranks)) continue;
         const sorted = [...ranks].sort((a, b) => a - b);
-        if (!best) best = { lowCards: five, ranks: sorted };
-        else {
-          // Lower lexicographic ranks is better (e.g., 5-4-3-2-A => [1,2,3,4,5])
-          const cmpLen = Math.min(best.ranks.length, sorted.length);
-          let cmp = 0;
-          for (let i = 0; i < cmpLen; i++) { if (best.ranks[i] !== sorted[i]) { cmp = best.ranks[i] - sorted[i]; break; } }
-          if (cmp > 0) best = { lowCards: five, ranks: sorted };
-        }
+        if (!best || this.compareAceToFiveLow(sorted, best.ranks) < 0) best = { lowCards: five, ranks: sorted };
       }
     }
     return best;

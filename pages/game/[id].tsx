@@ -35,7 +35,8 @@ import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
-import { ALL_VARIANTS, VARIANT_LABELS, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
+import { ALL_VARIANTS, VARIANT_LABELS, holeCardCount, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
+import { studCardOrder } from '../../src/lib/shared/stud-cards';
 import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/components/PlayerNotesPanel';
 import HostControlsPanel from '../../src/components/HostControlsPanel';
 import PrivateTableNotice from '../../src/components/PrivateTableNotice';
@@ -1015,7 +1016,9 @@ export default function GamePage() {
     return {
       down: Array.isArray(st?.downCards) ? st.downCards : [],
       up: Array.isArray(st?.upCards) ? st.upCards : [],
-    } as { down: any[]; up: any[] };
+      // Hidden down cards arrive as a count, so the table can still draw their backs
+      downCount: Number(st?.downCount) || 0,
+    } as { down: any[]; up: any[]; downCount: number };
   }, [pokerGameState]);
 
   type HandSummary = { primary: string | null; highLabel: string | null; lowLabel: string | null };
@@ -1734,34 +1737,30 @@ export default function GamePage() {
           }
 
           if (isStudVariant()) {
-            const { down, up } = getStudCardsForPlayer(assignment.playerId);
+            const { down, up, downCount } = getStudCardsForPlayer(assignment.playerId);
             const atShowdown = pokerGameState?.stage === 'showdown';
+            const downSlots: any[] = down.length > 0 ? down : Array(downCount).fill(null);
+            const slots = studCardOrder(
+              downSlots.map((card: any, i: number) => ({ key: `down-${i}`, card, faceDown: !(atShowdown && card) })),
+              up.map((card: any, i: number) => ({ key: `up-${i}`, card, faceDown: false })),
+            );
             return (
               <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent stud cards">
                 <div className="flex items-center gap-1">
-                  {/* Down cards: reveal at showdown, otherwise keep face-down */}
-                  {down.map((card: any, i: number) => (
-                    atShowdown ? (
-                      <div key={`down-${i}`} className="playing-card text-[11px] w-8 h-12">
+                  {/* Down cards stay face down until showdown; up cards are always face up */}
+                  {slots.map(({ key, card, faceDown }) => (
+                    faceDown ? (
+                      <div key={key} className="card-back w-8 h-12">
+                        <div className="card-back-inner"></div>
+                      </div>
+                    ) : (
+                      <div key={key} className="playing-card text-[11px] w-8 h-12">
                         <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                         <div className={suitColorClass(card.suit)}>
                           {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
                         </div>
                       </div>
-                    ) : (
-                      <div key={`down-${i}`} className="card-back w-8 h-12">
-                        <div className="card-back-inner"></div>
-                      </div>
                     )
-                  ))}
-                  {/* Up cards (always face up) */}
-                  {up.map((card: any, i: number) => (
-                    <div key={`up-${i}`} className="playing-card text-[11px] w-8 h-12">
-                      <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
-                      <div className={suitColorClass(card.suit)}>
-                        {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
-                      </div>
-                    </div>
                   ))}
                 </div>
               </div>
@@ -1798,12 +1797,15 @@ export default function GamePage() {
           return (
             <div key={`opp-backs-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (hidden)">
               <div className="flex gap-1">
-                <div className="table-card-deal card-back w-8 h-12">
-                  <div className="card-back-inner"></div>
-                </div>
-                <div className="table-card-deal card-back w-8 h-12 -ml-3 rotate-6" style={{ animationDelay: '80ms' }}>
-                  <div className="card-back-inner"></div>
-                </div>
+                {Array.from({ length: holeCardCount(pokerGameState?.variant) }, (_, i) => (
+                  <div
+                    key={i}
+                    className={`table-card-deal card-back w-8 h-12 ${i === 0 ? '' : holeCardCount(pokerGameState?.variant) > 2 ? '-ml-5' : '-ml-3 rotate-6'}`}
+                    style={{ animationDelay: `${i * 80}ms` }}
+                  >
+                    <div className="card-back-inner"></div>
+                  </div>
+                ))}
               </div>
             </div>
           );
@@ -2732,7 +2734,7 @@ export default function GamePage() {
                   if (isStudVariant()) {
                     const { down, up } = getStudCardsForPlayer(playerId);
                     // Show ALL of my cards face-up (no face-down backs for the current player)
-                    const all = [...down, ...up];
+                    const all = studCardOrder(down, up);
                     return (
                       <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''} ${actionPanelOpen ? 'max-sm:hidden' : ''}`}>
                         {all.map((card: any, i: number) => (
@@ -2788,7 +2790,7 @@ export default function GamePage() {
                   <TimeBankBadge count={me?.timeBanks} seconds={pokerGameState?.timeBankSeconds} />
                 </h3>
                 <div className="flex gap-1 sm:hidden" aria-hidden="true">
-                  {(isStudVariant() ? (() => { const c = getStudCardsForPlayer(playerId); return [...c.down, ...c.up]; })() : (getCurrentPlayerCards() || [])).map((card: any, i: number) => (
+                  {(isStudVariant() ? (() => { const c = getStudCardsForPlayer(playerId); return studCardOrder(c.down, c.up); })() : (getCurrentPlayerCards() || [])).map((card: any, i: number) => (
                     <div key={i} className="playing-card w-8 h-11 text-[13px] rounded">
                       <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                       <div className={suitColorClass(card.suit)}>{card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}</div>

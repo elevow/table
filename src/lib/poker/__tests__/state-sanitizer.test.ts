@@ -311,6 +311,9 @@ describe('state-sanitizer', () => {
       
       // Other players' down cards should be hidden
       expect(sanitized.studState?.playerCards.p2.downCards).toHaveLength(0);
+      // Only how many they hold is shared, so the table can draw the card backs
+      expect(sanitized.studState?.playerCards.p2.downCount).toBe(2);
+      expect(JSON.stringify(sanitized.studState?.playerCards.p2)).not.toContain('clubs');
       // Other players' up cards should be visible
       expect(sanitized.studState?.playerCards.p2.upCards).toHaveLength(1);
     });

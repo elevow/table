@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPool } from '../database/pool';
+import { envFlag } from '../config/env';
 import { isAdminEmail } from '../../utils/roleUtils';
 import { getSessionUser } from './auth-utils';
 import {
@@ -147,7 +148,8 @@ export async function getUserAccess(user: { id: string; email: string | null } |
     }
     loaded = true;
   } catch (error) {
-    console.error('Error loading user access:', error);
+    // The e2e run has no role tables, so the defaults below are expected there
+    if (!envFlag('USE_MOCK_DB')) console.error('Error loading user access:', error);
     grants.push(...DEFAULT_ROLE_GRANTS[implicitRole]);
     roleLimits.push(...Object.entries(DEFAULT_ROLE_LIMITS[implicitRole]).map(([key, value]) => ({ key, value })));
   }

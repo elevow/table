@@ -10,6 +10,7 @@ import Avatar from '../../src/components/Avatar';
 import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
 import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { OutsCalculator } from '../../src/lib/poker/outs-calculator';
+import { describeImprovement, improvementOnLastCard, lastCardDrawFor } from '../../src/lib/poker/improvement-odds';
 import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 import { useCheckTurn } from '../../src/hooks/useCheckTurn';
@@ -1161,6 +1162,29 @@ export default function GamePage() {
       console.warn('Hand summary computation failed:', e);
       return fallback;
     }
+  }, [pokerGameState, playerId, getStudCardsForPlayer]);
+
+  // With one card to come: the chance it improves your hand, from the cards you can see
+  const myLastCardOdds = useMemo((): string | null => {
+    if (!pokerGameState || !playerId || pokerGameState.stage === 'showdown') return null;
+    const me = pokerGameState.players?.find((p: any) => p.id === playerId);
+    if (!me || me.isFolded) return null;
+    const variant = pokerGameState.variant;
+    const stud = isStudGame(variant);
+    const board: Card[] = stud || !Array.isArray(pokerGameState.communityCards) ? [] : pokerGameState.communityCards;
+    let mine: Card[];
+    let seen: Card[] = [];
+    if (stud) {
+      const own = getStudCardsForPlayer(playerId);
+      mine = [...own.down, ...own.up];
+      seen = (pokerGameState.players || []).filter((p: any) => p.id !== playerId).flatMap((p: any) => getStudCardsForPlayer(p.id).up);
+    } else {
+      mine = Array.isArray(me.holeCards) ? me.holeCards : [];
+    }
+    const when = lastCardDrawFor(variant, { board: board.length, mine: mine.length });
+    if (!when) return null;
+    const odds = improvementOnLastCard({ mine, board, seen, omaha: isOmahaVariant(variant) });
+    return odds ? describeImprovement(odds, when) : null;
   }, [pokerGameState, playerId, getStudCardsForPlayer]);
 
   // Defensive: compute remaining non-folded players from current state
@@ -2883,6 +2907,9 @@ export default function GamePage() {
               })()}
               {/* Pot Odds Display */}
               {renderPotOdds()}
+              {showHandValue && myLastCardOdds && (
+                <div className="mb-3 text-sm text-gray-700 dark:text-gray-200" aria-label="Chance to improve">{myLastCardOdds}</div>
+              )}
               {myBringInPending ? (
                 <div className="flex flex-col gap-2">
                   <p className="text-sm text-gray-700 dark:text-gray-300">

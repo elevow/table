@@ -2808,11 +2808,15 @@ export default function GamePage() {
                   if (isStudVariant()) {
                     const { down, up } = getStudCardsForPlayer(playerId);
                     // Show ALL of my cards face-up (no face-down backs for the current player)
-                    const all = studCardOrder(down, up);
+                    // Face-down cards sit a little lower, so it's clear which cards the others can't see
+                    const all = studCardOrder(
+                      down.map((card: any) => ({ ...card, hidden: true })),
+                      up.map((card: any) => ({ ...card, hidden: false })),
+                    );
                     return (
                       <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''} ${actionPanelOpen ? 'max-sm:hidden' : ''}`}>
                         {all.map((card: any, i: number) => (
-                          <div key={`me-card-${i}`} style={{ animationDelay: `${Math.min(i, 2) * 80}ms` }} className="table-card-deal playing-card text-sm w-10 h-14 rounded-lg">
+                          <div key={`me-card-${i}`} style={{ animationDelay: `${Math.min(i, 2) * 80}ms` }} className={`table-card-deal playing-card text-sm w-10 h-14 rounded-lg ${card.hidden ? 'top-2' : ''}`} title={card.hidden ? 'Face down: only you can see this card' : undefined}>
                             <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                             <div className={suitColorClass(card.suit)}>
                               {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
@@ -2864,8 +2868,8 @@ export default function GamePage() {
                   <TimeBankBadge count={me?.timeBanks} seconds={pokerGameState?.timeBankSeconds} />
                 </h3>
                 <div className="flex gap-1 sm:hidden" aria-hidden="true">
-                  {(isStudVariant() ? (() => { const c = getStudCardsForPlayer(playerId); return studCardOrder(c.down, c.up); })() : (getCurrentPlayerCards() || [])).map((card: any, i: number) => (
-                    <div key={i} className="playing-card w-8 h-11 text-[13px] rounded">
+                  {(isStudVariant() ? (() => { const c = getStudCardsForPlayer(playerId); return studCardOrder(c.down.map((card: any) => ({ ...card, hidden: true })), c.up); })() : (getCurrentPlayerCards() || [])).map((card: any, i: number) => (
+                    <div key={i} className={`playing-card w-8 h-11 text-[13px] rounded ${card.hidden ? 'top-1' : ''}`}>
                       <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                       <div className={suitColorClass(card.suit)}>{card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}</div>
                     </div>

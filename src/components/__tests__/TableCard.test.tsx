@@ -2,10 +2,10 @@ import { render, screen } from '@testing-library/react';
 import TableCard from '../TableCard';
 
 describe('TableCard', () => {
-  it('shows the rank and suit in the corner and a large suit on the face, named for screen readers', () => {
+  it('shows the rank in the corner and one large suit on the face, named for screen readers', () => {
     render(<TableCard card={{ rank: 'Q', suit: 'hearts' }} />);
     const card = screen.getByRole('img', { name: 'Q of hearts' });
-    expect(card.textContent).toBe('Q♥♥');
+    expect(card.textContent).toBe('Q♥');
     expect(card.className).toContain('text-red-600');
   });
 

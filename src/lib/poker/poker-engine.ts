@@ -185,6 +185,13 @@ export class PokerEngine {
     };
   }
 
+  /** Record a player's run it twice vote, leaving the clock running for those yet to vote. */
+  public recordRunItVote(playerId: string, runs: number): void {
+    const prompt = this.state.runItTwicePrompt;
+    if (!prompt) throw new Error('No run it twice vote in progress');
+    this.state.runItTwicePrompt = { ...prompt, votes: { ...(prompt.votes || {}), [playerId]: runs } };
+  }
+
   public setRunItTwicePrompt(prompt: RunItTwicePrompt | null, disabled = false): void {
     this.state.runItTwicePrompt = prompt;
     this.state.runItTwicePromptDisabled = disabled;

@@ -161,6 +161,65 @@ describe('/api/games/enable-rit', () => {
     expect(engine.startRunItTwice).not.toHaveBeenCalled();
   });
 
+  describe('everyone still in votes', () => {
+    const setup = (votes?: Record<string, number>) => {
+      const state: any = {
+        tableId: 'table-1',
+        stage: 'flop',
+        players: [{ id: 'player-1', isFolded: false }, { id: 'player-2', isFolded: false }, { id: 'player-3', isFolded: true }],
+        runItTwicePrompt: { playerId: 'player-1', boardCardsCount: 3, eligiblePlayerIds: ['player-1', 'player-2'], votes },
+        allowRunItTwice: true,
+        communityCards: [],
+      };
+      const engine = {
+        getState: jest.fn(() => state),
+        setRunItTwicePrompt: jest.fn(),
+        startRunItTwice: jest.fn(),
+        recordRunItVote: jest.fn((id: string, runs: number) => {
+          state.runItTwicePrompt = { ...state.runItTwicePrompt, votes: { ...(state.runItTwicePrompt.votes || {}), [id]: runs } };
+        }),
+      };
+      (getOrRestoreEngine as jest.Mock).mockResolvedValue(engine);
+      (global as any).runItTwiceState = new Map([['table-1', { prompt: null, disabled: false }]]);
+      return engine;
+    };
+    const vote = async (playerId: string, runs: number) => {
+      const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as any;
+      await handler({ method: 'POST', body: { tableId: 'table-1', playerId, runs } } as any, res);
+      return res;
+    };
+
+    it('waits for the others after a vote to run it twice', async () => {
+      const engine = setup();
+      const res = await vote('player-1', 2);
+      expect(engine.recordRunItVote).toHaveBeenCalledWith('player-1', 2);
+      expect(engine.startRunItTwice).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, waitingFor: ['player-2'] }));
+    });
+
+    it('runs it twice once everyone agrees', async () => {
+      const engine = setup({ 'player-1': 2 });
+      await vote('player-2', 2);
+      expect(engine.startRunItTwice).toHaveBeenCalledWith(2, 3);
+    });
+
+    it('runs it once as soon as anyone votes for one run', async () => {
+      const engine = setup({ 'player-1': 2 });
+      const res = await vote('player-2', 1);
+      expect(engine.startRunItTwice).not.toHaveBeenCalled();
+      expect(engine.setRunItTwicePrompt).toHaveBeenCalledWith(null, true);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, runs: 1 }));
+    });
+
+    it('does not let a player who folded vote', async () => {
+      const engine = setup();
+      const res = await vote('player-3', 2);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(engine.recordRunItVote).not.toHaveBeenCalled();
+    });
+  });
+
   it('rejects multi-run requests while Run-It-Twice decisions are disabled', async () => {
     mockRitEnabled = false;
     const state: any = {

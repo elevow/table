@@ -3,6 +3,9 @@ import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
 import { getOrRestoreEngine, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../../src/lib/shared/feature-flags';
 import { resolveRunItTwiceDecision } from '../../../src/lib/server/run-it-twice-decision';
+import { broadcastGameState } from '../../../src/lib/server/game-action-pipeline';
+import { persistEngineState } from '../../../src/lib/poker/engine-persistence';
+import { runItVoters, tallyRunItVotes } from '../../../src/lib/shared/run-it-vote';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { apiHandler } from '../../../src/lib/api/handler';
 
@@ -33,7 +36,8 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     const gameState = engine.getState();
     const hasPersistedPrompt = Object.prototype.hasOwnProperty.call(gameState, 'runItTwicePrompt');
     const prompt = hasPersistedPrompt ? gameState.runItTwicePrompt : getRunItState(tableId).prompt;
-    if (!prompt || prompt.playerId !== playerId) {
+    // Everyone still in the hand votes
+    if (!prompt || !runItVoters(prompt).includes(playerId)) {
       return res.status(400).json({ error: 'No active Run-It-Twice prompt for this player' });
     }
     if ((!RUN_IT_TWICE_DECISIONS_ENABLED || !gameState.allowRunItTwice) && runs > 1) {
@@ -47,7 +51,18 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       return res.status(400).json({ error: `Runs must be 1-${maxRuns}` });
     }
 
-    const result = await resolveRunItTwiceDecision({ tableId, engine, res, playerId, runs });
+    const { runs: decided, waitingFor } = tallyRunItVotes(runItVoters(prompt), { ...(prompt.votes || {}), [playerId]: runs });
+    if (decided === null) {
+      // Still waiting on others: keep the vote and show the table who hasn't voted
+      engine.recordRunItVote(playerId, runs);
+      if ((await persistEngineState(tableId, engine)) === 'conflict') {
+        return res.status(409).json(STALE_STATE_RESPONSE);
+      }
+      const state = await broadcastGameState(tableId, res, engine.getState(), { action: 'run_it_twice_vote', playerId });
+      return res.status(200).json({ success: true, waitingFor, gameState: sanitizeStateForPlayer(state, playerId) });
+    }
+
+    const result = await resolveRunItTwiceDecision({ tableId, engine, res, playerId, runs: decided });
     if (result.status === 'conflict') {
       return res.status(409).json(STALE_STATE_RESPONSE);
     }
@@ -60,7 +75,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     // Note: In RIT scenarios, this should typically show all cards since it's an all-in situation
     const sanitizedState = sanitizeStateForPlayer(result.state, playerId);
 
-    return res.status(200).json({ success: true, runs, gameState: sanitizedState });
+    return res.status(200).json({ success: true, runs: decided, gameState: sanitizedState });
   } catch (e: unknown) {
     console.error('Error processing Run-It-Twice response:', e);
     const errorMessage =

@@ -11,6 +11,7 @@ import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
 import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { OutsCalculator } from '../../src/lib/poker/outs-calculator';
 import { describeImprovement, improvementOnLastCard, lastCardDrawFor } from '../../src/lib/poker/improvement-odds';
+import { runItVoters, tallyRunItVotes } from '../../src/lib/shared/run-it-vote';
 import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 import { useCheckTurn } from '../../src/hooks/useCheckTurn';
@@ -1342,10 +1343,12 @@ export default function GamePage() {
 
   // --- Run It Twice (RIT) helpers ---
   const runItTwicePrompt = pokerGameState?.runItTwicePrompt || null;
-  const isRunItTwicePromptOwner = !!runItTwicePrompt && runItTwicePrompt.playerId === playerId;
-  const runItTwicePromptOwnerName = runItTwicePrompt ? getPlayerLabel(runItTwicePrompt.playerId) : null;
-  const runItTwicePromptTieNames = runItTwicePrompt?.tiedWith
-    ? runItTwicePrompt.tiedWith
+  // Everyone still in votes; it runs more than once only if they all agree
+  const runItVoterIds: string[] = runItTwicePrompt ? runItVoters(runItTwicePrompt) : [];
+  const myRunItVote: number | undefined = runItTwicePrompt?.votes?.[playerId];
+  const canVoteRunIt = !!runItTwicePrompt && runItVoterIds.includes(playerId) && myRunItVote === undefined;
+  const runItWaitingNames: string[] = runItTwicePrompt
+    ? tallyRunItVotes(runItVoterIds, runItTwicePrompt.votes || {}).waitingFor
         .map((id: string) => getPlayerLabel(id))
         .filter((name: string | null): name is string => !!name)
     : [];
@@ -3208,28 +3211,25 @@ export default function GamePage() {
           )}
 
           {/* Run It Twice decision panel for the selected player */}
-          {gameStarted && pokerGameState && runItTwicePrompt && isRunItTwicePromptOwner && !pokerGameState.runItTwice?.enabled && (
+          {gameStarted && pokerGameState && runItTwicePrompt && canVoteRunIt && !pokerGameState.runItTwice?.enabled && (
             <div className="lg:col-span-2 bg-purple-50 dark:bg-purple-900/30 border border-purple-300 dark:border-purple-600 rounded-lg shadow-md p-4 mt-4" aria-live="polite">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="inline-block px-2 py-0.5 text-xs rounded bg-purple-600 text-white">RIT</span>
-                  <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100">Run It Twice Decision</h3>
+                  <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100">Run It Twice Vote</h3>
                 </div>
                 <span className="text-xs uppercase tracking-wide text-purple-700 dark:text-purple-300">Hand paused</span>
               </div>
               <div className="mt-3 text-sm text-purple-900 dark:text-purple-100 space-y-2">
-                <p>You currently have the lowest revealed hand and must choose how the board finishes.</p>
+                <p>Everyone still in votes on how the board finishes. It runs more than once only if everyone agrees; a vote for a single run, or the clock running out, means one run.</p>
                 {runItTwiceHighestHandDescription && (
                   <p className="text-[13px] text-purple-800 dark:text-purple-200">
                     Current best: <span className="font-semibold">{runItTwiceHighestHandDescription}</span>
                   </p>
                 )}
-                {!!runItTwicePromptTieNames.length && (
-                  <p className="text-[13px] text-purple-800 dark:text-purple-200">
-                    Lowest hand tie with {runItTwicePromptTieNames.join(', ')}. You were randomly selected to decide.
-                  </p>
+                {runItWaitingNames.length > 1 && (
+                  <p className="text-[12px] text-purple-700 dark:text-purple-200">Still to vote: {runItWaitingNames.join(', ')}.</p>
                 )}
-                <p className="text-[12px] text-purple-700 dark:text-purple-200">Choose a number of runs to resume the hand.</p>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -3252,38 +3252,27 @@ export default function GamePage() {
           )}
 
           {/* Run It Twice waiting banner for other players */}
-          {gameStarted && pokerGameState && runItTwicePrompt && !isRunItTwicePromptOwner && !pokerGameState.runItTwice?.enabled && (
+          {gameStarted && pokerGameState && runItTwicePrompt && !canVoteRunIt && !pokerGameState.runItTwice?.enabled && (
             <div className="lg:col-span-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-300 dark:border-purple-700 rounded-lg shadow-md p-4 mt-4" aria-live="polite">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100 flex items-center gap-2">
                   <span className="inline-block px-2 py-0.5 text-xs rounded bg-purple-600 text-white">RIT</span>
-                  Waiting on Run It Twice decision
+                  Waiting on the Run It Twice vote
                 </h3>
                 <span className="text-xs uppercase tracking-wide text-purple-700 dark:text-purple-300">Hand paused</span>
               </div>
               <div className="text-sm text-purple-900 dark:text-purple-100 space-y-2">
                 <p>
-                  Action is paused while
-                  {' '}
-                  <span className="font-semibold">{runItTwicePromptOwnerName || 'another player'}</span>
-                  {' '}
-                  chooses how many boards to run after the all-in showdown.
+                  Action is paused while {runItWaitingNames.length ? <span className="font-semibold">{runItWaitingNames.join(', ')}</span> : 'the table'} vote{runItWaitingNames.length === 1 ? 's' : ''} on running the board more than once.
+                  {typeof myRunItVote === 'number' && ` You voted to ${myRunItVote <= 1 ? 'run it once' : myRunItVote === 2 ? 'run it twice' : `run it ${myRunItVote} times`}.`}
                 </p>
                 {runItTwiceHighestHandDescription && (
                   <p className="text-[13px] text-purple-800 dark:text-purple-200">
                     Current best hand: <span className="font-semibold">{runItTwiceHighestHandDescription}</span>
                   </p>
                 )}
-                {!!runItTwicePromptTieNames.length && (
-                  <p className="text-[13px] text-purple-800 dark:text-purple-200">
-                    Tie detected between {runItTwicePromptTieNames.join(', ')}; a random picker selected
-                    {' '}
-                    {runItTwicePromptOwnerName || 'that player'}
-                    {' '}to decide.
-                  </p>
-                )}
                 <p className="text-[12px] text-purple-700 dark:text-purple-300">
-                  You don’t need to act—once the decision is made, the remaining boards will be dealt automatically.
+                  It runs more than once only if everyone agrees. Once the vote is settled, the remaining boards are dealt automatically.
                 </p>
               </div>
             </div>

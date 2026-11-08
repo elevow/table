@@ -301,6 +301,7 @@ export interface RunItTwicePrompt {
   handDescriptionsByPlayer?: Record<string, string>; // per-player best-hand description for eligible players
   eligiblePlayerIds: string[]; // players considered when determining lowest hand
   tiedWith?: string[]; // other players with identical strength when tie-breaking randomly
+  votes?: Record<string, number>; // runs each player has voted for so far (1 = run it once)
 }
 
 // US-032: Disconnection handling

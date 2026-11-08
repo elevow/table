@@ -436,6 +436,11 @@ export class PokerEngine {
     this.state.allowRunItTwice = allow;
   }
 
+  /** Whether everyone still in at a showdown must show, instead of losers mucking. */
+  public setShowAllAtShowdown(show: boolean): void {
+    this.state.showAllAtShowdown = show;
+  }
+
   public setAllowStraddle(allow: boolean): void {
     this.state.allowStraddle = allow;
     if (!allow) this.state.players.forEach(p => { delete p.wantsStraddle; });

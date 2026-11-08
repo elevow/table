@@ -21,6 +21,7 @@ type HostAction =
   | { action: 'set-blinds'; smallBlind: number; bigBlind: number }
   | { action: 'allow-straddle'; allow: boolean }
   | { action: 'allow-run-it-twice'; allow: boolean }
+  | { action: 'show-all-at-showdown'; show: boolean }
   | { action: 'set-turn-time'; seconds: number }
   | { action: 'set-hand-delay'; seconds: number }
   | { action: 'adjust-time-banks'; targetId: string; delta: number }
@@ -39,6 +40,7 @@ const ACTION_PERMISSIONS: Record<HostAction['action'], string> = {
   'set-blinds': 'room.configure',
   'allow-straddle': 'room.configure',
   'allow-run-it-twice': 'room.configure',
+  'show-all-at-showdown': 'room.configure',
   'set-turn-time': 'room.configure',
   'set-hand-delay': 'room.configure',
   'adjust-time-banks': 'room.configure',
@@ -168,6 +170,11 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
         await publishTableEvent(tableId, { type: 'settings' }).catch(() => {});
         break; // also applied to the running game below
       }
+      case 'show-all-at-showdown': {
+        await updateRoomConfig(tableId, { showAllAtShowdown: !!body.show });
+        await publishTableEvent(tableId, { type: 'settings' }).catch(() => {});
+        break; // also applied to the running game below
+      }
       case 'set-blinds': {
         const sb = Number(body.smallBlind);
         const bb = Number(body.bigBlind);
@@ -215,7 +222,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     // Changes to the running game
     const engine = await getOrRestoreEngine(tableId);
     if (!engine) {
-      if (body.action === 'allow-straddle' || body.action === 'allow-run-it-twice' || body.action === 'set-blinds' || body.action === 'set-turn-time' || body.action === 'set-hand-delay') {
+      if (body.action === 'allow-straddle' || body.action === 'allow-run-it-twice' || body.action === 'show-all-at-showdown' || body.action === 'set-blinds' || body.action === 'set-turn-time' || body.action === 'set-hand-delay') {
         return res.status(200).json({ ok: true });
       }
       return res.status(404).json({ error: 'No active game found for this table' });
@@ -226,6 +233,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       else if (body.action === 'set-blinds') engine.setPendingBlinds(Number(body.smallBlind), Number(body.bigBlind));
       else if (body.action === 'allow-straddle') engine.setAllowStraddle(!!body.allow);
       else if (body.action === 'allow-run-it-twice') engine.setAllowRunItTwice(!!body.allow);
+      else if (body.action === 'show-all-at-showdown') engine.setShowAllAtShowdown(!!body.show);
       else if (body.action === 'set-turn-time') engine.setTurnTime(Number(body.seconds));
       else if (body.action === 'set-hand-delay') engine.setHandDelay(Number(body.seconds));
       else if (body.action === 'adjust-time-banks') engine.adjustTimeBanks(body.targetId, Number(body.delta));

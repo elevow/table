@@ -205,6 +205,18 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             />
           </label>
         )}
+        {canConfigure && (
+          <label className="flex items-center justify-between gap-2" title="Everyone still in at a showdown shows their cards; nobody mucks">
+            <span>Everyone shows at showdown</span>
+            <input
+              type="checkbox"
+              className="switch"
+              checked={!!extras.showAllAtShowdown}
+              disabled={!!busy}
+              onChange={e => send('showall', { action: 'show-all-at-showdown', show: e.target.checked })}
+            />
+          </label>
+        )}
         {canConfigure && gameState && (
           <div>
             <div className="mb-2 eyebrow">Turn time {Math.round(turnTimeMs(gameState) / 1000)}s</div>

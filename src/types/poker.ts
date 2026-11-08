@@ -142,6 +142,8 @@ export interface TableState {
   allowStraddle?: boolean;
   // Table offers run it twice after an all-in (a room setting; off unless the room turned it on)
   allowRunItTwice?: boolean;
+  // Table rule: everyone still in at a contested showdown shows their cards; nobody mucks
+  showAllAtShowdown?: boolean;
   // The straddle posted this hand, if any
   straddle?: { playerId: string; amount: number };
   // Next hand is a bomb pot: everyone antes this many big blinds and betting starts on the flop

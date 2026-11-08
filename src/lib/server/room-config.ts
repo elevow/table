@@ -25,6 +25,7 @@ export interface TableExtrasConfig {
   requireSeatApproval?: boolean;
   allowStraddle?: boolean;
   allowRunItTwice?: boolean;
+  showAllAtShowdown?: boolean;
   seatRequests?: SeatRequest[];
   waitlist?: WaitlistEntry[];
   seatOffer?: SeatOffer | null;

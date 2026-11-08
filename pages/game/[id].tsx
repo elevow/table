@@ -2442,6 +2442,11 @@ export default function GamePage() {
                 Run it twice
               </span>
             )}
+            {tableExtras?.showAllAtShowdown && (
+              <span className="badge" title="Everyone still in at a showdown shows their cards; nobody mucks">
+                Cards shown at showdown
+              </span>
+            )}
             <GameRulesBadges state={pokerGameState} />
             </div>
           </div>
@@ -3426,7 +3431,7 @@ export default function GamePage() {
             const contested = getActiveNonFoldedPlayers().length >= 2;
             const winners: string[] = Array.isArray(pokerGameState.handWinners) ? pokerGameState.handWinners : [];
             const alreadyShown = (pokerGameState.shownCards || []).includes(playerId)
-              || (contested && !me.isFolded && (anyAllIn() || winners.includes(playerId)));
+              || (contested && !me.isFolded && (anyAllIn() || pokerGameState.showAllAtShowdown || winners.includes(playerId)));
             if (alreadyShown) return null;
             return (
               <div className="lg:col-span-2 flex items-center justify-between gap-3 surface p-3 mt-4">

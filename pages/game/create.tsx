@@ -33,6 +33,7 @@ export default function CreateGameRoomPage() {
   const [rebuyAmount, setRebuyAmount] = useState(20);
   const [buyIn, setBuyIn] = useState(1000);
   const [allowRunItTwice, setAllowRunItTwice] = useState(false);
+  const [showAllAtShowdown, setShowAllAtShowdown] = useState(false);
   const [turnTimeSeconds, setTurnTimeSeconds] = useState(DEFAULT_TURN_SECONDS);
   const [timeBanks, setTimeBanks] = useState(DEFAULT_TIME_BANKS);
   const [timeBankSeconds, setTimeBankSeconds] = useState(DEFAULT_TIME_BANK_SECONDS);
@@ -116,6 +117,7 @@ export default function CreateGameRoomPage() {
             rebuyAmount: numberOfRebuys !== 0 ? rebuyAmount : undefined,
             buyIn,
             allowRunItTwice,
+            showAllAtShowdown,
             turnTimeSeconds: clampSetting(turnTimeSeconds, MIN_TURN_SECONDS, MAX_TURN_SECONDS, DEFAULT_TURN_SECONDS),
             timeBanks: clampSetting(timeBanks, 0, MAX_TIME_BANKS, DEFAULT_TIME_BANKS),
             timeBankSeconds: clampSetting(timeBankSeconds, MIN_TIME_BANK_SECONDS, MAX_TIME_BANK_SECONDS, DEFAULT_TIME_BANK_SECONDS),
@@ -538,6 +540,18 @@ export default function CreateGameRoomPage() {
           </label>
           <p className="hint">
             After an all-in, the player with the weakest hand can choose to deal the rest of the board more than once and split the pot between the runs. Hold&apos;em and Omaha only.
+          </p>
+          <label className="mt-4 inline-flex items-center space-x-2 text-sm font-medium text-gray-800 dark:text-gray-200">
+            <input
+              type="checkbox"
+              className="checkbox"
+              checked={showAllAtShowdown}
+              onChange={e => setShowAllAtShowdown(e.target.checked)}
+            />
+            <span>Everyone shows at showdown</span>
+          </label>
+          <p className="hint">
+            Everyone still in when a hand reaches showdown shows their cards, winners and losers alike. Players who folded keep theirs hidden.
           </p>
         </div>
         </section>

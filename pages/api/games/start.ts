@@ -43,6 +43,7 @@ type RoomGameSettings = {
   bigBlind: number;
   allowRunItTwice: boolean;
   allowStraddle: boolean;
+  showAllAtShowdown: boolean;
   // Chips each player antes in Hold'em and Omaha hands; 0 = no antes
   ante: number;
   // 7-2 bounty in chips (Hold'em only); 0 = off
@@ -85,6 +86,7 @@ async function loadRoomGameSettings(tableId: string): Promise<RoomGameSettings |
     smallBlind: positiveNumber(blinds.sb, blinds.smallBlind) ?? 1,
     bigBlind: positiveNumber(blinds.bb, blinds.bigBlind) ?? 2,
     allowRunItTwice: config.allowRunItTwice === true,
+    showAllAtShowdown: config.showAllAtShowdown === true,
     allowStraddle: config.allowStraddle === true,
     ante: chipAmount(config.ante),
     sevenDeuceBounty: chipAmount(config.sevenDeuceBounty),
@@ -230,6 +232,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     // Create new engine for table (replace any existing)
     const engine = new PokerEngine(tableId, engPlayers as any, smallBlind, bigBlind, { variant: engineVariant as any, bettingMode: engineMode });
     engine.setAllowRunItTwice(roomSettings.allowRunItTwice);
+    engine.setShowAllAtShowdown(roomSettings.showAllAtShowdown);
     engine.setAllowStraddle(roomSettings.allowStraddle);
     // Rooms created before these settings existed get the defaults
     engine.configureClock({

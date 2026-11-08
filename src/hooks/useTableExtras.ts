@@ -13,6 +13,7 @@ export interface TableExtras {
   requireSeatApproval: boolean;
   allowStraddle: boolean;
   allowRunItTwice: boolean;
+  showAllAtShowdown: boolean;
   waitlist: Array<{ playerId: string; playerName: string }>;
   seatOffer: { playerId: string; seatNumber: number; expiresAt: number } | null;
   seatRequests?: Array<{ playerId: string; playerName: string; seatNumber: number; requestedAt: number }>;

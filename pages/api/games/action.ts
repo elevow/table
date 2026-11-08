@@ -8,13 +8,15 @@ import { apiHandler } from '../../../src/lib/api/handler';
 export const config = { maxDuration: 60 };
 
 export default apiHandler({ methods: 'POST' }, async (req, res) => {
-  const { tableId, playerId: claimedPlayerId, action, amount, expectedTurnSeq } = (req.body || {}) as {
+  const { tableId, playerId: claimedPlayerId, action, amount, expectedTurnSeq, splash } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
     action?: string;
     amount?: number;
     // turnSeq of the state the player acted on; omitted by older clients
     expectedTurnSeq?: number;
+    // Make this bet or raise a splash, once per session
+    splash?: boolean;
   };
 
   const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.play');
@@ -61,11 +63,20 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       return res.status(400).json({ error: `${playerAction.type} action requires an amount` });
     }
 
+    // Checked before the bet goes in, so a refused splash never leaves the bet half applied
+    const splashing = splash === true && (playerAction.type === 'bet' || playerAction.type === 'raise');
+    if (splashing && engine.hasSplashed(playerId)) {
+      return res.status(400).json({ error: 'You have already splashed the pot this session' });
+    }
+
     const result = await runGameAction({
       tableId,
       engine,
       res,
-      apply: () => engine.handleAction(playerAction),
+      apply: () => {
+        engine.handleAction(playerAction);
+        if (splashing) engine.recordSplash(playerId, Number(amount));
+      },
       lastAction: { action, playerId, amount },
     });
     if (result.status === 'rejected') {

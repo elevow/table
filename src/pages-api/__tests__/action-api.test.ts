@@ -107,6 +107,44 @@ describe('/api/games/action saves', () => {
     expect(mockPublishGameStateUpdate).not.toHaveBeenCalled();
   });
 
+  describe('splashing the pot', () => {
+    const splashEngine = (splashed: boolean) => ({
+      ...createEngine(),
+      hasSplashed: jest.fn(() => splashed),
+      recordSplash: jest.fn(),
+    });
+
+    it('puts the bet in and records the splash', async () => {
+      const engine = splashEngine(false);
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      mockPersistEngineState.mockResolvedValue('saved');
+      const res = createRes();
+      await handler(createReq({ tableId: 't1', playerId: 'a', action: 'raise', amount: 40, splash: true }), res);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(engine.handleAction).toHaveBeenCalledWith(expect.objectContaining({ type: 'raise', amount: 40 }));
+      expect(engine.recordSplash).toHaveBeenCalledWith('a', 40);
+    });
+
+    it('refuses a second splash in a session before the bet goes in', async () => {
+      const engine = splashEngine(true);
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      const res = createRes();
+      await handler(createReq({ tableId: 't1', playerId: 'a', action: 'bet', amount: 40, splash: true }), res);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(engine.handleAction).not.toHaveBeenCalled();
+      expect(engine.recordSplash).not.toHaveBeenCalled();
+    });
+
+    it('only splashes bets and raises', async () => {
+      const engine = splashEngine(false);
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      mockPersistEngineState.mockResolvedValue('saved');
+      await handler(createReq({ tableId: 't1', playerId: 'a', action: 'call', splash: true }), createRes());
+      expect(engine.handleAction).toHaveBeenCalled();
+      expect(engine.recordSplash).not.toHaveBeenCalled();
+    });
+  });
+
   it('applies an action made on the current state', async () => {
     const engine = createEngine(7);
     mockGetOrRestoreEngine.mockResolvedValue(engine);

@@ -185,6 +185,21 @@ export class PokerEngine {
     };
   }
 
+  /** Whether this player has already splashed the pot this session. */
+  public hasSplashed(playerId: string): boolean {
+    return (this.state.splashUsedBy || []).includes(playerId);
+  }
+
+  /**
+   * Once per session a player can make a bet or raise with a splash: it goes in like any other,
+   * and the table sees chips raining onto the pot.
+   */
+  public recordSplash(playerId: string, amount: number, now: number = Date.now()): void {
+    if (this.hasSplashed(playerId)) throw new Error('You have already splashed the pot this session');
+    this.state.splashUsedBy = [...(this.state.splashUsedBy || []), playerId];
+    this.state.lastSplash = { playerId, amount, at: now };
+  }
+
   /** Record a player's run it twice vote, leaving the clock running for those yet to vote. */
   public recordRunItVote(playerId: string, runs: number): void {
     const prompt = this.state.runItTwicePrompt;

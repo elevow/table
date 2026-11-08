@@ -37,6 +37,7 @@ import TimeBankBadge from '../../src/components/TimeBankBadge';
 import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
 import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
+import SplashAnimation from '../../src/components/SplashAnimation';
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
 import { ALL_VARIANTS, VARIANT_LABELS, gameLabel, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
@@ -930,6 +931,11 @@ export default function GamePage() {
   };
 
   // Poker action handlers
+  // Splash the pot: once per session, the next bet or raise lands with a show for the table
+  const [splashArmed, setSplashArmed] = useState(false);
+  const splashArmedRef = useRef(false);
+  splashArmedRef.current = splashArmed;
+
   const handlePokerAction = useCallback(async (action: string, amount?: number) => {
     if (!pokerGameState || !playerId) {
       console.warn('Cannot perform action: missing game state or player ID');
@@ -950,13 +956,16 @@ export default function GamePage() {
 
     pendingActionRef.current = true;
     console.log(`Performing ${action}${amount ? ` for ${amount}` : ''}`);
-    
+    const splash = splashArmedRef.current && (action === 'bet' || action === 'raise');
+    if (splash) setSplashArmed(false);
+
     try {
       const response = await api.post('/api/games/action', {
         tableId: id,
         playerId,
         action,
         amount,
+        ...(splash ? { splash: true } : {}),
         // The decision this click answers; the server refuses it if the game has moved on
         expectedTurnSeq: typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
       });
@@ -2734,6 +2743,11 @@ export default function GamePage() {
                  }}>
               {/* Inner felt playing surface */}
               <div className="table-felt absolute inset-[14px] rounded-full">
+                <SplashAnimation
+                  splash={pokerGameState?.lastSplash}
+                  playerName={pokerGameState?.lastSplash ? getPlayerLabel(pokerGameState.lastSplash.playerId) : null}
+                  formatAmount={(n) => showStackInBB ? formatChips(n, pokerGameState?.bigBlind || null, true) : `$${n}`}
+                />
                 
                 {/* Player positions - evenly spaced around table */}
                 {getRotatedSeatPositions().map((seatData) => 
@@ -2910,6 +2924,22 @@ export default function GamePage() {
               })()}
               {/* Pot Odds Display */}
               {renderPotOdds()}
+              {!myBringInPending && !(pokerGameState?.splashUsedBy || []).includes(playerId) && (
+                <div className="mb-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSplashArmed(a => !a)}
+                    aria-pressed={splashArmed}
+                    className={`btn btn-sm ${splashArmed ? 'bg-amber-500 text-white hover:bg-amber-600' : 'btn-ghost'}`}
+                    title="Your next bet or raise lands with chips raining onto the table. Once per session."
+                  >
+                    {splashArmed ? 'Splash ready' : 'Splash the pot'}
+                  </button>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {splashArmed ? 'Your next bet or raise splashes the pot.' : 'Once per session.'}
+                  </span>
+                </div>
+              )}
               {showHandValue && myLastCardOdds && (
                 <div className="mb-3 text-sm text-gray-700 dark:text-gray-200" aria-label="Chance to improve">{myLastCardOdds}</div>
               )}

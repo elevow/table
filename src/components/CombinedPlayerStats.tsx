@@ -6,6 +6,7 @@ import { useEffect, useState, memo } from 'react';
 import type { StatsSummary } from '../../pages/api/stats/summary';
 import { authHeaders } from '../utils/auth-headers';
 import { formatDuration } from '../lib/shared/profit-sessions';
+import { formatAf, formatPct } from '../lib/shared/hud-stats';
 
 const money = (n: number) => `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString()}`;
 
@@ -78,6 +79,20 @@ function CombinedPlayerStats() {
             <StatCard label="Sessions" value={stats.sessions.toLocaleString()} />
             <StatCard label="Time played" value={stats.timePlayedMs > 0 ? formatDuration(stats.timePlayedMs) : '0m'} />
           </div>
+          {stats.hud && stats.hud.hands > 0 && (
+            <>
+              <h4 className="mt-6 mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">How you play</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <StatCard label="VPIP" value={stats.hud.vpip == null ? '–' : `${formatPct(stats.hud.vpip)}%`} />
+                <StatCard label="PFR" value={stats.hud.pfr == null ? '–' : `${formatPct(stats.hud.pfr)}%`} />
+                <StatCard label="3-bet" value={stats.hud.threeBet == null ? '–' : `${formatPct(stats.hud.threeBet)}%`} />
+                <StatCard label="Aggression" value={formatAf(stats.hud)} />
+              </div>
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-500">
+                Over your last {stats.hud.hands.toLocaleString()} hand{stats.hud.hands === 1 ? '' : 's'}. VPIP is how often you put money in voluntarily, PFR how often you raise first, and aggression your bets and raises for each call after the first round.
+              </p>
+            </>
+          )}
           <p className="mt-4 text-xs text-gray-500 dark:text-gray-500">
             Every hand you&apos;ve played, on any device. Hands, pots won, profit and biggest pot match the leaderboard.
           </p>

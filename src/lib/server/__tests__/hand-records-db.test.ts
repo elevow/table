@@ -10,6 +10,7 @@ import {
   applyHandToStatistics,
   buildHandRecord,
   finishHand,
+  handExtras,
   markCardsShown,
   recordLateSevenDeuceBounty,
   redactHandRecord,
@@ -140,7 +141,8 @@ describe('hand records storage', () => {
   });
 
   describe('applyHandToStatistics', () => {
-    const awarded = () => query.mock.calls.map(c => c[1][1]);
+    const awards = () => query.mock.calls.filter(c => String(c[0]).includes('INSERT INTO achievements'));
+    const awarded = () => awards().map(c => c[1][1]);
 
     it('updates every player and awards first-hand and first-win achievements', async () => {
       await applyHandToStatistics({ query } as any, record());
@@ -151,7 +153,7 @@ describe('hand records storage', () => {
 
     it('casts each parameter, since Postgres rejects one used both as a value and against a column', async () => {
       await applyHandToStatistics({ query } as any, record());
-      const sql: string = query.mock.calls[0][0];
+      const sql: string = awards()[0][0];
       expect(sql).toContain('SELECT $1::uuid, $2::varchar, $3::jsonb');
       expect(sql).toContain('user_id = $1::uuid AND achievement_type = $2::varchar');
     });
@@ -209,7 +211,7 @@ describe('hand records storage', () => {
       const deuces = player({ id: 'b', won: 0, net: -100, cards: { hole: [c('2', 'hearts'), c('2', 'spades')] } });
       const queens = player({ cards: { hole: [c('Q', 'clubs'), c('Q', 'spades')] } });
       await applyHandToStatistics({ query } as any, record({ board, players: [queens, deuces] }));
-      expect(query.mock.calls.filter(call => call[1][1] === 'beat_quads').map(call => call[1][0])).toEqual(['a']);
+      expect(awards().filter(call => call[1][1] === 'beat_quads').map(call => call[1][0])).toEqual(['a']);
 
       query.mockClear();
       await applyHandToStatistics({ query } as any, record({ board, players: [queens, { ...deuces, won: 100 }] }));
@@ -234,6 +236,62 @@ describe('hand records storage', () => {
         ],
       }));
       expect(awarded()).not.toContain('omaha_trips');
+    });
+
+    it('awards hammer tiers from the count of 7-2 offsuit wins', async () => {
+      query.mockImplementation(async (sql: string) => (String(sql).includes('COUNT(*)::int AS wins') ? { rows: [{ wins: 7 }] } : { rowCount: 1, rows: [] }));
+      await applyHandToStatistics({ query } as any, record({
+        players: [player({ cards: { hole: [c('7', 'hearts'), c('2', 'diamonds')] } }), player({ id: 'b', won: 0, folded: true })],
+      }));
+      expect(awarded()).toEqual(expect.arrayContaining(['hammer', 'hammer_7']));
+      expect(awarded()).not.toContain('hammer_72');
+    });
+
+    it('still awards the first hammer when the count cannot be read', async () => {
+      query.mockImplementation(async (sql: string) => {
+        if (String(sql).includes('COUNT(*)::int AS wins')) throw new Error('db down');
+        return { rowCount: 1, rows: [] };
+      });
+      await applyHandToStatistics({ query } as any, record({
+        players: [player({ cards: { hole: [c('7', 'hearts'), c('2', 'diamonds')] } }), player({ id: 'b', won: 0, folded: true })],
+      }));
+      expect(awarded()).toContain('hammer');
+    });
+
+    it("looks up a winner's earlier hands at the table for streaks", async () => {
+      const earlier = [1, 2, 3, 4].map(i => ({
+        id: `h${i}`, started_at: null, ended_at: new Date(Date.parse('2026-01-01T00:00:00.000Z') - i * 60_000).toISOString(),
+        big_blind: '10', variant: 'texas-holdem', me: { startStack: 1000, endStack: 1100, net: 100, won: 200, folded: false },
+      }));
+      query.mockImplementation(async (sql: string) => (String(sql).includes('p AS me')
+        ? { rows: earlier }
+        : { rowCount: 1, rows: [] }));
+      await applyHandToStatistics({ query } as any, record());
+      expect(awards().filter(call => call[1][1] === 'heater').map(call => call[1][0])).toEqual(['a']);
+    });
+
+    it('awards deja vu for the same hole cards as the hand before', async () => {
+      query.mockImplementation(async (sql: string) => (String(sql).startsWith('SELECT players FROM hand_records')
+        ? { rows: [{ players: [player({ cards: { hole: [c('A', 'diamonds'), c('A', 'hearts')] } })] }] }
+        : { rowCount: 1, rows: [] }));
+      await applyHandToStatistics({ query } as any, record());
+      expect(awards().filter(call => call[1][1] === 'deja_vu').map(call => call[1][0])).toEqual(['a']);
+    });
+
+    it('takes the splash, hi-lo halves and run winners from the final state', () => {
+      const state = showdownState({
+        handStartedAt: 1_000,
+        lastSplash: { playerId: 'a', amount: 40, at: 2_000 },
+        lastHiLoResult: { high: [{ playerId: 'a', amount: 10 }], low: null },
+        runItTwice: { results: [{ winners: [{ playerId: 'a' }] }, { winners: [{ playerId: 'b' }] }] },
+      });
+      expect(handExtras(state)).toEqual({
+        splashedBy: ['a'],
+        hiLo: { high: [{ playerId: 'a', amount: 10 }], low: null },
+        runWinners: [['a'], ['b']],
+      });
+      // A splash from an earlier hand doesn't count
+      expect(handExtras({ ...state, lastSplash: { playerId: 'a', amount: 40, at: 500 } }).splashedBy).toBeUndefined();
     });
 
     it('keeps going when one player fails', async () => {

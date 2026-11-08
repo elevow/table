@@ -2,7 +2,10 @@ import type { Pool } from 'pg';
 import { isBettingMode } from '../poker/variant-rules';
 import { getPool } from '../database/pool';
 import { PlayerStatisticsManager } from '../database/player-statistics-manager';
-import { HandEvaluator } from '../poker/hand-evaluator';
+import {
+  hammerTiers, handAchievements, historyAchievements, holdsTrips, isDejaVu, isSevenDeuceOffsuit, needsHistory, showdownRanking,
+} from './achievement-checks';
+import type { HandExtras, PastHand } from './achievement-checks';
 import { revealedPlayerIds } from '../poker/state-sanitizer';
 import { postHandResultToChat, postSystemChatMessage } from '../utils/post-hand-result';
 import { formatSevenDeuceBounty } from '../utils/hand-result-formatter';
@@ -106,28 +109,10 @@ export async function saveHandRecord(pool: Pool, record: HandRecord): Promise<bo
   return (result.rowCount ?? 0) > 0;
 }
 
-/** Best showdown hand rank for a winner, for achievements (Hold'em and Omaha only). */
+/** Best showdown hand rank, for achievements (Hold'em, Omaha and high stud). */
 function showdownRank(record: HandRecord, player: HandRecordPlayer): number | null {
-  if (player.folded || !player.cards?.hole?.length || record.board.length < 3) return null;
-  try {
-    const omaha = String(record.variant).startsWith('omaha');
-    const ranking = omaha
-      ? HandEvaluator.getOmahaHandRanking(player.cards.hole, record.board)
-      : HandEvaluator.getHandRanking(player.cards.hole, record.board);
-    return ranking.rank;
-  } catch {
-    return null;
-  }
-}
-
-/** Three or more hole cards of one rank, which Omaha can't use more than two of. */
-function holdsTrips(hole: unknown[] | undefined): boolean {
-  const counts = new Map<string, number>();
-  for (const card of hole || []) {
-    const rank = (card as { rank?: unknown })?.rank;
-    if (typeof rank === 'string') counts.set(rank, (counts.get(rank) || 0) + 1);
-  }
-  return Array.from(counts.values()).some(n => n >= 3);
+  if (player.folded) return null;
+  return showdownRanking(record, player)?.rank ?? null;
 }
 
 /**
@@ -143,10 +128,77 @@ async function awardOnce(pool: Pool, userId: string, type: string, metadata: Rec
   );
 }
 
+// Most hands looked back over for streaks and sessions
+const HISTORY_LIMIT = 500;
+
+/** The player's earlier hands at this table, newest first (this hand included once stored). */
+async function pastHandsAtTable(pool: Pool, roomId: string, userId: string): Promise<PastHand[]> {
+  const result = await pool.query(
+    `SELECT h.id, h.started_at, h.ended_at, h.big_blind, h.variant, p AS me
+     FROM hand_records h CROSS JOIN LATERAL jsonb_array_elements(h.players) p
+     WHERE h.room_id = $1::text AND $2::text = ANY(h.player_ids) AND p->>'id' = $2::text
+     ORDER BY h.ended_at DESC
+     LIMIT ${HISTORY_LIMIT}`,
+    [roomId, userId]
+  );
+  return (result?.rows || []).map((row: any) => {
+    const me = parseJson<HandRecordPlayer>(row.me, {} as HandRecordPlayer);
+    return {
+      handId: row.id,
+      startedAt: row.started_at ? new Date(row.started_at).toISOString() : null,
+      endedAt: new Date(row.ended_at).toISOString(),
+      bigBlind: Number(row.big_blind),
+      variant: row.variant || 'texas-holdem',
+      me: { ...me, startStack: Number(me.startStack), endStack: Number(me.endStack), net: Number(me.net), won: Number(me.won) },
+    };
+  });
+}
+
+/** The players of the table's hand before this one, or null when there isn't one. */
+async function previousHandPlayers(pool: Pool, record: HandRecord): Promise<HandRecordPlayer[] | null> {
+  const result = await pool.query(
+    `SELECT players FROM hand_records WHERE room_id = $1 AND id <> $2 AND ended_at <= $3
+     ORDER BY ended_at DESC LIMIT 1`,
+    [record.roomId, record.id, record.endedAt]
+  );
+  const row = result?.rows?.[0];
+  return row ? parseJson<HandRecordPlayer[]>(row.players, []) : null;
+}
+
+/** How many Hold'em pots this player has won with 7-2 offsuit, this hand included once stored. */
+async function sevenDeuceWins(pool: Pool, userId: string): Promise<number> {
+  const result = await pool.query(
+    `SELECT COUNT(*)::int AS wins
+     FROM hand_records h CROSS JOIN LATERAL jsonb_array_elements(h.players) p
+     WHERE $1::text = ANY(h.player_ids) AND p->>'id' = $1::text
+       AND COALESCE(h.variant, 'texas-holdem') = 'texas-holdem'
+       AND (p->>'won')::numeric > 0
+       AND jsonb_typeof(p->'cards'->'hole') = 'array' AND jsonb_array_length(p->'cards'->'hole') = 2
+       AND p->'cards'->'hole'->0->>'suit' <> p->'cards'->'hole'->1->>'suit'
+       AND ((p->'cards'->'hole'->0->>'rank' = '7' AND p->'cards'->'hole'->1->>'rank' = '2')
+         OR (p->'cards'->'hole'->0->>'rank' = '2' AND p->'cards'->'hole'->1->>'rank' = '7'))`,
+    [userId]
+  );
+  return Number(result?.rows?.[0]?.wins) || 0;
+}
+
+/** Look something up for an achievement; a failed lookup only costs that achievement. */
+async function lookup<T>(what: string, fallback: T, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    console.warn(`[hand-records] Could not look up ${what} for achievements:`, err);
+    return fallback;
+  }
+}
+
 /** Add a finished hand to each player's lifetime statistics and award any achievements. */
-export async function applyHandToStatistics(pool: Pool, record: HandRecord): Promise<void> {
+export async function applyHandToStatistics(pool: Pool, record: HandRecord, extras: HandExtras = {}): Promise<void> {
   const stats = new PlayerStatisticsManager(pool);
   const contested = record.players.filter(p => !p.folded).length >= 2;
+  const previous = String(record.variant || 'texas-holdem') === 'texas-holdem'
+    ? await lookup('the previous hand', null, () => previousHandPlayers(pool, record))
+    : null;
   for (const p of record.players) {
     try {
       const won = p.won > 0;
@@ -177,11 +229,33 @@ export async function applyHandToStatistics(pool: Pool, record: HandRecord): Pro
         if (beaten >= HandRank.StraightFlush) earned.push('beat_straight_flush');
       }
       if (won && String(record.variant).startsWith('omaha') && holdsTrips(p.cards?.hole)) earned.push('omaha_trips');
+      earned.push(...handAchievements(record, p, extras));
+      if (isDejaVu(record, p, previous)) earned.push('deja_vu');
+      if (won && String(record.variant || 'texas-holdem') === 'texas-holdem' && isSevenDeuceOffsuit(p.cards?.hole)) {
+        const wins = await lookup('7-2 wins', 1, () => sevenDeuceWins(pool, p.id));
+        earned.push(...hammerTiers(Math.max(1, wins)));
+      }
+      if (needsHistory(record, p)) {
+        const past = await lookup('earlier hands', [] as PastHand[], () => pastHandsAtTable(pool, record.roomId, p.id));
+        earned.push(...historyAchievements(record, p, past));
+      }
       for (const type of earned) await awardOnce(pool, p.id, type, meta);
     } catch (err) {
       console.warn(`[hand-records] Statistics update failed for ${p.id}:`, err);
     }
   }
+}
+
+/** What the achievements need from the final state that the hand record doesn't keep. */
+export function handExtras(state: TableState): HandExtras {
+  const splash = state.lastSplash;
+  const splashedThisHand = !!splash && typeof state.handStartedAt === 'number' && splash.at >= state.handStartedAt;
+  const runs = state.runItTwice?.results || [];
+  return {
+    hiLo: state.lastHiLoResult || null,
+    runWinners: runs.length > 1 ? runs.map(r => (r.winners || []).map(w => w.playerId)) : undefined,
+    splashedBy: splashedThisHand ? [splash!.playerId] : undefined,
+  };
 }
 
 // Hands this server instance has already finished, so repeated calls for one hand are cheap
@@ -205,7 +279,7 @@ export async function finishHand(tableId: string, state: TableState): Promise<vo
     try {
       const pool = getPool();
       firstToFinish = await saveHandRecord(pool, record);
-      if (firstToFinish) await applyHandToStatistics(pool, record);
+      if (firstToFinish) await applyHandToStatistics(pool, record, handExtras(state));
     } catch (err) {
       // No database (e.g. local runs): still post to chat from this instance
       console.warn('[hand-records] Could not store hand:', err);

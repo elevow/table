@@ -54,6 +54,7 @@ export default apiHandler({ methods: 'GET' }, async (req, res) => {
       allowStraddle: !!config.allowStraddle,
       allowRunItTwice: !!config.allowRunItTwice,
       showAllAtShowdown: !!config.showAllAtShowdown,
+      closed: !!config.closed,
       waitlist: next.waitlist.map(w => ({ playerId: w.playerId, playerName: w.playerName })),
       seatOffer: next.seatOffer,
       seatRequests: hostPermissions.includes('room.approve_seat') ? config.seatRequests || [] : undefined,

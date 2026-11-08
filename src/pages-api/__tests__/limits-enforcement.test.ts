@@ -20,7 +20,11 @@ const mockSeatedAt = jest.fn(async (): Promise<string[]> => []);
 jest.mock('../../lib/shared/game-seats', () => ({ tablesSeatedAt: () => mockSeatedAt() }));
 const mockSeatClaim = jest.fn(async () => ({ status: 200, body: { ok: true } }));
 jest.mock('../../lib/server/seat-actions', () => ({ performSeatClaim: () => mockSeatClaim() }));
-jest.mock('../../lib/server/room-config', () => ({ loadRoom: async () => ({ createdBy: 'owner', configuration: {} }), updateRoomConfig: jest.fn() }));
+jest.mock('../../lib/server/room-config', () => ({
+  ...jest.requireActual('../../lib/server/room-config'),
+  loadRoom: async () => ({ createdBy: 'owner', configuration: {} }),
+  updateRoomConfig: jest.fn(),
+}));
 jest.mock('../../lib/realtime/publisher', () => ({ publishTableEvent: jest.fn(), publishChatMessage: jest.fn() }));
 const mockCreateRoom = jest.fn(async () => ({ id: 'r1' }));
 jest.mock('../../lib/services/game-service', () => ({ GameService: jest.fn(() => ({ createRoom: mockCreateRoom })) }));

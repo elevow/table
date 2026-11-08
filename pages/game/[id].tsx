@@ -2538,7 +2538,7 @@ export default function GamePage() {
               </>
             )}
             <span className="mx-1 h-5 w-px shrink-0 bg-gray-200 dark:bg-white/10 max-sm:hidden sm:ml-auto" aria-hidden="true" />
-            {canStartGame() && !gameStarted && (
+            {canStartGame() && !gameStarted && !tableExtras?.closed && (
               <button
                 onClick={handleStartGame}
                 className="btn btn-primary btn-sm"
@@ -2601,7 +2601,13 @@ export default function GamePage() {
               </button>
             </div>
           )}
-          {gameStarted && tableWaitNotice && pokerGameState?.stage === 'showdown' && (
+          {tableExtras?.closed && (
+            <div className="lg:col-span-3 bg-gray-800 text-white rounded-lg p-3 text-center" role="status">
+              <span className="font-semibold">The host closed this table.</span> No more hands will be dealt.{' '}
+              <Link href="/dashboard" className="underline font-semibold">Back to the lobby</Link>
+            </div>
+          )}
+          {gameStarted && tableWaitNotice && !tableExtras?.closed && pokerGameState?.stage === 'showdown' && (
             <div className="lg:col-span-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-lg p-3 text-sm text-amber-900 dark:text-amber-100" role="status">
               {tableWaitNotice}
             </div>

@@ -30,6 +30,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
   const [kickId, setKickId] = useState<string>('');
   const [turnSeconds, setTurnSeconds] = useState<string>('');
   const [delaySeconds, setDelaySeconds] = useState<string>('');
+  const [confirmClose, setConfirmClose] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const send = async (label: string, body: Record<string, unknown>) => {
@@ -120,6 +121,28 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
               </div>
               <div className="mt-1 text-xs text-gray-600 dark:text-gray-300">Code {extras.inviteCode}: anyone with it can watch and ask to sit.</div>
             </div>
+          )}
+        </div>
+      )}
+
+      {can('room.start') && !extras.closed && (
+        <div className="mb-3">
+          {confirmClose ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20" role="alertdialog" aria-label="Close the table?">
+              <p className="mb-2 text-red-800 dark:text-red-200">
+                Close the table? Any hand in play finishes, then no more hands are dealt and nobody can sit down. This can&apos;t be undone.
+              </p>
+              <div className="flex gap-2">
+                <button className="btn btn-sm bg-red-600 text-white hover:bg-red-700" disabled={!!busy} onClick={() => send('close', { action: 'close-table' }).then(() => setConfirmClose(false))}>
+                  Close table
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setConfirmClose(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button className="btn btn-ghost btn-sm text-red-600 dark:text-red-400" onClick={() => setConfirmClose(true)}>
+              End game and close table
+            </button>
           )}
         </div>
       )}

@@ -123,6 +123,21 @@ describe('POST /api/games/host', () => {
     expect(mockLog).toHaveBeenCalledWith('staff', 'table.kick', 'room', 't1', { action: 'kick', targetId: 'p2' });
   });
 
+  test('the owner can close the table with room.start, which marks it closed', async () => {
+    mockCaller.current = caller('owner', ['room.start']);
+    const r = await call(hostHandler, 'POST', { tableId: 't1', action: 'close-table' });
+    expect(r.status).toBe(200);
+    expect(mockUpdateRoomConfig).toHaveBeenCalledWith('t1', { closed: true, closedAt: expect.any(Number) });
+  });
+
+  test('closing the table needs room.start', async () => {
+    mockCaller.current = caller('owner', ['room.configure']);
+    const r = await call(hostHandler, 'POST', { tableId: 't1', action: 'close-table' });
+    expect(r.status).toBe(403);
+    expect(r.body).toMatchObject({ code: 'PERMISSION_DENIED', permission: 'room.start' });
+    expect(mockUpdateRoomConfig).not.toHaveBeenCalled();
+  });
+
   test('unknown actions are rejected before any permission check', async () => {
     mockCaller.current = caller('owner', []);
     const r = await call(hostHandler, 'POST', { tableId: 't1', action: 'explode' });

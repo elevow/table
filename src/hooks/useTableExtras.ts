@@ -14,6 +14,8 @@ export interface TableExtras {
   allowStraddle: boolean;
   allowRunItTwice: boolean;
   showAllAtShowdown: boolean;
+  // The host closed the table
+  closed: boolean;
   waitlist: Array<{ playerId: string; playerName: string }>;
   seatOffer: { playerId: string; seatNumber: number; expiresAt: number } | null;
   seatRequests?: Array<{ playerId: string; playerName: string; seatNumber: number; requestedAt: number }>;

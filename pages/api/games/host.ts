@@ -17,6 +17,7 @@ import { apiHandler } from '../../../src/lib/api/handler';
 
 type HostAction =
   | { action: 'pause' }
+  | { action: 'close-table' }
   | { action: 'resume' }
   | { action: 'set-blinds'; smallBlind: number; bigBlind: number }
   | { action: 'allow-straddle'; allow: boolean }
@@ -37,6 +38,7 @@ type HostAction =
 const ACTION_PERMISSIONS: Record<HostAction['action'], string> = {
   'pause': 'room.start',
   'resume': 'room.start',
+  'close-table': 'room.start',
   'set-blinds': 'room.configure',
   'allow-straddle': 'room.configure',
   'allow-run-it-twice': 'room.configure',
@@ -58,7 +60,7 @@ const ACTION_PERMISSIONS: Record<HostAction['action'], string> = {
  *
  * Controls for the room's host (its creator): pause and resume, change blinds for the next hand,
  * allow straddles and run it twice, schedule a bomb pot, remove a player, approve who sits down,
- * make the table public or private, and replace a private table's invite link.
+ * make the table public or private, replace a private table's invite link, and close the table.
  * Each needs its host permission; staff with admin.rooms.manage can use them on any table.
  */
 export default apiHandler({ methods: 'POST' }, async (req, res) => {
@@ -87,6 +89,13 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
 
     // Settings that live on the room rather than in a running game
     switch (body.action) {
+      case 'close-table': {
+        // The hand in play finishes; next-hand refuses to deal another, and nobody can sit down
+        await updateRoomConfig(tableId, { closed: true, closedAt: Date.now() });
+        await getPool().query(`UPDATE game_rooms SET status = 'closed' WHERE id = $1`, [tableId]);
+        await publishTableEvent(tableId, { type: 'closed' }).catch(() => {});
+        return res.status(200).json({ ok: true });
+      }
       case 'set-visibility': {
         const makePrivate = !!body.private;
         // Hosts need room.create_private to hide a table; staff acting through admin.rooms.manage don't

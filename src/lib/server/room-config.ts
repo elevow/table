@@ -29,7 +29,17 @@ export interface TableExtrasConfig {
   seatRequests?: SeatRequest[];
   waitlist?: WaitlistEntry[];
   seatOffer?: SeatOffer | null;
+  // The host closed the table: the hand in play finishes, then nothing more is dealt and nobody sits
+  closed?: boolean;
+  closedAt?: number;
 }
+
+/** Whether the host has closed this table, from its configuration. */
+export function isTableClosed(config: unknown): boolean {
+  return !!config && typeof config === 'object' && (config as TableExtrasConfig).closed === true;
+}
+
+export const TABLE_CLOSED_RESPONSE = { error: 'The host closed this table', code: 'TABLE_CLOSED' } as const;
 
 /** How long a waitlisted player has to take a seat offered to them. */
 export const SEAT_OFFER_MS = 60_000;

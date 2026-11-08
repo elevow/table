@@ -81,6 +81,7 @@ export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 
          FROM game_rooms r LEFT JOIN users u ON u.id = r.created_by
          WHERE COALESCE(r.configuration->>'visibility', 'public') <> 'private'
            AND COALESCE(r.status, 'waiting') <> 'closed'
+           AND NOT COALESCE((r.configuration->>'closed')::boolean, false)
            AND (r.created_at > NOW() - INTERVAL '${EMPTY_ROOM_HOURS} hours'
                 OR EXISTS (SELECT 1 FROM jsonb_each(${SEATS}) s WHERE jsonb_typeof(s.value) = 'object'))
          ORDER BY r.created_at DESC
@@ -99,6 +100,7 @@ export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 
          FROM game_rooms r LEFT JOIN users u ON u.id = r.created_by
          WHERE r.configuration->>'visibility' = 'private'
            AND COALESCE(r.status, 'waiting') <> 'closed'
+           AND NOT COALESCE((r.configuration->>'closed')::boolean, false)
            AND (r.created_by::text = $1
                 OR (jsonb_typeof(r.configuration->'members') = 'array' AND r.configuration->'members' ? $1))
          ORDER BY r.created_at DESC

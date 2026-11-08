@@ -4,6 +4,7 @@ import { getUserAccess, hasPermission } from '../../../../src/lib/auth/access-co
 import { countSeatedInConfig } from '../../../../src/lib/shared/game-seats';
 import { BETTING_MODE_LABELS, isBettingMode, variantLabel } from '../../../../src/lib/poker/variant-rules';
 import { apiHandler } from '../../../../src/lib/api/handler';
+import { envFlag } from '../../../../src/lib/config/env';
 
 export interface LobbyTable {
   id: string;
@@ -66,6 +67,10 @@ export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 
   try {
     const user = await getSessionUser(req);
     const access = await getUserAccess(user);
+    // The e2e run has no tables to list
+    if (envFlag('USE_MOCK_DB')) {
+      return res.status(200).json({ open: [], mine: [], canView: hasPermission(access, 'lobby.view') });
+    }
     const userId = user?.id ?? null;
     const pool = getPool();
 

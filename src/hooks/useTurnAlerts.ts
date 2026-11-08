@@ -49,6 +49,27 @@ function playTones(freqs: number[], durationMs = 140) {
   }
 }
 
+const NOTIFICATION_TITLE = "It's your turn";
+
+/** True when the player isn't looking at the table, including when another app is in front. */
+function awayFromTable(): boolean {
+  return typeof document !== 'undefined' && (document.hidden || !document.hasFocus());
+}
+
+function showTurnNotification() {
+  // Without renotify, a new turn silently replaces an unread notification with the same tag
+  const options = { body: 'Your poker table is waiting for you.', tag: 'table-turn', renotify: true } as NotificationOptions;
+  try {
+    const n = new Notification(NOTIFICATION_TITLE, options);
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch {
+    // Android browsers only allow notifications from a service worker
+    navigator.serviceWorker?.getRegistration()
+      ?.then(registration => registration?.showNotification(NOTIFICATION_TITLE, { ...options, data: { url: window.location.href } }))
+      .catch(() => {});
+  }
+}
+
 export interface TurnAlertSettings {
   soundEnabled: boolean;
   setSoundEnabled: (on: boolean) => void;
@@ -59,8 +80,8 @@ export interface TurnAlertSettings {
 }
 
 /**
- * Alerts the player when it becomes their turn (a chime, plus a browser notification if the tab
- * is in the background) and once more when their time is running low.
+ * Alerts the player when it becomes their turn (a chime, plus a browser notification and a note
+ * in the tab title if they're away from the table) and once more when their time is running low.
  */
 export function useTurnAlerts(isMyTurn: boolean, remainingMs: number | null, turnKey: string | null): TurnAlertSettings {
   const [soundEnabled, setSoundState] = useState(true);
@@ -96,22 +117,30 @@ export function useTurnAlerts(isMyTurn: boolean, remainingMs: number | null, tur
     }).catch(() => {});
   }, []);
 
-  // Your turn: chime, and notify if the player is looking at another tab
+  // Your turn: chime, and notify if the player is looking at another tab or app
   const wasMyTurnRef = useRef(false);
   useEffect(() => {
     const started = isMyTurn && !wasMyTurnRef.current;
     wasMyTurnRef.current = isMyTurn;
     if (!started) return;
     if (soundEnabled) playTones([523, 784]);
-    if (notifyEnabled && typeof document !== 'undefined' && document.hidden) {
-      try {
-        const n = new Notification("It's your turn", { body: 'Your poker table is waiting for you.', tag: 'table-turn' });
-        n.onclick = () => { window.focus(); n.close(); };
-      } catch {
-        // Some browsers only allow notifications from a service worker
-      }
-    }
+    if (notifyEnabled && awayFromTable()) showTurnNotification();
   }, [isMyTurn, soundEnabled, notifyEnabled]);
+
+  // The tab title needs no permission, so it reaches players who never turned on notifications
+  useEffect(() => {
+    if (!isMyTurn) return;
+    const title = document.title;
+    const update = () => { document.title = awayFromTable() ? `Your turn - ${title}` : title; };
+    update();
+    window.addEventListener('focus', update);
+    window.addEventListener('blur', update);
+    return () => {
+      window.removeEventListener('focus', update);
+      window.removeEventListener('blur', update);
+      document.title = title;
+    };
+  }, [isMyTurn]);
 
   // Time running low: warn once per turn
   const warnedKeyRef = useRef<string | null>(null);

@@ -55,6 +55,15 @@ test.describe('Removed and signed-in-only routes', () => {
     }
   });
 
+  test('the lobby loads', async () => {
+    const api = await anonymous();
+    try {
+      expect((await api.get('/api/games/rooms/lobby')).status()).toBe(200);
+    } finally {
+      await api.dispose();
+    }
+  });
+
   test('friends routes turn away signed-out callers', async () => {
     const api = await anonymous();
     try {

@@ -110,6 +110,22 @@ describe('access control', () => {
     expect([...guest.permissions].sort()).toEqual([...DEFAULT_ROLE_GRANTS.guest].sort());
   });
 
+  test('only reports a role table failure when a real database is expected', async () => {
+    mockQuery.mockRejectedValue(new Error('No database URL found'));
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => {});
+    process.env.USE_MOCK_DB = 'true';
+    try {
+      const quiet = await getUserAccess({ id: 'u1', email: 'p@example.com' });
+      expect(logged).not.toHaveBeenCalled();
+      expect([...quiet.permissions].sort()).toEqual([...DEFAULT_ROLE_GRANTS.player].sort());
+    } finally {
+      delete process.env.USE_MOCK_DB;
+    }
+    await getUserAccess({ id: 'u2', email: 'q@example.com' });
+    expect(logged).toHaveBeenCalledWith('Error loading user access:', expect.any(Error));
+    logged.mockRestore();
+  });
+
   test('limits come from the most generous role unless the user has their own', async () => {
     mockDb({
       roleRows: [{ key: 'player', rank: 10, permission: 'chat.send' }, { key: 'host', rank: 20, permission: null }],

@@ -1,6 +1,7 @@
 import { getPool } from '../../../src/lib/database/pool';
 import { rateLimit } from '../../../src/lib/api/rate-limit';
 import { apiHandler } from '../../../src/lib/api/handler';
+import { envFlag } from '../../../src/lib/config/env';
 
 export default apiHandler({ methods: 'POST' }, async (req, res) => {
   // Rate limiting
@@ -96,7 +97,8 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       // Do not end the shared pool
     }
   } catch (error) {
-    console.error('Error validating room code:', error);
+    // The e2e run has no database to check against
+    if (!envFlag('USE_MOCK_DB')) console.error('Error validating room code:', error);
     return res.status(500).json({ 
       error: 'Internal server error',
       message: 'Failed to validate room code'

@@ -8,7 +8,7 @@ export const BASE_TURN_MS = 30_000;
 
 /** Table settings the host chooses: limits and defaults. */
 export const MIN_TURN_SECONDS = 10;
-export const MAX_TURN_SECONDS = 180;
+export const MAX_TURN_SECONDS = 300;
 export const DEFAULT_TIME_BANKS = 2;
 export const MAX_TIME_BANKS = 20;
 export const DEFAULT_TIME_BANK_SECONDS = 30;

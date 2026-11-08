@@ -258,7 +258,6 @@ const Profile: NextPage = () => {
           <h2 className="eyebrow mb-2 px-1">Settings</h2>
           <div className="surface divide-y divide-gray-100 overflow-hidden dark:divide-white/[0.05]">
             <Row label="Account settings" onClick={() => router.push('/account-settings')} />
-            <Row label="Privacy settings" />
             <Row
               label="Theme"
               onClick={toggleTheme}

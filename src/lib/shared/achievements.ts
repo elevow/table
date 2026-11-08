@@ -19,6 +19,10 @@ export const ACHIEVEMENTS: AchievementInfo[] = [
   { type: 'double_up', label: 'Double Up', description: 'Double your stack in a single hand', icon: '⏫' },
   { type: 'quads_plus', label: 'Quad Squad', description: 'Win at showdown with four of a kind or better', icon: '🎰' },
   { type: 'bomb_pot_win', label: 'Demolition', description: 'Win a bomb pot', icon: '💣' },
+  { type: 'royal_flush', label: 'Royal Treatment', description: 'Win at showdown with a royal flush', icon: '👑' },
+  { type: 'beat_quads', label: 'Quad Killer', description: 'Beat four of a kind or better at showdown', icon: '🔨' },
+  { type: 'beat_straight_flush', label: 'Giant Slayer', description: 'Beat a straight flush at showdown', icon: '🗡️' },
+  { type: 'omaha_trips', label: 'Against the Odds', description: 'Win an Omaha hand holding three of a kind in your hole cards', icon: '🎲' },
 ];
 
 export const ACHIEVEMENTS_BY_TYPE: Record<string, AchievementInfo> = Object.fromEntries(

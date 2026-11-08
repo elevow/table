@@ -10,6 +10,8 @@ import Avatar from '../../src/components/Avatar';
 import { PotLimitCalculator } from '../../src/lib/poker/pot-limit';
 import { HandEvaluator } from '../../src/lib/poker/hand-evaluator';
 import { OutsCalculator } from '../../src/lib/poker/outs-calculator';
+import { describeImprovement, improvementOnLastCard, lastCardDrawFor } from '../../src/lib/poker/improvement-odds';
+import { runItVoters, tallyRunItVotes } from '../../src/lib/shared/run-it-vote';
 import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 import { useCheckTurn } from '../../src/hooks/useCheckTurn';
@@ -35,6 +37,7 @@ import TimeBankBadge from '../../src/components/TimeBankBadge';
 import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
 import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
+import SplashAnimation from '../../src/components/SplashAnimation';
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
 import { ALL_VARIANTS, VARIANT_LABELS, gameLabel, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
@@ -928,6 +931,11 @@ export default function GamePage() {
   };
 
   // Poker action handlers
+  // Splash the pot: once per session, the next bet or raise lands with a show for the table
+  const [splashArmed, setSplashArmed] = useState(false);
+  const splashArmedRef = useRef(false);
+  splashArmedRef.current = splashArmed;
+
   const handlePokerAction = useCallback(async (action: string, amount?: number) => {
     if (!pokerGameState || !playerId) {
       console.warn('Cannot perform action: missing game state or player ID');
@@ -948,13 +956,16 @@ export default function GamePage() {
 
     pendingActionRef.current = true;
     console.log(`Performing ${action}${amount ? ` for ${amount}` : ''}`);
-    
+    const splash = splashArmedRef.current && (action === 'bet' || action === 'raise');
+    if (splash) setSplashArmed(false);
+
     try {
       const response = await api.post('/api/games/action', {
         tableId: id,
         playerId,
         action,
         amount,
+        ...(splash ? { splash: true } : {}),
         // The decision this click answers; the server refuses it if the game has moved on
         expectedTurnSeq: typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
       });
@@ -1163,6 +1174,29 @@ export default function GamePage() {
     }
   }, [pokerGameState, playerId, getStudCardsForPlayer]);
 
+  // With one card to come: the chance it improves your hand, from the cards you can see
+  const myLastCardOdds = useMemo((): string | null => {
+    if (!pokerGameState || !playerId || pokerGameState.stage === 'showdown') return null;
+    const me = pokerGameState.players?.find((p: any) => p.id === playerId);
+    if (!me || me.isFolded) return null;
+    const variant = pokerGameState.variant;
+    const stud = isStudGame(variant);
+    const board: Card[] = stud || !Array.isArray(pokerGameState.communityCards) ? [] : pokerGameState.communityCards;
+    let mine: Card[];
+    let seen: Card[] = [];
+    if (stud) {
+      const own = getStudCardsForPlayer(playerId);
+      mine = [...own.down, ...own.up];
+      seen = (pokerGameState.players || []).filter((p: any) => p.id !== playerId).flatMap((p: any) => getStudCardsForPlayer(p.id).up);
+    } else {
+      mine = Array.isArray(me.holeCards) ? me.holeCards : [];
+    }
+    const when = lastCardDrawFor(variant, { board: board.length, mine: mine.length });
+    if (!when) return null;
+    const odds = improvementOnLastCard({ mine, board, seen, omaha: isOmahaVariant(variant) });
+    return odds ? describeImprovement(odds, when) : null;
+  }, [pokerGameState, playerId, getStudCardsForPlayer]);
+
   // Defensive: compute remaining non-folded players from current state
   const getActiveNonFoldedPlayers = useCallback(() => {
     if (!pokerGameState?.players) return [] as any[];
@@ -1318,10 +1352,12 @@ export default function GamePage() {
 
   // --- Run It Twice (RIT) helpers ---
   const runItTwicePrompt = pokerGameState?.runItTwicePrompt || null;
-  const isRunItTwicePromptOwner = !!runItTwicePrompt && runItTwicePrompt.playerId === playerId;
-  const runItTwicePromptOwnerName = runItTwicePrompt ? getPlayerLabel(runItTwicePrompt.playerId) : null;
-  const runItTwicePromptTieNames = runItTwicePrompt?.tiedWith
-    ? runItTwicePrompt.tiedWith
+  // Everyone still in votes; it runs more than once only if they all agree
+  const runItVoterIds: string[] = runItTwicePrompt ? runItVoters(runItTwicePrompt) : [];
+  const myRunItVote: number | undefined = runItTwicePrompt?.votes?.[playerId];
+  const canVoteRunIt = !!runItTwicePrompt && runItVoterIds.includes(playerId) && myRunItVote === undefined;
+  const runItWaitingNames: string[] = runItTwicePrompt
+    ? tallyRunItVotes(runItVoterIds, runItTwicePrompt.votes || {}).waitingFor
         .map((id: string) => getPlayerLabel(id))
         .filter((name: string | null): name is string => !!name)
     : [];
@@ -2707,6 +2743,11 @@ export default function GamePage() {
                  }}>
               {/* Inner felt playing surface */}
               <div className="table-felt absolute inset-[14px] rounded-full">
+                <SplashAnimation
+                  splash={pokerGameState?.lastSplash}
+                  playerName={pokerGameState?.lastSplash ? getPlayerLabel(pokerGameState.lastSplash.playerId) : null}
+                  formatAmount={(n) => showStackInBB ? formatChips(n, pokerGameState?.bigBlind || null, true) : `$${n}`}
+                />
                 
                 {/* Player positions - evenly spaced around table */}
                 {getRotatedSeatPositions().map((seatData) => 
@@ -2883,6 +2924,25 @@ export default function GamePage() {
               })()}
               {/* Pot Odds Display */}
               {renderPotOdds()}
+              {!myBringInPending && !(pokerGameState?.splashUsedBy || []).includes(playerId) && (
+                <div className="mb-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSplashArmed(a => !a)}
+                    aria-pressed={splashArmed}
+                    className={`btn btn-sm ${splashArmed ? 'bg-amber-500 text-white hover:bg-amber-600' : 'btn-ghost'}`}
+                    title="Your next bet or raise lands with chips raining onto the table. Once per session."
+                  >
+                    {splashArmed ? 'Splash ready' : 'Splash the pot'}
+                  </button>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {splashArmed ? 'Your next bet or raise splashes the pot.' : 'Once per session.'}
+                  </span>
+                </div>
+              )}
+              {showHandValue && myLastCardOdds && (
+                <div className="mb-3 text-sm text-gray-700 dark:text-gray-200" aria-label="Chance to improve">{myLastCardOdds}</div>
+              )}
               {myBringInPending ? (
                 <div className="flex flex-col gap-2">
                   <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -3181,28 +3241,25 @@ export default function GamePage() {
           )}
 
           {/* Run It Twice decision panel for the selected player */}
-          {gameStarted && pokerGameState && runItTwicePrompt && isRunItTwicePromptOwner && !pokerGameState.runItTwice?.enabled && (
+          {gameStarted && pokerGameState && runItTwicePrompt && canVoteRunIt && !pokerGameState.runItTwice?.enabled && (
             <div className="lg:col-span-2 bg-purple-50 dark:bg-purple-900/30 border border-purple-300 dark:border-purple-600 rounded-lg shadow-md p-4 mt-4" aria-live="polite">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="inline-block px-2 py-0.5 text-xs rounded bg-purple-600 text-white">RIT</span>
-                  <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100">Run It Twice Decision</h3>
+                  <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100">Run It Twice Vote</h3>
                 </div>
                 <span className="text-xs uppercase tracking-wide text-purple-700 dark:text-purple-300">Hand paused</span>
               </div>
               <div className="mt-3 text-sm text-purple-900 dark:text-purple-100 space-y-2">
-                <p>You currently have the lowest revealed hand and must choose how the board finishes.</p>
+                <p>Everyone still in votes on how the board finishes. It runs more than once only if everyone agrees; a vote for a single run, or the clock running out, means one run.</p>
                 {runItTwiceHighestHandDescription && (
                   <p className="text-[13px] text-purple-800 dark:text-purple-200">
                     Current best: <span className="font-semibold">{runItTwiceHighestHandDescription}</span>
                   </p>
                 )}
-                {!!runItTwicePromptTieNames.length && (
-                  <p className="text-[13px] text-purple-800 dark:text-purple-200">
-                    Lowest hand tie with {runItTwicePromptTieNames.join(', ')}. You were randomly selected to decide.
-                  </p>
+                {runItWaitingNames.length > 1 && (
+                  <p className="text-[12px] text-purple-700 dark:text-purple-200">Still to vote: {runItWaitingNames.join(', ')}.</p>
                 )}
-                <p className="text-[12px] text-purple-700 dark:text-purple-200">Choose a number of runs to resume the hand.</p>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -3225,38 +3282,27 @@ export default function GamePage() {
           )}
 
           {/* Run It Twice waiting banner for other players */}
-          {gameStarted && pokerGameState && runItTwicePrompt && !isRunItTwicePromptOwner && !pokerGameState.runItTwice?.enabled && (
+          {gameStarted && pokerGameState && runItTwicePrompt && !canVoteRunIt && !pokerGameState.runItTwice?.enabled && (
             <div className="lg:col-span-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-300 dark:border-purple-700 rounded-lg shadow-md p-4 mt-4" aria-live="polite">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100 flex items-center gap-2">
                   <span className="inline-block px-2 py-0.5 text-xs rounded bg-purple-600 text-white">RIT</span>
-                  Waiting on Run It Twice decision
+                  Waiting on the Run It Twice vote
                 </h3>
                 <span className="text-xs uppercase tracking-wide text-purple-700 dark:text-purple-300">Hand paused</span>
               </div>
               <div className="text-sm text-purple-900 dark:text-purple-100 space-y-2">
                 <p>
-                  Action is paused while
-                  {' '}
-                  <span className="font-semibold">{runItTwicePromptOwnerName || 'another player'}</span>
-                  {' '}
-                  chooses how many boards to run after the all-in showdown.
+                  Action is paused while {runItWaitingNames.length ? <span className="font-semibold">{runItWaitingNames.join(', ')}</span> : 'the table'} vote{runItWaitingNames.length === 1 ? 's' : ''} on running the board more than once.
+                  {typeof myRunItVote === 'number' && ` You voted to ${myRunItVote <= 1 ? 'run it once' : myRunItVote === 2 ? 'run it twice' : `run it ${myRunItVote} times`}.`}
                 </p>
                 {runItTwiceHighestHandDescription && (
                   <p className="text-[13px] text-purple-800 dark:text-purple-200">
                     Current best hand: <span className="font-semibold">{runItTwiceHighestHandDescription}</span>
                   </p>
                 )}
-                {!!runItTwicePromptTieNames.length && (
-                  <p className="text-[13px] text-purple-800 dark:text-purple-200">
-                    Tie detected between {runItTwicePromptTieNames.join(', ')}; a random picker selected
-                    {' '}
-                    {runItTwicePromptOwnerName || 'that player'}
-                    {' '}to decide.
-                  </p>
-                )}
                 <p className="text-[12px] text-purple-700 dark:text-purple-300">
-                  You don’t need to act—once the decision is made, the remaining boards will be dealt automatically.
+                  It runs more than once only if everyone agrees. Once the vote is settled, the remaining boards are dealt automatically.
                 </p>
               </div>
             </div>

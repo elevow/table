@@ -4,7 +4,9 @@ import { PlayerStatisticsManager } from '../../../src/lib/database/player-statis
 import { PLAYER_HANDS_SQL } from '../../../src/lib/server/hidden-hands';
 import { groupSessions, type ProfitHand } from '../../../src/lib/shared/profit-sessions';
 import { apiHandler } from '../../../src/lib/api/handler';
+import { computeHudStats, type HudStats } from '../../../src/lib/shared/hud-stats';
 import { PROFIT_HAND_LIMIT } from './profit';
+import { HUD_HAND_LIMIT } from './hud';
 
 export interface StatsSummary {
   handsPlayed: number;
@@ -15,6 +17,8 @@ export interface StatsSummary {
   losses: number;
   sessions: number;
   timePlayedMs: number;
+  // How you play (VPIP, PFR, 3-bet, aggression) over your most recent hands, as the HUD shows others
+  hud: HudStats;
 }
 
 // This player's net in one hand, read out of the players list so nobody's cards leave the database
@@ -33,7 +37,7 @@ export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 
 
   try {
     const pool = getPool();
-    const [record, totals, recent] = await Promise.all([
+    const [record, totals, recent, played] = await Promise.all([
       new PlayerStatisticsManager(pool).getByUserId(userId),
       pool.query(
         `SELECT COALESCE(SUM(GREATEST(net, 0)), 0) AS winnings, COALESCE(SUM(GREATEST(-net, 0)), 0) AS losses
@@ -46,6 +50,14 @@ export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 
          ORDER BY ended_at DESC
          LIMIT $2`,
         [userId, PROFIT_HAND_LIMIT]
+      ),
+      // Only the action lists, never cards
+      pool.query(
+        `SELECT actions, variant, kind FROM hand_records
+         WHERE ${PLAYER_HANDS_SQL}
+         ORDER BY ended_at DESC
+         LIMIT $2`,
+        [userId, HUD_HAND_LIMIT]
       ),
     ]);
 
@@ -67,6 +79,10 @@ export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 
       losses: Number(totals.rows[0]?.losses) || 0,
       sessions: sessions.length,
       timePlayedMs: sessions.reduce((sum, s) => sum + s.durationMs, 0),
+      hud: computeHudStats(played.rows.map(row => {
+        const actions = typeof row.actions === 'string' ? safeParse(row.actions) : row.actions;
+        return { actions: Array.isArray(actions) ? actions : [], variant: row.variant, kind: row.kind };
+      }), userId),
     };
     return res.status(200).json(summary);
   } catch (err) {
@@ -74,3 +90,7 @@ export default apiHandler({ methods: 'GET', rateLimit: { windowMs: 60_000, max: 
     return res.status(500).json({ error: 'Unable to load your statistics' });
   }
 });
+
+function safeParse(s: string): unknown {
+  try { return JSON.parse(s); } catch { return []; }
+}

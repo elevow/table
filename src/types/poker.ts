@@ -144,6 +144,9 @@ export interface TableState {
   allowRunItTwice?: boolean;
   // Table rule: everyone still in at a contested showdown shows their cards; nobody mucks
   showAllAtShowdown?: boolean;
+  // Players who have splashed the pot this session (once each), and the latest splash, for the show
+  splashUsedBy?: string[];
+  lastSplash?: { playerId: string; amount: number; at: number };
   // The straddle posted this hand, if any
   straddle?: { playerId: string; amount: number };
   // Next hand is a bomb pot: everyone antes this many big blinds and betting starts on the flop
@@ -301,6 +304,7 @@ export interface RunItTwicePrompt {
   handDescriptionsByPlayer?: Record<string, string>; // per-player best-hand description for eligible players
   eligiblePlayerIds: string[]; // players considered when determining lowest hand
   tiedWith?: string[]; // other players with identical strength when tie-breaking randomly
+  votes?: Record<string, number>; // runs each player has voted for so far (1 = run it once)
 }
 
 // US-032: Disconnection handling

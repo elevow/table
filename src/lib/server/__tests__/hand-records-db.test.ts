@@ -191,6 +191,51 @@ describe('hand records storage', () => {
       expect(awarded()).not.toContain('quads_plus');
     });
 
+    it('awards a royal flush, and beating four of a kind or a straight flush at showdown', async () => {
+      const board = [c('10', 'spades'), c('J', 'spades'), c('Q', 'spades'), c('9', 'hearts'), c('9', 'diamonds')];
+      await applyHandToStatistics({ query } as any, record({
+        board,
+        players: [
+          player({ cards: { hole: [c('A', 'spades'), c('K', 'spades')] } }),
+          player({ id: 'b', won: 0, net: -100, cards: { hole: [c('9', 'spades'), c('8', 'spades')] } }),
+        ],
+      }));
+      expect(awarded()).toEqual(expect.arrayContaining(['royal_flush', 'beat_quads', 'beat_straight_flush']));
+    });
+
+    it('awards beating four of a kind only to the winner, and not for a split pot', async () => {
+      const board = [c('Q', 'hearts'), c('Q', 'diamonds'), c('2', 'clubs'), c('2', 'diamonds'), c('7', 'spades')];
+      // a's queens beat b's deuces: four of a kind against four of a kind
+      const deuces = player({ id: 'b', won: 0, net: -100, cards: { hole: [c('2', 'hearts'), c('2', 'spades')] } });
+      const queens = player({ cards: { hole: [c('Q', 'clubs'), c('Q', 'spades')] } });
+      await applyHandToStatistics({ query } as any, record({ board, players: [queens, deuces] }));
+      expect(query.mock.calls.filter(call => call[1][1] === 'beat_quads').map(call => call[1][0])).toEqual(['a']);
+
+      query.mockClear();
+      await applyHandToStatistics({ query } as any, record({ board, players: [queens, { ...deuces, won: 100 }] }));
+      expect(awarded()).not.toContain('beat_quads');
+    });
+
+    it('awards winning Omaha while holding three of a kind', async () => {
+      await applyHandToStatistics({ query } as any, record({
+        variant: 'omaha',
+        players: [
+          player({ cards: { hole: [c('8', 'hearts'), c('8', 'diamonds'), c('8', 'clubs'), c('4', 'clubs')] } }),
+          player({ id: 'b', won: 0, net: -100, cards: { hole: [c('K', 'hearts'), c('Q', 'diamonds'), c('5', 'clubs'), c('6', 'clubs')] } }),
+        ],
+      }));
+      expect(awarded()).toContain('omaha_trips');
+
+      query.mockClear();
+      await applyHandToStatistics({ query } as any, record({
+        players: [
+          player({ cards: { hole: [c('8', 'hearts'), c('8', 'diamonds')] } }),
+          player({ id: 'b', won: 0, net: -100 }),
+        ],
+      }));
+      expect(awarded()).not.toContain('omaha_trips');
+    });
+
     it('keeps going when one player fails', async () => {
       updateStats.mockRejectedValueOnce(new Error('db down'));
       await applyHandToStatistics({ query } as any, record());

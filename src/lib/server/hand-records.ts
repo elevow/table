@@ -120,6 +120,16 @@ function showdownRank(record: HandRecord, player: HandRecordPlayer): number | nu
   }
 }
 
+/** Three or more hole cards of one rank, which Omaha can't use more than two of. */
+function holdsTrips(hole: unknown[] | undefined): boolean {
+  const counts = new Map<string, number>();
+  for (const card of hole || []) {
+    const rank = (card as { rank?: unknown })?.rank;
+    if (typeof rank === 'string') counts.set(rank, (counts.get(rank) || 0) + 1);
+  }
+  return Array.from(counts.values()).some(n => n >= 3);
+}
+
 /**
  * Award an achievement the first time a player earns it. The parameters are cast because each is
  * used twice, as a selected value and against a column, and Postgres refuses to guess one type.
@@ -158,7 +168,15 @@ export async function applyHandToStatistics(pool: Pool, record: HandRecord): Pro
       if (won && contested) {
         const rank = showdownRank(record, p);
         if (rank !== null && rank >= HandRank.FourOfAKind) earned.push('quads_plus');
+        if (rank === HandRank.RoyalFlush) earned.push('royal_flush');
+        // The best hand among opponents who reached showdown and won nothing
+        const beaten = Math.max(0, ...record.players
+          .filter(o => o.id !== p.id && !o.folded && !(o.won > 0))
+          .map(o => showdownRank(record, o) ?? 0));
+        if (beaten >= HandRank.FourOfAKind) earned.push('beat_quads');
+        if (beaten >= HandRank.StraightFlush) earned.push('beat_straight_flush');
       }
+      if (won && String(record.variant).startsWith('omaha') && holdsTrips(p.cards?.hole)) earned.push('omaha_trips');
       for (const type of earned) await awardOnce(pool, p.id, type, meta);
     } catch (err) {
       console.warn(`[hand-records] Statistics update failed for ${p.id}:`, err);

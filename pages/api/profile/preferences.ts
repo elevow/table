@@ -6,7 +6,7 @@ import { apiHandler } from '../../../src/lib/api/handler';
 
 /**
  * GET /api/profile/preferences -> { display }
- * PUT /api/profile/preferences { display: { highContrastCards?, showPotOdds?, showStackInBB? } } -> { display }
+ * PUT /api/profile/preferences { display: { highContrastCards?, showPotOdds?, showStackInBB?, showHandValue? } } -> { display }
  *
  * The signed-in user's table display settings, which every table starts from. A PUT changes only
  * the settings it sends.

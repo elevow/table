@@ -1,5 +1,5 @@
 import { PokerEngine } from '../poker-engine';
-import { bankTimeMs, clampSetting, turnTimeMs } from '../../shared/turn-clock';
+import { bankTimeMs, clampSetting, handDelayMs, turnTimeMs } from '../../shared/turn-clock';
 
 const mk = (id: string, position: number): any => ({
   id, name: id, position, stack: 1000, currentBet: 0, hasActed: false, isFolded: false, isAllIn: false, timeBank: 30,
@@ -75,6 +75,16 @@ describe('table clock settings', () => {
     expect(engine.getState().players[0].timeBanks).toBe(20);
     expect(engine.getState().timeBankSeconds).toBe(120);
   });
+
+  it('keeps the pause between hands within its limits', () => {
+    const engine = table();
+    engine.configureClock({ handDelaySeconds: 12 });
+    expect(engine.getState().handDelayMs).toBe(12_000);
+    engine.setHandDelay(1);
+    expect(engine.getState().handDelayMs).toBe(3_000);
+    engine.setHandDelay(600);
+    expect(engine.getState().handDelayMs).toBe(60_000);
+  });
 });
 
 describe('host adjusting time banks', () => {
@@ -115,6 +125,8 @@ describe('host adjusting time banks', () => {
 describe('clock helpers', () => {
   it('fall back to the defaults and to legacy seconds', () => {
     expect(turnTimeMs({})).toBe(30_000);
+    expect(handDelayMs({})).toBe(5_000);
+    expect(handDelayMs({ handDelayMs: 20_000 })).toBe(20_000);
     expect(bankTimeMs({ timeBank: 12 }, {})).toBe(12_000);
     expect(bankTimeMs({ timeBanks: 3, timeBank: 12 }, { timeBankSeconds: 10 })).toBe(30_000);
     expect(clampSetting('abc', 1, 5, 3)).toBe(3);

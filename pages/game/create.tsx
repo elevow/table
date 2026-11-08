@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import {
   BASE_TURN_MS, DEFAULT_TIME_BANKS, DEFAULT_TIME_BANK_SECONDS, MAX_TIME_BANKS, MAX_TIME_BANK_SECONDS,
   MAX_TURN_SECONDS, MIN_TIME_BANK_SECONDS, MIN_TURN_SECONDS, clampSetting,
+  DEFAULT_HAND_DELAY_SECONDS, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS,
 } from '../../src/lib/shared/turn-clock';
 
 const DEFAULT_TURN_SECONDS = BASE_TURN_MS / 1000;
@@ -32,9 +33,11 @@ export default function CreateGameRoomPage() {
   const [rebuyAmount, setRebuyAmount] = useState(20);
   const [buyIn, setBuyIn] = useState(1000);
   const [allowRunItTwice, setAllowRunItTwice] = useState(false);
+  const [showAllAtShowdown, setShowAllAtShowdown] = useState(false);
   const [turnTimeSeconds, setTurnTimeSeconds] = useState(DEFAULT_TURN_SECONDS);
   const [timeBanks, setTimeBanks] = useState(DEFAULT_TIME_BANKS);
   const [timeBankSeconds, setTimeBankSeconds] = useState(DEFAULT_TIME_BANK_SECONDS);
+  const [handDelaySeconds, setHandDelaySeconds] = useState(DEFAULT_HAND_DELAY_SECONDS);
   // Table options that are off unless set: antes and the 7-2 bounty, in chips
   const [ante, setAnte] = useState(0);
   const [sevenDeuceBounty, setSevenDeuceBounty] = useState(0);
@@ -114,9 +117,11 @@ export default function CreateGameRoomPage() {
             rebuyAmount: numberOfRebuys !== 0 ? rebuyAmount : undefined,
             buyIn,
             allowRunItTwice,
+            showAllAtShowdown,
             turnTimeSeconds: clampSetting(turnTimeSeconds, MIN_TURN_SECONDS, MAX_TURN_SECONDS, DEFAULT_TURN_SECONDS),
             timeBanks: clampSetting(timeBanks, 0, MAX_TIME_BANKS, DEFAULT_TIME_BANKS),
             timeBankSeconds: clampSetting(timeBankSeconds, MIN_TIME_BANK_SECONDS, MAX_TIME_BANK_SECONDS, DEFAULT_TIME_BANK_SECONDS),
+            handDelaySeconds: clampSetting(handDelaySeconds, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS),
             ante: ante > 0 ? ante : undefined,
             sevenDeuceBounty: sevenDeuceBounty > 0 ? sevenDeuceBounty : undefined,
             mixedGames: variant === 'mixed' ? mixedGames : undefined,
@@ -445,6 +450,19 @@ export default function CreateGameRoomPage() {
             <p className="hint">Per decision, {MIN_TURN_SECONDS}–{MAX_TURN_SECONDS}s.</p>
           </div>
           <div>
+            <label className="label" htmlFor="hand-delay">Time between hands (seconds)</label>
+            <input
+              id="hand-delay"
+              type="number"
+              min={MIN_HAND_DELAY_SECONDS}
+              max={MAX_HAND_DELAY_SECONDS}
+              className="input"
+              value={handDelaySeconds}
+              onChange={e => setHandDelaySeconds(Number(e.target.value))}
+            />
+            <p className="hint">Pause to see how a hand ended, {MIN_HAND_DELAY_SECONDS}–{MAX_HAND_DELAY_SECONDS}s.</p>
+          </div>
+          <div>
             <label className="label" htmlFor="time-banks">Time banks per player</label>
             <input
               id="time-banks"
@@ -522,6 +540,18 @@ export default function CreateGameRoomPage() {
           </label>
           <p className="hint">
             After an all-in, the player with the weakest hand can choose to deal the rest of the board more than once and split the pot between the runs. Hold&apos;em and Omaha only.
+          </p>
+          <label className="mt-4 inline-flex items-center space-x-2 text-sm font-medium text-gray-800 dark:text-gray-200">
+            <input
+              type="checkbox"
+              className="checkbox"
+              checked={showAllAtShowdown}
+              onChange={e => setShowAllAtShowdown(e.target.checked)}
+            />
+            <span>Everyone shows at showdown</span>
+          </label>
+          <p className="hint">
+            Everyone still in when a hand reaches showdown shows their cards, winners and losers alike. Players who folded keep theirs hidden.
           </p>
         </div>
         </section>

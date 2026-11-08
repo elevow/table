@@ -21,7 +21,7 @@ import { GameService } from '../../../src/lib/services/game-service';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import type { BettingMode, GameVariant } from '../../../src/types/poker';
 import { ALL_VARIANTS } from '../../../src/lib/poker/variant-rules';
-import { loadRoom } from '../../../src/lib/server/room-config';
+import { loadRoom, isTableClosed, TABLE_CLOSED_RESPONSE } from '../../../src/lib/server/room-config';
 import { keepTablesMoving, prepareTournamentHand, tournamentTableOf } from '../../../src/lib/tournament/table-rooms';
 import { apiHandler } from '../../../src/lib/api/handler';
 
@@ -150,6 +150,12 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       g.roomConfigs.set(tableId, roomConfig);
     };
 
+    const room = await loadRoom(tableId).catch(() => null);
+    // The host closed the table: the hand in play finished, and no new one is dealt
+    if (isTableClosed(room?.configuration)) {
+      return res.status(409).json(TABLE_CLOSED_RESPONSE);
+    }
+
     const locks = getNextHandLocks();
     if (locks.has(tableId)) {
       return res.status(409).json({ error: 'Next hand already being started' });
@@ -157,7 +163,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     locks.add(tableId);
     try {
       // A tournament table follows the tournament: busts, table moves, chips, blinds and breaks
-      const tournamentTable = tournamentTableOf((await loadRoom(tableId).catch(() => null))?.configuration);
+      const tournamentTable = tournamentTableOf(room?.configuration);
       if (tournamentTable) {
         const prepared = await prepareTournamentHand(tableId, engine, tournamentTable);
         if (!prepared.ok) return res.status(prepared.status).json(prepared.body);

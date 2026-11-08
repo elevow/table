@@ -77,7 +77,10 @@ jest.mock('../../../src/lib/auth/auth-utils', () => ({
 
 // Tournament tables follow the tournament between hands; ordinary rooms have no tournament link
 const mockLoadRoom = jest.fn().mockResolvedValue(null);
-jest.mock('../../../src/lib/server/room-config', () => ({ loadRoom: (...args: any[]) => mockLoadRoom(...args) }));
+jest.mock('../../../src/lib/server/room-config', () => ({
+  ...jest.requireActual('../../../src/lib/server/room-config'),
+  loadRoom: (...args: any[]) => mockLoadRoom(...args),
+}));
 const mockPrepareTournamentHand = jest.fn();
 jest.mock('../../../src/lib/tournament/table-rooms', () => ({
   tournamentTableOf: (c: any) => (c?.tournamentId ? { tournamentId: c.tournamentId, tableId: c.tournamentTableId } : null),
@@ -150,6 +153,18 @@ describe('/api/games/next-hand', () => {
     const res = createRes();
     await handler(createReq({ tableId: 't1', playerId: 'outsider' }), res);
     expect(res.status).toHaveBeenCalledWith(403);
+    expect(engine.startNewHand).not.toHaveBeenCalled();
+  });
+
+  it('deals no new hand once the host has closed the table', async () => {
+    const engine = createEngine('showdown');
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+    mockLoadRoom.mockResolvedValueOnce({ createdBy: 'a', maxPlayers: 6, configuration: { closed: true } });
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'TABLE_CLOSED' }));
     expect(engine.startNewHand).not.toHaveBeenCalled();
   });
 

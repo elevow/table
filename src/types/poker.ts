@@ -110,6 +110,8 @@ export interface TableState {
   turnDeadline?: number;
   // Base time for each decision at this table (ms); unset means the default
   turnTimeMs?: number;
+  // Pause after a hand before the next is dealt (ms); unset means the default
+  handDelayMs?: number;
   // Length of one time bank at this table (seconds)
   timeBankSeconds?: number;
   // Time banks a player starts with, for players who sit down after the game started
@@ -140,6 +142,8 @@ export interface TableState {
   allowStraddle?: boolean;
   // Table offers run it twice after an all-in (a room setting; off unless the room turned it on)
   allowRunItTwice?: boolean;
+  // Table rule: everyone still in at a contested showdown shows their cards; nobody mucks
+  showAllAtShowdown?: boolean;
   // The straddle posted this hand, if any
   straddle?: { playerId: string; amount: number };
   // Next hand is a bomb pot: everyone antes this many big blinds and betting starts on the flop

@@ -8,8 +8,9 @@ describe('GameSettings', () => {
   test('offers only the settings the table uses, showing the current values', () => {
     render(<GameSettings settings={{ ...DEFAULT_DISPLAY_SETTINGS, showStackInBB: true }} onChange={jest.fn()} />);
     expect(screen.getAllByRole('checkbox').map(c => c.parentElement?.textContent?.trim())).toEqual([
-      'High Contrast Cards', 'Show Pot Odds', 'Show Stack in Big Blinds',
+      'High Contrast Cards', 'Show Pot Odds', 'Show Stack in Big Blinds', 'Show Hand Value',
     ]);
+    expect(screen.getByLabelText('Show Hand Value')).toBeChecked();
     expect(screen.getByLabelText('High Contrast Cards')).not.toBeChecked();
     expect(screen.getByLabelText('Show Pot Odds')).toBeChecked();
     expect(screen.getByLabelText('Show Stack in Big Blinds')).toBeChecked();

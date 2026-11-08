@@ -82,7 +82,8 @@ function canSeePrivateCards(playerId: string, viewerId: string | null, revealedI
  * Players whose cards are face up for the whole table:
  * - during an all-in runout, everyone still in the hand;
  * - at a contested showdown, the winners (who must show to take the pot), or everyone still in
- *   when it ended in an all-in (their cards were already face up for the runout); losers muck;
+ *   when it ended in an all-in (their cards were already face up for the runout) or the table has
+ *   everyone show; otherwise losers muck;
  * - after the hand, anyone who chose to show.
  */
 export function revealedPlayerIds(state: TableState): Set<string> {
@@ -94,7 +95,7 @@ export function revealedPlayerIds(state: TableState): Set<string> {
   if (inHand.length >= 2) {
     // States saved before winners were recorded keep the old rule of showing everyone still in
     const winners = state.handWinners;
-    const mustShow = isAllInSituation(state) || !Array.isArray(winners)
+    const mustShow = isAllInSituation(state) || state.showAllAtShowdown || !Array.isArray(winners)
       ? inHand
       : inHand.filter(p => winners.includes(p.id));
     mustShow.forEach(p => revealed.add(p.id));

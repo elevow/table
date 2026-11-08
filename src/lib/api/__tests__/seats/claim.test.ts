@@ -89,4 +89,16 @@ describe('/api/games/seats/claim', () => {
     expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ code: 'TOURNAMENT_TABLE' }));
     expect(GameSeats.getRoomSeats('tournament-table')[3]).toBeFalsy();
   });
+
+  test('refuses seats at a table the host has closed', async () => {
+    jest.spyOn(roomConfig, 'loadRoom').mockResolvedValueOnce({ createdBy: 'host-1', maxPlayers: 6, configuration: { closed: true } });
+    const req = {
+      method: 'POST',
+      body: { tableId: 'closed-table', seatNumber: 1, playerId: 'player1', playerName: 'Alice' },
+    } as unknown as NextApiRequest;
+    await handler(req, res as NextApiResponse);
+    expect(statusMock).toHaveBeenCalledWith(409);
+    expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({ code: 'TABLE_CLOSED' }));
+    expect(GameSeats.getRoomSeats('closed-table')[1]).toBeFalsy();
+  });
 });

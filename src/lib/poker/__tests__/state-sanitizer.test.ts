@@ -217,6 +217,45 @@ describe('state-sanitizer', () => {
       expect(sanitized.players.find(p => p.id === 'p3')?.holeCards).toBeUndefined();
     });
 
+    describe('when the table has everyone show at showdown', () => {
+      const players = () => [
+        createPlayer('p1'),
+        createPlayer('p2'),
+        createPlayer('p3'),
+        createPlayer('p4', { isFolded: true })
+      ];
+
+      it('shows the losers too, instead of letting them muck', () => {
+        const losersMuck = sanitizeStateForPlayer(createState({ stage: 'showdown', players: players(), handWinners: ['p2'] }), 'p1');
+        expect(losersMuck.players.find(p => p.id === 'p3')?.holeCards).toBeUndefined();
+
+        const state = createState({ stage: 'showdown', players: players(), handWinners: ['p2'], showAllAtShowdown: true });
+        const sanitized = sanitizeStateForPlayer(state, 'p1');
+        expect(sanitized.players.find(p => p.id === 'p2')?.holeCards).toHaveLength(2);
+        expect(sanitized.players.find(p => p.id === 'p3')?.holeCards).toHaveLength(2);
+      });
+
+      it('still hides the cards of players who folded', () => {
+        const state = createState({ stage: 'showdown', players: players(), handWinners: ['p2'], showAllAtShowdown: true });
+        expect(sanitizeStateForPlayer(state, 'p1').players.find(p => p.id === 'p4')?.holeCards).toBeUndefined();
+      });
+
+      it('reveals nothing before the hand ends', () => {
+        const state = createState({ stage: 'river', players: players(), showAllAtShowdown: true });
+        expect(sanitizeStateForPlayer(state, 'p1').players.find(p => p.id === 'p2')?.holeCards).toBeUndefined();
+      });
+
+      it('keeps an uncontested winner\'s cards hidden', () => {
+        const state = createState({
+          stage: 'showdown',
+          players: [createPlayer('p1', { isFolded: true }), createPlayer('p2')],
+          handWinners: ['p2'],
+          showAllAtShowdown: true
+        });
+        expect(sanitizeStateForPlayer(state, 'p1').players.find(p => p.id === 'p2')?.holeCards).toBeUndefined();
+      });
+    });
+
     it('should not show the winners cards when everyone else folded', () => {
       const state = createState({
         stage: 'showdown',

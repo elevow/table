@@ -50,6 +50,7 @@ jest.mock('../../../src/lib/poker/poker-engine', () => ({
     startNewHand: jest.fn(),
     setAllowRunItTwice: jest.fn(),
     setAllowStraddle: jest.fn(),
+    setShowAllAtShowdown: jest.fn(),
     configureClock: jest.fn(),
     setAnte: jest.fn(),
     setSevenDeuceBounty: jest.fn(),
@@ -188,12 +189,19 @@ describe('/api/games/start', () => {
     const engine = MockPokerEngine.mock.results[0].value;
     expect(engine.setAllowRunItTwice).toHaveBeenCalledWith(true);
     expect(engine.setAllowStraddle).toHaveBeenCalledWith(false);
+    expect(engine.setShowAllAtShowdown).toHaveBeenCalledWith(false);
+  });
+
+  it('applies the room’s everyone-shows-at-showdown rule to the new game', async () => {
+    mockGetRoomById.mockResolvedValue({ id: 't1', configuration: { showAllAtShowdown: true }, blindLevels: {} });
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());
+    expect(MockPokerEngine.mock.results[0].value.setShowAllAtShowdown).toHaveBeenCalledWith(true);
   });
 
   it('applies the room clock settings, with defaults for rooms that never set them', async () => {
-    mockGetRoomById.mockResolvedValue({ id: 't1', configuration: { turnTimeSeconds: 45, timeBanks: 4, timeBankSeconds: 20 }, blindLevels: {} });
+    mockGetRoomById.mockResolvedValue({ id: 't1', configuration: { turnTimeSeconds: 45, timeBanks: 4, timeBankSeconds: 20, handDelaySeconds: 12 }, blindLevels: {} });
     await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());
-    expect(MockPokerEngine.mock.results[0].value.configureClock).toHaveBeenCalledWith({ turnSeconds: 45, timeBanks: 4, timeBankSeconds: 20 });
+    expect(MockPokerEngine.mock.results[0].value.configureClock).toHaveBeenCalledWith({ turnSeconds: 45, timeBanks: 4, timeBankSeconds: 20, handDelaySeconds: 12 });
 
     MockPokerEngine.mockClear();
     mockGetRoomById.mockResolvedValue({ id: 't1', configuration: {}, blindLevels: {} });

@@ -22,6 +22,7 @@ import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../src/lib/shared/feature-fla
 import { api, unwrap } from '../../src/utils/api-client';
 import { resolveSessionUserId } from '../../src/utils/session-identity';
 import { useTurnClock } from '../../src/hooks/useTurnClock';
+import { handDelayMs } from '../../src/lib/shared/turn-clock';
 import { useRevealWhen } from '../../src/hooks/useRevealWhen';
 import { useTurnAlerts } from '../../src/hooks/useTurnAlerts';
 import TurnClockBar from '../../src/components/TurnClockBar';
@@ -583,7 +584,7 @@ export default function GamePage() {
   // Visual accessibility options
   // The player's profile display settings, with any changes made at this table
   const display = useDisplaySettings(id ? String(id) : null);
-  const { highContrastCards, showPotOdds, showStackInBB } = display.settings;
+  const { highContrastCards, showPotOdds, showStackInBB, showHandValue } = display.settings;
   // Dealer's Choice: pending choice prompt from server
   const [awaitingDealerChoice, setAwaitingDealerChoice] = useState<null | { dealerId?: string; allowedVariants?: string[]; current?: string }>(null);
   const [selectedVariantDC, setSelectedVariantDC] = useState<string>('texas-holdem');
@@ -756,13 +757,15 @@ export default function GamePage() {
         timer = setTimeout(attempt, 30000);
       }
     };
-    timer = setTimeout(attempt, isNextHandLeaderRef.current ? 5000 : 20000);
+    // The table's pause between hands; the other players step in if the first one's request never comes
+    const pause = handDelayMs({ handDelayMs: pokerGameState?.handDelayMs });
+    timer = setTimeout(attempt, isNextHandLeaderRef.current ? pause : pause + 15000);
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
     // Re-run for each new hand, and when players sit in or out
-  }, [pokerGameState?.stage, pokerGameState?.handNumber, id, playerId, sittingInCount, seatedCount]);
+  }, [pokerGameState?.stage, pokerGameState?.handNumber, pokerGameState?.handDelayMs, id, playerId, sittingInCount, seatedCount]);
 
   // Seat polling shows other players sitting down before a game starts; once one is running, seats
   // come from game state. A fallback for missed live updates, so it pauses for hidden or idle tabs.
@@ -2439,6 +2442,11 @@ export default function GamePage() {
                 Run it twice
               </span>
             )}
+            {tableExtras?.showAllAtShowdown && (
+              <span className="badge" title="Everyone still in at a showdown shows their cards; nobody mucks">
+                Cards shown at showdown
+              </span>
+            )}
             <GameRulesBadges state={pokerGameState} />
             </div>
           </div>
@@ -2530,7 +2538,7 @@ export default function GamePage() {
               </>
             )}
             <span className="mx-1 h-5 w-px shrink-0 bg-gray-200 dark:bg-white/10 max-sm:hidden sm:ml-auto" aria-hidden="true" />
-            {canStartGame() && !gameStarted && (
+            {canStartGame() && !gameStarted && !tableExtras?.closed && (
               <button
                 onClick={handleStartGame}
                 className="btn btn-primary btn-sm"
@@ -2593,7 +2601,13 @@ export default function GamePage() {
               </button>
             </div>
           )}
-          {gameStarted && tableWaitNotice && pokerGameState?.stage === 'showdown' && (
+          {tableExtras?.closed && (
+            <div className="lg:col-span-3 bg-gray-800 text-white rounded-lg p-3 text-center" role="status">
+              <span className="font-semibold">The host closed this table.</span> No more hands will be dealt.{' '}
+              <Link href="/dashboard" className="underline font-semibold">Back to the lobby</Link>
+            </div>
+          )}
+          {gameStarted && tableWaitNotice && !tableExtras?.closed && pokerGameState?.stage === 'showdown' && (
             <div className="lg:col-span-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-lg p-3 text-sm text-amber-900 dark:text-amber-100" role="status">
               {tableWaitNotice}
             </div>
@@ -2847,7 +2861,7 @@ export default function GamePage() {
                 </div>
               )}
               <TurnClockBar clock={turnClock} />
-              {(() => {
+              {showHandValue && (() => {
                 const summary = getMyHandSummary();
                 const isHiLo = pokerGameState?.variant === 'omaha-hi-lo' || pokerGameState?.variant === 'seven-card-stud-hi-lo';
                 if (isHiLo) {
@@ -3279,7 +3293,9 @@ export default function GamePage() {
                     { label: 'Current bet', value: fmt(pokerGameState.currentBet || 0) },
                     { label: 'Pot', value: fmt(pokerGameState.pot || 0) },
                   ];
-                  if (isHiLo) {
+                  if (!showHandValue) {
+                    // The player turned off naming their hand
+                  } else if (isHiLo) {
                     tiles.push({ label: 'High hand', value: summary.highLabel || summary.primary || 'Waiting for more cards' });
                     tiles.push({ label: 'Low hand', value: summary.lowLabel || 'No qualifying low yet' });
                   } else if (summary.primary) {
@@ -3421,7 +3437,7 @@ export default function GamePage() {
             const contested = getActiveNonFoldedPlayers().length >= 2;
             const winners: string[] = Array.isArray(pokerGameState.handWinners) ? pokerGameState.handWinners : [];
             const alreadyShown = (pokerGameState.shownCards || []).includes(playerId)
-              || (contested && !me.isFolded && (anyAllIn() || winners.includes(playerId)));
+              || (contested && !me.isFolded && (anyAllIn() || pokerGameState.showAllAtShowdown || winners.includes(playerId)));
             if (alreadyShown) return null;
             return (
               <div className="lg:col-span-2 flex items-center justify-between gap-3 surface p-3 mt-4">

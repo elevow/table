@@ -11,17 +11,20 @@ import {
 } from '../../../src/lib/server/room-privacy';
 import { publishTableEvent } from '../../../src/lib/realtime/publisher';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
-import { MIN_TURN_SECONDS, MAX_TURN_SECONDS } from '../../../src/lib/shared/turn-clock';
+import { MIN_TURN_SECONDS, MAX_TURN_SECONDS, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS } from '../../../src/lib/shared/turn-clock';
 import { isStudVariant } from '../../../src/lib/poker/variant-rules';
 import { apiHandler } from '../../../src/lib/api/handler';
 
 type HostAction =
   | { action: 'pause' }
+  | { action: 'close-table' }
   | { action: 'resume' }
   | { action: 'set-blinds'; smallBlind: number; bigBlind: number }
   | { action: 'allow-straddle'; allow: boolean }
   | { action: 'allow-run-it-twice'; allow: boolean }
+  | { action: 'show-all-at-showdown'; show: boolean }
   | { action: 'set-turn-time'; seconds: number }
+  | { action: 'set-hand-delay'; seconds: number }
   | { action: 'adjust-time-banks'; targetId: string; delta: number }
   | { action: 'bomb-pot'; anteBB: number | null }
   | { action: 'kick'; targetId: string }
@@ -35,10 +38,13 @@ type HostAction =
 const ACTION_PERMISSIONS: Record<HostAction['action'], string> = {
   'pause': 'room.start',
   'resume': 'room.start',
+  'close-table': 'room.start',
   'set-blinds': 'room.configure',
   'allow-straddle': 'room.configure',
   'allow-run-it-twice': 'room.configure',
+  'show-all-at-showdown': 'room.configure',
   'set-turn-time': 'room.configure',
+  'set-hand-delay': 'room.configure',
   'adjust-time-banks': 'room.configure',
   'bomb-pot': 'room.configure',
   'kick': 'room.kick_player',
@@ -54,7 +60,7 @@ const ACTION_PERMISSIONS: Record<HostAction['action'], string> = {
  *
  * Controls for the room's host (its creator): pause and resume, change blinds for the next hand,
  * allow straddles and run it twice, schedule a bomb pot, remove a player, approve who sits down,
- * make the table public or private, and replace a private table's invite link.
+ * make the table public or private, replace a private table's invite link, and close the table.
  * Each needs its host permission; staff with admin.rooms.manage can use them on any table.
  */
 export default apiHandler({ methods: 'POST' }, async (req, res) => {
@@ -83,6 +89,13 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
 
     // Settings that live on the room rather than in a running game
     switch (body.action) {
+      case 'close-table': {
+        // The hand in play finishes; next-hand refuses to deal another, and nobody can sit down
+        await updateRoomConfig(tableId, { closed: true, closedAt: Date.now() });
+        await getPool().query(`UPDATE game_rooms SET status = 'closed' WHERE id = $1`, [tableId]);
+        await publishTableEvent(tableId, { type: 'closed' }).catch(() => {});
+        return res.status(200).json({ ok: true });
+      }
       case 'set-visibility': {
         const makePrivate = !!body.private;
         // Hosts need room.create_private to hide a table; staff acting through admin.rooms.manage don't
@@ -166,6 +179,11 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
         await publishTableEvent(tableId, { type: 'settings' }).catch(() => {});
         break; // also applied to the running game below
       }
+      case 'show-all-at-showdown': {
+        await updateRoomConfig(tableId, { showAllAtShowdown: !!body.show });
+        await publishTableEvent(tableId, { type: 'settings' }).catch(() => {});
+        break; // also applied to the running game below
+      }
       case 'set-blinds': {
         const sb = Number(body.smallBlind);
         const bb = Number(body.bigBlind);
@@ -188,6 +206,15 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
         await updateRoomConfig(tableId, { turnTimeSeconds: Math.round(seconds) });
         break;
       }
+      case 'set-hand-delay': {
+        const seconds = Number(body.seconds);
+        if (!Number.isFinite(seconds) || seconds < MIN_HAND_DELAY_SECONDS || seconds > MAX_HAND_DELAY_SECONDS) {
+          return res.status(400).json({ error: `Time between hands must be ${MIN_HAND_DELAY_SECONDS}-${MAX_HAND_DELAY_SECONDS} seconds` });
+        }
+        // New games at this table use it too
+        await updateRoomConfig(tableId, { handDelaySeconds: Math.round(seconds) });
+        break;
+      }
       case 'adjust-time-banks':
         if (!body.targetId || !Number.isFinite(Number(body.delta)) || Number(body.delta) === 0) {
           return res.status(400).json({ error: 'Choose a player and how many time banks to add or remove' });
@@ -204,7 +231,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     // Changes to the running game
     const engine = await getOrRestoreEngine(tableId);
     if (!engine) {
-      if (body.action === 'allow-straddle' || body.action === 'allow-run-it-twice' || body.action === 'set-blinds' || body.action === 'set-turn-time') {
+      if (body.action === 'allow-straddle' || body.action === 'allow-run-it-twice' || body.action === 'show-all-at-showdown' || body.action === 'set-blinds' || body.action === 'set-turn-time' || body.action === 'set-hand-delay') {
         return res.status(200).json({ ok: true });
       }
       return res.status(404).json({ error: 'No active game found for this table' });
@@ -215,7 +242,9 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       else if (body.action === 'set-blinds') engine.setPendingBlinds(Number(body.smallBlind), Number(body.bigBlind));
       else if (body.action === 'allow-straddle') engine.setAllowStraddle(!!body.allow);
       else if (body.action === 'allow-run-it-twice') engine.setAllowRunItTwice(!!body.allow);
+      else if (body.action === 'show-all-at-showdown') engine.setShowAllAtShowdown(!!body.show);
       else if (body.action === 'set-turn-time') engine.setTurnTime(Number(body.seconds));
+      else if (body.action === 'set-hand-delay') engine.setHandDelay(Number(body.seconds));
       else if (body.action === 'adjust-time-banks') engine.adjustTimeBanks(body.targetId, Number(body.delta));
       else if (body.action === 'bomb-pot') {
         const variant = engine.getState().variant;

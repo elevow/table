@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { authHeaders } from '../utils/auth-headers';
 import type { TableExtras } from '../hooks/useTableExtras';
 import { isStudVariant } from '../lib/poker/variant-rules';
-import { MIN_TURN_SECONDS, MAX_TURN_SECONDS, turnTimeMs } from '../lib/shared/turn-clock';
+import { MIN_TURN_SECONDS, MAX_TURN_SECONDS, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, handDelayMs, turnTimeMs } from '../lib/shared/turn-clock';
 
 interface Props {
   tableId: string;
@@ -29,6 +29,8 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
   const [anteBB, setAnteBB] = useState<string>('2');
   const [kickId, setKickId] = useState<string>('');
   const [turnSeconds, setTurnSeconds] = useState<string>('');
+  const [delaySeconds, setDelaySeconds] = useState<string>('');
+  const [confirmClose, setConfirmClose] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const send = async (label: string, body: Record<string, unknown>) => {
@@ -123,6 +125,28 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
         </div>
       )}
 
+      {can('room.start') && !extras.closed && (
+        <div className="mb-3">
+          {confirmClose ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20" role="alertdialog" aria-label="Close the table?">
+              <p className="mb-2 text-red-800 dark:text-red-200">
+                Close the table? Any hand in play finishes, then no more hands are dealt and nobody can sit down. This can&apos;t be undone.
+              </p>
+              <div className="flex gap-2">
+                <button className="btn btn-sm bg-red-600 text-white hover:bg-red-700" disabled={!!busy} onClick={() => send('close', { action: 'close-table' }).then(() => setConfirmClose(false))}>
+                  Close table
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setConfirmClose(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button className="btn btn-ghost btn-sm text-red-600 dark:text-red-400" onClick={() => setConfirmClose(true)}>
+              End game and close table
+            </button>
+          )}
+        </div>
+      )}
+
       {gameState && (
         <div className="space-y-3">
           {can('room.start') && (
@@ -204,6 +228,18 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             />
           </label>
         )}
+        {canConfigure && (
+          <label className="flex items-center justify-between gap-2" title="Everyone still in at a showdown shows their cards; nobody mucks">
+            <span>Everyone shows at showdown</span>
+            <input
+              type="checkbox"
+              className="switch"
+              checked={!!extras.showAllAtShowdown}
+              disabled={!!busy}
+              onChange={e => send('showall', { action: 'show-all-at-showdown', show: e.target.checked })}
+            />
+          </label>
+        )}
         {canConfigure && gameState && (
           <div>
             <div className="mb-2 eyebrow">Turn time {Math.round(turnTimeMs(gameState) / 1000)}s</div>
@@ -224,6 +260,30 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
                 onClick={() => send('turn', { action: 'set-turn-time', seconds: Number(turnSeconds) }).then(() => setTurnSeconds(''))}
               >
                 Set turn time
+              </button>
+            </div>
+          </div>
+        )}
+        {canConfigure && gameState && (
+          <div>
+            <div className="mb-2 eyebrow">Time between hands {Math.round(handDelayMs(gameState) / 1000)}s</div>
+            <div className="flex items-center gap-1">
+              <input
+                aria-label="Time between hands in seconds"
+                type="number"
+                min={MIN_HAND_DELAY_SECONDS}
+                max={MAX_HAND_DELAY_SECONDS}
+                value={delaySeconds}
+                onChange={e => setDelaySeconds(e.target.value)}
+                placeholder="secs"
+                className="w-16 input !h-9 !px-2.5"
+              />
+              <button
+                className={`btn btn-secondary btn-sm`}
+                disabled={!!busy || !(Number(delaySeconds) >= MIN_HAND_DELAY_SECONDS && Number(delaySeconds) <= MAX_HAND_DELAY_SECONDS)}
+                onClick={() => send('delay', { action: 'set-hand-delay', seconds: Number(delaySeconds) }).then(() => setDelaySeconds(''))}
+              >
+                Set pause
               </button>
             </div>
           </div>

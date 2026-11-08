@@ -8,6 +8,7 @@ const LABELS: Record<keyof DisplaySettings, string> = {
   highContrastCards: 'High-contrast cards',
   showPotOdds: 'Show pot odds',
   showStackInBB: 'Show stacks in big blinds',
+  showHandValue: 'Show hand value',
 };
 
 /** The profile's table display settings: every table starts from these, and each saves as it's changed. */

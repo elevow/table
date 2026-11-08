@@ -4,7 +4,7 @@ import {
 } from '../../../../src/lib/auth/access-control';
 import { performSeatClaim } from '../../../../src/lib/server/seat-actions';
 import { tablesSeatedAt } from '../../../../src/lib/shared/game-seats';
-import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../../src/lib/server/room-config';
+import { TABLE_CLOSED_RESPONSE, isTableClosed, loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../../src/lib/server/room-config';
 import { PRIVATE_TABLE_RESPONSE, canEnterRoom, isPrivateRoom, isRoomMember } from '../../../../src/lib/server/room-privacy';
 import { tournamentTableOf } from '../../../../src/lib/tournament/table-rooms';
 import { apiHandler } from '../../../../src/lib/api/handler';
@@ -48,6 +48,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     if (tournamentTableOf(room?.configuration)) {
       return res.status(409).json({ error: 'Seats at a tournament table are assigned by the tournament', code: 'TOURNAMENT_TABLE' });
     }
+    if (isTableClosed(config)) return res.status(409).json(TABLE_CLOSED_RESPONSE);
 
     // Private tables: the host and players who used the invite link may sit. Staff who can see the
     // table without an invite also need table.join_private to sit at it.

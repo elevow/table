@@ -4,12 +4,14 @@ export interface DisplaySettings {
   highContrastCards: boolean;
   showPotOdds: boolean;
   showStackInBB: boolean;
+  showHandValue: boolean;
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   highContrastCards: false,
   showPotOdds: true,
   showStackInBB: false,
+  showHandValue: true,
 };
 
 export const DISPLAY_SETTING_KEYS = Object.keys(DEFAULT_DISPLAY_SETTINGS) as (keyof DisplaySettings)[];

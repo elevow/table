@@ -14,6 +14,7 @@ import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import type { MixedGameEntry, TableState } from '../../../src/types/poker';
 import { ALL_VARIANTS, HORSE_GAMES, parseHandsPerGame, parseMixedGames } from '../../../src/lib/poker/variant-rules';
 import { apiHandler } from '../../../src/lib/api/handler';
+import { TABLE_CLOSED_RESPONSE } from '../../../src/lib/server/room-config';
 
 // Socket.io server type (simplified to avoid external dependency)
 type SocketIOServer = {
@@ -43,6 +44,9 @@ type RoomGameSettings = {
   bigBlind: number;
   allowRunItTwice: boolean;
   allowStraddle: boolean;
+  showAllAtShowdown: boolean;
+  // The host closed the table
+  closed: boolean;
   // Chips each player antes in Hold'em and Omaha hands; 0 = no antes
   ante: number;
   // 7-2 bounty in chips (Hold'em only); 0 = off
@@ -54,6 +58,8 @@ type RoomGameSettings = {
   turnTimeSeconds?: number;
   timeBanks?: number;
   timeBankSeconds?: number;
+  // Pause between hands
+  handDelaySeconds?: number;
 };
 
 /** A non-negative chip amount from configuration; anything else counts as 0 (off). */
@@ -83,6 +89,8 @@ async function loadRoomGameSettings(tableId: string): Promise<RoomGameSettings |
     smallBlind: positiveNumber(blinds.sb, blinds.smallBlind) ?? 1,
     bigBlind: positiveNumber(blinds.bb, blinds.bigBlind) ?? 2,
     allowRunItTwice: config.allowRunItTwice === true,
+    showAllAtShowdown: config.showAllAtShowdown === true,
+    closed: config.closed === true,
     allowStraddle: config.allowStraddle === true,
     ante: chipAmount(config.ante),
     sevenDeuceBounty: chipAmount(config.sevenDeuceBounty),
@@ -91,6 +99,7 @@ async function loadRoomGameSettings(tableId: string): Promise<RoomGameSettings |
     turnTimeSeconds: positiveNumber(config.turnTimeSeconds),
     timeBanks: Number.isFinite(Number(config.timeBanks)) ? Number(config.timeBanks) : undefined,
     timeBankSeconds: positiveNumber(config.timeBankSeconds),
+    handDelaySeconds: positiveNumber(config.handDelaySeconds),
   };
 }
 
@@ -123,6 +132,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     return res.status(503).json({ error: 'Unable to load room settings' });
   }
   if (!roomSettings) return res.status(404).json({ error: 'Room not found' });
+  if (roomSettings.closed) return res.status(409).json(TABLE_CLOSED_RESPONSE);
 
   try {
     // Starting replaces the table's engine, so refuse while a hand is being played
@@ -227,12 +237,14 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     // Create new engine for table (replace any existing)
     const engine = new PokerEngine(tableId, engPlayers as any, smallBlind, bigBlind, { variant: engineVariant as any, bettingMode: engineMode });
     engine.setAllowRunItTwice(roomSettings.allowRunItTwice);
+    engine.setShowAllAtShowdown(roomSettings.showAllAtShowdown);
     engine.setAllowStraddle(roomSettings.allowStraddle);
     // Rooms created before these settings existed get the defaults
     engine.configureClock({
       turnSeconds: roomSettings.turnTimeSeconds ?? DEFAULT_TURN_SECONDS,
       timeBanks: roomSettings.timeBanks ?? DEFAULT_TIME_BANKS,
       timeBankSeconds: roomSettings.timeBankSeconds ?? DEFAULT_TIME_BANK_SECONDS,
+      handDelaySeconds: roomSettings.handDelaySeconds,
     });
     engine.setAnte(roomSettings.ante);
     engine.setSevenDeuceBounty(roomSettings.sevenDeuceBounty);

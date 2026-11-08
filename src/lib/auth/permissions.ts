@@ -50,7 +50,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'room.create_private', label: 'Create private rooms', description: 'Not used yet: there are no private rooms' },
       { key: 'room.configure', label: 'Change table settings', description: 'Blinds, bomb pots, straddles, run it twice, turn time and time banks' },
       { key: 'room.choose_variant', label: 'Create dealer\'s choice and mixed games' },
-      { key: 'room.start', label: 'Pause and resume the game', description: 'Any seated player can start the game and deal' },
+      { key: 'room.start', label: 'Pause, resume and close the game', description: 'Any seated player can start the game and deal' },
       { key: 'room.approve_seat', label: 'Approve who sits down' },
       { key: 'room.kick_player', label: 'Remove players' },
       { key: 'room.transfer_host', label: 'Hand over host', description: 'Not used yet: hosts can\'t hand over yet' },

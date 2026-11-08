@@ -42,6 +42,7 @@ import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
 import { ALL_VARIANTS, VARIANT_LABELS, gameLabel, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
 import { studCardOrder } from '../../src/lib/shared/stud-cards';
+import TableCard from '../../src/components/TableCard';
 import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/components/PlayerNotesPanel';
 import HostControlsPanel from '../../src/components/HostControlsPanel';
 import PrivateTableNotice from '../../src/components/PrivateTableNotice';
@@ -1597,6 +1598,18 @@ export default function GamePage() {
   }, [tableId, playerId]);
 
   // Get position for current player's hole cards based on their seat
+  // Your hole cards fan out a little, like cards held in hand: tilted from the middle and dipping
+  // at the ends
+  const fanStyle = (index: number, count: number): React.CSSProperties => {
+    if (count < 2) return {};
+    const offset = index - (count - 1) / 2;
+    const tilt = count === 2 ? 6 : 5;
+    return {
+      transform: `translateY(${Math.abs(offset) * (count === 2 ? 3 : 4)}px) rotate(${offset * tilt}deg)`,
+      transformOrigin: 'bottom center',
+    };
+  };
+
   const getCurrentPlayerCardsPosition = () => {
     // Place the current player's cards centered near the bottom of the felt,
     // lowered to just touch the top of the avatar positioned below the table.
@@ -1801,12 +1814,7 @@ export default function GamePage() {
                         <div className="card-back-inner"></div>
                       </div>
                     ) : (
-                      <div key={key} className="playing-card text-[11px] w-8 h-12">
-                        <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
-                        <div className={suitColorClass(card.suit)}>
-                          {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
-                        </div>
-                      </div>
+                      <TableCard key={key} card={card} size="xs" highContrast={highContrastCards} />
                     )
                   ))}
                 </div>
@@ -1829,12 +1837,7 @@ export default function GamePage() {
               <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (revealed)">
                 <div className="flex gap-1">
                   {holes.map((card: any, index: number) => (
-                    <div key={index} className="playing-card text-[11px] w-8 h-12">
-                      <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
-                      <div className={suitColorClass(card.suit)}>
-                        {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
-                      </div>
-                    </div>
+                    <TableCard key={index} card={card} size="sm" highContrast={highContrastCards} />
                   ))}
                 </div>
               </div>
@@ -2761,12 +2764,7 @@ export default function GamePage() {
                       <div key={`run-${run}`} className="flex items-center gap-1">
                         <span className="text-[10px] uppercase tracking-wide text-amber-200 font-semibold drop-shadow w-10 text-right">Run {run + 1}</span>
                         {board.map((card: any, index: number) => (
-                          <div key={index} className="table-card-flip playing-card text-[11px] w-8 h-11">
-                            <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
-                            <div className={suitColorClass(card.suit)}>
-                              {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
-                            </div>
-                          </div>
+                          <TableCard key={index} card={card} size="xs" highContrast={highContrastCards} className="table-card-flip" />
                         ))}
                         {/* Spaces for cards still to come on this run */}
                         {Array.from({ length: Math.max(0, 5 - board.length) }, (_, i) => (
@@ -2778,12 +2776,7 @@ export default function GamePage() {
                 ) : pokerGameState?.communityCards && pokerGameState.communityCards.length > 0 && (
                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-7 flex gap-1.5 max-sm:gap-1">
                     {pokerGameState.communityCards.map((card: any, index: number) => (
-                      <div key={index} className="table-card-flip playing-card text-base max-sm:text-sm w-11 h-16 max-sm:w-9 max-sm:h-[52px] rounded-lg gap-0.5" style={{ animationDelay: `${index < 3 ? index * 90 : 0}ms` }}>
-                        <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
-                        <div className={suitColorClass(card.suit)}>
-                          {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
-                        </div>
-                      </div>
+                      <TableCard key={index} card={card} size="md" highContrast={highContrastCards} className="table-card-flip" style={{ animationDelay: `${index < 3 ? index * 90 : 0}ms` }} />
                     ))}
                   </div>
                 )}
@@ -2816,12 +2809,7 @@ export default function GamePage() {
                     return (
                       <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''} ${actionPanelOpen ? 'max-sm:hidden' : ''}`}>
                         {all.map((card: any, i: number) => (
-                          <div key={`me-card-${i}`} style={{ animationDelay: `${Math.min(i, 2) * 80}ms` }} className={`table-card-deal playing-card text-sm w-10 h-14 rounded-lg ${card.hidden ? 'top-2' : ''}`} title={card.hidden ? 'Face down: only you can see this card' : undefined}>
-                            <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
-                            <div className={suitColorClass(card.suit)}>
-                              {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
-                            </div>
-                          </div>
+                          <TableCard key={`me-card-${i}`} card={card} size="sm" highContrast={highContrastCards} style={{ animationDelay: `${Math.min(i, 2) * 80}ms` }} className={`table-card-deal ${card.hidden ? 'top-2' : ''}`} title={card.hidden ? 'Face down: only you can see this card' : undefined} />
                         ))}
                       </div>
                     );
@@ -2833,12 +2821,7 @@ export default function GamePage() {
                   return (
                     <div key={`my-cards-${pokerGameState?.handId ?? pokerGameState?.handNumber ?? ''}`} className={`absolute ${getCurrentPlayerCardsPosition()} flex gap-1 z-20 ${isFolded ? 'opacity-60 grayscale' : ''} ${actionPanelOpen ? 'max-sm:hidden' : ''}`}>
                       {holes.map((card: any, index: number) => (
-                        <div key={index} style={{ animationDelay: `${index * 80}ms` }} className="table-card-deal playing-card text-[15px] max-sm:text-sm w-10 h-[58px] max-sm:w-9 max-sm:h-[52px] rounded-lg gap-0.5 ring-2 ring-emerald-400/60">
-                          <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
-                          <div className={suitColorClass(card.suit)}>
-                            {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
-                          </div>
-                        </div>
+                        <TableCard key={index} card={card} size="lg" highContrast={highContrastCards} className={`table-card-deal ring-2 ring-emerald-400/60 ${holes.length > 2 && index > 0 ? '-ml-4 max-sm:-ml-5' : ''}`} style={{ animationDelay: `${index * 80}ms`, ...fanStyle(index, holes.length) }} />
                       ))}
                     </div>
                   );
@@ -2869,10 +2852,7 @@ export default function GamePage() {
                 </h3>
                 <div className="flex gap-1 sm:hidden" aria-hidden="true">
                   {(isStudVariant() ? (() => { const c = getStudCardsForPlayer(playerId); return studCardOrder(c.down.map((card: any) => ({ ...card, hidden: true })), c.up); })() : (getCurrentPlayerCards() || [])).map((card: any, i: number) => (
-                    <div key={i} className={`playing-card w-8 h-11 text-[13px] rounded ${card.hidden ? 'top-1' : ''}`}>
-                      <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
-                      <div className={suitColorClass(card.suit)}>{card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}</div>
-                    </div>
+                    <TableCard key={i} card={card} size="xs" highContrast={highContrastCards} className={card.hidden ? 'top-1' : ''} />
                   ))}
                 </div>
                 {/* The pot is on the felt, so phones skip this line to keep the sheet short */}

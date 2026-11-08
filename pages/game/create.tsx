@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import {
   BASE_TURN_MS, DEFAULT_TIME_BANKS, DEFAULT_TIME_BANK_SECONDS, MAX_TIME_BANKS, MAX_TIME_BANK_SECONDS,
   MAX_TURN_SECONDS, MIN_TIME_BANK_SECONDS, MIN_TURN_SECONDS, clampSetting,
+  DEFAULT_HAND_DELAY_SECONDS, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS,
 } from '../../src/lib/shared/turn-clock';
 
 const DEFAULT_TURN_SECONDS = BASE_TURN_MS / 1000;
@@ -35,6 +36,7 @@ export default function CreateGameRoomPage() {
   const [turnTimeSeconds, setTurnTimeSeconds] = useState(DEFAULT_TURN_SECONDS);
   const [timeBanks, setTimeBanks] = useState(DEFAULT_TIME_BANKS);
   const [timeBankSeconds, setTimeBankSeconds] = useState(DEFAULT_TIME_BANK_SECONDS);
+  const [handDelaySeconds, setHandDelaySeconds] = useState(DEFAULT_HAND_DELAY_SECONDS);
   // Table options that are off unless set: antes and the 7-2 bounty, in chips
   const [ante, setAnte] = useState(0);
   const [sevenDeuceBounty, setSevenDeuceBounty] = useState(0);
@@ -117,6 +119,7 @@ export default function CreateGameRoomPage() {
             turnTimeSeconds: clampSetting(turnTimeSeconds, MIN_TURN_SECONDS, MAX_TURN_SECONDS, DEFAULT_TURN_SECONDS),
             timeBanks: clampSetting(timeBanks, 0, MAX_TIME_BANKS, DEFAULT_TIME_BANKS),
             timeBankSeconds: clampSetting(timeBankSeconds, MIN_TIME_BANK_SECONDS, MAX_TIME_BANK_SECONDS, DEFAULT_TIME_BANK_SECONDS),
+            handDelaySeconds: clampSetting(handDelaySeconds, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS),
             ante: ante > 0 ? ante : undefined,
             sevenDeuceBounty: sevenDeuceBounty > 0 ? sevenDeuceBounty : undefined,
             mixedGames: variant === 'mixed' ? mixedGames : undefined,
@@ -443,6 +446,19 @@ export default function CreateGameRoomPage() {
               onChange={e => setTurnTimeSeconds(Number(e.target.value))}
             />
             <p className="hint">Per decision, {MIN_TURN_SECONDS}–{MAX_TURN_SECONDS}s.</p>
+          </div>
+          <div>
+            <label className="label" htmlFor="hand-delay">Time between hands (seconds)</label>
+            <input
+              id="hand-delay"
+              type="number"
+              min={MIN_HAND_DELAY_SECONDS}
+              max={MAX_HAND_DELAY_SECONDS}
+              className="input"
+              value={handDelaySeconds}
+              onChange={e => setHandDelaySeconds(Number(e.target.value))}
+            />
+            <p className="hint">Pause to see how a hand ended, {MIN_HAND_DELAY_SECONDS}–{MAX_HAND_DELAY_SECONDS}s.</p>
           </div>
           <div>
             <label className="label" htmlFor="time-banks">Time banks per player</label>

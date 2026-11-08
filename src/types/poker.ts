@@ -110,6 +110,8 @@ export interface TableState {
   turnDeadline?: number;
   // Base time for each decision at this table (ms); unset means the default
   turnTimeMs?: number;
+  // Pause after a hand before the next is dealt (ms); unset means the default
+  handDelayMs?: number;
   // Length of one time bank at this table (seconds)
   timeBankSeconds?: number;
   // Time banks a player starts with, for players who sit down after the game started

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { authHeaders } from '../utils/auth-headers';
 import type { TableExtras } from '../hooks/useTableExtras';
 import { isStudVariant } from '../lib/poker/variant-rules';
-import { MIN_TURN_SECONDS, MAX_TURN_SECONDS, turnTimeMs } from '../lib/shared/turn-clock';
+import { MIN_TURN_SECONDS, MAX_TURN_SECONDS, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, handDelayMs, turnTimeMs } from '../lib/shared/turn-clock';
 
 interface Props {
   tableId: string;
@@ -29,6 +29,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
   const [anteBB, setAnteBB] = useState<string>('2');
   const [kickId, setKickId] = useState<string>('');
   const [turnSeconds, setTurnSeconds] = useState<string>('');
+  const [delaySeconds, setDelaySeconds] = useState<string>('');
   const [copied, setCopied] = useState(false);
 
   const send = async (label: string, body: Record<string, unknown>) => {
@@ -224,6 +225,30 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
                 onClick={() => send('turn', { action: 'set-turn-time', seconds: Number(turnSeconds) }).then(() => setTurnSeconds(''))}
               >
                 Set turn time
+              </button>
+            </div>
+          </div>
+        )}
+        {canConfigure && gameState && (
+          <div>
+            <div className="mb-2 eyebrow">Time between hands {Math.round(handDelayMs(gameState) / 1000)}s</div>
+            <div className="flex items-center gap-1">
+              <input
+                aria-label="Time between hands in seconds"
+                type="number"
+                min={MIN_HAND_DELAY_SECONDS}
+                max={MAX_HAND_DELAY_SECONDS}
+                value={delaySeconds}
+                onChange={e => setDelaySeconds(e.target.value)}
+                placeholder="secs"
+                className="w-16 input !h-9 !px-2.5"
+              />
+              <button
+                className={`btn btn-secondary btn-sm`}
+                disabled={!!busy || !(Number(delaySeconds) >= MIN_HAND_DELAY_SECONDS && Number(delaySeconds) <= MAX_HAND_DELAY_SECONDS)}
+                onClick={() => send('delay', { action: 'set-hand-delay', seconds: Number(delaySeconds) }).then(() => setDelaySeconds(''))}
+              >
+                Set pause
               </button>
             </div>
           </div>

@@ -54,6 +54,8 @@ type RoomGameSettings = {
   turnTimeSeconds?: number;
   timeBanks?: number;
   timeBankSeconds?: number;
+  // Pause between hands
+  handDelaySeconds?: number;
 };
 
 /** A non-negative chip amount from configuration; anything else counts as 0 (off). */
@@ -91,6 +93,7 @@ async function loadRoomGameSettings(tableId: string): Promise<RoomGameSettings |
     turnTimeSeconds: positiveNumber(config.turnTimeSeconds),
     timeBanks: Number.isFinite(Number(config.timeBanks)) ? Number(config.timeBanks) : undefined,
     timeBankSeconds: positiveNumber(config.timeBankSeconds),
+    handDelaySeconds: positiveNumber(config.handDelaySeconds),
   };
 }
 
@@ -233,6 +236,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       turnSeconds: roomSettings.turnTimeSeconds ?? DEFAULT_TURN_SECONDS,
       timeBanks: roomSettings.timeBanks ?? DEFAULT_TIME_BANKS,
       timeBankSeconds: roomSettings.timeBankSeconds ?? DEFAULT_TIME_BANK_SECONDS,
+      handDelaySeconds: roomSettings.handDelaySeconds,
     });
     engine.setAnte(roomSettings.ante);
     engine.setSevenDeuceBounty(roomSettings.sevenDeuceBounty);

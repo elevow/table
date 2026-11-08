@@ -15,6 +15,11 @@ export const DEFAULT_TIME_BANK_SECONDS = 30;
 export const MIN_TIME_BANK_SECONDS = 5;
 export const MAX_TIME_BANK_SECONDS = 120;
 
+/** Pause after a hand before the next is dealt, so players can see how it ended. */
+export const MIN_HAND_DELAY_SECONDS = 3;
+export const MAX_HAND_DELAY_SECONDS = 60;
+export const DEFAULT_HAND_DELAY_SECONDS = 5;
+
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 /** Whole number in range, or the fallback when the value is missing or not a number. */
@@ -26,6 +31,11 @@ export function clampSetting(value: unknown, lo: number, hi: number, fallback: n
 /** Base time for each decision at this table, in ms. */
 export function turnTimeMs(state: { turnTimeMs?: number }): number {
   return typeof state.turnTimeMs === 'number' && state.turnTimeMs > 0 ? state.turnTimeMs : BASE_TURN_MS;
+}
+
+/** Pause between hands at this table, in ms. */
+export function handDelayMs(state: { handDelayMs?: number }): number {
+  return typeof state.handDelayMs === 'number' && state.handDelayMs > 0 ? state.handDelayMs : DEFAULT_HAND_DELAY_SECONDS * 1000;
 }
 
 /** Length of one time bank at this table, in ms. */

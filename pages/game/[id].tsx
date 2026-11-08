@@ -22,6 +22,7 @@ import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../src/lib/shared/feature-fla
 import { api, unwrap } from '../../src/utils/api-client';
 import { resolveSessionUserId } from '../../src/utils/session-identity';
 import { useTurnClock } from '../../src/hooks/useTurnClock';
+import { handDelayMs } from '../../src/lib/shared/turn-clock';
 import { useRevealWhen } from '../../src/hooks/useRevealWhen';
 import { useTurnAlerts } from '../../src/hooks/useTurnAlerts';
 import TurnClockBar from '../../src/components/TurnClockBar';
@@ -583,7 +584,7 @@ export default function GamePage() {
   // Visual accessibility options
   // The player's profile display settings, with any changes made at this table
   const display = useDisplaySettings(id ? String(id) : null);
-  const { highContrastCards, showPotOdds, showStackInBB } = display.settings;
+  const { highContrastCards, showPotOdds, showStackInBB, showHandValue } = display.settings;
   // Dealer's Choice: pending choice prompt from server
   const [awaitingDealerChoice, setAwaitingDealerChoice] = useState<null | { dealerId?: string; allowedVariants?: string[]; current?: string }>(null);
   const [selectedVariantDC, setSelectedVariantDC] = useState<string>('texas-holdem');
@@ -756,13 +757,15 @@ export default function GamePage() {
         timer = setTimeout(attempt, 30000);
       }
     };
-    timer = setTimeout(attempt, isNextHandLeaderRef.current ? 5000 : 20000);
+    // The table's pause between hands; the other players step in if the first one's request never comes
+    const pause = handDelayMs({ handDelayMs: pokerGameState?.handDelayMs });
+    timer = setTimeout(attempt, isNextHandLeaderRef.current ? pause : pause + 15000);
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
     // Re-run for each new hand, and when players sit in or out
-  }, [pokerGameState?.stage, pokerGameState?.handNumber, id, playerId, sittingInCount, seatedCount]);
+  }, [pokerGameState?.stage, pokerGameState?.handNumber, pokerGameState?.handDelayMs, id, playerId, sittingInCount, seatedCount]);
 
   // Seat polling shows other players sitting down before a game starts; once one is running, seats
   // come from game state. A fallback for missed live updates, so it pauses for hidden or idle tabs.
@@ -2847,7 +2850,7 @@ export default function GamePage() {
                 </div>
               )}
               <TurnClockBar clock={turnClock} />
-              {(() => {
+              {showHandValue && (() => {
                 const summary = getMyHandSummary();
                 const isHiLo = pokerGameState?.variant === 'omaha-hi-lo' || pokerGameState?.variant === 'seven-card-stud-hi-lo';
                 if (isHiLo) {
@@ -3279,7 +3282,9 @@ export default function GamePage() {
                     { label: 'Current bet', value: fmt(pokerGameState.currentBet || 0) },
                     { label: 'Pot', value: fmt(pokerGameState.pot || 0) },
                   ];
-                  if (isHiLo) {
+                  if (!showHandValue) {
+                    // The player turned off naming their hand
+                  } else if (isHiLo) {
                     tiles.push({ label: 'High hand', value: summary.highLabel || summary.primary || 'Waiting for more cards' });
                     tiles.push({ label: 'Low hand', value: summary.lowLabel || 'No qualifying low yet' });
                   } else if (summary.primary) {

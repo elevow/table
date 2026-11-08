@@ -10,6 +10,7 @@ import { GameStateManager, sitsOutOfHand } from './game-state-manager';
 import {
   TIMEOUTS_BEFORE_SIT_OUT, MAX_TIME_BANKS, MIN_TURN_SECONDS, MAX_TURN_SECONDS, MIN_TIME_BANK_SECONDS,
   MAX_TIME_BANK_SECONDS, bankTimeMs, clampSetting, timeBankMs, turnTimeMs,
+  MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS,
 } from '../shared/turn-clock';
 import { holeCardCount, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { fixedLimitBetSize } from './fixed-limit';
@@ -365,8 +366,9 @@ export class PokerEngine {
 
   /** Host allows or disallows straddles at this table. */
   /** Table settings for the clock: base time per decision and each player's time banks. */
-  public configureClock(opts: { turnSeconds?: number; timeBanks?: number; timeBankSeconds?: number }): void {
+  public configureClock(opts: { turnSeconds?: number; timeBanks?: number; timeBankSeconds?: number; handDelaySeconds?: number }): void {
     if (opts.turnSeconds !== undefined) this.setTurnTime(opts.turnSeconds);
+    if (opts.handDelaySeconds !== undefined) this.setHandDelay(opts.handDelaySeconds);
     if (opts.timeBankSeconds !== undefined) {
       this.state.timeBankSeconds = clampSetting(opts.timeBankSeconds, MIN_TIME_BANK_SECONDS, MAX_TIME_BANK_SECONDS, 30);
     }
@@ -380,6 +382,11 @@ export class PokerEngine {
   /** Host changes the base time per decision; it applies from the next decision. */
   public setTurnTime(seconds: number): void {
     this.state.turnTimeMs = clampSetting(seconds, MIN_TURN_SECONDS, MAX_TURN_SECONDS, 30) * 1000;
+  }
+
+  /** Host changes the pause between hands; it applies from the next hand's end. */
+  public setHandDelay(seconds: number): void {
+    this.state.handDelayMs = clampSetting(seconds, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS) * 1000;
   }
 
   /**

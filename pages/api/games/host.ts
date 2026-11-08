@@ -11,7 +11,7 @@ import {
 } from '../../../src/lib/server/room-privacy';
 import { publishTableEvent } from '../../../src/lib/realtime/publisher';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
-import { MIN_TURN_SECONDS, MAX_TURN_SECONDS } from '../../../src/lib/shared/turn-clock';
+import { MIN_TURN_SECONDS, MAX_TURN_SECONDS, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS } from '../../../src/lib/shared/turn-clock';
 import { isStudVariant } from '../../../src/lib/poker/variant-rules';
 import { apiHandler } from '../../../src/lib/api/handler';
 
@@ -22,6 +22,7 @@ type HostAction =
   | { action: 'allow-straddle'; allow: boolean }
   | { action: 'allow-run-it-twice'; allow: boolean }
   | { action: 'set-turn-time'; seconds: number }
+  | { action: 'set-hand-delay'; seconds: number }
   | { action: 'adjust-time-banks'; targetId: string; delta: number }
   | { action: 'bomb-pot'; anteBB: number | null }
   | { action: 'kick'; targetId: string }
@@ -39,6 +40,7 @@ const ACTION_PERMISSIONS: Record<HostAction['action'], string> = {
   'allow-straddle': 'room.configure',
   'allow-run-it-twice': 'room.configure',
   'set-turn-time': 'room.configure',
+  'set-hand-delay': 'room.configure',
   'adjust-time-banks': 'room.configure',
   'bomb-pot': 'room.configure',
   'kick': 'room.kick_player',
@@ -188,6 +190,15 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
         await updateRoomConfig(tableId, { turnTimeSeconds: Math.round(seconds) });
         break;
       }
+      case 'set-hand-delay': {
+        const seconds = Number(body.seconds);
+        if (!Number.isFinite(seconds) || seconds < MIN_HAND_DELAY_SECONDS || seconds > MAX_HAND_DELAY_SECONDS) {
+          return res.status(400).json({ error: `Time between hands must be ${MIN_HAND_DELAY_SECONDS}-${MAX_HAND_DELAY_SECONDS} seconds` });
+        }
+        // New games at this table use it too
+        await updateRoomConfig(tableId, { handDelaySeconds: Math.round(seconds) });
+        break;
+      }
       case 'adjust-time-banks':
         if (!body.targetId || !Number.isFinite(Number(body.delta)) || Number(body.delta) === 0) {
           return res.status(400).json({ error: 'Choose a player and how many time banks to add or remove' });
@@ -204,7 +215,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     // Changes to the running game
     const engine = await getOrRestoreEngine(tableId);
     if (!engine) {
-      if (body.action === 'allow-straddle' || body.action === 'allow-run-it-twice' || body.action === 'set-blinds' || body.action === 'set-turn-time') {
+      if (body.action === 'allow-straddle' || body.action === 'allow-run-it-twice' || body.action === 'set-blinds' || body.action === 'set-turn-time' || body.action === 'set-hand-delay') {
         return res.status(200).json({ ok: true });
       }
       return res.status(404).json({ error: 'No active game found for this table' });
@@ -216,6 +227,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       else if (body.action === 'allow-straddle') engine.setAllowStraddle(!!body.allow);
       else if (body.action === 'allow-run-it-twice') engine.setAllowRunItTwice(!!body.allow);
       else if (body.action === 'set-turn-time') engine.setTurnTime(Number(body.seconds));
+      else if (body.action === 'set-hand-delay') engine.setHandDelay(Number(body.seconds));
       else if (body.action === 'adjust-time-banks') engine.adjustTimeBanks(body.targetId, Number(body.delta));
       else if (body.action === 'bomb-pot') {
         const variant = engine.getState().variant;

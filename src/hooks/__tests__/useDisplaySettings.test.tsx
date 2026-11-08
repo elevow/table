@@ -11,7 +11,7 @@ beforeEach(() => {
 test('a table starts from the profile settings', async () => {
   const { result } = renderHook(() => useDisplaySettings('t1'));
   await waitFor(() => expect(result.current.settings.highContrastCards).toBe(true));
-  expect(result.current.settings).toEqual({ highContrastCards: true, showPotOdds: false, showStackInBB: false });
+  expect(result.current.settings).toEqual({ highContrastCards: true, showPotOdds: false, showStackInBB: false, showHandValue: true });
   expect(result.current.hasOverrides).toBe(false);
 });
 
@@ -45,5 +45,5 @@ test('signed out, or the profile can\'t be read: the usual defaults, with this t
   localStorage.setItem('game_settings_t1', JSON.stringify({ showStackInBB: true, soundEnabled: false }));
   const { result } = renderHook(() => useDisplaySettings('t1'));
   await waitFor(() => expect(global.fetch).toHaveBeenCalled());
-  expect(result.current.settings).toEqual({ highContrastCards: false, showPotOdds: true, showStackInBB: true });
+  expect(result.current.settings).toEqual({ highContrastCards: false, showPotOdds: true, showStackInBB: true, showHandValue: true });
 });

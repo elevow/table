@@ -18,6 +18,7 @@ const OPTIONS: { key: keyof DisplaySettings; label: string; help: string }[] = [
   { key: 'highContrastCards', label: 'High Contrast Cards', help: 'When enabled: Hearts = Red, Diamonds = Yellow, Spades = Black, Clubs = Blue.' },
   { key: 'showPotOdds', label: 'Show Pot Odds', help: 'Display the ratio between the pot size and the bet you are facing.' },
   { key: 'showStackInBB', label: 'Show Stack in Big Blinds', help: 'Display chip stacks in Big Blinds (BB) instead of raw chip counts.' },
+  { key: 'showHandValue', label: 'Show Hand Value', help: 'Name the hand your cards make, such as "Two Pair", while you play.' },
 ];
 
 function GameSettings({ settings, onChange, hasOverrides = false, onReset }: GameSettingsProps) {

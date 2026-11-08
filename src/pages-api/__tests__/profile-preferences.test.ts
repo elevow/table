@@ -26,14 +26,14 @@ beforeEach(() => { mockUser = 'u1'; mockQuery.mockReset(); });
 
 test('a new user gets the usual defaults', async () => {
   mockQuery.mockResolvedValue({ rows: [] });
-  expect(await call('GET')).toEqual({ status: 200, body: { display: { highContrastCards: false, showPotOdds: true, showStackInBB: false } } });
+  expect(await call('GET')).toEqual({ status: 200, body: { display: { highContrastCards: false, showPotOdds: true, showStackInBB: false, showHandValue: true } } });
   expect(mockQuery.mock.calls[0][1]).toEqual(['u1']);
 });
 
 test('saving sends only known true/false settings, for the signed-in user', async () => {
   mockQuery.mockResolvedValue({ rows: [{ display: { highContrastCards: true } }] });
   const r = await call('PUT', { display: { highContrastCards: true, showPotOdds: 'yes', soundEnabled: false } });
-  expect(r).toEqual({ status: 200, body: { display: { highContrastCards: true, showPotOdds: true, showStackInBB: false } } });
+  expect(r).toEqual({ status: 200, body: { display: { highContrastCards: true, showPotOdds: true, showStackInBB: false, showHandValue: true } } });
   expect(mockQuery.mock.calls[0][1]).toEqual(['u1', JSON.stringify({ highContrastCards: true })]);
 });
 

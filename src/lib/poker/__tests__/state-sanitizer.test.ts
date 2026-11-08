@@ -49,6 +49,18 @@ const createState = (overrides: Partial<TableState> = {}): TableState => ({
 });
 
 describe('state-sanitizer', () => {
+  describe('splash timing', () => {
+    it("tells each viewer how long ago the splash was by the server's clock", () => {
+      jest.useFakeTimers().setSystemTime(100_000);
+      try {
+        const view = sanitizeStateForPlayer(createState({ lastSplash: { playerId: 'p1', amount: 40, at: 97_000 } }), 'p2');
+        expect(view.lastSplash).toEqual({ playerId: 'p1', amount: 40, at: 97_000, ageMs: 3_000 });
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
   describe('isAllInSituation', () => {
     it('should return false when no players are all-in', () => {
       const state = createState();

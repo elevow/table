@@ -174,6 +174,10 @@ function sanitizeState(state: TableState, viewerId: string | null): TableState {
   } else {
     delete result.turnTimeRemainingMs;
   }
+  // Same for the splash: clients judge whether it just happened by the server's clock
+  if (state.lastSplash) {
+    result.lastSplash = { ...state.lastSplash, ageMs: Math.max(0, Date.now() - state.lastSplash.at) };
+  }
   if (state.runItTwice) {
     result.runItTwice = sanitizeRunItTwice(state);
   }

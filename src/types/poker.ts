@@ -146,7 +146,8 @@ export interface TableState {
   showAllAtShowdown?: boolean;
   // Players who have splashed the pot this session (once each), and the latest splash, for the show
   splashUsedBy?: string[];
-  lastSplash?: { playerId: string; amount: number; at: number };
+  // ageMs is added when the state is sent to a client: how long ago the splash was, by the server's clock
+  lastSplash?: { playerId: string; amount: number; at: number; ageMs?: number };
   // The straddle posted this hand, if any
   straddle?: { playerId: string; amount: number };
   // Next hand is a bomb pot: everyone antes this many big blinds and betting starts on the flop

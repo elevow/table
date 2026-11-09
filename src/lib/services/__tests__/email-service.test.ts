@@ -288,6 +288,8 @@ describe('EmailService', () => {
       
       const service = new EmailService(smtpConfig);
       expect(service).toBeInstanceOf(EmailService);
+      // nodemailer's function is createTransport
+      expect(require('nodemailer').createTransport).toHaveBeenCalledWith(expect.objectContaining({ host: 'smtp.test.com', port: 587 }));
     });
   });
 

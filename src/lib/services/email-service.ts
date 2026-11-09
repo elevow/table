@@ -112,7 +112,7 @@ export class EmailService {
         case 'smtp':
           if (this.config.smtp) {
             const nodemailer = require('nodemailer');
-            this.smtpTransporter = nodemailer.createTransporter({
+            this.smtpTransporter = nodemailer.createTransport({
               host: this.config.smtp.host,
               port: this.config.smtp.port,
               secure: this.config.smtp.secure,

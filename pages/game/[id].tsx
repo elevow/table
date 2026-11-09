@@ -37,7 +37,7 @@ import TimeBankBadge from '../../src/components/TimeBankBadge';
 import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
 import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
-import SplashAnimation from '../../src/components/SplashAnimation';
+import SplashAnimation, { splashInPlay } from '../../src/components/SplashAnimation';
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
 import { ALL_VARIANTS, VARIANT_LABELS, gameLabel, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
@@ -2747,7 +2747,7 @@ export default function GamePage() {
               {/* Inner felt playing surface */}
               <div className="table-felt absolute inset-[14px] rounded-full">
                 <SplashAnimation
-                  splash={pokerGameState?.lastSplash}
+                  splash={splashInPlay(pokerGameState)}
                   playerName={pokerGameState?.lastSplash ? getPlayerLabel(pokerGameState.lastSplash.playerId) : null}
                   formatAmount={(n) => showStackInBB ? formatChips(n, pokerGameState?.bigBlind || null, true) : `$${n}`}
                 />

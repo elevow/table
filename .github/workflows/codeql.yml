@@ -1,0 +1,38 @@
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    # Mondays, so new security rules are run against the code even in a quiet week
+    - cron: '23 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'

@@ -32,3 +32,13 @@ export function formatChips(chips: number, bigBlind: number | null, showAsBB: bo
   }
   return chips.toLocaleString();
 }
+
+/**
+ * Format a dollar amount for a button label: whole amounts without cents ("$20"),
+ * others with two decimals ("$20.50")
+ */
+export function formatDollars(amount: number): string {
+  const cents = Math.round(amount * 100);
+  const digits = cents % 100 === 0 ? 0 : 2;
+  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+}

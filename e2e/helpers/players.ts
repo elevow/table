@@ -7,8 +7,9 @@ import { APIRequestContext, APIResponse, Browser, Page, expect, request } from '
  * These accounts have fake email addresses, so nothing here may call a route that sends mail
  * (register, forgot/reset password, invites, /api/test/email).
  *
- * Optional: TEST_ADMIN_EMAIL/TEST_ADMIN_PASSWORD, an account with admin.rooms.manage, lets specs
- * delete the tables they create (see deleteTables). Without it those tables are left behind.
+ * Optional: an account with admin.rooms.manage lets specs delete the tables they create (see
+ * deleteTables). Either name one of the test users, TEST_ADMIN_USER=5, or give a separate account,
+ * TEST_ADMIN_EMAIL/TEST_ADMIN_PASSWORD. Without one those tables are left behind.
  */
 
 export const MAX_TEST_USERS = 6;
@@ -225,24 +226,36 @@ export async function clearTable(tableId: string | undefined, players: TestPlaye
   for (const p of players) await p.stand(tableId).catch(() => undefined);
 }
 
-/** Whether TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD are both set. */
+/**
+ * The admin account that deletes test tables: TEST_ADMIN_EMAIL/TEST_ADMIN_PASSWORD if set,
+ * otherwise the test user TEST_ADMIN_USER names. Null when neither is configured.
+ */
+export function testAdminCredentials(): (Credentials & { label: string }) | null {
+  const { TEST_ADMIN_EMAIL: email, TEST_ADMIN_PASSWORD: password, TEST_ADMIN_USER: n } = process.env;
+  if (email && password) return { email, password, label: 'TEST_ADMIN' };
+  if (!n) return null;
+  const userEmail = process.env[`TEST_USER${n}_EMAIL`];
+  const userPassword = process.env[`TEST_USER${n}_PASSWORD`];
+  if (!userEmail || !userPassword) throw new Error(`TEST_ADMIN_USER=${n}, but TEST_USER${n}_EMAIL/PASSWORD aren't set`);
+  return { email: userEmail, password: userPassword, label: `TEST_USER${n} (admin)` };
+}
+
+/** Whether an admin account is configured to delete test tables. */
 export function hasTestAdmin(): boolean {
-  return !!process.env.TEST_ADMIN_EMAIL && !!process.env.TEST_ADMIN_PASSWORD;
+  return testAdminCredentials() !== null;
 }
 
 /**
- * Removes tables a spec created: stands the players up, then deletes the tables when a
- * TEST_ADMIN_* account is configured. Without one the empty tables are left behind (the lobby
- * stops listing empty rooms after a few hours).
+ * Removes tables a spec created: stands the players up, then deletes the tables when an admin
+ * account is configured (see testAdminCredentials). Without one the empty tables are left behind
+ * (the lobby stops listing empty rooms after a few hours).
  */
 export async function deleteTables(tableIds: Array<string | undefined>, players: TestPlayer[] = []): Promise<void> {
   const ids = tableIds.filter((id): id is string => !!id);
   for (const id of ids) await clearTable(id, players);
-  if (!ids.length || !hasTestAdmin()) return;
-  const admin = await login(
-    { email: process.env.TEST_ADMIN_EMAIL!, password: process.env.TEST_ADMIN_PASSWORD! },
-    'TEST_ADMIN',
-  );
+  const creds = testAdminCredentials();
+  if (!ids.length || !creds) return;
+  const admin = await login({ email: creds.email, password: creds.password }, creds.label);
   try {
     for (const id of ids) {
       const res = await admin.delete(`/api/admin/rooms/${encodeURIComponent(id)}`);

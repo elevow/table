@@ -12,9 +12,15 @@ updates:
         update-types:
           - minor
           - patch
-    # These move together in one planned upgrade (Next 16 with React 19, TypeScript 5 and ESLint 9),
-    # part 2 of #140. Minor and patch updates still come. Remove this once that upgrade lands.
+    # These move together in one planned upgrade (Next 16 with React 19, TypeScript 5, ESLint 9 and
+    # Tailwind 4), #167. Minor and patch updates still come. Remove this once that upgrade lands.
+    # @types/node then moves to 22, the Node version the app runs on (its 22 types need TypeScript
+    # 5.6); change its entry to `versions: ['>= 23']` so it stays there.
     ignore:
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+      - dependency-name: tailwindcss
+        update-types: [version-update:semver-major]
       - dependency-name: next
         update-types: [version-update:semver-major]
       - dependency-name: eslint-config-next

@@ -19,7 +19,7 @@ import { Card, Player, GameVariant } from '../../src/types/poker';
 import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import { useDisplaySettings } from '../../src/hooks/useDisplaySettings';
-import { formatChips } from '../../src/utils/chip-display';
+import { formatChips, formatDollars } from '../../src/utils/chip-display';
 import { RUN_IT_TWICE_DECISIONS_ENABLED } from '../../src/lib/shared/feature-flags';
 import { api, unwrap } from '../../src/utils/api-client';
 import { resolveSessionUserId } from '../../src/utils/session-identity';
@@ -3084,10 +3084,11 @@ export default function GamePage() {
                                 const add = Math.max(0, sel - prev);
                                 const onClick = () => handleRaise(Number(sel.toFixed(2)));
                                 const bbVal = pokerGameState?.bigBlind || null;
-                                const label = isAllIn ? `All-in ${showStackInBB ? formatChips(stack, bbVal, true) : `$${stack.toFixed(2)}`}` : `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
+                                const amt = (n: number) => showStackInBB ? formatChips(n, bbVal, true) : formatDollars(n);
                                 return (
                                   <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
-                                    {label}
+                                    {/* Phones skip the amount added: it's in the box above, and the button is half the screen */}
+                                    {isAllIn ? `All-in ${amt(stack)}` : <>Raise to {amt(sel)}<span className="max-sm:hidden"> (+{amt(add)})</span></>}
                                   </button>
                                 );
                               })()}
@@ -3206,10 +3207,11 @@ export default function GamePage() {
                                 const add = Math.max(0, sel - prev);
                                 const onClick = () => handleRaise(Number(sel.toFixed(2)));
                                 const bbVal = pokerGameState?.bigBlind || null;
-                                const label = `Raise to ${showStackInBB ? formatChips(sel, bbVal, true) : `$${sel.toFixed(2)}`} (+${showStackInBB ? formatChips(add, bbVal, true) : `$${add.toFixed(2)}`})`;
+                                const amt = (n: number) => showStackInBB ? formatChips(n, bbVal, true) : formatDollars(n);
                                 return (
                                   <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
-                                    {label}
+                                    {/* Phones skip the amount added: it's in the box above, and the button is half the screen */}
+                                    Raise to {amt(sel)}<span className="max-sm:hidden"> (+{amt(add)})</span>
                                   </button>
                                 );
                               })()}

@@ -13,6 +13,8 @@ interface Props {
   players: Array<{ id: string; name: string }>;
   onState: (gameState: any) => void;
   onRefresh: () => void;
+  // Shown inside the side panel tabs, without its own card
+  embedded?: boolean;
 }
 
 /**
@@ -21,7 +23,7 @@ interface Props {
  * and removing a player. Each shows only with its permission (extras.hostPermissions); staff
  * with admin.rooms.manage see them on any table.
  */
-export default function HostControlsPanel({ tableId, playerId, extras, gameState, players, onState, onRefresh }: Props) {
+export default function HostControlsPanel({ tableId, playerId, extras, gameState, players, onState, onRefresh, embedded = false }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sb, setSb] = useState<string>('');
@@ -71,13 +73,15 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
     }).catch(() => setError('Copy the link from the box instead'));
   };
 
+  const Wrapper: React.ElementType = embedded ? 'div' : 'details';
   return (
-    <details className="group surface text-sm text-gray-800 dark:text-gray-200">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-5 py-4 [&::-webkit-details-marker]:hidden">
+    // Inside the side panel tabs it shows open, under its tab, without its own card and header
+    <Wrapper className={`group text-sm text-gray-800 dark:text-gray-200 ${embedded ? '' : 'surface'}`}>
+      {!embedded && <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-5 py-4 [&::-webkit-details-marker]:hidden">
         <h3 className="section-title">{extras.isHost ? 'Host controls' : 'Host controls (staff)'}</h3>
         <svg className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M5.2 7.2a1 1 0 011.4 0L10 10.6l3.4-3.4a1 1 0 111.4 1.4l-4.1 4.1a1 1 0 01-1.4 0L5.2 8.6a1 1 0 010-1.4z" clipRule="evenodd" /></svg>
-      </summary>
-      <div className="space-y-4 border-t border-gray-100 px-5 pb-5 pt-4 dark:border-white/[0.06] [&>*]:!mt-0 [&>*+*]:border-t [&>*+*]:border-gray-100 dark:[&>*+*]:border-white/[0.06] [&>*+*]:pt-4">
+      </summary>}
+      <div className={`space-y-4 ${embedded ? '' : 'border-t border-gray-100 px-5 pb-5 pt-4 dark:border-white/[0.06]'} [&>*]:!mt-0 [&>*+*]:border-t [&>*+*]:border-gray-100 dark:[&>*+*]:border-white/[0.06] [&>*+*]:pt-4`}>
       {error && <div className="mb-2 text-xs text-red-700 dark:text-red-300">{error}</div>}
 
       {canConfigure && (
@@ -373,6 +377,6 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
         </div>
       )}
       </div>
-    </details>
+    </Wrapper>
   );
 }

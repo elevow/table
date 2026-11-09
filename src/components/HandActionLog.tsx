@@ -7,12 +7,14 @@ interface Props {
   players: Array<{ id: string; name?: string }>;
   handNumber?: number;
   variant?: string;
+  // Shown inside the side panel tabs, without its own card
+  embedded?: boolean;
 }
 
 const money = (n: number) => `$${n}`;
 
 /** What has happened so far in the current hand, newest at the bottom. */
-export default function HandActionLog({ actions = [], players, handNumber, variant }: Props) {
+export default function HandActionLog({ actions = [], players, handNumber, variant, embedded = false }: Props) {
   const listRef = useRef<HTMLOListElement>(null);
   const names = new Map(players.map(p => [p.id, p.name || 'Player']));
 
@@ -41,7 +43,7 @@ export default function HandActionLog({ actions = [], players, handNumber, varia
   });
 
   return (
-    <div className="surface p-5">
+    <div className={embedded ? '' : 'surface p-5'}>
       <h3 className="section-title mb-3">
         Action{handNumber ? <span className="font-normal text-gray-500 dark:text-gray-400"> · Hand #{handNumber}</span> : null}
       </h3>

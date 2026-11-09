@@ -35,6 +35,7 @@ import { useTableExtras } from '../../src/hooks/useTableExtras';
 import { usePolling } from '../../src/hooks/usePolling';
 import TimeBankBadge from '../../src/components/TimeBankBadge';
 import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
+import SidePanelTabs from '../../src/components/SidePanelTabs';
 import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
 import SplashAnimation, { splashInPlay } from '../../src/components/SplashAnimation';
@@ -3660,48 +3661,65 @@ export default function GamePage() {
             }
           })()}
 
-          {/* Right column: timer and statistics, then host controls, session and notes */}
+          {/* Right column: statistics, the hand's actions, session, notes and host controls, a tab each */}
           <div className="flex flex-col gap-4 lg:row-span-4">
-          <div className="surface p-5">
-            {id && playerId && (
-              <CombinedTimerStats 
-                tableId={String(id)} 
-                playerId={playerId} 
-                gameId={String(id)}
-                onShowSettings={toggleSettings}
-                gameState={pokerGameState}
-              />
-            )}
-            {showSettings && (
-              <div className="mt-4">
-                <GameSettings settings={display.settings} onChange={display.change} hasOverrides={display.hasOverrides} onReset={display.reset} />
-              </div>
-            )}
-          </div>
-          {tableExtras && (tableExtras.hostPermissions || []).some(p => p !== 'room.view_ledger') && (
-            <HostControlsPanel
-              tableId={tableId}
-              playerId={playerId}
-              extras={tableExtras}
-              gameState={gameStarted ? pokerGameState : null}
-              players={otherSeated}
-              onState={setPokerGameState}
-              onRefresh={refreshTableExtras}
-            />
-          )}
-          {gameStarted && pokerGameState && (
-            <HandActionLog actions={pokerGameState.handActions} players={pokerGameState.players || []} handNumber={pokerGameState.handNumber} variant={pokerGameState.variant} />
-          )}
-          {playerId && (isSeated || amInGame) && (
-            <MobileCollapsible title="Session">
-            <SessionLedgerPanel tableId={tableId} refreshKey={`${pokerGameState?.handNumber ?? 0}:${pokerGameState?.stage === 'showdown'}`} />
-            </MobileCollapsible>
-          )}
-          {playerId && (
-            <MobileCollapsible title="Player notes">
-            <PlayerNotesPanel players={otherSeated} notes={playerNotes} onNotesChange={setPlayerNotes} />
-            </MobileCollapsible>
-          )}
+          <SidePanelTabs
+            tabs={[
+              {
+                id: 'stats',
+                label: 'Stats',
+                content: (
+                  <>
+                    {id && playerId && (
+                      <CombinedTimerStats
+                        tableId={String(id)}
+                        playerId={playerId}
+                        gameId={String(id)}
+                        onShowSettings={toggleSettings}
+                        gameState={pokerGameState}
+                      />
+                    )}
+                    {showSettings && (
+                      <div className="mt-4">
+                        <GameSettings settings={display.settings} onChange={display.change} hasOverrides={display.hasOverrides} onReset={display.reset} />
+                      </div>
+                    )}
+                  </>
+                ),
+              },
+              ...(gameStarted && pokerGameState ? [{
+                id: 'hand',
+                label: 'Hand',
+                content: <HandActionLog embedded actions={pokerGameState.handActions} players={pokerGameState.players || []} handNumber={pokerGameState.handNumber} variant={pokerGameState.variant} />,
+              }] : []),
+              ...(playerId && (isSeated || amInGame) ? [{
+                id: 'session',
+                label: 'Session',
+                content: <SessionLedgerPanel embedded tableId={tableId} refreshKey={`${pokerGameState?.handNumber ?? 0}:${pokerGameState?.stage === 'showdown'}`} />,
+              }] : []),
+              ...(playerId && otherSeated.length > 0 ? [{
+                id: 'notes',
+                label: 'Notes',
+                content: <PlayerNotesPanel embedded players={otherSeated} notes={playerNotes} onNotesChange={setPlayerNotes} />,
+              }] : []),
+              ...(tableExtras && (tableExtras.hostPermissions || []).some(p => p !== 'room.view_ledger') ? [{
+                id: 'host',
+                label: tableExtras.isHost ? 'Host' : 'Staff',
+                content: (
+                  <HostControlsPanel
+                    embedded
+                    tableId={tableId}
+                    playerId={playerId}
+                    extras={tableExtras}
+                    gameState={gameStarted ? pokerGameState : null}
+                    players={otherSeated}
+                    onState={setPokerGameState}
+                    onRefresh={refreshTableExtras}
+                  />
+                ),
+              }] : []),
+            ]}
+          />
           </div>
 
           {/* Less critical component in viewport */}

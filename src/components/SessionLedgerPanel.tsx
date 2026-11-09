@@ -23,7 +23,7 @@ const netClass = (n: number) => (n > 0 ? 'text-emerald-600 dark:text-emerald-400
  * Your session at this table (hands, wins, biggest pot, net) and the table's chip ledger with
  * the payments that settle it, downloadable as CSV. `refreshKey` changes after each hand.
  */
-export default function SessionLedgerPanel({ tableId, refreshKey }: { tableId: string; refreshKey: unknown }) {
+export default function SessionLedgerPanel({ tableId, refreshKey, embedded = false }: { tableId: string; refreshKey: unknown; embedded?: boolean }) {
   const [data, setData] = useState<LedgerResponse | null>(null);
   const [open, setOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -59,12 +59,13 @@ export default function SessionLedgerPanel({ tableId, refreshKey }: { tableId: s
     }
   };
 
-  if (!data) return null;
+  if (!data) return embedded ? <p className="text-sm text-gray-500 dark:text-gray-400">Loading your session…</p> : null;
   const s = data.session;
 
   return (
-    <div className="surface p-5">
-      <h3 className="section-title mb-3">This session</h3>
+    // Inside the side panel tabs the tab names it, so no card or heading of its own
+    <div className={embedded ? '' : 'surface p-5'}>
+      {!embedded && <h3 className="section-title mb-3">This session</h3>}
       <div className="grid grid-cols-2 gap-2 text-sm mb-3">
         <div className="text-gray-600 dark:text-gray-300">Hands</div>
         <div className="text-right tabular-nums text-gray-900 dark:text-gray-100">{s.handsPlayed}</div>

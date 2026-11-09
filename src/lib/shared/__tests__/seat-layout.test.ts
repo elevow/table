@@ -1,4 +1,4 @@
-import { NARROW_INFO_GAP_PX, narrowInfoBoxStyle, seatPlateStyle } from '../seat-layout';
+import { NARROW_INFO_GAP_PX, isCentreSeat, narrowInfoBoxStyle, seatPlateStyle } from '../seat-layout';
 
 describe('narrowInfoBoxStyle', () => {
   it('puts the box above seats in the top half', () => {
@@ -29,9 +29,18 @@ describe('narrowInfoBoxStyle', () => {
 });
 
 describe('seatPlateStyle', () => {
-  it('puts the plate under the avatar for every seat', () => {
-    expect(seatPlateStyle({ left: '50%', top: '2%' }, 40)).toMatchObject({ left: '50%', top: 'calc(2% + 40px)', transform: 'translate(-50%, 0)' });
-    expect(seatPlateStyle({ left: '50%', top: '104%' }, 40)).toMatchObject({ top: 'calc(104% + 40px)' });
+  it('puts the plate left of the avatar for the top and bottom seats', () => {
+    // The top seat's angle leaves it a hair off 50%
+    expect(seatPlateStyle({ left: '49.99999999999999%', top: '2%' }, 40)).toMatchObject({
+      left: 'calc(49.99999999999999% - 40px)',
+      top: '2%',
+      transform: 'translate(-100%, -50%)',
+    });
+    expect(seatPlateStyle({ left: '50%', top: '104%' }, 40)).toMatchObject({ left: 'calc(50% - 40px)', top: '104%' });
+  });
+
+  it('puts the plate under the avatar for the seats around the sides', () => {
+    expect(seatPlateStyle({ left: '32%', top: '5%' }, 40)).toMatchObject({ left: '32%', top: 'calc(5% + 40px)', transform: 'translate(-50%, 0)' });
   });
 
   it('keeps plates near the edges on screen', () => {
@@ -41,5 +50,14 @@ describe('seatPlateStyle', () => {
 
   it('falls back to below the seat without coordinates', () => {
     expect(seatPlateStyle(undefined, 40)).toMatchObject({ left: '50%', top: '100%' });
+  });
+});
+
+describe('isCentreSeat', () => {
+  it('picks out the top and bottom seats only', () => {
+    expect(isCentreSeat({ left: '50%', top: '104%' })).toBe(true);
+    expect(isCentreSeat({ left: '50.00000000000001%', top: '2%' })).toBe(true);
+    expect(isCentreSeat({ left: '32.2%', top: '4%' })).toBe(false);
+    expect(isCentreSeat(undefined)).toBe(false);
   });
 });

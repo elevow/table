@@ -33,16 +33,36 @@ export function narrowInfoBoxStyle(seat?: CSSProperties, gapPx: number = NARROW_
   };
 }
 
+/** Seats this close to the middle of the table's width are the top and bottom seats. */
+const CENTRE_BAND_PCT = 5;
+
+/** Whether a seat sits at the top or bottom middle of the table, rather than around its sides. */
+export function isCentreSeat(seat: CSSProperties | undefined): boolean {
+  const left = percent(seat?.left as string | number | undefined);
+  return left !== null && Math.abs(left - 50) < CENTRE_BAND_PCT;
+}
+
 /**
- * Where a seat's name plate goes: centred just under the avatar, the same for every seat, with
- * plates near the left or right edge shifted inwards so they stay on screen. The seat's cards sit
- * beside the avatar (toward the middle), so the plate never covers them.
+ * Where a seat's name plate goes. The top and bottom seats have theirs beside the avatar, on the
+ * left, so it stays off the board and leaves room under your own seat; their cards go on the
+ * right. Every other seat's plate is centred just under its avatar, with plates near the left or
+ * right edge shifted inwards so they stay on screen; their cards sit beside the avatar (toward the
+ * middle), so the plate never covers them.
  */
 export function seatPlateStyle(seat: CSSProperties | undefined, gapPx: number): CSSProperties {
   const left = percent(seat?.left as string | number | undefined);
   const top = percent(seat?.top as string | number | undefined);
   if (left === null || top === null) {
     return { position: 'absolute', left: '50%', top: '100%', transform: 'translate(-50%, 4px)', pointerEvents: 'none' };
+  }
+  if (isCentreSeat(seat)) {
+    return {
+      position: 'absolute',
+      left: `calc(${left}% - ${gapPx}px)`,
+      top: `${top}%`,
+      transform: 'translate(-100%, -50%)',
+      pointerEvents: 'none',
+    };
   }
   const shiftX = left < 15 ? '-25%' : left > 85 ? '-75%' : '-50%';
   return {

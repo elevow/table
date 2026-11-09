@@ -14,6 +14,8 @@ interface Props {
   players: Array<{ id: string; name: string }>;
   notes: NotesMap;
   onNotesChange: (notes: NotesMap) => void;
+  // Shown inside the side panel tabs, without its own card
+  embedded?: boolean;
 }
 
 /** Load your private notes about these players. */
@@ -28,7 +30,7 @@ export async function fetchNotes(subjectIds: string[]): Promise<NotesMap> {
 /**
  * Your private notes and color tags for the other players at the table. Only you see them.
  */
-export default function PlayerNotesPanel({ players, notes, onNotesChange }: Props) {
+export default function PlayerNotesPanel({ players, notes, onNotesChange, embedded = false }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [color, setColor] = useState<NoteColor | null>(null);
@@ -79,8 +81,9 @@ export default function PlayerNotesPanel({ players, notes, onNotesChange }: Prop
   if (players.length === 0) return null;
 
   return (
-    <div className="surface p-5">
-      <h3 className="section-title mb-1">Player notes</h3>
+    // Inside the side panel tabs the tab names it, so no card or heading of its own
+    <div className={embedded ? '' : 'surface p-5'}>
+      {!embedded && <h3 className="section-title mb-1">Player notes</h3>}
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Private to you. Tags show VPIP/PFR · hands played together.</p>
       <ul className="space-y-1">
         {players.map(p => {

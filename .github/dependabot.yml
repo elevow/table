@@ -12,6 +12,25 @@ updates:
         update-types:
           - minor
           - patch
+    # These move together in one planned upgrade (Next 16 with React 19, TypeScript 5 and ESLint 9),
+    # part 2 of #140. Minor and patch updates still come. Remove this once that upgrade lands.
+    ignore:
+      - dependency-name: next
+        update-types: [version-update:semver-major]
+      - dependency-name: eslint-config-next
+        update-types: [version-update:semver-major]
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major]
+      - dependency-name: '@types/react'
+        update-types: [version-update:semver-major]
+      - dependency-name: '@types/react-dom'
+        update-types: [version-update:semver-major]
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
 
   # Actions used by the workflows
   - package-ecosystem: github-actions

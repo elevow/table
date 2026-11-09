@@ -56,7 +56,7 @@ export default function SidePanelTabs({ tabs }: { tabs: SidePanelTab[] }) {
         role="tablist"
         aria-label="Table panels"
         onKeyDown={onKeyDown}
-        className="flex gap-1 overflow-x-auto border-b border-gray-100 px-3 pt-2 dark:border-white/[0.06]"
+        className="flex gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-b border-gray-100 px-3 pt-2 dark:border-white/[0.06]"
       >
         {tabs.map(t => {
           const selected = t.id === active;

@@ -61,7 +61,7 @@ import { useTableReactions } from '../../src/hooks/useTableReactions';
 import TableChipAnimations from '../../src/components/TableChipAnimations';
 import MobileCollapsible from '../../src/components/MobileCollapsible';
 import { useMediaQuery, NARROW_SCREEN_QUERY } from '../../src/hooks/useMediaQuery';
-import { seatPlateStyle } from '../../src/lib/shared/seat-layout';
+import { isCentreSeat, seatPlateStyle } from '../../src/lib/shared/seat-layout';
 import { tablePlayerName } from '../../src/utils/table-player-name';
 import { suitColorClass as suitTextClass } from '../../src/lib/shared/display-settings';
 // Run It Twice: UI additions rely on optional runItTwice field in game state
@@ -1720,7 +1720,7 @@ export default function GamePage() {
         {!isEmpty && assignment && (
           <div
             className="absolute z-10"
-            // Every seat's plate sits centred under its avatar; the seat's cards sit beside the avatar instead
+            // The top and bottom seats' plates sit left of the avatar; the others' are centred under it
             style={seatPlateStyle(style, isNarrowScreen ? 30 : 38)}
           >
             <div className={`min-w-[96px] max-w-[150px] px-3 py-1.5 max-sm:px-2 max-sm:py-1 max-sm:text-[10px] max-sm:min-w-[84px] max-sm:max-w-[120px] rounded-xl shadow-card border backdrop-blur-sm text-xs bg-gray-950/85 text-gray-100 ${
@@ -1785,9 +1785,10 @@ export default function GamePage() {
             const topStr = style.top.toString();
             const leftPercent = parseFloat(leftStr.replace('%', ''));
             const topPercent = parseFloat(topStr.replace('%', ''));
-            // Move cards toward the table center (opposite side of avatar)
+            // Move cards toward the table center (opposite side of avatar). The top and bottom
+            // seats have their name plate on the left, so their cards go on the right
             const offset = isNarrowScreen ? 56 : 58;
-            const dx = leftPercent >= 50 ? -offset : offset;
+            const dx = isCentreSeat(style) || leftPercent < 50 ? offset : -offset;
             const dy = topPercent >= 50 ? -4 : 4;
             cardStyle = {
               position: 'absolute',
@@ -2736,10 +2737,11 @@ export default function GamePage() {
               })()}
             </div>
           )}
-          {/* Poker Table - Green Felt Design; on wide screens the reaction row sits beside your seat */}
-          <div className="lg:col-span-2 relative lg:pb-20">
+          {/* Poker Table - Green Felt Design; on wide screens the reaction row sits beside your seat.
+              The margin under the felt leaves room for the bottom seat's avatar, which hangs below it */}
+          <div className="lg:col-span-2 relative">
             {/* Green felt table surface */}
-            <div className="table-rail relative rounded-full mx-auto max-sm:mt-7 max-sm:mb-20"
+            <div className="table-rail relative rounded-full mx-auto mb-12 max-sm:mt-7"
                  style={{
                    width: '100%',
                    maxWidth: '820px',

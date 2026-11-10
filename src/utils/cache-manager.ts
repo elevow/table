@@ -72,7 +72,8 @@ class CacheManager {
         // Dynamically import to avoid bundling ioredis in the browser
         const mod: any = await import('ioredis');
         const RedisCtor = mod?.default ?? mod?.Redis ?? mod;
-        this.redisClient = new RedisCtor(options) as IORedisClient;
+        // ioredis 6 speaks RESP3 by default; keep RESP2, which every Redis host accepts
+        this.redisClient = new RedisCtor({ ...options, protocol: 2 }) as IORedisClient;
         // console.log('Redis cache initialized');
       }
     } catch (error) {

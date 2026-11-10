@@ -95,15 +95,27 @@ test.describe('A tournament from start to finish', () => {
   const openTables = (v: any): Table[] => (v.tables as Table[]).filter(t => t.roomId && t.players.length > 0);
 
   /**
-   * The table as one of its players sees it. A player the tournament has just moved here isn't in
-   * the room until the table they left finishes its hand, so ask each in turn.
+   * The table as one of its players sees it, or null while it has no game yet: a table opened for
+   * one player (a rebuy when every other seat is taken) starts once a second player, moved to even
+   * the tables up, arrives after finishing the hand at their old table. That moved player isn't in
+   * the room until then, so ask each player in turn.
    */
-  async function tableState(table: Table): Promise<TableState> {
+  async function gameAt(table: Table): Promise<TableState | null> {
+    const statuses: number[] = [];
     for (const p of table.players) {
       const res = await byId(players, p.userId).get(`/api/games/state?tableId=${encodeURIComponent(table.roomId!)}`);
       if (res.status() === 200) return (await res.json()).gameState;
+      statuses.push(res.status());
     }
-    throw new Error(`None of table ${table.number}'s players can see it`);
+    if (statuses.every(s => s === 404)) return null;
+    throw new Error(`None of table ${table.number}'s players can see it: ${statuses.join(', ')}`);
+  }
+
+  /** The table's game, which must have started. */
+  async function tableState(table: Table): Promise<TableState> {
+    const state = await gameAt(table);
+    if (!state) throw new Error(`Table ${table.number} has no game yet`);
+    return state;
   }
 
   /** What a player's screen does on opening the table: sit in if the tournament just seated them. */
@@ -136,7 +148,8 @@ test.describe('A tournament from start to finish', () => {
     const held: Record<string, string | undefined> = {};
     for (const table of openTables(await view())) {
       const roomId = table.roomId!;
-      const state = await tableState(table);
+      const state = await gameAt(table);
+      if (!state) continue;
       const seated = table.players.filter(p => state.players.some(sp => sp.id === p.userId));
       opts.onState?.(roomId, state);
       for (const p of state.players) if (p.notArrived && p.id !== noShow) await arrive(roomId, p);
@@ -310,7 +323,7 @@ test.describe('A tournament from start to finish', () => {
       held = await stepTables();
       for (const t of openTables(await view())) {
         if (!t.players.some(p => p.userId === busted)) continue;
-        const me = (await tableState(t)).players.find(p => p.id === busted);
+        const me = (await gameAt(t))?.players.find(p => p.id === busted);
         if (me) seatedWith = me.stack + (me.currentBet || 0);
       }
     }

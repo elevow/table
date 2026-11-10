@@ -12,31 +12,14 @@ updates:
         update-types:
           - minor
           - patch
-    # These move together in one planned upgrade (Next 16 with React 19, TypeScript 5, ESLint 9 and
-    # Tailwind 4), #167. Minor and patch updates still come. Remove this once that upgrade lands.
-    # @types/node then moves to 22, the Node version the app runs on (its 22 types need TypeScript
-    # 5.6); change its entry to `versions: ['>= 23']` so it stays there.
     ignore:
+      # Type definitions follow the Node version the app runs on (22 in CI and on Vercel). Raise
+      # this together with the runtime.
       - dependency-name: '@types/node'
-        update-types: [version-update:semver-major]
-      - dependency-name: tailwindcss
-        update-types: [version-update:semver-major]
-      - dependency-name: next
-        update-types: [version-update:semver-major]
-      - dependency-name: eslint-config-next
-        update-types: [version-update:semver-major]
-      - dependency-name: react
-        update-types: [version-update:semver-major]
-      - dependency-name: react-dom
-        update-types: [version-update:semver-major]
-      - dependency-name: '@types/react'
-        update-types: [version-update:semver-major]
-      - dependency-name: '@types/react-dom'
-        update-types: [version-update:semver-major]
-      - dependency-name: eslint
-        update-types: [version-update:semver-major]
+        versions: ['>= 23']
+      # TypeScript 7 is the new native compiler; ts-jest supports TypeScript below 7 only
       - dependency-name: typescript
-        update-types: [version-update:semver-major]
+        versions: ['>= 7']
 
   # Actions used by the workflows
   - package-ecosystem: github-actions

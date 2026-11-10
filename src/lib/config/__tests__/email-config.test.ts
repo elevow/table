@@ -98,31 +98,17 @@ describe('Email Configuration', () => {
       }));
     });
 
-    test('returns AWS SES configuration when all AWS variables are provided', () => {
+    test('ignores the old AWS SES variables, and warns that they no longer work', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
       (process.env as any).AWS_SES_REGION = 'us-east-1';
       (process.env as any).AWS_ACCESS_KEY_ID = 'test-access-key';
       (process.env as any).AWS_SECRET_ACCESS_KEY = 'test-secret-key';
 
       const config = getEmailConfig();
 
-      expect(config).toEqual(expect.objectContaining({
-        provider: 'aws-ses',
-        awsSes: {
-          region: 'us-east-1',
-          accessKeyId: 'test-access-key',
-          secretAccessKey: 'test-secret-key'
-        }
-      }));
-    });
-
-    test('does not return AWS SES configuration when only some AWS variables are provided', () => {
-      (process.env as any).AWS_SES_REGION = 'us-east-1';
-      // Missing AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
-
-      const config = getEmailConfig();
-
       expect(config.provider).toBe('development');
-      expect(config.awsSes).toBeUndefined();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('AWS SES is no longer supported'));
+      warn.mockRestore();
     });
 
     test('returns SMTP configuration when all SMTP variables are provided', () => {
@@ -180,19 +166,6 @@ describe('Email Configuration', () => {
       expect(config.smtp).toBeUndefined();
     });
 
-    test('prioritizes SendGrid over AWS SES when both are configured', () => {
-      (process.env as any).SENDGRID_API_KEY = 'sg-test-key';
-      (process.env as any).AWS_SES_REGION = 'us-east-1';
-      (process.env as any).AWS_ACCESS_KEY_ID = 'test-access-key';
-      (process.env as any).AWS_SECRET_ACCESS_KEY = 'test-secret-key';
-
-      const config = getEmailConfig();
-
-      expect(config.provider).toBe('sendgrid');
-      expect(config.sendgrid).toBeDefined();
-      expect(config.awsSes).toBeUndefined();
-    });
-
     test('prioritizes SendGrid over SMTP when both are configured', () => {
       (process.env as any).SENDGRID_API_KEY = 'sg-test-key';
       (process.env as any).SMTP_HOST = 'smtp.example.com';
@@ -206,7 +179,8 @@ describe('Email Configuration', () => {
       expect(config.smtp).toBeUndefined();
     });
 
-    test('prioritizes AWS SES over SMTP when both are configured', () => {
+    test('uses SMTP when it is configured alongside the old AWS SES variables', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
       (process.env as any).AWS_SES_REGION = 'us-east-1';
       (process.env as any).AWS_ACCESS_KEY_ID = 'test-access-key';
       (process.env as any).AWS_SECRET_ACCESS_KEY = 'test-secret-key';
@@ -216,9 +190,9 @@ describe('Email Configuration', () => {
 
       const config = getEmailConfig();
 
-      expect(config.provider).toBe('aws-ses');
-      expect(config.awsSes).toBeDefined();
-      expect(config.smtp).toBeUndefined();
+      expect(config.provider).toBe('smtp');
+      expect(config.smtp).toBeDefined();
+      warn.mockRestore();
     });
 
     test('handles invalid SMTP port gracefully', () => {
@@ -304,11 +278,6 @@ describe('Email Configuration', () => {
         replyTo: 'reply@example.com',
         sendgrid: {
           apiKey: 'test-key'
-        },
-        awsSes: {
-          region: 'us-east-1',
-          accessKeyId: 'key',
-          secretAccessKey: 'secret'
         },
         smtp: {
           host: 'smtp.example.com',

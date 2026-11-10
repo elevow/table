@@ -19,20 +19,7 @@ EMAIL_FROM=noreply@yourdomain.com
 EMAIL_FROM_NAME=Your App Name
 ```
 
-### Option 2: AWS SES (Cost-effective for high volume)
-
-1. **Configure AWS SES** in your AWS account
-2. **Create IAM user** with SES permissions
-3. **Add to your `.env.local`**:
-```env
-AWS_SES_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_aws_access_key_id
-AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
-EMAIL_FROM=noreply@yourdomain.com
-EMAIL_FROM_NAME=Your App Name
-```
-
-### Option 3: Gmail SMTP (Easy for small projects)
+### Option 2: Gmail SMTP (Easy for small projects)
 
 1. **Enable 2-Factor Authentication** on your Google account
 2. **Generate an App Password**: https://myaccount.google.com/apppasswords
@@ -47,7 +34,7 @@ EMAIL_FROM=your.email@gmail.com
 EMAIL_FROM_NAME=Your App Name
 ```
 
-### Option 4: Custom SMTP Server
+### Option 3: Custom SMTP Server
 
 ```env
 SMTP_HOST=mail.yourdomain.com
@@ -72,7 +59,7 @@ EMAIL_SUPPORT=support@yourdomain.com
 NEXT_PUBLIC_BASE_URL=https://yourdomain.com
 
 # Choose ONE provider configuration:
-# SendGrid OR AWS SES OR SMTP
+# SendGrid OR SMTP
 ```
 
 ## Features

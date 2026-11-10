@@ -4,7 +4,7 @@
  */
 
 export interface EmailConfig {
-  provider: 'sendgrid' | 'aws-ses' | 'smtp' | 'development';
+  provider: 'sendgrid' | 'smtp' | 'development';
   fromEmail: string;
   fromName: string;
   replyTo?: string;
@@ -12,13 +12,6 @@ export interface EmailConfig {
   // SendGrid configuration
   sendgrid?: {
     apiKey: string;
-  };
-  
-  // AWS SES configuration  
-  awsSes?: {
-    region: string;
-    accessKeyId: string;
-    secretAccessKey: string;
   };
   
   // SMTP configuration
@@ -71,16 +64,9 @@ export function getEmailConfig(): EmailConfig {
     };
   }
 
-  if (process.env.AWS_SES_REGION && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-    return {
-      ...defaultConfig,
-      provider: 'aws-ses',
-      awsSes: {
-        region: process.env.AWS_SES_REGION,
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-      }
-    };
+  // AWS SES was removed (#168); say so rather than quietly falling back to the console
+  if (process.env.AWS_SES_REGION) {
+    console.warn('[email] AWS SES is no longer supported; AWS_SES_REGION is ignored. Use SendGrid or SMTP.');
   }
 
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {

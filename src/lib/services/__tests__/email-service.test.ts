@@ -24,7 +24,6 @@ jest.mock('../../config/email-config', () => ({
   }
 }));
 jest.mock('@sendgrid/mail');
-jest.mock('aws-sdk');
 jest.mock('nodemailer');
 
 import { EmailService } from '../email-service';
@@ -251,22 +250,6 @@ describe('EmailService', () => {
       mockGetEmailConfig.mockReturnValue(sendgridConfig);
       
       const service = new EmailService(sendgridConfig);
-      expect(service).toBeInstanceOf(EmailService);
-    });
-
-    it('should handle AWS SES provider configuration', () => {
-      const awsConfig = {
-        ...mockConfig,
-        provider: 'aws-ses' as const,
-        awsSes: {
-          region: 'us-east-1',
-          accessKeyId: 'test-key',
-          secretAccessKey: 'test-secret'
-        }
-      };
-      mockGetEmailConfig.mockReturnValue(awsConfig);
-      
-      const service = new EmailService(awsConfig);
       expect(service).toBeInstanceOf(EmailService);
     });
 

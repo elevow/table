@@ -124,34 +124,7 @@ const Dashboard: NextPage = () => {
       if (response.ok) {
         if (data.joinable) {
           // Room exists and is joinable - navigate to the game
-          console.log('Attempting to navigate to:', `/game/${data.room.id}`);
-          
-          try {
-            // Use window.location as backup if router fails
-            const navigationPromise = router.push(`/game/${data.room.id}`);
-            
-            // Set a timeout to check if navigation completed
-            const timeoutId = setTimeout(() => {
-              console.log('Navigation timeout - trying window.location.href');
-              window.location.href = `/game/${data.room.id}`;
-            }, 2000);
-            
-            // Handle the navigation promise
-            navigationPromise.then(() => {
-              console.log('Navigation completed successfully');
-              clearTimeout(timeoutId);
-            }).catch((error) => {
-              console.error('Navigation error:', error);
-              clearTimeout(timeoutId);
-              // Fallback to window.location
-              console.log('Router failed, using window.location.href');
-              window.location.href = `/game/${data.room.id}`;
-            });
-          } catch (error) {
-            console.error('Router push failed:', error);
-            // Direct navigation fallback
-            window.location.href = `/game/${data.room.id}`;
-          }
+          await router.push(`/game/${data.room.id}`);
         } else {
           // Room exists but not joinable
           console.log('Room not joinable. Reason:', data.reason);

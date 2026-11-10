@@ -13,6 +13,7 @@ import {
   getCurrentPlayerCount,
   getActiveRooms,
   getRoomStats,
+  tablesSeatedAt,
   type GameSeats,
 } from '../../lib/shared/game-seats';
 import { getPool } from '../database/pool';
@@ -158,5 +159,27 @@ describe('lib/shared/game-seats', () => {
     // Everyone stood up
     expect(countSeatedInConfig({ seats: { 1: null, 2: null } }, 9)).toBe(0);
     expect(countSeatedInConfig(null)).toBe(0);
+  });
+
+  describe('tablesSeatedAt', () => {
+    it('lists the other tables where the player holds a seat', async () => {
+      mockQuery.mockResolvedValue({ rows: [{ name: 'Friday game' }, { name: 'Late table' }] });
+      await expect(tablesSeatedAt('p1', ROOM_A)).resolves.toEqual(['Friday game', 'Late table']);
+      expect(mockQuery).toHaveBeenCalledWith(expect.any(String), ['p1', ROOM_A]);
+    });
+
+    it("doesn't count the tables of a tournament that has finished or been cancelled", async () => {
+      mockQuery.mockResolvedValue({ rows: [] });
+      await tablesSeatedAt('p1', ROOM_A);
+      const sql = String(mockQuery.mock.calls[0][0]).replace(/\s+/g, ' ');
+      expect(sql).toContain("NOT EXISTS ( SELECT 1 FROM tournaments t WHERE t.id::text = game_rooms.configuration->>'tournamentId' AND t.status IN ('completed', 'cancelled') )");
+    });
+
+    it('counts nothing when the lookup fails, so a database hiccup never keeps anyone from sitting', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      mockQuery.mockRejectedValue(new Error('db down'));
+      await expect(tablesSeatedAt('p1', ROOM_A)).resolves.toEqual([]);
+      warn.mockRestore();
+    });
   });
 });

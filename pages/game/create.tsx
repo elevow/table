@@ -147,68 +147,10 @@ export default function CreateGameRoomPage() {
       const room = await res.json();
       console.log('Room created successfully:', room);
       console.log('Room ID:', room.id);
-      console.log('Navigating to:', `/game/${room.id}`);
-      
+
       // Set navigation state for user feedback
       setIsNavigating(true);
-      
-      // Check if router is available
-      if (!router) {
-        console.error('Router not available, using window.location');
-        if (typeof window !== 'undefined') {
-          window.location.href = `/game/${room.id}`;
-        }
-        return;
-      }
-      
-      // Add a small delay to ensure the room is fully created
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Try multiple navigation approaches
-      const navigationTarget = `/game/${room.id}`;
-      let navigationSuccessful = false;
-      
-      // Method 1: Try router.push with timeout
-      try {
-        console.log('Attempting router.push...');
-        
-        // Set up a timeout for navigation
-        const navigationPromise = router.push(navigationTarget);
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Navigation timeout')), 3000);
-        });
-        
-        await Promise.race([navigationPromise, timeoutPromise]);
-        
-        // Wait a bit to see if navigation actually happened
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // Check if navigation was successful
-        if (typeof window !== 'undefined') {
-          const currentPath = window.location.pathname;
-          console.log('Current path after router.push:', currentPath);
-          
-          if (currentPath === navigationTarget) {
-            console.log('✅ Navigation successful via router.push');
-            navigationSuccessful = true;
-          }
-        }
-      } catch (navError) {
-        console.warn('Router.push failed or timed out:', navError);
-      }
-      
-      // Method 2: Fallback to window.location if router.push didn't work
-      if (!navigationSuccessful && typeof window !== 'undefined') {
-        console.log('🔄 Using window.location fallback...');
-        window.location.href = navigationTarget;
-        navigationSuccessful = true;
-      }
-      
-      // Method 3: Final fallback - reload with new URL
-      if (!navigationSuccessful && typeof window !== 'undefined') {
-        console.log('🔄 Using window.location.replace fallback...');
-        window.location.replace(navigationTarget);
-      }
+      await router.push(`/game/${room.id}`);
     } catch (err: any) {
       console.error('Room creation error:', err);
       setError(err?.message || 'Failed to create room');

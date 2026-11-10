@@ -2402,15 +2402,10 @@ export default function GamePage() {
         }
       }
       
-      // Use direct navigation for reliability
-      console.log('Navigating to dashboard with window.location.href');
-      window.location.href = '/dashboard';
-      
+      await router.push('/dashboard');
     } catch (error) {
       console.error('Error leaving game:', error);
-      // Direct navigation fallback
-      console.log('Error occurred, using direct navigation');
-      window.location.href = '/dashboard';
+      await router.push('/dashboard');
     }
   };
   

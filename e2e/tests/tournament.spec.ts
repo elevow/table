@@ -1,5 +1,5 @@
 import { test, expect, APIResponse } from '@playwright/test';
-import { GameState, TestPlayer, byId, chipsInPlay, hasTestUser, loginAs, logoutAll, MAX_TEST_USERS, signedInPage } from '../helpers/players';
+import { GameState, TestPlayer, byId, chipsInPlay, deleteTables, hasTestUser, loginAs, logoutAll, MAX_TEST_USERS, signedInPage } from '../helpers/players';
 
 /**
  * A whole tournament against the real API and database, with all six test accounts playing and
@@ -13,7 +13,9 @@ import { GameState, TestPlayer, byId, chipsInPlay, hasTestUser, loginAs, logoutA
  *
  * Players' screens are stood in for by the API: a player the tournament has just seated is sat in
  * the way their screen would (except the no-show), and everyone else moves all in to bust quickly.
- * Leaves behind one completed tournament named "E2E tournament …" and its rooms.
+ * Leaves behind one completed tournament named "E2E tournament …". Its rooms are deleted at the end
+ * (when an admin is configured, see testAdminCredentials): the tournament leaves its last players
+ * seated, and test users can only sit at a few tables.
  */
 
 const DIRECTOR = 3;
@@ -56,6 +58,8 @@ test.describe('A tournament from start to finish', () => {
   let tournamentId = '';
   // Kept away (never sat in) until the no-show test is done
   let noShow: string | null = null;
+  // Every room the tournament has opened, for cleanup
+  const roomIds = new Set<string>();
 
   test.beforeAll(async () => {
     for (const n of USERS) players.push(await loginAs(n));
@@ -70,13 +74,16 @@ test.describe('A tournament from start to finish', () => {
         await director.post('/api/tournaments/cancel', { tournamentId, reason: 'E2E test stopped early' }).catch(() => undefined);
       }
     }
+    await deleteTables([...roomIds]);
     await logoutAll(players);
   });
 
   async function view(as: TestPlayer = director): Promise<any> {
     const res = await as.get(`/api/tournaments/view?tournamentId=${encodeURIComponent(tournamentId)}`);
     expect(res.status(), `view: ${JSON.stringify(await body(res))}`).toBe(200);
-    return res.json();
+    const v = await res.json();
+    for (const t of v.tables as Table[]) if (t.roomId) roomIds.add(t.roomId);
+    return v;
   }
 
   async function directorDoes(path: string, extra: Record<string, unknown> = {}): Promise<any> {

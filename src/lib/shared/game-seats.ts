@@ -83,6 +83,8 @@ export async function loadPersistedRoomSeats(roomId: string): Promise<GameSeats 
 
 /**
  * Names of the other tables where a player holds a seat, from the saved seats.
+ * Tables of a tournament that has finished or been cancelled don't count: the tournament leaves
+ * its last players in their seats, and nobody can stand up from a tournament table.
  * Returns an empty list if the lookup fails, so a database hiccup never keeps anyone from sitting.
  */
 export async function tablesSeatedAt(playerId: string, exceptRoomId: string): Promise<string[]> {
@@ -95,6 +97,11 @@ export async function tablesSeatedAt(playerId: string, exceptRoomId: string): Pr
            SELECT 1 FROM jsonb_each(CASE WHEN jsonb_typeof(configuration->'seats') = 'object'
                                          THEN configuration->'seats' ELSE '{}'::jsonb END) s
            WHERE s.value->>'playerId' = $1
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM tournaments t
+           WHERE t.id::text = game_rooms.configuration->>'tournamentId'
+             AND t.status IN ('completed', 'cancelled')
          )
        ORDER BY created_at DESC
        LIMIT 50`,

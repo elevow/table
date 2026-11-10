@@ -18,7 +18,7 @@ const bigBlindId = (engine: PokerEngine) => engine.getState().handActions!.find(
 const dealtIn = (engine: PokerEngine, id: string) => (player(engine, id).holeCards || []).length > 0;
 
 describe('the blinds follow the button', () => {
-  it('moves the big blind round a ring-3 game, one seat per hand', () => {
+  it('moves the big blind round a ring game, one seat per hand', () => {
     const engine = new PokerEngine('t', [mk('a', 1), mk('b', 2), mk('c', 3), mk('d', 4)], 1, 2);
     const seen: string[] = [];
     for (let i = 0; i < 4; i++) {

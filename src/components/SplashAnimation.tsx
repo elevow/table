@@ -43,6 +43,7 @@ export default function SplashAnimation({ splash, playerName, formatAmount }: Pr
     // The server says how long ago the splash was; a state without that falls back to this clock
     const age = typeof splash.ageMs === 'number' ? splash.ageMs : Date.now() - splash.at;
     if (age > FRESH_MS) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- a new splash starts (or skips) its fall; a timer ends the banner
       setFalling(false);
       return;
     }

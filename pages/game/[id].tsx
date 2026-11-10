@@ -1,5 +1,7 @@
 import { useRouter } from 'next/router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLatest } from '../../src/hooks/useLatest';
+import { useHydrated } from '../../src/hooks/useHydrated';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
@@ -224,9 +226,7 @@ export default function GamePage() {
       return playerAvatars[playerIdForAvatar];
     }
     
-    // If avatar not loaded yet, generate temporary default and trigger load
-    console.log('Avatar not loaded yet for other player, generating temporary default and triggering load');
-    loadPlayerAvatar(playerIdForAvatar);
+    // Not loaded yet: a placeholder until the effect that loads seated players' avatars finishes
     const shortId = playerIdForAvatar.slice(-3).toUpperCase();
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(shortId)}&background=9ca3af&color=fff&size=128`;
   };
@@ -531,22 +531,21 @@ export default function GamePage() {
   // Poll for turn status every 10 seconds when waiting
   // This complements Supabase Realtime notifications to ensure players are notified of their turn even if broadcasts are missed
   // Can be disabled via localStorage for debugging: localStorage.setItem('disablePolling', 'true')
-  const [pollingDisabled, setPollingDisabled] = useState<boolean | null>(null);
-  
-  useEffect(() => {
-    let disabled = false;
+  // Null until hydrated, so polling never starts before the flag has been read
+  const hydratedForPolling = useHydrated();
+  const pollingDisabled = useMemo<boolean | null>(() => {
+    if (!hydratedForPolling) return null;
     try {
-      disabled = localStorage.getItem('disablePolling') === 'true';
+      return localStorage.getItem('disablePolling') === 'true';
     } catch (error) {
       console.warn('Unable to access localStorage for disablePolling flag', error);
+      return false;
     }
-    setPollingDisabled(disabled);
-    if (disabled) {
-      console.log('⚠️ Turn polling is DISABLED via localStorage');
-    } else {
-      console.log('✓ Turn polling is ENABLED');
-    }
-  }, []);
+  }, [hydratedForPolling]);
+  useEffect(() => {
+    if (pollingDisabled === null) return;
+    console.log(pollingDisabled ? '⚠️ Turn polling is DISABLED via localStorage' : '✓ Turn polling is ENABLED');
+  }, [pollingDisabled]);
   
   const isWaitingForTurn = gameStarted && pokerGameState && pokerGameState.activePlayer !== playerId && currentPlayerSeat !== null;
   useCheckTurn(
@@ -629,7 +628,7 @@ export default function GamePage() {
       allowedVariants: prompt.allowedVariants || allowedDealerChoiceVariants.current,
       current: prompt.current || 'texas-holdem',
     });
-  }, []);
+  }, [setAwaitingDealerChoice, setSelectedVariantDC]);
 
   const computeDealerChoicePrompt = useCallback((state: any) => {
     if (!state || state.stage !== 'awaiting-dealer-choice') return null;
@@ -694,8 +693,7 @@ export default function GamePage() {
 
   // After a showdown, ask for the next hand, and keep asking while the table is still at showdown:
   // one failed request (or a rebuy prompt someone never saw) used to leave the table stuck.
-  const rebuyPromptRef = useRef(rebuyPrompt);
-  rebuyPromptRef.current = rebuyPrompt;
+  const rebuyPromptRef = useLatest(rebuyPrompt);
   // One tab drives this: the player in the lowest-numbered seat asks promptly, everyone else only as
   // a slow backup (in case that player has left), so a table makes one request every few seconds
   // rather than one per player.
@@ -707,14 +705,16 @@ export default function GamePage() {
     }
     return null;
   }, [seatAssignments]);
-  const isNextHandLeaderRef = useRef(false);
-  isNextHandLeaderRef.current = !nextHandLeaderId || nextHandLeaderId === playerId;
+  const isNextHandLeaderRef = useLatest(!nextHandLeaderId || nextHandLeaderId === playerId);
+  // Leaving the showdown clears its waiting notice (adjusted during render, React's recommended way to reset state when something changes)
+  const [waitNoticeStage, setWaitNoticeStage] = useState(pokerGameState?.stage);
+  if (waitNoticeStage !== pokerGameState?.stage) {
+    setWaitNoticeStage(pokerGameState?.stage);
+    if (pokerGameState?.stage !== 'showdown') setTableWaitNotice(null);
+  }
   useEffect(() => {
     if (!id || typeof id !== 'string') return;
-    if (pokerGameState?.stage !== 'showdown') {
-      setTableWaitNotice(null);
-      return;
-    }
+    if (pokerGameState?.stage !== 'showdown') return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
@@ -770,13 +770,12 @@ export default function GamePage() {
       if (timer) clearTimeout(timer);
     };
     // Re-run for each new hand, and when players sit in or out
-  }, [pokerGameState?.stage, pokerGameState?.handNumber, pokerGameState?.handDelayMs, id, playerId, sittingInCount, seatedCount]);
+  }, [pokerGameState?.stage, pokerGameState?.handNumber, pokerGameState?.handDelayMs, id, playerId, sittingInCount, seatedCount, isNextHandLeaderRef, rebuyPromptRef]);
 
   // Seat polling shows other players sitting down before a game starts; once one is running, seats
   // come from game state. A fallback for missed live updates, so it pauses for hidden or idle tabs.
   const seatPollEnabled = !!id && !gameStarted && !pokerGameState;
-  const seatPollEnabledRef = useRef(seatPollEnabled);
-  seatPollEnabledRef.current = seatPollEnabled;
+  const seatPollEnabledRef = useLatest(seatPollEnabled);
   const fetchSeats = async () => {
     try {
       const resp = await api.get('/api/games/seats/state', { query: { tableId: String(id) } });
@@ -935,8 +934,7 @@ export default function GamePage() {
   // Poker action handlers
   // Splash the pot: once per session, the next bet or raise lands with a show for the table
   const [splashArmed, setSplashArmed] = useState(false);
-  const splashArmedRef = useRef(false);
-  splashArmedRef.current = splashArmed;
+  const splashArmedRef = useLatest(splashArmed);
 
   const handlePokerAction = useCallback(async (action: string, amount?: number) => {
     if (!pokerGameState || !playerId) {
@@ -1002,7 +1000,7 @@ export default function GamePage() {
         pendingActionRef.current = false;
       }, 500);
     }
-  }, [pokerGameState, playerId, id]);
+  }, [pokerGameState, playerId, id, splashArmedRef]);
 
   const handleFold = useCallback(() => handlePokerAction('fold'), [handlePokerAction]);
   const handleCheck = useCallback(() => handlePokerAction('check'), [handlePokerAction]);
@@ -1014,6 +1012,8 @@ export default function GamePage() {
       handlePokerAction('call', callAmount);
     }
   }, [pokerGameState, playerId, handlePokerAction]);
+  // What this player last bet or raised to, offered as a quick pick
+  const [lastBet, setLastBet] = useState<number>(0);
   const handleBet = useCallback((amount: number) => {
     setLastBet(amount);
     return handlePokerAction('bet', amount);
@@ -1315,14 +1315,15 @@ export default function GamePage() {
   }, [showPotOdds, pokerGameState, getMe]);
 
   // Pot-Limit helpers
+  const potLimitPlayers = pokerGameState?.players;
   const getPotLimitPlayersShape = useCallback(() => {
-    const arr = Array.isArray(pokerGameState?.players) ? pokerGameState.players : [];
+    const arr = Array.isArray(potLimitPlayers) ? potLimitPlayers : [];
     return arr.map((p: any) => ({
       currentBet: Number(p?.currentBet || 0),
       isFolded: !!(p?.isFolded || p?.folded),
       isAllIn: !!p?.isAllIn,
     }));
-  }, [pokerGameState?.players]);
+  }, [potLimitPlayers]);
 
   const getPotLimitBetBounds = useCallback(() => {
     const me = getMe();
@@ -1442,13 +1443,14 @@ export default function GamePage() {
   // Local state for inputs
   const [betInput, setBetInput] = useState<number>(0);
   const [raiseInput, setRaiseInput] = useState<number>(0);
-  // What this player last bet or raised to, offered as a quick pick
-  const [lastBet, setLastBet] = useState<number>(0);
   // Every turn starts from the minimum (0 clamps up to it) rather than the amount used last time
-  useEffect(() => {
+  // (adjusted during render, React's recommended way to reset state when something changes)
+  const [inputsTurnKey, setInputsTurnKey] = useState(myTurnKey);
+  if (inputsTurnKey !== myTurnKey) {
+    setInputsTurnKey(myTurnKey);
     setBetInput(0);
     setRaiseInput(0);
-  }, [myTurnKey]);
+  }
   // Private notes about the other seated players
   const [playerNotes, setPlayerNotes] = useState<NotesMap>({});
   const otherSeated = useMemo(
@@ -1494,17 +1496,18 @@ export default function GamePage() {
   const completeAmount = Math.min(Number(pokerGameState?.bigBlind) || 0, Math.max(0, Number(me?.stack) || 0));
 
   // A pre-action applies to one betting round
-  useEffect(() => {
+  // (adjusted during render, React's recommended way to reset state when something changes)
+  const [preActionStage, setPreActionStage] = useState(pokerGameState?.stage);
+  if (preActionStage !== pokerGameState?.stage) {
+    setPreActionStage(pokerGameState?.stage);
     setPreAction(null);
-  }, [pokerGameState?.stage]);
+  }
 
   // A bet cancels "Check", and a raise cancels "Call X"
-  useEffect(() => {
-    if (!preAction || isMyTurn) return;
-    if ((preAction.type === 'check' && myOwed > 0) || (preAction.type === 'call' && myOwed !== preAction.amount)) {
-      setPreAction(null);
-    }
-  }, [preAction, myOwed, isMyTurn]);
+  if (preAction && !isMyTurn
+    && ((preAction.type === 'check' && myOwed > 0) || (preAction.type === 'call' && myOwed !== preAction.amount))) {
+    setPreAction(null);
+  }
 
   // Carry out the queued pre-action as soon as the turn arrives
   useEffect(() => {
@@ -1512,6 +1515,8 @@ export default function GamePage() {
     // A Run It Twice decision is not a betting turn
     if (pokerGameState?.runItTwicePrompt) return;
     // Nor is the stud bring-in: that choice is the player's to make
+    // Carrying out the queued pre-action is this effect's job; clearing it stops it firing twice
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (myBringInPending) { setPreAction(null); return; }
     const result = resolvePreAction(preAction, myOwed);
     setPreAction(null);
@@ -2236,6 +2241,7 @@ export default function GamePage() {
           }
         }
         
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- restores seats cached in this browser until the server's arrive
         setSeatAssignments(cleanSeats);
         
         // Check if current player has a seat and restore their chip count
@@ -2295,6 +2301,7 @@ export default function GamePage() {
     }
     if (seatNumberFromState === candidateSeatNumber) return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- adopts the seat remembered in this browser
     setCurrentPlayerSeat(candidateSeatNumber);
     setPlayerChips(assignment.chips || 0);
     persistSeatNumber(lastSeatStorageKey, candidateSeatNumber);
@@ -2346,12 +2353,15 @@ export default function GamePage() {
     }
   }, [playerId, id]);
 
-  useEffect(() => {
+  // (adjusted during render, React's recommended way to reset state when something changes)
+  const [rebuySeat, setRebuySeat] = useState(currentPlayerSeat);
+  if (rebuySeat !== currentPlayerSeat) {
+    setRebuySeat(currentPlayerSeat);
     if (!currentPlayerSeat) {
       setRebuyPrompt(null);
       setRebuySubmitting(false);
     }
-  }, [currentPlayerSeat]);
+  }
 
   const handleLeaveGame = async () => {
     // Show confirmation dialog

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSupabaseRealtime } from './useSupabaseRealtime';
+import { useHydrated } from './useHydrated';
+import { useLatest } from './useLatest';
 import { authHeaders } from '../utils/auth-headers';
 import {
   isTableReaction,
@@ -8,6 +10,14 @@ import {
   REACTIONS_MUTED_KEY,
   type TableReaction,
 } from '../lib/shared/reactions';
+
+function readMuted(): boolean {
+  try {
+    return localStorage.getItem(REACTIONS_MUTED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
 
 export interface ReactionBubble {
   emote: TableReaction;
@@ -21,19 +31,16 @@ export interface ReactionBubble {
  */
 export function useTableReactions(tableId: string | undefined, playerId: string) {
   const [bubbles, setBubbles] = useState<Record<string, ReactionBubble>>({});
-  const [muted, setMutedState] = useState(false);
+  // Chosen here, else what this browser remembers (read once hydrated)
+  const [mutedChoice, setMutedState] = useState<boolean | null>(null);
+  const hydrated = useHydrated();
+  const muted = mutedChoice ?? (hydrated && readMuted());
   const [coolingDown, setCoolingDown] = useState(false);
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextIdRef = useRef(1);
-  const mutedRef = useRef(muted);
-  mutedRef.current = muted;
-  const playerIdRef = useRef(playerId);
-  playerIdRef.current = playerId;
-
-  useEffect(() => {
-    try { setMutedState(localStorage.getItem(REACTIONS_MUTED_KEY) === 'true'); } catch {}
-  }, []);
+  const mutedRef = useLatest(muted);
+  const playerIdRef = useLatest(playerId);
 
   const setMuted = useCallback((value: boolean) => {
     setMutedState(value);

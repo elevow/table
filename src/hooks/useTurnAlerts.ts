@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LOW_TIME_WARNING_MS } from '../lib/shared/turn-clock';
+import { useHydrated } from './useHydrated';
 
 const SOUND_KEY = 'table_turnSound';
 const NOTIFY_KEY = 'table_turnNotify';
@@ -84,16 +85,15 @@ export interface TurnAlertSettings {
  * in the tab title if they're away from the table) and once more when their time is running low.
  */
 export function useTurnAlerts(isMyTurn: boolean, remainingMs: number | null, turnKey: string | null): TurnAlertSettings {
-  const [soundEnabled, setSoundState] = useState(true);
-  const [notifyEnabled, setNotifyState] = useState(false);
-  const [notifyPermission, setNotifyPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
-
-  useEffect(() => {
-    setSoundState(readFlag(SOUND_KEY, true));
-    const supported = typeof window !== 'undefined' && 'Notification' in window;
-    setNotifyPermission(supported ? Notification.permission : 'unsupported');
-    setNotifyState(supported && Notification.permission === 'granted' && readFlag(NOTIFY_KEY, true));
-  }, []);
+  // Choices made here, else what this browser remembers (read once hydrated)
+  const [soundChoice, setSoundState] = useState<boolean | null>(null);
+  const [notifyChoice, setNotifyState] = useState<boolean | null>(null);
+  const [permissionAnswer, setNotifyPermission] = useState<NotificationPermission | null>(null);
+  const hydrated = useHydrated();
+  const supported = hydrated && 'Notification' in window;
+  const soundEnabled = soundChoice ?? (hydrated ? readFlag(SOUND_KEY, true) : true);
+  const notifyPermission: NotificationPermission | 'unsupported' = permissionAnswer ?? (supported ? Notification.permission : 'unsupported');
+  const notifyEnabled = notifyChoice ?? (supported && Notification.permission === 'granted' && readFlag(NOTIFY_KEY, true));
 
   const setSoundEnabled = useCallback((on: boolean) => {
     setSoundState(on);
@@ -137,7 +137,7 @@ export function useTurnAlerts(isMyTurn: boolean, remainingMs: number | null, tur
     window.addEventListener('blur', update);
     return () => {
       window.removeEventListener('focus', update);
-      window.removeEventListener('blur-sm', update);
+      window.removeEventListener('blur', update);
       document.title = title;
     };
   }, [isMyTurn]);

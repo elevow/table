@@ -200,7 +200,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
   };
 
   return (
-    <div className={`bg-white rounded-lg p-4 shadow-sm border ${className}`}>
+    <div className={`bg-white rounded-lg p-4 shadow-xs border ${className}`}>
       <div className="text-sm font-medium text-gray-600 mb-1">{title}</div>
       <div className="flex items-end justify-between">
         <div className="text-2xl font-bold text-gray-900">{formatValue(value)}</div>
@@ -218,7 +218,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
 const SimpleChart: React.FC<ChartProps> = ({ data, title, type = 'line', height = 200 }) => {
   if (!data || data.length === 0) {
     return (
-      <div className="bg-white rounded-lg p-4 shadow-sm border">
+      <div className="bg-white rounded-lg p-4 shadow-xs border">
         <h3 className="text-lg font-semibold mb-4">{title}</h3>
         <div className="flex items-center justify-center h-48 text-gray-500">
           No data available
@@ -232,7 +232,7 @@ const SimpleChart: React.FC<ChartProps> = ({ data, title, type = 'line', height 
   const range = maxValue - minValue;
 
   return (
-    <div className="bg-white rounded-lg p-4 shadow-sm border">
+    <div className="bg-white rounded-lg p-4 shadow-xs border">
       <h3 className="text-lg font-semibold mb-4">{title}</h3>
       <div className="relative" style={{ height }}>
         <svg width="100%" height="100%" className="overflow-visible">
@@ -336,7 +336,7 @@ const DataTable: React.FC<TableProps> = ({ data, columns, maxRows = 10 }) => {
   }, [data, sortColumn, sortDirection, maxRows]);
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+    <div className="bg-white rounded-lg shadow-xs border overflow-hidden">
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -452,13 +452,13 @@ export const GameAnalyticsDashboard: React.FC<GameAnalyticsDashboardProps> = ({
     return (
       <div className={`game-analytics-dashboard ${className}`}>
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded mb-4"></div>
+          <div className="h-8 bg-gray-200 rounded-sm mb-4"></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-24 bg-gray-200 rounded"></div>
+              <div key={i} className="h-24 bg-gray-200 rounded-sm"></div>
             ))}
           </div>
-          <div className="h-64 bg-gray-200 rounded"></div>
+          <div className="h-64 bg-gray-200 rounded-sm"></div>
         </div>
       </div>
     );
@@ -472,7 +472,7 @@ export const GameAnalyticsDashboard: React.FC<GameAnalyticsDashboardProps> = ({
           <div className="text-red-600 text-sm mt-1">{error}</div>
           <button 
             onClick={refresh}
-            className="mt-3 bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700"
+            className="mt-3 bg-red-600 text-white px-4 py-2 rounded-sm text-sm hover:bg-red-700"
           >
             Retry
           </button>
@@ -538,7 +538,7 @@ export const GameAnalyticsDashboard: React.FC<GameAnalyticsDashboardProps> = ({
         <div className="flex space-x-2">
           <button
             onClick={refresh}
-            className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+            className="bg-blue-600 text-white px-4 py-2 rounded-sm text-sm hover:bg-blue-700"
           >
             Refresh
           </button>
@@ -547,7 +547,7 @@ export const GameAnalyticsDashboard: React.FC<GameAnalyticsDashboardProps> = ({
             <div className="relative">
               <button
                 onClick={() => setShowExportDialog(!showExportDialog)}
-                className="bg-gray-600 text-white px-4 py-2 rounded text-sm hover:bg-gray-700"
+                className="bg-gray-600 text-white px-4 py-2 rounded-sm text-sm hover:bg-gray-700"
               >
                 Export
               </button>
@@ -560,7 +560,7 @@ export const GameAnalyticsDashboard: React.FC<GameAnalyticsDashboardProps> = ({
                       <select
                         value={exportFormat}
                         onChange={(e) => setExportFormat(e.target.value as 'json' | 'csv')}
-                        className="mt-1 block w-full text-sm border-gray-300 rounded"
+                        className="mt-1 block w-full text-sm border-gray-300 rounded-sm"
                       >
                         <option value="json">JSON</option>
                         <option value="csv">CSV</option>
@@ -568,7 +568,7 @@ export const GameAnalyticsDashboard: React.FC<GameAnalyticsDashboardProps> = ({
                     </div>
                     <button
                       onClick={handleExport}
-                      className="w-full bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700"
+                      className="w-full bg-blue-600 text-white px-3 py-2 rounded-sm text-sm hover:bg-blue-700"
                     >
                       Export Data
                     </button>
@@ -664,7 +664,7 @@ export const GameAnalyticsDashboard: React.FC<GameAnalyticsDashboardProps> = ({
           </div>
 
           {/* Feature Usage Overview */}
-          <div className="bg-white rounded-lg p-4 shadow-sm border">
+          <div className="bg-white rounded-lg p-4 shadow-xs border">
             <h3 className="text-lg font-semibold mb-4">Feature Usage</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {Object.entries(analytics.features.usage).map(([feature, stats]) => (
@@ -734,7 +734,7 @@ export const GameAnalyticsDashboard: React.FC<GameAnalyticsDashboardProps> = ({
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Player Demographics */}
-            <div className="bg-white rounded-lg p-4 shadow-sm border">
+            <div className="bg-white rounded-lg p-4 shadow-xs border">
               <h3 className="text-lg font-semibold mb-4">Player Demographics</h3>
               <div className="space-y-3">
                 <div>
@@ -752,7 +752,7 @@ export const GameAnalyticsDashboard: React.FC<GameAnalyticsDashboardProps> = ({
             </div>
 
             {/* Retention Metrics */}
-            <div className="bg-white rounded-lg p-4 shadow-sm border">
+            <div className="bg-white rounded-lg p-4 shadow-xs border">
               <h3 className="text-lg font-semibold mb-4">Player Retention</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
@@ -787,7 +787,7 @@ export const GameAnalyticsDashboard: React.FC<GameAnalyticsDashboardProps> = ({
             ))}
           </div>
 
-          <div className="bg-white rounded-lg p-4 shadow-sm border">
+          <div className="bg-white rounded-lg p-4 shadow-xs border">
             <h3 className="text-lg font-semibold mb-4">Feature Performance</h3>
             <div className="overflow-x-auto">
               <table className="min-w-full">
@@ -837,7 +837,7 @@ export const GameAnalyticsDashboard: React.FC<GameAnalyticsDashboardProps> = ({
           </div>
 
           {showAdvancedMetrics && (
-            <div className="bg-white rounded-lg p-4 shadow-sm border">
+            <div className="bg-white rounded-lg p-4 shadow-xs border">
               <h3 className="text-lg font-semibold mb-4">Advanced Metrics</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <MetricCard

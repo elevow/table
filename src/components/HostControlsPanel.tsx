@@ -81,7 +81,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
         <h3 className="section-title">{extras.isHost ? 'Host controls' : 'Host controls (staff)'}</h3>
         <svg className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M5.2 7.2a1 1 0 011.4 0L10 10.6l3.4-3.4a1 1 0 111.4 1.4l-4.1 4.1a1 1 0 01-1.4 0L5.2 8.6a1 1 0 010-1.4z" clipRule="evenodd" /></svg>
       </summary>}
-      <div className={`space-y-4 ${embedded ? '' : 'border-t border-gray-100 px-5 pb-5 pt-4 dark:border-white/[0.06]'} [&>*]:!mt-0 [&>*+*]:border-t [&>*+*]:border-gray-100 dark:[&>*+*]:border-white/[0.06] [&>*+*]:pt-4`}>
+      <div className={`space-y-4 ${embedded ? '' : 'border-t border-gray-100 px-5 pb-5 pt-4 dark:border-white/6'} *:mt-0! [&>*+*]:border-t [&>*+*]:border-gray-100 dark:[&>*+*]:border-white/6 [&>*+*]:pt-4`}>
       {error && <div className="mb-2 text-xs text-red-700 dark:text-red-300">{error}</div>}
 
       {canConfigure && (
@@ -105,7 +105,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
                   aria-label="Invite link"
                   value={inviteLink}
                   onFocus={e => e.target.select()}
-                  className="flex-1 min-w-0 input !h-9 !px-2.5 text-xs"
+                  className="flex-1 min-w-0 input h-9! px-2.5! text-xs"
                 />
                 <button className={`btn btn-secondary btn-sm`} onClick={copyInviteLink}>
                   {copied ? 'Copied' : 'Copy'}
@@ -170,9 +170,9 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
           <div>
             <div className="mb-2 eyebrow">Blinds ${gameState.smallBlind}/${gameState.bigBlind}{pending ? ` → $${pending.smallBlind}/$${pending.bigBlind} next hand` : ''}</div>
             <div className="flex items-center gap-1">
-              <input aria-label="Small blind" type="number" min={1} value={sb} onChange={e => setSb(e.target.value)} placeholder="SB" className="w-16 input !h-9 !px-2.5" />
+              <input aria-label="Small blind" type="number" min={1} value={sb} onChange={e => setSb(e.target.value)} placeholder="SB" className="w-16 input h-9! px-2.5!" />
               <span>/</span>
-              <input aria-label="Big blind" type="number" min={1} value={bb} onChange={e => setBb(e.target.value)} placeholder="BB" className="w-16 input !h-9 !px-2.5" />
+              <input aria-label="Big blind" type="number" min={1} value={bb} onChange={e => setBb(e.target.value)} placeholder="BB" className="w-16 input h-9! px-2.5!" />
               <button
                 className={`btn btn-secondary btn-sm`}
                 disabled={!!busy || !(Number(sb) > 0) || !(Number(bb) >= Number(sb))}
@@ -190,7 +190,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
               <div className="flex items-center gap-1">
                 {!bomb && (
                   <>
-                    <input aria-label="Bomb pot ante in big blinds" type="number" min={1} value={anteBB} onChange={e => setAnteBB(e.target.value)} className="w-16 input !h-9 !px-2.5" />
+                    <input aria-label="Bomb pot ante in big blinds" type="number" min={1} value={anteBB} onChange={e => setAnteBB(e.target.value)} className="w-16 input h-9! px-2.5!" />
                     <span className="text-xs">BB</span>
                   </>
                 )}
@@ -256,7 +256,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
                 value={turnSeconds}
                 onChange={e => setTurnSeconds(e.target.value)}
                 placeholder="secs"
-                className="w-16 input !h-9 !px-2.5"
+                className="w-16 input h-9! px-2.5!"
               />
               <button
                 className={`btn btn-secondary btn-sm`}
@@ -280,7 +280,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
                 value={delaySeconds}
                 onChange={e => setDelaySeconds(e.target.value)}
                 placeholder="secs"
-                className="w-16 input !h-9 !px-2.5"
+                className="w-16 input h-9! px-2.5!"
               />
               <button
                 className={`btn btn-secondary btn-sm`}
@@ -304,14 +304,14 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
                     <span className="truncate">{p.name || 'Player'}</span>
                     <span className="flex items-center gap-1">
                       <button
-                        className="btn btn-secondary btn-sm !h-8 !w-8 !px-0"
+                        className="btn btn-secondary btn-sm h-8! w-8! px-0!"
                         disabled={!!busy || count <= 0}
                         aria-label={`Remove a time bank from ${who}`}
                         onClick={() => send('banks', { action: 'adjust-time-banks', targetId: p.id, delta: -1 })}
                       >−</button>
                       <span className="w-8 text-center tabular-nums" aria-label={`${count} time banks`}>{count}</span>
                       <button
-                        className="btn btn-secondary btn-sm !h-8 !w-8 !px-0"
+                        className="btn btn-secondary btn-sm h-8! w-8! px-0!"
                         disabled={!!busy}
                         aria-label={`Give ${who} a time bank`}
                         onClick={() => send('banks', { action: 'adjust-time-banks', targetId: p.id, delta: 1 })}
@@ -356,7 +356,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
             aria-label="Player to remove"
             value={kickId}
             onChange={e => setKickId(e.target.value)}
-            className="flex-1 input !h-9 !px-2.5 text-xs"
+            className="flex-1 input h-9! px-2.5! text-xs"
           >
             <option value="">Remove a player…</option>
             {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}

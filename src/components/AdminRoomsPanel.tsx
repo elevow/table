@@ -158,11 +158,11 @@ export default function AdminRoomsPanel() {
     return (
       <div className="surface p-6 mt-8">
         <div className="animate-pulse">
-          <div className="h-6 bg-gray-200 rounded w-1/4 mb-4"></div>
+          <div className="h-6 bg-gray-200 rounded-sm w-1/4 mb-4"></div>
           <div className="space-y-3">
-            <div className="h-4 bg-gray-200 rounded"></div>
-            <div className="h-4 bg-gray-200 rounded w-5/6"></div>
-            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+            <div className="h-4 bg-gray-200 rounded-sm"></div>
+            <div className="h-4 bg-gray-200 rounded-sm w-5/6"></div>
+            <div className="h-4 bg-gray-200 rounded-sm w-3/4"></div>
           </div>
         </div>
       </div>
@@ -238,26 +238,26 @@ export default function AdminRoomsPanel() {
     <div className="surface p-6 mt-8">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-          <span className="bg-red-500 text-white px-2 py-1 rounded text-sm mr-3">ADMIN</span>
+          <span className="bg-red-500 text-white px-2 py-1 rounded-sm text-sm mr-3">ADMIN</span>
           All Game Rooms ({total})
         </h2>
       </div>
 
       {/* Success/Error Messages */}
       {message && (
-        <div className="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
+        <div className="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-sm">
           {message}
         </div>
       )}
       
       {error && (
-        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-sm">
           {error}
         </div>
       )}
 
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-sm mb-4">
           {error}
         </div>
       )}
@@ -291,7 +291,7 @@ export default function AdminRoomsPanel() {
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {rooms.map((room) => (
-                <tr key={room.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.08]">
+                <tr key={room.id} className="hover:bg-gray-50 dark:hover:bg-white/8">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <Link
                       href={`/game/${encodeURIComponent(room.id)}`}
@@ -321,14 +321,14 @@ export default function AdminRoomsPanel() {
                         <button
                           onClick={() => deleteRoom(room.id)}
                           disabled={deleting === room.id}
-                          className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white px-3 py-1 rounded text-xs font-medium"
+                          className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white px-3 py-1 rounded-sm text-xs font-medium"
                         >
                           {deleting === room.id ? 'Deleting...' : 'Confirm'}
                         </button>
                         <button
                           onClick={() => setDeleteConfirm(null)}
                           disabled={deleting === room.id}
-                          className="bg-gray-500 hover:bg-gray-600 disabled:bg-gray-400 text-white px-3 py-1 rounded text-xs font-medium"
+                          className="bg-gray-500 hover:bg-gray-600 disabled:bg-gray-400 text-white px-3 py-1 rounded-sm text-xs font-medium"
                         >
                           Cancel
                         </button>
@@ -336,7 +336,7 @@ export default function AdminRoomsPanel() {
                     ) : (
                       <button
                         onClick={() => setDeleteConfirm(room.id)}
-                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-medium"
+                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-sm text-xs font-medium"
                       >
                         Delete
                       </button>

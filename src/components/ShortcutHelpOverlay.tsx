@@ -34,7 +34,7 @@ export default function ShortcutHelpOverlay({ open, onClose }: Props) {
             ref={closeRef}
             type="button"
             onClick={onClose}
-            className="rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+            className="rounded-sm px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
           >
             Close
           </button>
@@ -46,7 +46,7 @@ export default function ShortcutHelpOverlay({ open, onClose }: Props) {
           {SHORTCUT_HELP.map(({ keys, description }) => (
             <div key={keys} className="flex items-start gap-3">
               <dt className="w-20 shrink-0">
-                <kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100">{keys}</kbd>
+                <kbd className="rounded-sm border border-gray-300 bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-800 dark:border-white/10 dark:bg-white/4 dark:text-gray-100">{keys}</kbd>
               </dt>
               <dd className="text-sm text-gray-700 dark:text-gray-200">{description}</dd>
             </div>

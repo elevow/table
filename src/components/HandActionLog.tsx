@@ -30,7 +30,7 @@ export default function HandActionLog({ actions = [], players, handNumber, varia
     if (a.stage !== stage) {
       stage = a.stage;
       rows.push(
-        <li key={`s${i}`} className="sticky top-0 z-10 bg-white pt-1.5 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:bg-[#151a21] dark:text-emerald-400 border-t border-gray-100 dark:border-white/[0.05] first:border-t-0 first:pt-0">
+        <li key={`s${i}`} className="sticky top-0 z-10 bg-white pt-1.5 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:bg-[#151a21] dark:text-emerald-400 border-t border-gray-100 dark:border-white/5 first:border-t-0 first:pt-0">
           {streetLabel(a.stage, variant)}
         </li>
       );

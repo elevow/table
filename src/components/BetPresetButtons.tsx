@@ -26,7 +26,7 @@ const SHORTCUT_KEY: Record<BetPreset, string> = {
   'all-in': 'allin',
 };
 
-const buttonClass = 'btn btn-sm btn-secondary !px-2.5 shrink-0 sm:flex-1 max-sm:h-10 max-sm:!px-0 max-sm:text-[11px]';
+const buttonClass = 'btn btn-sm btn-secondary px-2.5! shrink-0 sm:flex-1 max-sm:h-10 max-sm:px-0! max-sm:text-[11px]';
 
 /**
  * Quick amounts for the bet and raise controls. Hidden for betting modes without free sizing.

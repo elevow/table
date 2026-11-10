@@ -43,7 +43,7 @@ export default function EquityPanel({ players, board, omaha }: Props) {
                   {r.tie > 0.005 && <span className="text-gray-500 dark:text-gray-400"> (tie {(r.tie * 100).toFixed(0)}%)</span>}
                 </span>
               </div>
-              <div className="h-2 rounded bg-gray-200 dark:bg-gray-700 overflow-hidden">
+              <div className="h-2 rounded-sm bg-gray-200 dark:bg-gray-700 overflow-hidden">
                 <div className="h-full bg-emerald-500" style={{ width: `${r.equity * 100}%` }} />
               </div>
             </div>

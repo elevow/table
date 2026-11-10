@@ -263,7 +263,7 @@ const Dashboard: NextPage = () => {
                 <div className={`text-sm rounded-lg px-3 py-2 ${
                   validationMessage.includes('Cannot join') || validationMessage.includes('not found') || validationMessage.includes('Failed')
                     ? 'text-red-700 bg-red-50 dark:text-red-300 dark:bg-red-500/10'
-                    : 'text-gray-700 bg-gray-100 dark:text-gray-300 dark:bg-white/[0.05]'
+                    : 'text-gray-700 bg-gray-100 dark:text-gray-300 dark:bg-white/5'
                 }`}>
                   {validationMessage}
                 </div>

@@ -93,8 +93,8 @@ export default function HandReplayPage() {
         {error && <div role="alert" className="p-3 mb-4 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 text-sm">{error}</div>}
         {!hand && !error && (
           <div className="surface p-6 space-y-3 animate-pulse" aria-label="Loading">
-            <div className="h-40 rounded-xl bg-gray-200 dark:bg-white/[0.06]" />
-            <div className="h-4 w-1/2 rounded bg-gray-200 dark:bg-white/[0.06]" />
+            <div className="h-40 rounded-xl bg-gray-200 dark:bg-white/6" />
+            <div className="h-4 w-1/2 rounded-sm bg-gray-200 dark:bg-white/6" />
           </div>
         )}
 
@@ -114,11 +114,11 @@ export default function HandReplayPage() {
                         </div>
                       ))
                     ) : (
-                      <div className="flex gap-1 min-h-[3.5rem]">
+                      <div className="flex gap-1 min-h-14">
                         {hand.board.slice(0, frame.boardCount).map((c, i) => <MiniCard key={i} card={c} size="md" highContrast={hc} />)}
                       </div>
                     )}
-                    <div className="inline-flex items-center gap-1.5 bg-black/35 ring-1 ring-white/10 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-semibold tabular-nums text-white">
+                    <div className="inline-flex items-center gap-1.5 bg-black/35 ring-1 ring-white/10 backdrop-blur-xs px-3 py-1 rounded-full text-sm font-semibold tabular-nums text-white">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-white/60">Pot</span>
                       {money(frame.pot)}
                     </div>
@@ -135,20 +135,20 @@ export default function HandReplayPage() {
                       return (
                         <div
                           key={p.id}
-                          className={`rounded-xl border p-3 bg-gray-950/80 backdrop-blur-sm text-gray-100 transition-opacity ${out ? 'opacity-50' : ''} ${isWinner ? 'border-amber-300/70 shadow-[0_0_0_3px_rgba(252,211,77,0.25)]' : 'border-white/10'}`}
+                          className={`rounded-xl border p-3 bg-gray-950/80 backdrop-blur-xs text-gray-100 transition-opacity ${out ? 'opacity-50' : ''} ${isWinner ? 'border-amber-300/70 shadow-[0_0_0_3px_rgba(252,211,77,0.25)]' : 'border-white/10'}`}
                         >
                           <div className="flex items-center justify-between text-sm">
                             <span className="font-medium text-gray-200 truncate">{p.name}</span>
                             <span className="tabular-nums text-emerald-300 font-semibold">{money(frame.stacks[p.id] ?? 0)}</span>
                           </div>
-                          <div className="flex gap-0.5 my-2 min-h-[3rem]">
+                          <div className="flex gap-0.5 my-2 min-h-12">
                             {hole && hole.map((c, i) => <MiniCard key={i} card={c} highContrast={hc} />)}
                             {!hole && down && down.slice(0, 2).map((c, i) => <MiniCard key={`d${i}`} card={c} highContrast={hc} />)}
                             {!hole && !down && !up.length && [0, 1].map(i => <MiniCard key={i} />)}
                             {up.map((c, i) => <MiniCard key={`u${i}`} card={c} highContrast={hc} />)}
                             {!hole && down && down.slice(2).map((c, i) => <MiniCard key={`d${i + 2}`} card={c} highContrast={hc} />)}
                           </div>
-                          <div className="text-xs text-gray-400 min-h-[1rem]">
+                          <div className="text-xs text-gray-400 min-h-4">
                             {isWinner
                               ? <span className="font-semibold text-amber-300">Wins {money(frame.result!.find(w => w.playerId === p.id)!.amount)}</span>
                               : act ? describeAction(act, '', money).trim() : out ? 'Folded' : ''}
@@ -163,8 +163,8 @@ export default function HandReplayPage() {
               {/* Controls */}
               <div className="surface p-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <button className="btn btn-secondary btn-sm !px-2.5" onClick={() => { setPlaying(false); setFrameIndex(0); }} aria-label="First step" title="First step"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5 4a1 1 0 011 1v4.2l7.4-4.9A1 1 0 0115 5.1v9.8a1 1 0 01-1.6.8L6 10.8V15a1 1 0 11-2 0V5a1 1 0 011-1z" /></svg></button>
-                  <button className="btn btn-secondary btn-sm !px-2.5" onClick={() => setFrameIndex(i => Math.max(0, i - 1))} aria-label="Previous step" title="Previous step"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M13.4 4.3A1 1 0 0115 5.1v9.8a1 1 0 01-1.6.8l-7-4.9a1 1 0 010-1.6l7-4.9z" /></svg></button>
+                  <button className="btn btn-secondary btn-sm px-2.5!" onClick={() => { setPlaying(false); setFrameIndex(0); }} aria-label="First step" title="First step"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5 4a1 1 0 011 1v4.2l7.4-4.9A1 1 0 0115 5.1v9.8a1 1 0 01-1.6.8L6 10.8V15a1 1 0 11-2 0V5a1 1 0 011-1z" /></svg></button>
+                  <button className="btn btn-secondary btn-sm px-2.5!" onClick={() => setFrameIndex(i => Math.max(0, i - 1))} aria-label="Previous step" title="Previous step"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M13.4 4.3A1 1 0 0115 5.1v9.8a1 1 0 01-1.6.8l-7-4.9a1 1 0 010-1.6l7-4.9z" /></svg></button>
                   <button
                     className="btn btn-primary btn-sm min-w-[84px]"
                     onClick={() => {
@@ -174,11 +174,11 @@ export default function HandReplayPage() {
                   >
                     {playing ? 'Pause' : frameIndex >= last ? 'Replay' : 'Play'}
                   </button>
-                  <button className="btn btn-secondary btn-sm !px-2.5" onClick={() => setFrameIndex(i => Math.min(last, i + 1))} aria-label="Next step" title="Next step"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6.6 4.3A1 1 0 005 5.1v9.8a1 1 0 001.6.8l7-4.9a1 1 0 000-1.6l-7-4.9z" /></svg></button>
-                  <button className="btn btn-secondary btn-sm !px-2.5" onClick={() => { setPlaying(false); setFrameIndex(last); }} aria-label="Last step" title="Last step"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M15 4a1 1 0 00-1 1v4.2L6.6 4.3A1 1 0 005 5.1v9.8a1 1 0 001.6.8L14 10.8V15a1 1 0 102 0V5a1 1 0 00-1-1z" /></svg></button>
+                  <button className="btn btn-secondary btn-sm px-2.5!" onClick={() => setFrameIndex(i => Math.min(last, i + 1))} aria-label="Next step" title="Next step"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6.6 4.3A1 1 0 005 5.1v9.8a1 1 0 001.6.8l7-4.9a1 1 0 000-1.6l-7-4.9z" /></svg></button>
+                  <button className="btn btn-secondary btn-sm px-2.5!" onClick={() => { setPlaying(false); setFrameIndex(last); }} aria-label="Last step" title="Last step"><svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M15 4a1 1 0 00-1 1v4.2L6.6 4.3A1 1 0 005 5.1v9.8a1 1 0 001.6.8L14 10.8V15a1 1 0 102 0V5a1 1 0 00-1-1z" /></svg></button>
                   <span className="ml-2 text-sm text-gray-700 dark:text-gray-200">{frame.caption}</span>
                 </div>
-                <div className="mt-3 h-1 rounded-full bg-gray-200 dark:bg-white/[0.08] overflow-hidden" aria-hidden="true">
+                <div className="mt-3 h-1 rounded-full bg-gray-200 dark:bg-white/8 overflow-hidden" aria-hidden="true">
                   <div className="h-full bg-emerald-500 transition-[width] duration-200" style={{ width: `${frames.length > 1 ? (frameIndex / last) * 100 : 100}%` }} />
                 </div>
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Step {frameIndex + 1} of {frames.length}. Arrow keys step through the hand.</p>
@@ -197,7 +197,7 @@ export default function HandReplayPage() {
                       <li>
                         <button
                           onClick={() => { setPlaying(false); setFrameIndex(i + 1); }}
-                          className={`text-left w-full px-2 py-1 rounded-md transition-colors ${frame.step === i ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-400/10 dark:text-emerald-100' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.04]'}`}
+                          className={`text-left w-full px-2 py-1 rounded-md transition-colors ${frame.step === i ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-400/10 dark:text-emerald-100' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/4'}`}
                         >
                           {describeAction(a, names.get(a.playerId) || 'Player', money, pid => names.get(pid))}
                         </button>
@@ -208,7 +208,7 @@ export default function HandReplayPage() {
                 <li className="pt-1">
                   <button
                     onClick={() => { setPlaying(false); setFrameIndex(last); }}
-                    className={`text-left w-full px-2 py-1 rounded-md font-semibold transition-colors ${frameIndex === last ? 'bg-amber-50 text-amber-900 dark:bg-amber-400/10 dark:text-amber-200' : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04]'}`}
+                    className={`text-left w-full px-2 py-1 rounded-md font-semibold transition-colors ${frameIndex === last ? 'bg-amber-50 text-amber-900 dark:bg-amber-400/10 dark:text-amber-200' : 'text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/4'}`}
                   >
                     {frames[last].caption}
                   </button>

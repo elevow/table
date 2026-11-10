@@ -135,20 +135,20 @@ export default function LeaderboardPage() {
               <tr>
                 <th className="w-14">#</th>
                 <th className="w-full">Player</th>
-                <th className="!text-right">{current.label}</th>
-                <th className="!text-right">Hands</th>
+                <th className="text-right!">{current.label}</th>
+                <th className="text-right!">Hands</th>
                 {canManage && <th><span className="sr-only">Manage</span></th>}
               </tr>
             </thead>
             <tbody>
               {loading && <tr><td colSpan={canManage ? 5 : 4} className="text-gray-500 dark:text-gray-400">Loading…</td></tr>}
               {!loading && entries.length === 0 && (
-                <tr><td colSpan={canManage ? 5 : 4} className="!py-10 text-center text-gray-500 dark:text-gray-400">No hands played yet. Rankings appear once hands are finished.</td></tr>
+                <tr><td colSpan={canManage ? 5 : 4} className="py-10! text-center text-gray-500 dark:text-gray-400">No hands played yet. Rankings appear once hands are finished.</td></tr>
               )}
               {!loading && entries.map(e => (
                 <tr
                   key={e.userId}
-                  className={`text-gray-900 dark:text-gray-100 ${e.userId === userId ? 'bg-emerald-50 dark:bg-emerald-400/[0.06] font-semibold' : ''}`}
+                  className={`text-gray-900 dark:text-gray-100 ${e.userId === userId ? 'bg-emerald-50 dark:bg-emerald-400/6 font-semibold' : ''}`}
                 >
                   <td>
                     <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold tabular-nums ${
@@ -223,8 +223,8 @@ export default function LeaderboardPage() {
                 className={`min-h-[92px] ${when ? 'surface p-4' : 'surface-muted p-4 border-dashed'}`}
               >
                 <div className="flex items-start gap-4">
-                  <span className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-2xl ${when ? 'bg-emerald-400/10' : 'bg-gray-200/60 dark:bg-white/[0.05]'}`} aria-hidden="true">
-                    <span className={when ? '' : 'grayscale-[50%] opacity-75'}>{a.icon}</span>
+                  <span className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-2xl ${when ? 'bg-emerald-400/10' : 'bg-gray-200/60 dark:bg-white/5'}`} aria-hidden="true">
+                    <span className={when ? '' : 'grayscale-50 opacity-75'}>{a.icon}</span>
                     {!when && (
                       <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-gray-500 ring-2 ring-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:ring-gray-900">
                         <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 2a4 4 0 00-4 4v2H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-1V6a4 4 0 00-4-4zm2 6V6a2 2 0 10-4 0v2h4z" clipRule="evenodd" /></svg>

@@ -55,7 +55,7 @@ export default function PrivateTableNotice({ kind = 'table' }: { kind?: 'table' 
               value={code}
               onChange={e => setCode(e.target.value.toUpperCase())}
               placeholder="XXXXX-XXXXX"
-              className="flex-1 px-3 py-2 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+              className="flex-1 px-3 py-2 rounded-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700"
             />
             <button
               type="submit"

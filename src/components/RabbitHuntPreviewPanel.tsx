@@ -75,7 +75,7 @@ export default function RabbitHuntPreviewPanel({ roomId }: Props) {
           <label className="text-sm text-gray-600 dark:text-gray-400 mb-1" htmlFor="userId">User ID</label>
           <input
             id="userId"
-            className="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400"
+            className="border border-gray-300 dark:border-gray-600 rounded-sm px-3 py-2 focus:outline-hidden focus:ring-3 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400"
             placeholder="enter your user id"
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
@@ -87,7 +87,7 @@ export default function RabbitHuntPreviewPanel({ roomId }: Props) {
           <label className="text-sm text-gray-600 dark:text-gray-400 mb-1" htmlFor="street">Street</label>
           <select
             id="street"
-            className="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            className="border border-gray-300 dark:border-gray-600 rounded-sm px-3 py-2 focus:outline-hidden focus:ring-3 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             value={street}
             onChange={(e) => setStreet(e.target.value as Street)}
           >
@@ -101,7 +101,7 @@ export default function RabbitHuntPreviewPanel({ roomId }: Props) {
           <button
             onClick={onPreview}
             disabled={!canSubmit}
-            className={`w-full md:w-auto bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white font-medium px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed`}
+            className={`w-full md:w-auto bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white font-medium px-4 py-2 rounded-sm disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             {loading ? 'Previewing…' : 'Preview'}
           </button>
@@ -113,7 +113,7 @@ export default function RabbitHuntPreviewPanel({ roomId }: Props) {
       )}
 
       {result && (
-        <div className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded p-4">
+        <div className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-sm p-4">
           <div className="mb-3">
             <span className="text-sm text-gray-600 dark:text-gray-400">Street:</span>
             <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">{result.street}</span>
@@ -125,7 +125,7 @@ export default function RabbitHuntPreviewPanel({ roomId }: Props) {
             ) : (
               <div className="flex flex-wrap gap-2">
                 {result.revealedCards.map((c, i) => (
-                  <span key={`${c}-${i}`} className="inline-block bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded px-2 py-1 text-sm text-gray-900 dark:text-gray-100">{c}</span>
+                  <span key={`${c}-${i}`} className="inline-block bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-sm px-2 py-1 text-sm text-gray-900 dark:text-gray-100">{c}</span>
                 ))}
               </div>
             )}
@@ -138,7 +138,7 @@ export default function RabbitHuntPreviewPanel({ roomId }: Props) {
             ) : (
               <div className="grid grid-cols-8 gap-1 text-sm">
                 {result.remainingDeck.map((c, i) => (
-                  <span key={`${c}-${i}`} className="inline-block bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded px-2 py-1 text-center text-gray-900 dark:text-gray-100">{c}</span>
+                  <span key={`${c}-${i}`} className="inline-block bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-sm px-2 py-1 text-center text-gray-900 dark:text-gray-100">{c}</span>
                 ))}
               </div>
             )}

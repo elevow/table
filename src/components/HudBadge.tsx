@@ -26,7 +26,7 @@ export default function HudBadge({ stats }: { stats?: HudStats }) {
     <span
       title={summary}
       aria-label={summary}
-      className="shrink-0 ml-auto px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-[11px] tabular-nums text-gray-700 dark:text-gray-200"
+      className="shrink-0 ml-auto px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-700 text-[11px] tabular-nums text-gray-700 dark:text-gray-200"
     >
       {formatPct(stats.vpip)}/{formatPct(stats.pfr)} · {stats.hands}
     </span>

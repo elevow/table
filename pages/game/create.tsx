@@ -246,14 +246,14 @@ export default function CreateGameRoomPage() {
           </div>
           <fieldset aria-label="Visibility">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${visibility === 'public' ? 'border-emerald-500/60 bg-emerald-50 dark:bg-emerald-400/[0.06]' : 'border-gray-200 hover:border-gray-300 dark:border-white/10 dark:hover:border-white/20'}`}>
+              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${visibility === 'public' ? 'border-emerald-500/60 bg-emerald-50 dark:bg-emerald-400/6' : 'border-gray-200 hover:border-gray-300 dark:border-white/10 dark:hover:border-white/20'}`}>
                 <input type="radio" name="visibility" className="radio mt-0.5" checked={visibility === 'public'} onChange={() => setVisibility('public')} />
                 <span>
                   <span className="block text-sm font-medium text-gray-900 dark:text-white">Public</span>
                   <span className="block text-xs text-gray-500 dark:text-gray-400">Listed in the lobby for anyone to join</span>
                 </span>
               </label>
-              <label className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${canCreatePrivate ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'} ${visibility === 'private' ? 'border-emerald-500/60 bg-emerald-50 dark:bg-emerald-400/[0.06]' : 'border-gray-200 hover:border-gray-300 dark:border-white/10 dark:hover:border-white/20'}`}>
+              <label className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${canCreatePrivate ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'} ${visibility === 'private' ? 'border-emerald-500/60 bg-emerald-50 dark:bg-emerald-400/6' : 'border-gray-200 hover:border-gray-300 dark:border-white/10 dark:hover:border-white/20'}`}>
                 <input
                   type="radio"
                   name="visibility"
@@ -528,7 +528,7 @@ export default function CreateGameRoomPage() {
             <p className="hint">Paid to whoever wins with 7-2 offsuit. 0 for off.</p>
           </div>
         </div>
-        <div className="mt-5 border-t border-gray-100 pt-5 dark:border-white/[0.06]">
+        <div className="mt-5 border-t border-gray-100 pt-5 dark:border-white/6">
           <label className="inline-flex items-center space-x-2 text-sm font-medium text-gray-800 dark:text-gray-200">
             <input
               type="checkbox"

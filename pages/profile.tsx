@@ -169,7 +169,7 @@ const Profile: NextPage = () => {
   const Row = ({ label, onClick, right }: { label: string; onClick?: () => void; right?: React.ReactNode }) => (
     <button
       onClick={onClick}
-      className="flex w-full items-center justify-between px-5 py-3.5 text-left text-sm text-gray-800 transition-colors hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/[0.03]"
+      className="flex w-full items-center justify-between px-5 py-3.5 text-left text-sm text-gray-800 transition-colors hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/3"
     >
       <span className="font-medium">{label}</span>
       <span className="flex items-center gap-2 text-gray-400 dark:text-gray-500">
@@ -189,13 +189,13 @@ const Profile: NextPage = () => {
       <main className="page-narrow space-y-6">
         {/* Identity */}
         <section className="surface relative overflow-hidden p-6 sm:p-8">
-          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-500/10 to-transparent" />
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-linear-to-b from-emerald-500/10 to-transparent" />
           <div className="relative flex flex-col items-start gap-5 sm:flex-row sm:items-center">
             <div className="relative">
               <Avatar
                 src={avatarData?.url}
                 size="lg"
-                className="!h-20 !w-20 ring-4 ring-white dark:ring-gray-800 shadow-card"
+                className="h-20! w-20! ring-4 ring-white dark:ring-gray-800 shadow-card"
               />
               {isUploading && (
                 <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
@@ -245,7 +245,7 @@ const Profile: NextPage = () => {
         {/* Quick actions */}
         <section>
           <h2 className="eyebrow mb-2 px-1">Quick actions</h2>
-          <div className="surface divide-y divide-gray-100 overflow-hidden dark:divide-white/[0.05]">
+          <div className="surface divide-y divide-gray-100 overflow-hidden dark:divide-white/5">
             <Row label="Back to the lobby" onClick={() => router.push('/dashboard')} />
             {canCreateRoom && <Row label="Create a table" onClick={() => router.push('/game/create')} />}
           </div>
@@ -256,7 +256,7 @@ const Profile: NextPage = () => {
         {/* Settings */}
         <section>
           <h2 className="eyebrow mb-2 px-1">Settings</h2>
-          <div className="surface divide-y divide-gray-100 overflow-hidden dark:divide-white/[0.05]">
+          <div className="surface divide-y divide-gray-100 overflow-hidden dark:divide-white/5">
             <Row label="Account settings" onClick={() => router.push('/account-settings')} />
             <Row
               label="Theme"

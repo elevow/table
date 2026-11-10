@@ -151,10 +151,10 @@ export default function StatsPage() {
                   <tr>
                     <th>Date</th>
                     <th>Table</th>
-                    <th className="!text-right">Hands</th>
-                    <th className="!text-right">Duration</th>
-                    <th className="!text-right">Net</th>
-                    <th className="!text-right">Export</th>
+                    <th className="text-right!">Hands</th>
+                    <th className="text-right!">Duration</th>
+                    <th className="text-right!">Net</th>
+                    <th className="text-right!">Export</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -175,7 +175,7 @@ export default function StatsPage() {
                           <button
                             onClick={() => exportSession(s)}
                             disabled={exporting === key}
-                            className="btn btn-ghost btn-sm !h-8 !px-2 disabled:opacity-60"
+                            className="btn btn-ghost btn-sm h-8! px-2! disabled:opacity-60"
                             title="Export this session"
                             aria-label={exporting === key ? 'Exporting…' : 'Export'}
                           >

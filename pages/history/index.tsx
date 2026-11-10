@@ -100,14 +100,14 @@ export default function HandHistoryPage() {
 
         {loading && hands.length === 0 && (
           <div className="surface p-6 space-y-3 animate-pulse" aria-label="Loading">
-            <div className="h-4 w-1/3 rounded bg-gray-200 dark:bg-white/[0.06]" />
-            <div className="h-4 w-1/2 rounded bg-gray-200 dark:bg-white/[0.06]" />
+            <div className="h-4 w-1/3 rounded-sm bg-gray-200 dark:bg-white/6" />
+            <div className="h-4 w-1/2 rounded-sm bg-gray-200 dark:bg-white/6" />
           </div>
         )}
 
         {!error && !loading && hands.length === 0 && (
           <div className="surface px-6 py-14 text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/[0.05] dark:text-gray-500">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/5 dark:text-gray-500">
               <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.8L3 8M3 3v5h5M12 7v5l3 2" /></svg>
             </div>
             <p className="text-base font-semibold text-gray-900 dark:text-white">No hands yet</p>
@@ -125,9 +125,9 @@ export default function HandHistoryPage() {
                   <th>Game</th>
                   <th>Your cards</th>
                   <th>Winner</th>
-                  <th className="!text-right">Pot</th>
-                  <th className="!text-right">You</th>
-                  <th className="!text-right">Export</th>
+                  <th className="text-right!">Pot</th>
+                  <th className="text-right!">You</th>
+                  <th className="text-right!">Export</th>
                 </tr>
               </thead>
               <tbody>
@@ -158,7 +158,7 @@ export default function HandHistoryPage() {
                         <button
                           onClick={e => { e.stopPropagation(); exportHands(h.id, { handId: h.id }); }}
                           disabled={exporting === h.id}
-                          className="btn btn-ghost btn-sm !h-8 !px-2 disabled:opacity-60"
+                          className="btn btn-ghost btn-sm h-8! px-2! disabled:opacity-60"
                           title="Export this hand"
                           aria-label={`Export hand #${h.handNumber}`}
                         >

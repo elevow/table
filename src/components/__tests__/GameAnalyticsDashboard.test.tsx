@@ -265,7 +265,7 @@ describe('GameAnalyticsDashboard', () => {
         return (
           <div className="game-analytics-dashboard">
             <div className="animate-pulse">
-              <div className="h-8 bg-gray-200 rounded mb-4"></div>
+              <div className="h-8 bg-gray-200 rounded-sm mb-4"></div>
             </div>
           </div>
         );
@@ -615,7 +615,7 @@ describe('GameAnalyticsDashboard', () => {
     it('should handle empty chart data gracefully', () => {
       // This would require mocking empty trend data
       const MockDashboardWithEmptyCharts = () => (
-        <div className="bg-white rounded-lg p-4 shadow-sm border">
+        <div className="bg-white rounded-lg p-4 shadow-xs border">
           <h3 className="text-lg font-semibold mb-4">Test Chart</h3>
           <div className="flex items-center justify-center h-48 text-gray-500">
             No data available

@@ -76,9 +76,9 @@ export default function TournamentPage() {
       <Head><title>{view.name}</title></Head>
       <div className="flex flex-wrap items-baseline gap-3">
         <h1 className="text-2xl font-semibold">{view.name}</h1>
-        <span className="text-sm px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200">{statusLabel[view.status]}</span>
+        <span className="text-sm px-2 py-0.5 rounded-sm bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200">{statusLabel[view.status]}</span>
         {view.visibility === 'private' && (
-          <span className="text-sm px-2 py-0.5 rounded bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200">Private</span>
+          <span className="text-sm px-2 py-0.5 rounded-sm bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200">Private</span>
         )}
         {error && <span role="alert" className="text-sm text-amber-700 dark:text-amber-400">Couldn&apos;t refresh: {error}</span>}
       </div>
@@ -104,7 +104,7 @@ export default function TournamentPage() {
       {notices.length > 0 && (
         <section aria-label="Notices" className="space-y-1">
           {notices.map((text, i) => (
-            <div key={`${i}-${text}`} role="status" className="flex items-center justify-between rounded bg-blue-50 dark:bg-blue-900/30 px-3 py-2 text-sm">
+            <div key={`${i}-${text}`} role="status" className="flex items-center justify-between rounded-sm bg-blue-50 dark:bg-blue-900/30 px-3 py-2 text-sm">
               <span>{text}</span>
               <button className="text-xs text-gray-600 dark:text-gray-400 hover:underline" onClick={() => setNotices(n => n.filter((_, j) => j !== i))}>Dismiss</button>
             </div>
@@ -254,7 +254,7 @@ function Actions({ view, signedIn, busy, onAct }: {
   busy: boolean;
   onAct: (action: 'register' | 'unregister' | 'rebuy' | 'add-on' | 'reenter') => void;
 }) {
-  const btn = 'px-4 py-2 rounded text-white disabled:opacity-50';
+  const btn = 'px-4 py-2 rounded-sm text-white disabled:opacity-50';
   const cost = (n: number | null) => (n ? ` (${formatMoney(n)})` : '');
   const items: React.ReactNode[] = [];
   if (!view.you && view.registration.open && signedIn) {

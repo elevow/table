@@ -1304,7 +1304,7 @@ export default function GamePage() {
     }
     
     return (
-      <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+      <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-sm border border-blue-200 dark:border-blue-800">
         <div className="text-sm text-gray-700 dark:text-gray-300">
           <span className="font-semibold text-gray-900 dark:text-gray-100">Pot Odds:</span> {potOddsDisplay}
         </div>
@@ -1687,7 +1687,7 @@ export default function GamePage() {
               <Avatar 
                 src={getPlayerAvatarSrc(assignment.playerId)}
                 size="lg"
-                className={`w-[52px] h-[52px] max-sm:w-10 max-sm:h-10 rounded-full shadow-sm ${(() => {
+                className={`w-[52px] h-[52px] max-sm:w-10 max-sm:h-10 rounded-full shadow-xs ${(() => {
                   const tag = playerNotes[assignment.playerId]?.color as NoteColor | undefined;
                   return tag && NOTE_COLOR_CLASSES[tag] ? `ring-4 ${NOTE_COLOR_CLASSES[tag].ring}` : '';
                 })()}`}
@@ -1723,7 +1723,7 @@ export default function GamePage() {
             // The top and bottom seats' plates sit left of the avatar; the others' are centred under it
             style={seatPlateStyle(style, isNarrowScreen ? 30 : 38)}
           >
-            <div className={`min-w-[96px] max-w-[150px] px-3 py-1.5 max-sm:px-2 max-sm:py-1 max-sm:text-[10px] max-sm:min-w-[84px] max-sm:max-w-[120px] rounded-xl shadow-card border backdrop-blur-sm text-xs bg-gray-950/85 text-gray-100 ${
+            <div className={`min-w-[96px] max-w-[150px] px-3 py-1.5 max-sm:px-2 max-sm:py-1 max-sm:text-[10px] max-sm:min-w-[84px] max-sm:max-w-[120px] rounded-xl shadow-card border backdrop-blur-xs text-xs bg-gray-950/85 text-gray-100 ${
               isCurrentPlayer ? 'border-emerald-400/40' : 'border-white/10'
             }`}>
               <div className="font-medium text-gray-200 whitespace-nowrap max-sm:truncate">
@@ -2449,10 +2449,10 @@ export default function GamePage() {
         </div>
       )}
       {/* Table bar: where you are on the left, what you can do on the right */}
-      <header className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/80 backdrop-blur-md dark:border-white/[0.06] dark:bg-gray-900/75">
+      <header className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/80 backdrop-blur-md dark:border-white/6 dark:bg-gray-900/75">
         <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-2 lg:py-2.5 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <Link href="/dashboard" className="btn btn-ghost btn-sm !px-2 shrink-0" aria-label="Back to the lobby" title="Back to the lobby">
+            <Link href="/dashboard" className="btn btn-ghost btn-sm px-2! shrink-0" aria-label="Back to the lobby" title="Back to the lobby">
               <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M12.8 5.2a1 1 0 010 1.4L9.4 10l3.4 3.4a1 1 0 01-1.4 1.4l-4.1-4.1a1 1 0 010-1.4l4.1-4.1a1 1 0 011.4 0z" clipRule="evenodd" /></svg>
             </Link>
             <div className="min-w-0">
@@ -2495,11 +2495,11 @@ export default function GamePage() {
             {currentPlayerSeat && (
               <button
                 onClick={standUp}
-                className="btn btn-ghost btn-sm max-sm:!px-2"
+                className="btn btn-ghost btn-sm max-sm:px-2!"
                 title={`Stand up from seat ${currentPlayerSeat}`}
                 aria-label="Stand up from seat"
               >
-                <svg className="w-4 h-4 flex-shrink-0 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg className="w-4 h-4 shrink-0 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                 </svg>
                 <span className="whitespace-nowrap max-sm:sr-only">Stand up</span>
@@ -2507,7 +2507,7 @@ export default function GamePage() {
             )}
             <a
               href={`/history?room=${encodeURIComponent(tableId)}`}
-              className="btn btn-ghost btn-sm max-sm:!px-2"
+              className="btn btn-ghost btn-sm max-sm:px-2!"
               title="Hand history"
             >
               <svg className="h-4 w-4 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.8L3 8M3 3v5h5M12 7v5l3 2" /></svg>
@@ -2551,7 +2551,7 @@ export default function GamePage() {
               <>
                 <button
                   onClick={() => turnAlerts.setSoundEnabled(!turnAlerts.soundEnabled)}
-                  className="btn btn-ghost btn-sm !px-2"
+                  className="btn btn-ghost btn-sm px-2!"
                   title={turnAlerts.soundEnabled ? 'Turn off the sound when it is your turn' : 'Play a sound when it is your turn'}
                   aria-label={turnAlerts.soundEnabled ? 'Sound on' : 'Sound off'}
                   aria-pressed={turnAlerts.soundEnabled}
@@ -2566,7 +2566,7 @@ export default function GamePage() {
                 {turnAlerts.notifyPermission !== 'unsupported' && turnAlerts.notifyPermission !== 'denied' && (
                   <button
                     onClick={() => turnAlerts.setNotifyEnabled(!turnAlerts.notifyEnabled)}
-                    className={`btn btn-ghost btn-sm !px-2 ${turnAlerts.notifyEnabled ? '!text-emerald-500 dark:!text-emerald-300' : ''}`}
+                    className={`btn btn-ghost btn-sm px-2! ${turnAlerts.notifyEnabled ? 'text-emerald-500! dark:text-emerald-300!' : ''}`}
                     title="Get a browser notification when it is your turn and you are in another tab or app"
                     aria-label={turnAlerts.notifyEnabled ? 'Alerts on' : 'Alert me'}
                     aria-pressed={turnAlerts.notifyEnabled}
@@ -2586,7 +2586,7 @@ export default function GamePage() {
                 title={`Start the game with ${getSeatedPlayersCount()} players`}
                 aria-label="Start game"
               >
-                <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path d="M8 5v14l11-7z"/>
                 </svg>
                 <span className="whitespace-nowrap">Start Game ({getSeatedPlayersCount()})</span>
@@ -2594,11 +2594,11 @@ export default function GamePage() {
             )}
             <button
               onClick={handleLeaveGame}
-              className="btn btn-ghost btn-sm max-sm:!px-2 text-red-600 hover:!text-red-500 dark:text-red-400 dark:hover:!text-red-300 dark:hover:!bg-red-500/10"
+              className="btn btn-ghost btn-sm max-sm:px-2! text-red-600 hover:text-red-500! dark:text-red-400 dark:hover:text-red-300! dark:hover:bg-red-500/10!"
               title="Leave this game and return to dashboard"
               aria-label="Leave game"
             >
-              <svg className="w-4 h-4 flex-shrink-0 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <svg className="w-4 h-4 shrink-0 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
               <span className="whitespace-nowrap max-sm:sr-only">Leave</span>
@@ -2680,12 +2680,12 @@ export default function GamePage() {
                   return (
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="inline-block px-2 py-0.5 text-xs rounded bg-amber-600 text-white">Dealer&apos;s Choice</span>
+                        <span className="inline-block px-2 py-0.5 text-xs rounded-sm bg-amber-600 text-white">Dealer&apos;s Choice</span>
                         <h3 className="text-lg font-semibold">Choose the variant for this hand</h3>
                       </div>
                       <div className="flex flex-wrap gap-3 mt-2">
                         {allowed.map(v => (
-                          <label key={v} className={`px-3 py-1.5 rounded border text-sm cursor-pointer select-none ${selectedVariantDC === v ? 'bg-amber-600 text-white border-amber-500' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-amber-300 dark:border-amber-600'}`}> 
+                          <label key={v} className={`px-3 py-1.5 rounded-sm border text-sm cursor-pointer select-none ${selectedVariantDC === v ? 'bg-amber-600 text-white border-amber-500' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-amber-300 dark:border-amber-600'}`}> 
                             <input
                               type="radio"
                               name="dc-variant"
@@ -2714,7 +2714,7 @@ export default function GamePage() {
                               console.warn('Dealer choice failed:', err);
                             }
                           }}
-                          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded shadow"
+                          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-sm shadow-sm"
                         >
                           Start {labelMap[selectedVariantDC] || selectedVariantDC}
                         </button>
@@ -2727,7 +2727,7 @@ export default function GamePage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="inline-block px-2 py-0.5 text-xs rounded bg-amber-600 text-white">Dealer&apos;s Choice</span>
+                        <span className="inline-block px-2 py-0.5 text-xs rounded-sm bg-amber-600 text-white">Dealer&apos;s Choice</span>
                         <h3 className="text-lg font-semibold">Waiting for dealer to choose variant…</h3>
                       </div>
                       <div className="text-sm mt-1 opacity-80">Allowed: {allowed.map(v => labelMap[v] || v).join(', ')}</div>
@@ -2765,13 +2765,13 @@ export default function GamePage() {
                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-6 flex flex-col items-center gap-1" aria-label="Run it twice boards">
                     {runItTwiceBoards.map((board: any[], run: number) => (
                       <div key={`run-${run}`} className="flex items-center gap-1">
-                        <span className="text-[10px] uppercase tracking-wide text-amber-200 font-semibold drop-shadow w-10 text-right">Run {run + 1}</span>
+                        <span className="text-[10px] uppercase tracking-wide text-amber-200 font-semibold drop-shadow-sm w-10 text-right">Run {run + 1}</span>
                         {board.map((card: any, index: number) => (
                           <TableCard key={index} card={card} size="xs" highContrast={highContrastCards} className="table-card-flip" />
                         ))}
                         {/* Spaces for cards still to come on this run */}
                         {Array.from({ length: Math.max(0, 5 - board.length) }, (_, i) => (
-                          <div key={`empty-${i}`} className="w-7 h-10 rounded border border-dashed border-white/40" />
+                          <div key={`empty-${i}`} className="w-7 h-10 rounded-sm border border-dashed border-white/40" />
                         ))}
                       </div>
                     ))}
@@ -2786,7 +2786,7 @@ export default function GamePage() {
 
                 {/* Pot area - positioned below the community cards */}
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-12 max-sm:mt-10 text-white text-center">
-                  <div className="inline-flex items-center gap-1.5 bg-black/35 ring-1 ring-white/10 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-semibold tabular-nums">
+                  <div className="inline-flex items-center gap-1.5 bg-black/35 ring-1 ring-white/10 backdrop-blur-xs px-3 py-1 rounded-full text-sm font-semibold tabular-nums">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-white/60">Pot</span>
                     {showStackInBB 
                       ? formatChips(pokerGameState?.pot || 0, pokerGameState?.bigBlind || null, true)
@@ -2846,7 +2846,7 @@ export default function GamePage() {
 
           {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && (
-            <div className="lg:col-span-2 surface max-sm:!bg-gray-50 max-sm:dark:!bg-gray-800 p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
+            <div className="lg:col-span-2 surface max-sm:bg-gray-50! max-sm:dark:bg-gray-800! p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <h3 className="text-base font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
@@ -2884,7 +2884,7 @@ export default function GamePage() {
                 </button>
               </div>
               {shortcuts.allInArmed && (
-                <div className="mb-2 rounded bg-yellow-100 px-2 py-1 text-sm font-semibold text-yellow-900 dark:bg-yellow-900/40 dark:text-yellow-100" role="status">
+                <div className="mb-2 rounded-sm bg-yellow-100 px-2 py-1 text-sm font-semibold text-yellow-900 dark:bg-yellow-900/40 dark:text-yellow-100" role="status">
                   Press A again to go all-in, or Esc to cancel.
                 </div>
               )}
@@ -2980,7 +2980,7 @@ export default function GamePage() {
                 {/* No-Limit betting controls */}
                 {((pokerGameState?.bettingMode || 'no-limit') === 'no-limit') && (
                   (pokerGameState.currentBet || 0) === 0 ? (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:border-0! max-sm:bg-transparent! max-sm:p-0!">
                       <div className="sr-only">Bet amount</div>
                       {(() => {
                         const { min, max } = getBetBounds();
@@ -3038,7 +3038,7 @@ export default function GamePage() {
                       })()}
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:border-0! max-sm:bg-transparent! max-sm:p-0!">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Raise to</div>
                       {(() => {
                         const { min, max } = getRaiseBounds();
@@ -3107,7 +3107,7 @@ export default function GamePage() {
                 {/* Pot-Limit betting controls */}
                 {((pokerGameState?.bettingMode || 'no-limit') === 'pot-limit') && (
                   (pokerGameState.currentBet || 0) === 0 ? (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:border-0! max-sm:bg-transparent! max-sm:p-0!">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Bet amount (Pot-Limit)</div>
                       {(() => {
                         const { min, max } = getPotLimitBetBounds();
@@ -3163,7 +3163,7 @@ export default function GamePage() {
                       })()}
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:!border-0 max-sm:!bg-transparent max-sm:!p-0">
+                    <div className="flex flex-col gap-2 surface-muted p-3 w-full order-first sm:mb-1 max-sm:border-0! max-sm:bg-transparent! max-sm:p-0!">
                       <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Raise to (Pot-Limit)</div>
                       {(() => {
                         const { min, max } = getPotLimitRaiseBounds();
@@ -3234,7 +3234,7 @@ export default function GamePage() {
             <div className="lg:col-span-2 bg-purple-50 dark:bg-purple-900/30 border border-purple-300 dark:border-purple-600 rounded-lg shadow-md p-4 mt-4" aria-live="polite">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="inline-block px-2 py-0.5 text-xs rounded bg-purple-600 text-white">RIT</span>
+                  <span className="inline-block px-2 py-0.5 text-xs rounded-sm bg-purple-600 text-white">RIT</span>
                   <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100">Run It Twice Vote</h3>
                 </div>
                 <span className="text-xs uppercase tracking-wide text-purple-700 dark:text-purple-300">Hand paused</span>
@@ -3253,7 +3253,7 @@ export default function GamePage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   onClick={() => enableRunItTwice(1)}
-                  className="px-3 py-1.5 rounded text-xs font-semibold bg-gray-200 hover:bg-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  className="px-3 py-1.5 rounded-sm text-xs font-semibold bg-gray-200 hover:bg-gray-300 text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-purple-400"
                 >Keep single run</button>
                 {RUN_IT_TWICE_DECISIONS_ENABLED && (() => {
                   const activeCount = getActiveNonFoldedPlayers().length;
@@ -3262,7 +3262,7 @@ export default function GamePage() {
                     <button
                       key={`rit-${r}`}
                       onClick={() => enableRunItTwice(r)}
-                      className="px-3 py-1.5 rounded text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow focus:outline-none focus:ring-2 focus:ring-purple-400"
+                      className="px-3 py-1.5 rounded-sm text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-sm focus:outline-hidden focus:ring-2 focus:ring-purple-400"
                     >Run {r === 2 ? 'Twice' : `${r}x`}</button>
                   ));
                 })()}
@@ -3275,7 +3275,7 @@ export default function GamePage() {
             <div className="lg:col-span-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-300 dark:border-purple-700 rounded-lg shadow-md p-4 mt-4" aria-live="polite">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100 flex items-center gap-2">
-                  <span className="inline-block px-2 py-0.5 text-xs rounded bg-purple-600 text-white">RIT</span>
+                  <span className="inline-block px-2 py-0.5 text-xs rounded-sm bg-purple-600 text-white">RIT</span>
                   Waiting on the Run It Twice vote
                 </h3>
                 <span className="text-xs uppercase tracking-wide text-purple-700 dark:text-purple-300">Hand paused</span>
@@ -3299,7 +3299,7 @@ export default function GamePage() {
 
           {/* Game Status Display (only before showdown); hide if only one non-folded remains; hide during Run-It-Twice prompt */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer !== playerId && !runItTwicePrompt && (
-            <div className="lg:col-span-2 surface p-4 sm:p-5 mt-4 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:!bg-gray-50 max-sm:dark:!bg-gray-800 max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
+            <div className="lg:col-span-2 surface p-4 sm:p-5 mt-4 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:bg-gray-50! max-sm:dark:bg-gray-800! max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
               {/* On phones this pins to the bottom as a slim bar: heading and tiles give way to the pre-actions */}
               <div className="flex items-center justify-between mb-3 max-sm:hidden">
                 <h3 className="section-title">Game status</h3>
@@ -3355,19 +3355,19 @@ export default function GamePage() {
           {gameStarted && pokerGameState && pokerGameState.stage === 'showdown' && pokerGameState.runItTwice?.enabled && pokerGameState.runItTwice.results?.length > 0 && (
             <div className="lg:col-span-2 bg-purple-50 dark:bg-purple-900/30 border border-purple-300 dark:border-purple-700 text-purple-900 dark:text-purple-100 rounded-lg shadow-md p-4 mt-4">
               <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                <span className="inline-block px-2 py-0.5 text-xs rounded bg-purple-600 text-white">RIT</span>
+                <span className="inline-block px-2 py-0.5 text-xs rounded-sm bg-purple-600 text-white">RIT</span>
                 Run It Twice Results ({pokerGameState.runItTwice.numberOfRuns} Runs)
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {pokerGameState.runItTwice.results.map((res: any, idx: number) => (
-                  <div key={res.boardId || idx} className="rounded-md border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-800 p-3 shadow-sm">
+                  <div key={res.boardId || idx} className="rounded-md border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-800 p-3 shadow-xs">
                     <div className="text-sm font-semibold mb-2">Board {idx + 1}</div>
                     {(() => {
                       const board = pokerGameState.runItTwice.boards?.[idx] || [];
                       return (
                         <div className="flex gap-1 mb-3">
                           {board.map((card: any, ci: number) => (
-                            <div key={ci} className="bg-white dark:bg-gray-700 rounded border text-[10px] p-1 w-7 h-10 flex flex-col items-center justify-center text-black dark:text-gray-100 font-bold">
+                            <div key={ci} className="bg-white dark:bg-gray-700 rounded-sm border text-[10px] p-1 w-7 h-10 flex flex-col items-center justify-center text-black dark:text-gray-100 font-bold">
                               <div className={highContrastCards ? suitColorClass(card.suit) : 'text-gray-900'}>{card.rank}</div>
                               <div className={suitColorClass(card.suit)}>
                                 {card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}
@@ -3381,7 +3381,7 @@ export default function GamePage() {
                       {res.winners.map((w: any) => {
                         const player = pokerGameState.players.find((p: any) => p.id === w.playerId);
                         return (
-                          <div key={w.playerId} className="text-xs flex items-center justify-between bg-purple-100 dark:bg-purple-800/40 px-2 py-1 rounded">
+                          <div key={w.playerId} className="text-xs flex items-center justify-between bg-purple-100 dark:bg-purple-800/40 px-2 py-1 rounded-sm">
                             <span className="font-medium">
                               {player?.name || w.playerId.slice(0,6)}
                               {w.side && <span className="ml-1 text-[10px] uppercase opacity-70">{w.side === 'both' ? 'scoops' : w.side}</span>}
@@ -3404,7 +3404,7 @@ export default function GamePage() {
                 {pokerGameState.runItTwice.potDistribution.map((pd: any) => {
                   const player = pokerGameState.players.find((p: any) => p.id === pd.playerId);
                   return (
-                    <div key={pd.playerId} className="text-xs px-2 py-1 rounded bg-purple-200 dark:bg-purple-800/60 text-purple-900 dark:text-purple-100 font-semibold">
+                    <div key={pd.playerId} className="text-xs px-2 py-1 rounded-sm bg-purple-200 dark:bg-purple-800/60 text-purple-900 dark:text-purple-100 font-semibold">
                       {player?.name || pd.playerId.slice(0,6)}: {showStackInBB 
                         ? formatChips(pd.amount, pokerGameState?.bigBlind || null, true)
                         : `$${pd.amount}`
@@ -3422,18 +3422,18 @@ export default function GamePage() {
             && ((pokerGameState.variant === 'omaha-hi-lo' || pokerGameState.variant === 'seven-card-stud-hi-lo') && pokerGameState.lastHiLoResult) && (
             <div className="lg:col-span-2 bg-cyan-50 dark:bg-cyan-900/30 border border-cyan-300 dark:border-cyan-700 text-cyan-900 dark:text-cyan-100 rounded-lg shadow-md p-4 mt-4">
               <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                <span className="inline-block px-2 py-0.5 text-xs rounded bg-cyan-600 text-white">Hi-Lo</span>
+                <span className="inline-block px-2 py-0.5 text-xs rounded-sm bg-cyan-600 text-white">Hi-Lo</span>
                 Showdown Results
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* High winners */}
-                <div className="rounded-md border border-cyan-300 dark:border-cyan-700 bg-white dark:bg-gray-800 p-3 shadow-sm">
+                <div className="rounded-md border border-cyan-300 dark:border-cyan-700 bg-white dark:bg-gray-800 p-3 shadow-xs">
                   <div className="text-sm font-semibold mb-2">High Winners</div>
                   <div className="space-y-1">
                     {pokerGameState.lastHiLoResult!.high.map((h: any) => {
                       const player = pokerGameState.players.find((p: any) => p.id === h.playerId);
                       return (
-                        <div key={h.playerId} className="text-xs flex items-center justify-between bg-cyan-100 dark:bg-cyan-800/40 px-2 py-1 rounded">
+                        <div key={h.playerId} className="text-xs flex items-center justify-between bg-cyan-100 dark:bg-cyan-800/40 px-2 py-1 rounded-sm">
                           <span className="font-medium">{player?.name || h.playerId.slice(0,6)}</span>
                           <span className="text-cyan-700 dark:text-cyan-300 font-semibold">+${h.amount}</span>
                         </div>
@@ -3442,14 +3442,14 @@ export default function GamePage() {
                   </div>
                 </div>
                 {/* Low winners (if any) */}
-                <div className="rounded-md border border-cyan-300 dark:border-cyan-700 bg-white dark:bg-gray-800 p-3 shadow-sm">
+                <div className="rounded-md border border-cyan-300 dark:border-cyan-700 bg-white dark:bg-gray-800 p-3 shadow-xs">
                   <div className="text-sm font-semibold mb-2">Low Winners</div>
                   {Array.isArray(pokerGameState.lastHiLoResult!.low) && pokerGameState.lastHiLoResult!.low.length > 0 ? (
                     <div className="space-y-1">
                       {pokerGameState.lastHiLoResult!.low!.map((l: any) => {
                         const player = pokerGameState.players.find((p: any) => p.id === l.playerId);
                         return (
-                          <div key={l.playerId} className="text-xs flex items-center justify-between bg-cyan-100 dark:bg-cyan-800/40 px-2 py-1 rounded">
+                          <div key={l.playerId} className="text-xs flex items-center justify-between bg-cyan-100 dark:bg-cyan-800/40 px-2 py-1 rounded-sm">
                             <span className="font-medium">{player?.name || l.playerId.slice(0,6)}</span>
                             <span className="text-cyan-700 dark:text-cyan-300 font-semibold">+${l.amount}</span>
                           </div>
@@ -3491,7 +3491,7 @@ export default function GamePage() {
           {gameStarted && pokerGameState && (pokerGameState.stage === 'showdown' || getActiveNonFoldedPlayers().length === 1)
             && !pokerGameState.runItTwice?.enabled
             && !(((pokerGameState.variant === 'omaha-hi-lo' || pokerGameState.variant === 'seven-card-stud-hi-lo')) && pokerGameState.lastHiLoResult) && (
-            <div className="lg:col-span-2 rounded-2xl border border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-400/25 dark:bg-emerald-400/[0.08] dark:text-emerald-100 p-4 mt-4">
+            <div className="lg:col-span-2 rounded-2xl border border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-400/25 dark:bg-emerald-400/8 dark:text-emerald-100 p-4 mt-4">
               {(() => {
                 const remaining = getActiveNonFoldedPlayers();
                 // Win-by-fold: only one active player remains

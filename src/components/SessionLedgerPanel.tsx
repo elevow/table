@@ -121,7 +121,7 @@ export default function SessionLedgerPanel({ tableId, refreshKey, embedded = fal
           <button
             onClick={downloadCsv}
             disabled={downloading}
-            className="mt-3 px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-60"
+            className="mt-3 px-3 py-1 rounded-sm bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-60"
           >
             {downloading ? 'Preparing…' : 'Download CSV'}
           </button>

@@ -20,7 +20,7 @@ function TablesList({ title, empty, tables, showHost }: { title: string; empty: 
       </div>
       {tables.length === 0 ? (
         <div className="px-6 pb-8 pt-4 text-center">
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/[0.05] dark:text-gray-500">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/5 dark:text-gray-500">
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true"><ellipse cx="12" cy="12" rx="9" ry="6" /></svg>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">{empty}</p>
@@ -28,7 +28,7 @@ function TablesList({ title, empty, tables, showHost }: { title: string; empty: 
       ) : (
         <>
         {/* Phones: one card-like row per table */}
-        <ul className="sm:hidden divide-y divide-gray-100 dark:divide-white/[0.05] border-t border-gray-100 dark:border-white/[0.05]">
+        <ul className="sm:hidden divide-y divide-gray-100 dark:divide-white/5 border-t border-gray-100 dark:border-white/5">
           {tables.map(t => {
             const full = t.seated >= t.maxPlayers;
             return (

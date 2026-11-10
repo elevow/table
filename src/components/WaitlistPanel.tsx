@@ -60,7 +60,7 @@ export default function WaitlistPanel({ extras, playerId, isSeated, tableFull, c
       </span>
       <button
         onClick={() => onToggleWaitlist(position < 0)}
-        className={`px-4 py-1.5 rounded text-sm font-medium text-white ${position >= 0 ? 'bg-gray-500 hover:bg-gray-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+        className={`px-4 py-1.5 rounded-sm text-sm font-medium text-white ${position >= 0 ? 'bg-gray-500 hover:bg-gray-600' : 'bg-blue-600 hover:bg-blue-700'}`}
       >
         {position >= 0 ? 'Leave waitlist' : 'Join waitlist'}
       </button>

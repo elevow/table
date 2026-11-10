@@ -141,10 +141,10 @@ export default function AdminRolesPage() {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
-      <header className="bg-white dark:bg-gray-800 shadow-sm">
+      <header className="bg-white dark:bg-gray-800 shadow-xs">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
-            <span className="bg-red-500 text-white px-2 py-1 rounded text-sm mr-3">ADMIN</span>
+            <span className="bg-red-500 text-white px-2 py-1 rounded-sm text-sm mr-3">ADMIN</span>
             Roles &amp; permissions
           </h1>
           <Link href="/dashboard" className="text-blue-600 dark:text-blue-400 hover:underline text-sm">
@@ -174,8 +174,8 @@ export default function AdminRolesPage() {
             ))}
         </nav>
 
-        {message && <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">{message}</div>}
-        {error && <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">{error}</div>}
+        {message && <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-sm">{message}</div>}
+        {error && <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-sm">{error}</div>}
 
         {loading ? (
           <p className="text-gray-600 dark:text-gray-300">Loading…</p>
@@ -316,7 +316,7 @@ function RolesTab({
             <tr>
               <th className="text-left p-3 font-semibold text-gray-900 dark:text-gray-100 min-w-[16rem]">Permission</th>
               {roles.map(role => (
-                <th key={role.id} className="p-3 text-center align-bottom min-w-[6.5rem]">
+                <th key={role.id} className="p-3 text-center align-bottom min-w-26">
                   <div className="font-semibold text-gray-900 dark:text-gray-100">{role.name}</div>
                   <div className="text-xs font-normal text-gray-500 dark:text-gray-400">
                     rank {role.rank}
@@ -407,7 +407,7 @@ function RolesTab({
               required
               value={newRole.name}
               onChange={e => setNewRole({ ...newRole, name: e.target.value })}
-              className="block mt-1 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+              className="block mt-1 px-2 py-1 rounded-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700"
             />
           </label>
           <label className="text-sm text-gray-700 dark:text-gray-200">
@@ -416,15 +416,15 @@ function RolesTab({
               type="number"
               value={newRole.rank}
               onChange={e => setNewRole({ ...newRole, rank: parseInt(e.target.value, 10) || 0 })}
-              className="block mt-1 w-24 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+              className="block mt-1 w-24 px-2 py-1 rounded-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700"
             />
           </label>
-          <label className="text-sm text-gray-700 dark:text-gray-200 flex-1 min-w-[12rem]">
+          <label className="text-sm text-gray-700 dark:text-gray-200 flex-1 min-w-48">
             Description
             <input
               value={newRole.description}
               onChange={e => setNewRole({ ...newRole, description: e.target.value })}
-              className="block mt-1 w-full px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700"
+              className="block mt-1 w-full px-2 py-1 rounded-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700"
             />
           </label>
           <button type="submit" className="px-4 py-2 rounded-md text-white bg-indigo-500 hover:bg-indigo-600">
@@ -527,7 +527,7 @@ function UsersTab({
             onChange={e => setQuery(e.target.value)}
             placeholder="Email or username; * is a wildcard, * alone is everyone"
             aria-label="Search by email or username"
-            className="flex-1 px-3 py-2 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            className="flex-1 px-3 py-2 rounded-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
           />
           <button type="submit" className="px-4 py-2 rounded-md text-white bg-indigo-500 hover:bg-indigo-600">Search</button>
         </form>
@@ -541,7 +541,7 @@ function UsersTab({
             <li key={u.id}>
               <button
                 onClick={() => setSelected(u)}
-                className={`w-full text-left px-2 py-2 rounded ${selected?.id === u.id ? 'bg-indigo-50 dark:bg-gray-700' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                className={`w-full text-left px-2 py-2 rounded-sm ${selected?.id === u.id ? 'bg-indigo-50 dark:bg-gray-700' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
               >
                 <div className="font-medium text-gray-900 dark:text-gray-100">{u.username}</div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">{u.email}</div>
@@ -707,7 +707,7 @@ function UserEditor({
             <select
               value={draft.effect}
               onChange={e => setDraft({ ...draft, effect: e.target.value as Override['effect'] })}
-              className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
+              className="px-2 py-1 rounded-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
             >
               <option value="deny">Deny</option>
               <option value="grant">Grant</option>
@@ -715,7 +715,7 @@ function UserEditor({
             <select
               value={draft.permission}
               onChange={e => setDraft({ ...draft, permission: e.target.value })}
-              className="flex-1 min-w-[12rem] px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
+              className="flex-1 min-w-48 px-2 py-1 rounded-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
             >
               <option value="">Choose a permission…</option>
               {groups.map(g => (
@@ -730,7 +730,7 @@ function UserEditor({
               value={draft.reason ?? ''}
               onChange={e => setDraft({ ...draft, reason: e.target.value })}
               placeholder="Reason (optional)"
-              className="flex-1 min-w-[10rem] px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
+              className="flex-1 min-w-40 px-2 py-1 rounded-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
             />
             <button onClick={addOverride} disabled={!draft.permission} className="px-3 py-1 rounded-md text-sm text-white bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400">
               Add
@@ -751,7 +751,7 @@ function UserEditor({
               const text = limitTexts[d.key] ?? '';
               return (
                 <label key={d.key} className="flex flex-wrap items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
-                  <span className="flex-1 min-w-[10rem]">{d.label}</span>
+                  <span className="flex-1 min-w-40">{d.label}</span>
                   <input
                     value={text}
                     placeholder="–"
@@ -857,7 +857,7 @@ function SanctionSection({
         This takes effect right away, without Save.
       </p>
       {current && (
-        <div className="mb-3 p-2 rounded bg-red-50 dark:bg-red-900/30 text-sm text-red-800 dark:text-red-200 flex flex-wrap items-center gap-2">
+        <div className="mb-3 p-2 rounded-sm bg-red-50 dark:bg-red-900/30 text-sm text-red-800 dark:text-red-200 flex flex-wrap items-center gap-2">
           <span>
             {current.kind === 'ban' ? 'Banned' : 'Suspended'}
             {current.until ? ` until ${new Date(current.until).toLocaleString()}` : ' with no end'}
@@ -887,7 +887,7 @@ function SanctionSection({
               setKind(next);
               if (next === 'suspend' && hours === null) setHours(24);
             }}
-            className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
+            className="px-2 py-1 rounded-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
           >
             {canSuspend && <option value="suspend">Suspend</option>}
             {canBan && <option value="ban">Ban</option>}
@@ -895,7 +895,7 @@ function SanctionSection({
           <select
             value={hours === null ? '' : String(hours)}
             onChange={e => setHours(e.target.value ? Number(e.target.value) : null)}
-            className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
+            className="px-2 py-1 rounded-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
           >
             {SANCTION_DURATIONS.filter(d => d.hours !== null || kind === 'ban').map(d => (
               <option key={d.label} value={d.hours === null ? '' : String(d.hours)}>{d.label}</option>
@@ -905,7 +905,7 @@ function SanctionSection({
             value={reason}
             onChange={e => setReason(e.target.value)}
             placeholder="Reason (shown to the user)"
-            className="flex-1 min-w-[10rem] px-2 py-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
+            className="flex-1 min-w-40 px-2 py-1 rounded-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
           />
           <button
             onClick={apply}
@@ -965,5 +965,5 @@ function Badge({ children, tone = 'indigo' }: { children: React.ReactNode; tone?
     amber: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
     green: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   };
-  return <span className={`px-1.5 py-0.5 rounded text-xs ${tones[tone]}`}>{children}</span>;
+  return <span className={`px-1.5 py-0.5 rounded-sm text-xs ${tones[tone]}`}>{children}</span>;
 }

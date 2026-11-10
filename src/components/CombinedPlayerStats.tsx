@@ -46,8 +46,8 @@ function CombinedPlayerStats() {
 
       {status === 'loading' && (
         <div className="animate-pulse" aria-label="Loading your statistics">
-          <div className="h-4 bg-gray-200 dark:bg-white/[0.06] rounded w-3/4 mb-2"></div>
-          <div className="h-4 bg-gray-200 dark:bg-white/[0.06] rounded w-1/2"></div>
+          <div className="h-4 bg-gray-200 dark:bg-white/6 rounded-sm w-3/4 mb-2"></div>
+          <div className="h-4 bg-gray-200 dark:bg-white/6 rounded-sm w-1/2"></div>
         </div>
       )}
 

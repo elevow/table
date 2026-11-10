@@ -44,7 +44,7 @@ export default function InvitesList({ userId, kind = 'incoming', page = 1, limit
   return (
     <div className="space-y-2">
       {items.map(inv => (
-        <div key={inv.id} className="flex items-center justify-between rounded border border-gray-200 p-2">
+        <div key={inv.id} className="flex items-center justify-between rounded-sm border border-gray-200 p-2">
           <div className="text-sm text-gray-800">
             <div>
               <span className="font-medium">Room:</span> {inv.roomId}
@@ -55,8 +55,8 @@ export default function InvitesList({ userId, kind = 'incoming', page = 1, limit
           </div>
           {kind === 'incoming' && inv.status === 'pending' ? (
             <div className="flex gap-2">
-              <button onClick={() => onRespond(inv.id, 'accept')} className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700">Accept</button>
-              <button onClick={() => onRespond(inv.id, 'decline')} className="rounded bg-gray-200 px-2 py-1 text-xs text-gray-800 hover:bg-gray-300">Decline</button>
+              <button onClick={() => onRespond(inv.id, 'accept')} className="rounded-sm bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700">Accept</button>
+              <button onClick={() => onRespond(inv.id, 'decline')} className="rounded-sm bg-gray-200 px-2 py-1 text-xs text-gray-800 hover:bg-gray-300">Decline</button>
             </div>
           ) : (
             <span className="text-xs text-gray-500">{inv.status}</span>

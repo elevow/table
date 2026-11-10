@@ -11,7 +11,7 @@ const DEFAULT_PRESET = 'freezeout_default';
 const DEFAULT_BREAK_MINUTES = 10;
 
 const inputClass =
-  'border border-gray-300 dark:border-gray-600 rounded p-1.5 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500';
+  'border border-gray-300 dark:border-gray-600 rounded-sm p-1.5 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 const linkButton = 'text-sm text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-40 disabled:no-underline';
 
 /** A number from an input, with empty meaning undefined. */
@@ -470,7 +470,7 @@ export default function TournamentSetupForm({
         </ul>
       )}
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+      <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-sm disabled:opacity-50"
         disabled={submitting || problems.length > 0 || blocked}>
         {submitting ? submittingLabel : submitLabel}
       </button>

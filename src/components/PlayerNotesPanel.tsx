@@ -93,7 +93,7 @@ export default function PlayerNotesPanel({ players, notes, onNotesChange, embedd
             <li key={p.id}>
               <button
                 onClick={() => setEditing(editing === p.id ? null : p.id)}
-                className="w-full flex items-center gap-2 text-left text-sm px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-white/[0.08] text-gray-900 dark:text-gray-100"
+                className="w-full flex items-center gap-2 text-left text-sm px-2 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-white/8 text-gray-900 dark:text-gray-100"
                 aria-expanded={editing === p.id}
               >
                 <span className={`inline-block w-3 h-3 rounded-full border border-gray-300 dark:border-gray-600 ${swatch || 'bg-transparent'}`} aria-hidden="true" />
@@ -121,13 +121,13 @@ export default function PlayerNotesPanel({ players, notes, onNotesChange, embedd
                     maxLength={2000}
                     rows={3}
                     placeholder="e.g. bluffs a lot on the river"
-                    className="w-full text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 p-2"
+                    className="w-full text-sm rounded-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 p-2"
                   />
                   <div className="flex gap-2 mt-1">
-                    <button onClick={save} disabled={saving} className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs">
+                    <button onClick={save} disabled={saving} className="px-3 py-1 rounded-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs">
                       {saving ? 'Saving…' : 'Save'}
                     </button>
-                    <button onClick={() => setEditing(null)} className="px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs">Cancel</button>
+                    <button onClick={() => setEditing(null)} className="px-3 py-1 rounded-sm bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs">Cancel</button>
                   </div>
                 </div>
               )}

@@ -7,10 +7,10 @@ import { postTournamentAction } from '../../../src/lib/tournament/client';
 import { useTournamentView } from '../../../src/lib/tournament/use-tournament-view';
 import TournamentClock from '../../../src/components/tournament/TournamentClock';
 
-const btn = 'px-4 py-2 rounded text-white disabled:opacity-50';
+const btn = 'px-4 py-2 rounded-sm text-white disabled:opacity-50';
 const card = 'rounded-lg bg-gray-50 dark:bg-gray-800 p-4';
 const select =
-  'border border-gray-300 dark:border-gray-600 rounded p-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100';
+  'border border-gray-300 dark:border-gray-600 rounded-sm p-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100';
 
 /** The director's screen: run the clock, record knockouts, and take rebuys and add-ons at the desk. */
 export default function ManageTournamentPage() {
@@ -183,7 +183,7 @@ export default function ManageTournamentPage() {
       )}
 
       {view.rebuysOpen && (
-        <section aria-label="Rebuys" className={`flex flex-wrap items-center gap-3 rounded p-3 text-sm ${view.waitingOnRebuys ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
+        <section aria-label="Rebuys" className={`flex flex-wrap items-center gap-3 rounded-sm p-3 text-sm ${view.waitingOnRebuys ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
           <span>
             {view.waitingOnRebuys
               ? 'One player is left. The tournament ends when you close rebuys, unless someone buys back in first.'
@@ -197,7 +197,7 @@ export default function ManageTournamentPage() {
       )}
 
       {view.undo && (
-        <section aria-label="Undo" className="flex flex-wrap items-center gap-3 rounded bg-amber-50 dark:bg-amber-900/20 p-3 text-sm">
+        <section aria-label="Undo" className="flex flex-wrap items-center gap-3 rounded-sm bg-amber-50 dark:bg-amber-900/20 p-3 text-sm">
           <span>{view.undo.name} was the last player out.</span>
           <button className={`${btn} bg-amber-600`} disabled={busy} onClick={() => run('undo-elimination', {}, `${view.undo!.name} is back in`)}>
             Undo: put {view.undo.name} back

@@ -363,7 +363,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
                 {m.senderId === playerId ? 'You' : m.senderName || 'Player'}
               </span>
               {m.senderId === directorId && (
-                <span className="rounded bg-indigo-100 px-1 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">Director</span>
+                <span className="rounded-sm bg-indigo-100 px-1 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">Director</span>
               )}
               {canMute(m) && (
                 <button
@@ -422,7 +422,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300" aria-label="Muted players">
           <span>Muted:</span>
           {mutedHere.map(([id, name]) => (
-            <span key={id} className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 dark:bg-gray-700">
+            <span key={id} className="inline-flex items-center gap-1 rounded-sm bg-gray-100 px-2 py-0.5 dark:bg-gray-700">
               {name}
               <button
                 type="button"

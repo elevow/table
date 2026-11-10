@@ -14,7 +14,7 @@ interface Props {
   onChange: (games: MixedGameEntry[], handsPerGame: number) => void;
 }
 
-const inputClass = 'border border-gray-300 dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
+const inputClass = 'border border-gray-300 dark:border-gray-600 rounded-sm p-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
 
 /**
  * Room creation: pick the games of a mixed-game rotation (a preset such as HORSE, or any list),
@@ -43,7 +43,7 @@ export default function MixedGameSetup({ games, handsPerGame, onChange }: Props)
   };
 
   return (
-    <div className="space-y-3 border border-gray-200 dark:border-gray-700 rounded p-3">
+    <div className="space-y-3 border border-gray-200 dark:border-gray-700 rounded-sm p-3">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium">Mix</label>
@@ -80,7 +80,7 @@ export default function MixedGameSetup({ games, handsPerGame, onChange }: Props)
           {games.map((g, i) => (
             <li key={g.variant} className="flex flex-wrap items-center gap-2 text-sm">
               <span className="w-6 text-right text-gray-500">{i + 1}.</span>
-              <span className="min-w-[10rem]">{VARIANT_LABELS[g.variant]}</span>
+              <span className="min-w-40">{VARIANT_LABELS[g.variant]}</span>
               <select
                 aria-label={`Betting for ${VARIANT_LABELS[g.variant]}`}
                 className={`${inputClass} py-1`}
@@ -91,15 +91,15 @@ export default function MixedGameSetup({ games, handsPerGame, onChange }: Props)
                   <option key={m} value={m}>{BETTING_MODE_LABELS[m]}</option>
                 ))}
               </select>
-              <button type="button" className="px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700" onClick={() => move(i, -1)} aria-label="Move up">↑</button>
-              <button type="button" className="px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700" onClick={() => move(i, 1)} aria-label="Move down">↓</button>
-              <button type="button" className="px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700" onClick={() => toggle(g.variant)} aria-label="Remove">✕</button>
+              <button type="button" className="px-2 py-0.5 rounded-sm bg-gray-200 dark:bg-gray-700" onClick={() => move(i, -1)} aria-label="Move up">↑</button>
+              <button type="button" className="px-2 py-0.5 rounded-sm bg-gray-200 dark:bg-gray-700" onClick={() => move(i, 1)} aria-label="Move down">↓</button>
+              <button type="button" className="px-2 py-0.5 rounded-sm bg-gray-200 dark:bg-gray-700" onClick={() => toggle(g.variant)} aria-label="Remove">✕</button>
             </li>
           ))}
         </ol>
         <div className="flex flex-wrap gap-2 mt-2">
           {ALL_VARIANTS.filter(v => !games.some(g => g.variant === v)).map(v => (
-            <button key={v} type="button" className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600" onClick={() => toggle(v)}>
+            <button key={v} type="button" className="px-2 py-1 text-xs rounded-sm border border-gray-300 dark:border-gray-600" onClick={() => toggle(v)}>
               + {VARIANT_LABELS[v]}
             </button>
           ))}

@@ -153,7 +153,8 @@ function buildPool(): Pool {
     try {
       const tryPaths = isAbsolute(suppliedCaFile)
         ? [suppliedCaFile]
-        : [suppliedCaFile, join(process.cwd(), suppliedCaFile)];
+        // turbopackIgnore: the file is read at runtime; don't trace the whole project for it
+        : [suppliedCaFile, join(/*turbopackIgnore: true*/ process.cwd(), suppliedCaFile)];
       for (const p of tryPaths) {
         try {
           suppliedCa = readFileSync(p, 'utf8');

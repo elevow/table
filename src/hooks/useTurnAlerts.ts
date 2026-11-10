@@ -137,7 +137,7 @@ export function useTurnAlerts(isMyTurn: boolean, remainingMs: number | null, tur
     window.addEventListener('blur', update);
     return () => {
       window.removeEventListener('focus', update);
-      window.removeEventListener('blur', update);
+      window.removeEventListener('blur-sm', update);
       document.title = title;
     };
   }, [isMyTurn]);

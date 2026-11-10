@@ -79,7 +79,7 @@ export default function ProfitChart({ points }: Props) {
               x2={W - PAD.right}
               y1={geo.y(t)}
               y2={geo.y(t)}
-              className={t === 0 ? 'stroke-gray-300 dark:stroke-white/20' : 'stroke-gray-100 dark:stroke-white/[0.05]'}
+              className={t === 0 ? 'stroke-gray-300 dark:stroke-white/20' : 'stroke-gray-100 dark:stroke-white/5'}
               strokeDasharray={t === 0 ? '4 4' : undefined}
               strokeWidth={1}
             />

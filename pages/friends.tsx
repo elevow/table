@@ -27,20 +27,20 @@ export default function FriendsDemo() {
       </Head>
       <main className="mx-auto max-w-3xl p-4">
         <h1 className="mb-4 text-xl font-semibold">Friends & Invites</h1>
-        <section className="mb-6 rounded border p-4">
+        <section className="mb-6 rounded-sm border p-4">
           <h2 className="mb-2 text-lg font-medium">Relationship</h2>
           <div className="flex items-center gap-3">
-            <input value={peer} onChange={e => setPeer(e.target.value)} placeholder="Peer userId" className="rounded border px-2 py-1 text-sm" />
+            <input value={peer} onChange={e => setPeer(e.target.value)} placeholder="Peer userId" className="rounded-sm border px-2 py-1 text-sm" />
             <RelationshipBadge status={status || undefined} />
             {error && <span className="text-xs text-red-600">{error}</span>}
           </div>
         </section>
         <section className="grid gap-6 md:grid-cols-2">
-          <div className="rounded border p-4">
+          <div className="rounded-sm border p-4">
             <h2 className="mb-2 text-lg font-medium">Incoming invites</h2>
             <InvitesList userId={me} kind="incoming" />
           </div>
-          <div className="rounded border p-4">
+          <div className="rounded-sm border p-4">
             <h2 className="mb-2 text-lg font-medium">Outgoing invites</h2>
             <InvitesList userId={me} kind="outgoing" />
           </div>

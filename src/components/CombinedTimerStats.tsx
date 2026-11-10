@@ -262,8 +262,8 @@ function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameSta
   if (statsLoading) {
     return (
       <div className="animate-pulse space-y-3">
-        <div className="h-16 bg-gray-200 dark:bg-white/[0.05] rounded-xl"></div>
-        <div className="h-16 bg-gray-200 dark:bg-white/[0.05] rounded-xl"></div>
+        <div className="h-16 bg-gray-200 dark:bg-white/5 rounded-xl"></div>
+        <div className="h-16 bg-gray-200 dark:bg-white/5 rounded-xl"></div>
       </div>
     );
   }

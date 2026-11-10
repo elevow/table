@@ -92,8 +92,8 @@ export default function TournamentLobbyPage() {
       {!signedIn && <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">Sign in to register.</p>}
       {tournaments === null && !error && (
         <div className="surface p-6 space-y-3 animate-pulse" aria-label="Loading">
-          <div className="h-4 w-1/3 rounded bg-gray-200 dark:bg-white/[0.06]" />
-          <div className="h-4 w-1/2 rounded bg-gray-200 dark:bg-white/[0.06]" />
+          <div className="h-4 w-1/3 rounded-sm bg-gray-200 dark:bg-white/6" />
+          <div className="h-4 w-1/2 rounded-sm bg-gray-200 dark:bg-white/6" />
         </div>
       )}
       {tournaments?.length === 0 && (

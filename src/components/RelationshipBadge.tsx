@@ -19,6 +19,6 @@ export default function RelationshipBadge({ status }: Props) {
         : 'request sent'
       : status.status;
   const colorKey = status?.status ?? 'none';
-  const cls = `inline-flex items-center rounded px-2 py-1 text-xs font-medium ${colorMap[colorKey] || colorMap.none}`;
+  const cls = `inline-flex items-center rounded-sm px-2 py-1 text-xs font-medium ${colorMap[colorKey] || colorMap.none}`;
   return <span className={cls} title={`relationship: ${label}`}>{label}</span>;
 }

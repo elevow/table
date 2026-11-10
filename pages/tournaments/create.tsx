@@ -46,7 +46,7 @@ export default function CreateTournamentPage() {
       <div className="container mx-auto p-6 max-w-3xl">
         <Head><title>Tournament Created</title></Head>
         <h1 className="text-2xl font-semibold mb-4">Tournament created</h1>
-        <div role="status" className="rounded bg-green-50 dark:bg-green-900/30 border border-green-300 dark:border-green-700 p-4 space-y-1 text-sm">
+        <div role="status" className="rounded-sm bg-green-50 dark:bg-green-900/30 border border-green-300 dark:border-green-700 p-4 space-y-1 text-sm">
           <p className="font-medium">{created.name}</p>
           <p>
             {created.config.blindLevels.length} levels, {created.config.startingStack.toLocaleString()} starting stack,{' '}
@@ -58,7 +58,7 @@ export default function CreateTournamentPage() {
           <p className="text-gray-600 dark:text-gray-400">Tournament ID: <code>{created.id}</code></p>
         </div>
         <div className="mt-4 flex gap-4">
-          <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={() => router.push(`/tournaments/${created.id}`)}>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-sm" onClick={() => router.push(`/tournaments/${created.id}`)}>
             View tournament
           </button>
           {created.visibility === 'private' && (

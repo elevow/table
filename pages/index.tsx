@@ -230,14 +230,14 @@ const Home: NextPage = () => {
           {/* Guest access */}
           <div className="mt-6">
             <div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500">
-              <div className="h-px flex-1 bg-gray-200 dark:bg-white/[0.08]" />
+              <div className="h-px flex-1 bg-gray-200 dark:bg-white/8" />
               or
-              <div className="h-px flex-1 bg-gray-200 dark:bg-white/[0.08]" />
+              <div className="h-px flex-1 bg-gray-200 dark:bg-white/8" />
             </div>
             <button
               type="button"
               onClick={handleGuestAccess}
-              className="btn btn-secondary mt-6 w-full h-11 !font-medium dark:!text-gray-300"
+              className="btn btn-secondary mt-6 w-full h-11 font-medium! dark:text-gray-300!"
             >
               Continue as guest
             </button>

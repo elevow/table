@@ -127,7 +127,7 @@ function MyApp({ Component, pageProps }: AppProps) {
       {/* On html, not a wrapper, so portals and overlays get the font too */}
       <style jsx global>{`
         html {
-          --font-sans: ${inter.style.fontFamily};
+          --font-inter: ${inter.style.fontFamily};
         }
       `}</style>
       <Component {...pageProps} />

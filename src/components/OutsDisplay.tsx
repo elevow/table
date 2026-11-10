@@ -69,7 +69,7 @@ export const OutsDisplay: React.FC<OutsDisplayProps> = ({
   return (
     <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100 rounded-lg shadow-md p-4 mt-4">
       <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-        <span className="inline-block px-2 py-0.5 text-xs rounded bg-blue-600 text-white">OUTS</span>
+        <span className="inline-block px-2 py-0.5 text-xs rounded-sm bg-blue-600 text-white">OUTS</span>
         {losingPlayerName ? `${losingPlayerName}'s Outs` : 'Outs to Win'}
       </h3>
       
@@ -120,7 +120,7 @@ export const OutsDisplay: React.FC<OutsDisplayProps> = ({
                 {category.cards.map((card, cardIdx) => (
                   <div
                     key={cardIdx}
-                    className="bg-white dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 text-xs p-1 w-8 h-11 flex flex-col items-center justify-center font-bold shadow-sm"
+                    className="bg-white dark:bg-gray-700 rounded-sm border border-gray-300 dark:border-gray-600 text-xs p-1 w-8 h-11 flex flex-col items-center justify-center font-bold shadow-xs"
                     aria-label={getCardLabel(card)}
                   >
                     <div className="text-gray-800 dark:text-gray-100">{card.rank}</div>
@@ -145,7 +145,7 @@ export const OutsDisplay: React.FC<OutsDisplayProps> = ({
             {outs.map((card, idx) => (
               <div
                 key={idx}
-                className="bg-white dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 text-xs p-1 w-8 h-11 flex flex-col items-center justify-center font-bold shadow-sm"
+                className="bg-white dark:bg-gray-700 rounded-sm border border-gray-300 dark:border-gray-600 text-xs p-1 w-8 h-11 flex flex-col items-center justify-center font-bold shadow-xs"
                 aria-label={getCardLabel(card)}
               >
                 <div className="text-gray-800 dark:text-gray-100">{card.rank}</div>

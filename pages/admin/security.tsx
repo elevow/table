@@ -35,6 +35,7 @@ export default function AdminSecurityPage() {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the API; the loading/error state it sets is the point
   useEffect(() => { load(); }, [load]);
 
   const saveOverrides = async () => {

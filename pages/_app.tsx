@@ -12,7 +12,8 @@ const inter = Inter({ subsets: ['latin'], display: 'swap' });
 // Code splitting and optimization imports
 import { dynamicImport } from '../src/utils/code-splitting';
 // Service worker registration
-import { registerServiceWorker, isOffline } from '../src/utils/service-worker-registration';
+import { registerServiceWorker } from '../src/utils/service-worker-registration';
+import { useIsOffline } from '../src/hooks/useIsOffline';
 // Theme context
 import { ThemeProvider } from '../src/contexts/ThemeContext';
 
@@ -20,26 +21,11 @@ function MyApp({ Component, pageProps }: AppProps) {
   const router = useRouter();
   const [isRouteChanging, setIsRouteChanging] = useState(false);
   const [loadingKey, setLoadingKey] = useState(0);
-  const [offline, setOffline] = useState(false);
-  
+  const offline = useIsOffline();
+
   useEffect(() => {
     // Register service worker for caching and offline support
     registerServiceWorker();
-    
-    // Initialize offline status
-    setOffline(isOffline());
-    
-    // Listen for online/offline events
-    const handleOnline = () => setOffline(false);
-    const handleOffline = () => setOffline(true);
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
   }, []);
   
   useEffect(() => {

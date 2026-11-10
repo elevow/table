@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useHydrated } from '../../src/hooks/useHydrated';
 import {
   BASE_TURN_MS, DEFAULT_TIME_BANKS, DEFAULT_TIME_BANK_SECONDS, MAX_TIME_BANKS, MAX_TIME_BANK_SECONDS,
   MAX_TURN_SECONDS, MIN_TIME_BANK_SECONDS, MIN_TURN_SECONDS, clampSetting,
@@ -16,6 +17,14 @@ import { defaultBettingModeForVariant } from '../../src/lib/game/variant-mapping
 import { DEFAULT_HANDS_PER_GAME, HORSE_GAMES } from '../../src/lib/poker/variant-rules';
 
 type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'razz' | 'omaha-5' | 'dealers-choice' | 'mixed';
+
+function readAuthToken(): string | null {
+  try {
+    return localStorage.getItem('auth_token');
+  } catch {
+    return null;
+  }
+}
 
 export default function CreateGameRoomPage() {
   const router = useRouter();
@@ -45,20 +54,20 @@ export default function CreateGameRoomPage() {
   const [mixedGames, setMixedGames] = useState<MixedGameEntry[]>(HORSE_GAMES.map(g => ({ ...g })));
   const [handsPerGame, setHandsPerGame] = useState(DEFAULT_HANDS_PER_GAME);
   // Auth state
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  // Signed in = a token in this browser, read once hydrated
+  const hydrated = useHydrated();
+  const isAuthenticated = hydrated && !!readAuthToken();
   const [submitting, setSubmitting] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // On mount, determine if user is authenticated (token present)
+  const signInError = hydrated && !isAuthenticated ? 'You must sign in to create a room.' : null;
+
+  // Signed in: find out which kinds of room this player may create
   useEffect(() => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-      setIsAuthenticated(!!token);
-      if (!token) {
-        setError('You must sign in to create a room.');
-        return;
-      }
+      const token = readAuthToken();
+      if (!token) return;
       fetch('/api/auth/check-admin', { headers: { Authorization: `Bearer ${token}` } })
         .then(r => (r.ok ? r.json() : null))
         .then(data => {
@@ -555,7 +564,7 @@ export default function CreateGameRoomPage() {
           </p>
         </div>
         </section>
-        {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
+        {(error || signInError) && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error || signInError}</p>}
         <div className="flex flex-col-reverse gap-4 pt-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Running a tournament? Set it up from <Link href="/tournaments" className="link">Tournaments</Link>.

@@ -16,6 +16,7 @@ export default function InvitesList({ userId, kind = 'incoming', page = 1, limit
 
   useEffect(() => {
     const ctl = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the API; the loading/error state it sets is the point
     setLoading(true);
     setError(null);
     fetchInvites(userId, kind, page, limit, ctl.signal)

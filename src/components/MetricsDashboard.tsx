@@ -49,6 +49,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({
   }, [metricsCollector]);
   
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the API; the loading/error state it sets is the point
     refreshMetrics();
     
     const interval = setInterval(refreshMetrics, refreshInterval);

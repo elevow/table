@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import { useLatest } from './useLatest';
 
 /** Polling stops after this long without the user touching the page, and resumes on the next touch. */
 export const DEFAULT_IDLE_MS = 10 * 60 * 1000;
@@ -42,8 +43,7 @@ export interface PollingOptions {
  */
 export function usePolling(fn: () => unknown, intervalMs: number, options: PollingOptions = {}) {
   const { enabled = true, idleMs = DEFAULT_IDLE_MS, runOnStart = true } = options;
-  const fnRef = useRef(fn);
-  fnRef.current = fn;
+  const fnRef = useLatest(fn);
 
   useEffect(() => {
     if (!enabled || typeof window === 'undefined') return;
@@ -107,5 +107,5 @@ export function usePolling(fn: () => unknown, intervalMs: number, options: Polli
       document.removeEventListener('visibilitychange', onVisibility);
       resumeListeners.delete(resume);
     };
-  }, [enabled, intervalMs, idleMs, runOnStart]);
+  }, [enabled, intervalMs, idleMs, runOnStart, fnRef]);
 }

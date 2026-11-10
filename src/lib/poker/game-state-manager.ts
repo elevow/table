@@ -24,7 +24,6 @@ export class GameStateManager {
     // Safety: if only one player remains, do not start another round; go to showdown immediately
     const activeCount = this.state.players.filter(p => !(p as any).folded && !p.isFolded).length;
     if (activeCount <= 1) {
-      // eslint-disable-next-line no-console
       console.log(`[DEBUG] Prevented starting ${stage}: only one active remains; forcing showdown`);
       this.state.stage = 'showdown';
       this.state.activePlayer = '';
@@ -64,7 +63,6 @@ export class GameStateManager {
           activePlayer = this.findNextActivePlayer(bringInPlayer.position) || (isActive(bringInPlayer) ? bringInPlayer : actives[0]);
           if (debugFlags.poker) {
             const up = this.state.studState?.playerCards[activePlayer.id]?.upCards?.[0];
-            // eslint-disable-next-line no-console
             console.log(`[DEBUG] Stud third street firstToAct=bring-in ${activePlayer.id} up=${up?.rank}${up?.suit?.[0]}`);
           }
         } else {
@@ -86,7 +84,6 @@ export class GameStateManager {
           activePlayer = chosen || actives[0];
           if (debugFlags.poker && activePlayer) {
             const up = this.state.studState?.playerCards[activePlayer.id]?.upCards?.[0];
-            // eslint-disable-next-line no-console
             console.log(`[DEBUG] Stud third street firstToAct=computed ${activePlayer.id} up=${up?.rank}${up?.suit?.[0]}`);
           }
         }
@@ -129,7 +126,6 @@ export class GameStateManager {
         activePlayer = chosen || actives[0];
       }
       if (debugFlags.poker) {
-        // eslint-disable-next-line no-console
         console.log(`[DEBUG] Stud first-to-act (${stage}) -> ${activePlayer?.id}`);
       }
     } else if (typeof this.state.dealerPosition === 'number' && this.dealtInPlayers().length >= 2) {
@@ -163,7 +159,6 @@ export class GameStateManager {
     if (debugFlags.poker) {
       const n = this.state.players.length;
       const mode = n === 2 ? 'HU' : 'RING';
-      // eslint-disable-next-line no-console
       console.log(`[DEBUG] Start ${stage}: dealerIdx=${this.state.dealerPosition} players=${n} (${mode}) firstToAct=${activePlayer.id} (pos=${(activePlayer as any).position})`);
     }
     this.state.activePlayer = activePlayer.id;
@@ -228,7 +223,6 @@ export class GameStateManager {
     }
     this.state.dealerPosition = next;
     if (debugFlags.poker) {
-      // eslint-disable-next-line no-console
       console.log(`[DEBUG] Dealer rotated -> new dealerIdx=${this.state.dealerPosition} (playerId=${this.state.players[this.state.dealerPosition]?.id})`);
     }
     return this.state.dealerPosition;
@@ -236,9 +230,7 @@ export class GameStateManager {
 
   public findNextActivePlayer(startPosition: number): Player | undefined {
     if (debugFlags.poker) {
-      // eslint-disable-next-line no-console
       console.log(`[DEBUG] findNextActivePlayer: startPos=${startPosition}, numPlayers=${this.state.players.length}, currentBet=${this.state.currentBet}`);
-      // eslint-disable-next-line no-console
       console.log(`[DEBUG]   All players:`, this.state.players.map(p => `pos=${p.position} id=${p.id.slice(0,8)} hasActed=${p.hasActed} bet=${p.currentBet}`));
     }
     
@@ -248,7 +240,6 @@ export class GameStateManager {
     const startIndex = this.state.players.findIndex(p => p.position === startPosition);
     if (startIndex === -1) {
       if (debugFlags.poker) {
-        // eslint-disable-next-line no-console
         console.log(`[DEBUG]   -> Start position ${startPosition} not found in players array`);
       }
       return undefined;
@@ -260,14 +251,12 @@ export class GameStateManager {
       const player = this.state.players[currentIndex];
       
       if (debugFlags.poker) {
-        // eslint-disable-next-line no-console
         console.log(`[DEBUG]   Loop iteration ${i}: arrayIndex=${currentIndex}, pos=${player.position}, player=${player.id}, hasActed=${player.hasActed}, currentBet=${player.currentBet}, isFolded=${player.isFolded}, isAllIn=${player.isAllIn}`);
       }
       
       if (player && !player.isFolded && !player.isAllIn && 
           (!player.hasActed || player.currentBet < this.state.currentBet)) {
         if (debugFlags.poker) {
-          // eslint-disable-next-line no-console
           console.log(`[DEBUG]   -> Found next player: ${player.id} at pos=${player.position}`);
         }
         return player;
@@ -275,7 +264,6 @@ export class GameStateManager {
     }
 
     if (debugFlags.poker) {
-      // eslint-disable-next-line no-console
       console.log(`[DEBUG]   -> No next player found`);
     }
     return undefined;

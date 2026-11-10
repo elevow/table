@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { usePolling } from '../hooks/usePolling';
+import { useLatest } from '../hooks/useLatest';
 import { authHeaders } from '../utils/auth-headers';
 import { NOTE_COLORS, NOTE_COLOR_CLASSES, type NoteColor } from '../lib/shared/note-colors';
 import HudBadge, { fetchHudStats, type HudMap } from './HudBadge';
@@ -38,24 +39,25 @@ export default function PlayerNotesPanel({ players, notes, onNotesChange, embedd
   const [hud, setHud] = useState<HudMap>({});
   const playerKey = players.map(p => p.id).sort().join(',');
 
-  const playerKeyRef = useRef(playerKey);
-  playerKeyRef.current = playerKey;
+  const playerKeyRef = useLatest(playerKey);
   const loadHud = useCallback(() => {
     const key = playerKey;
     return fetchHudStats(key.split(',')).then(s => { if (playerKeyRef.current === key) setHud(s); }).catch(() => {});
-  }, [playerKey]);
+  }, [playerKey, playerKeyRef]);
   useEffect(() => {
     if (playerKey) loadHud();
   }, [playerKey, loadHud]);
   usePolling(loadHud, HUD_REFRESH_MS, { enabled: !!playerKey, runOnStart: false });
 
-  useEffect(() => {
-    if (!editing) return;
-    setDraft(notes[editing]?.note || '');
-    setColor((notes[editing]?.color as NoteColor) || null);
-    // Only when switching players; typing must not be overwritten
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing]);
+  // Opening a player's note starts the draft from what's saved; closing it leaves the draft alone
+  const toggleEditing = (id: string) => {
+    const next = editing === id ? null : id;
+    setEditing(next);
+    if (next) {
+      setDraft(notes[next]?.note || '');
+      setColor((notes[next]?.color as NoteColor) || null);
+    }
+  };
 
   const save = async () => {
     if (!editing) return;
@@ -92,7 +94,7 @@ export default function PlayerNotesPanel({ players, notes, onNotesChange, embedd
           return (
             <li key={p.id}>
               <button
-                onClick={() => setEditing(editing === p.id ? null : p.id)}
+                onClick={() => toggleEditing(p.id)}
                 className="w-full flex items-center gap-2 text-left text-sm px-2 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-white/8 text-gray-900 dark:text-gray-100"
                 aria-expanded={editing === p.id}
               >

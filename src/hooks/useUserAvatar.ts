@@ -106,6 +106,7 @@ export function useUserAvatar(userId: string) {
   }, [fetchAvatar, userId, isAlias]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the API; the loading/error state it sets is the point
     fetchAvatar();
   }, [fetchAvatar]);
 

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { authHeaders } from '../../utils/auth-headers';
 import { usePolling } from '../../hooks/usePolling';
+import { useLatest } from '../../hooks/useLatest';
 import { getSupabaseBrowser } from '../realtime/supabaseClient';
 import type { TournamentEvent } from './tournament-events';
 import type { TournamentView } from './tournament-view';
@@ -14,8 +15,7 @@ const POLL_MS = 30_000;
  * clock stands still). `onEvents` hears what happened in each change.
  */
 export function useTournamentView(id: string | null, onEvents?: (events: TournamentEvent[]) => void) {
-  const onEventsRef = useRef(onEvents);
-  onEventsRef.current = onEvents;
+  const onEventsRef = useLatest(onEvents);
   const [view, setView] = useState<TournamentView | null>(null);
   const [fetchedAt, setFetchedAt] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -61,10 +61,10 @@ export function useTournamentView(id: string | null, onEvents?: (events: Tournam
       })
       .subscribe();
     return () => { try { channel.unsubscribe(); } catch { /* already gone */ } };
-  }, [id, reload]);
+  }, [id, reload, onEventsRef]);
 
   const elapsed = view && view.status !== 'paused' ? Math.max(0, now - fetchedAt) : 0;
   const levelLeft = view?.levelRemainingMs != null ? view.levelRemainingMs - (view.status === 'running' ? elapsed : 0) : null;
   const breakLeft = view?.breakRemainingMs != null ? view.breakRemainingMs - (view.status === 'on-break' ? elapsed : 0) : null;
-  return { view, error, errorCode, reload, levelLeft, breakLeft };
+  return { view, error, errorCode, reload, levelLeft, breakLeft, now };
 }

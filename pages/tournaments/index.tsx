@@ -3,6 +3,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import AppShell, { PageHeader } from '../../src/components/AppShell';
 import { authHeaders } from '../../src/utils/auth-headers';
+import { useHydrated } from '../../src/hooks/useHydrated';
 import { formatMoney } from '../../src/lib/tournament/format';
 import { loadPermissions, postTournamentAction } from '../../src/lib/tournament/client';
 import type { TournamentSummary } from '../../src/lib/tournament/tournament-view';
@@ -34,7 +35,8 @@ export default function TournamentLobbyPage() {
   const [tournaments, setTournaments] = useState<TournamentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [signedIn, setSignedIn] = useState(false);
+  const hydrated = useHydrated();
+  const signedIn = hydrated && !!authHeaders().Authorization;
   const [canCreate, setCanCreate] = useState(false);
 
   const load = useCallback(async () => {
@@ -49,9 +51,9 @@ export default function TournamentLobbyPage() {
     }
   }, [filter]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the API; the loading/error state it sets is the point
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    setSignedIn(!!authHeaders().Authorization);
     loadPermissions().then(p => setCanCreate(!!p?.includes('tournament.create')));
   }, []);
 

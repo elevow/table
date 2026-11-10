@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useHydrated } from './useHydrated';
 import {
   DEFAULT_DISPLAY_SETTINGS, pickDisplaySettings, readTableOverrides, writeTableOverrides, type DisplaySettings,
 } from '../lib/shared/display-settings';
@@ -10,7 +11,11 @@ import { authHeaders } from '../utils/auth-headers';
  */
 export function useDisplaySettings(tableId: string | null) {
   const [profile, setProfile] = useState<DisplaySettings>(DEFAULT_DISPLAY_SETTINGS);
-  const [overrides, setOverrides] = useState<Partial<DisplaySettings>>({});
+  // Changes made at this table in this visit, else the ones saved for it (read once hydrated)
+  const hydrated = useHydrated();
+  const [edited, setEdited] = useState<{ tableId: string; overrides: Partial<DisplaySettings> } | null>(null);
+  const saved = useMemo(() => (hydrated && tableId ? readTableOverrides(tableId) : {}), [hydrated, tableId]);
+  const overrides = edited && edited.tableId === tableId ? edited.overrides : saved;
 
   useEffect(() => {
     let cancelled = false;
@@ -21,24 +26,19 @@ export function useDisplaySettings(tableId: string | null) {
     return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
-    setOverrides(tableId ? readTableOverrides(tableId) : {});
-  }, [tableId]);
-
   const change = useCallback((key: keyof DisplaySettings, value: boolean) => {
     if (!tableId) return;
-    setOverrides(prev => {
-      const next = { ...prev, [key]: value };
-      // Back to the profile's setting means no change at this table
-      if (value === profile[key]) delete next[key];
-      writeTableOverrides(tableId, next);
-      return next;
-    });
-  }, [tableId, profile]);
+    const next = { ...overrides, [key]: value };
+    // Back to the profile's setting means no change at this table
+    if (value === profile[key]) delete next[key];
+    writeTableOverrides(tableId, next);
+    setEdited({ tableId, overrides: next });
+  }, [tableId, profile, overrides]);
 
   const reset = useCallback(() => {
-    if (tableId) writeTableOverrides(tableId, {});
-    setOverrides({});
+    if (!tableId) return;
+    writeTableOverrides(tableId, {});
+    setEdited({ tableId, overrides: {} });
   }, [tableId]);
 
   const settings: DisplaySettings = { ...profile, ...overrides };

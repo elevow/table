@@ -28,6 +28,43 @@ interface PokerTableWithAnalyticsProps {
   maxPlayers: number;
 }
 
+const getOperatingSystem = (): string => {
+  const userAgent = navigator.userAgent;
+  if (userAgent.includes('Windows')) return 'Windows';
+  if (userAgent.includes('Mac')) return 'macOS';
+  if (userAgent.includes('Linux')) return 'Linux';
+  if (userAgent.includes('Android')) return 'Android';
+  if (userAgent.includes('iOS')) return 'iOS';
+  return 'Unknown';
+};
+
+const getBrowserName = (): string => {
+  const userAgent = navigator.userAgent;
+  if (userAgent.includes('Chrome')) return 'Chrome';
+  if (userAgent.includes('Firefox')) return 'Firefox';
+  if (userAgent.includes('Safari')) return 'Safari';
+  if (userAgent.includes('Edge')) return 'Edge';
+  return 'Unknown';
+};
+
+const getConnectionType = (): string => {
+  // @ts-ignore - Navigator.connection is experimental
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  return connection ? connection.effectiveType || 'unknown' : 'unknown';
+};
+
+const getPositionName = (index: number, totalPlayers: number): string => {
+  if (totalPlayers <= 2) return index === 0 ? 'small-blind' : 'big-blind';
+
+  const positions = ['small-blind', 'big-blind', 'under-the-gun', 'middle', 'cut-off', 'button'];
+  return positions[index] || 'middle';
+};
+
+const getCurrentStreet = (): 'preflop' | 'flop' | 'turn' | 'river' => {
+  // Simplified - would determine from actual game state
+  return 'preflop';
+};
+
 export const PokerTableWithAnalytics: React.FC<PokerTableWithAnalyticsProps> = ({
   tableId,
   gameType,
@@ -90,31 +127,6 @@ export const PokerTableWithAnalytics: React.FC<PokerTableWithAnalyticsProps> = (
       connectionType: getConnectionType()
     };
   }, []);
-
-  const getOperatingSystem = (): string => {
-    const userAgent = navigator.userAgent;
-    if (userAgent.includes('Windows')) return 'Windows';
-    if (userAgent.includes('Mac')) return 'macOS';
-    if (userAgent.includes('Linux')) return 'Linux';
-    if (userAgent.includes('Android')) return 'Android';
-    if (userAgent.includes('iOS')) return 'iOS';
-    return 'Unknown';
-  };
-
-  const getBrowserName = (): string => {
-    const userAgent = navigator.userAgent;
-    if (userAgent.includes('Chrome')) return 'Chrome';
-    if (userAgent.includes('Firefox')) return 'Firefox';
-    if (userAgent.includes('Safari')) return 'Safari';
-    if (userAgent.includes('Edge')) return 'Edge';
-    return 'Unknown';
-  };
-
-  const getConnectionType = (): string => {
-    // @ts-ignore - Navigator.connection is experimental
-    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    return connection ? connection.effectiveType || 'unknown' : 'unknown';
-  };
 
   // Player management with analytics
   const addPlayer = useCallback((playerId: string, playerName: string) => {
@@ -248,17 +260,6 @@ export const PokerTableWithAnalytics: React.FC<PokerTableWithAnalyticsProps> = (
   }, [lastActionTime]);
 
   // Helper functions
-  const getPositionName = (index: number, totalPlayers: number): string => {
-    if (totalPlayers <= 2) return index === 0 ? 'small-blind' : 'big-blind';
-    
-    const positions = ['small-blind', 'big-blind', 'under-the-gun', 'middle', 'cut-off', 'button'];
-    return positions[index] || 'middle';
-  };
-
-  const getCurrentStreet = (): 'preflop' | 'flop' | 'turn' | 'river' => {
-    // Simplified - would determine from actual game state
-    return 'preflop';
-  };
 
   // Render the table interface
   return (
@@ -367,12 +368,13 @@ export const PokerTableWithAnalytics: React.FC<PokerTableWithAnalyticsProps> = (
 
 // Example: Analytics Dashboard Integration
 export const AnalyticsDashboardPage: React.FC = () => {
-  const [dateFilter, setDateFilter] = useState<AnalyticsFilter>({
+  // A lazy initial value, so the clock is read once rather than on every render
+  const [dateFilter, setDateFilter] = useState<AnalyticsFilter>(() => ({
     dateRange: {
       start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
       end: new Date()
     }
-  });
+  }));
 
   const [reportType, setReportType] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [generatedReport, setGeneratedReport] = useState<any>(null);

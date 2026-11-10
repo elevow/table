@@ -128,6 +128,7 @@ export default function AdminRolesPage() {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the API; the loading/error state it sets is the point
   useEffect(() => { loadRoles(); }, [loadRoles]);
 
   const can = useCallback((p: string) => !!me?.permissions.includes(p), [me]);
@@ -229,7 +230,14 @@ function RolesTab({
   const [saving, setSaving] = useState(false);
   const [newRole, setNewRole] = useState({ name: '', rank: 15, description: '' });
 
-  useEffect(() => { setDrafts({}); setLimitDrafts({}); }, [roles]);
+  // Fresh roles from the server clear the unsaved edits (adjusted during render, React's
+  // recommended way to reset state when a prop changes)
+  const [draftsFor, setDraftsFor] = useState(roles);
+  if (draftsFor !== roles) {
+    setDraftsFor(roles);
+    setDrafts({});
+    setLimitDrafts({});
+  }
 
   const editable = (role: Role) => canEdit && canManageRank(role.rank) && !LOCKED_ROLES.includes(role.key);
   const limitsEditable = (role: Role) => canEdit && canManageRank(role.rank);
@@ -514,6 +522,7 @@ function UsersTab({
     }
   }, [onError]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the API; the loading/error state it sets is the point
   useEffect(() => { search(''); }, [search]);
 
   const roleName = (key: string) => roles.find(r => r.key === key)?.name ?? key;

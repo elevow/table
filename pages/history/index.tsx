@@ -69,6 +69,7 @@ export default function HandHistoryPage() {
   }, [roomId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the API; the loading/error state it sets is the point
     if (router.isReady) load(null);
   }, [router.isReady, load]);
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { authHeaders } from '../utils/auth-headers';
+import { useHydrated } from '../hooks/useHydrated';
 
 type Street = 'flop' | 'turn' | 'river';
 
@@ -17,20 +18,23 @@ interface Props {
  * UI panel to trigger Rabbit Hunt previews against the secured API and render results.
  * Requires a userId (used by the API for auth/permissions) and a target street.
  */
+function readSavedUserId(): string {
+  try {
+    return window.localStorage.getItem('table.userId') || '';
+  } catch {
+    return '';
+  }
+}
+
 export default function RabbitHuntPreviewPanel({ roomId }: Props) {
-  const [userId, setUserId] = useState('');
+  // What's typed here, else the remembered userId (read once hydrated)
+  const [typedUserId, setUserId] = useState<string | null>(null);
+  const hydrated = useHydrated();
+  const userId = typedUserId ?? (hydrated ? readSavedUserId() : '');
   const [street, setStreet] = useState<Street>('flop');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PreviewResult | null>(null);
-
-  // Load a remembered userId if present
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem('table.userId');
-      if (saved) setUserId(saved);
-    } catch {}
-  }, []);
 
   // Persist userId for convenience
   useEffect(() => {

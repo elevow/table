@@ -1401,7 +1401,6 @@ export class PokerEngine {
       // this amount or complete to a full bet (see decideBringIn)
       this.state.studState!.bringIn = { amount: Math.min(amount, player.stack), player: player.id, pending: true };
       if (debugFlags.poker) {
-        // eslint-disable-next-line no-console
         console.log(`[DEBUG] Stud bring-in computed: player=${player.id} amount=${amount} upcards=`, debug);
       }
     }

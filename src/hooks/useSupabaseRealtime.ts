@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import { useLatest } from './useLatest';
 import { getSupabaseBrowser } from '../lib/realtime/supabaseClient';
 
 type Callbacks = {
@@ -22,8 +23,7 @@ const activeChannels = new Map<string, {
 
 export function useSupabaseRealtime(tableId?: string | string[], callbacks?: Callbacks) {
   const tbl = typeof tableId === 'string' ? tableId : Array.isArray(tableId) ? tableId[0] : undefined;
-  const cbsRef = useRef<Callbacks | undefined>(callbacks);
-  cbsRef.current = callbacks;
+  const cbsRef = useLatest<Callbacks | undefined>(callbacks);
 
   useEffect(() => {
     if (!tbl) return;
@@ -108,5 +108,5 @@ export function useSupabaseRealtime(tableId?: string | string[], callbacks?: Cal
         }
       }
     };
-  }, [tbl]);
+  }, [tbl, cbsRef]);
 }

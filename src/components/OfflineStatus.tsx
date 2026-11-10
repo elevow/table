@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { isOffline, getCacheStatus, clearAllCaches } from '../utils/service-worker-registration';
+import { useState } from 'react';
+import { getCacheStatus, clearAllCaches } from '../utils/service-worker-registration';
+import { useIsOffline } from '../hooks/useIsOffline';
 import { getOfflineSupportedRoutes } from '../utils/game-routes';
 import Link from 'next/link';
 
@@ -8,34 +9,10 @@ import Link from 'next/link';
  * and allows users to manage cached content
  */
 export default function OfflineStatus() {
-  const [offline, setOffline] = useState(false);
+  const offline = useIsOffline();
   const [cacheInfo, setCacheInfo] = useState<any>(null);
-  const [offlineRoutes, setOfflineRoutes] = useState<any[]>([]);
+  const offlineRoutes = getOfflineSupportedRoutes();
   const [showDetails, setShowDetails] = useState(false);
-  
-  // Monitor online status
-  useEffect(() => {
-    const updateOfflineStatus = () => {
-      setOffline(isOffline());
-    };
-    
-    // Initial check
-    updateOfflineStatus();
-    
-    // Setup event listeners
-    window.addEventListener('online', updateOfflineStatus);
-    window.addEventListener('offline', updateOfflineStatus);
-    
-    return () => {
-      window.removeEventListener('online', updateOfflineStatus);
-      window.removeEventListener('offline', updateOfflineStatus);
-    };
-  }, []);
-  
-  // Get offline-supported routes
-  useEffect(() => {
-    setOfflineRoutes(getOfflineSupportedRoutes());
-  }, []);
   
   // Function to check cache status
   const checkCacheStatus = async () => {

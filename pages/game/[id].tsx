@@ -40,6 +40,7 @@ import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
 import SidePanelTabs from '../../src/components/SidePanelTabs';
 import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
+import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, wildMatcher } from '../../src/lib/poker/wild-hands';
 import SplashAnimation, { splashInPlay } from '../../src/components/SplashAnimation';
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
@@ -1115,11 +1116,14 @@ export default function GamePage() {
         return top?.rank ? `${top.rank === 'A' ? 'Ace' : top.rank === 'K' ? 'King' : top.rank === 'Q' ? 'Queen' : top.rank === 'J' ? 'Jack' : top.rank} High` : null;
       };
 
+      const wild = wildMatcher(pokerGameState?.wildRule);
+
       const computeHighLabel = (): string | null => {
         if (isStudGame(variant)) {
           const { down, up } = getStudCardsForPlayer(playerId);
           const all = [...(down || []), ...(up || [])];
           if (!all || all.length === 0) return null;
+          if (wild) return variant === 'razz' ? evaluateWildRazz(all, wild).description : evaluateWildHigh(all, wild).name;
           // Razz is played for the lowest hand
           if (variant === 'razz') return HandEvaluator.evaluateRazzLow(all).description;
           if (all.length < 5) return partialLabel(all);
@@ -1131,6 +1135,7 @@ export default function GamePage() {
         const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
         if (!holes || holes.length === 0) return null;
         const known = [...holes, ...board];
+        if (wild) return isOmahaVariant(variant) ? evaluateWildOmaha(holes, board, wild).name : evaluateWildHigh(known, wild).name;
         if (known.length < 5) return partialLabel(known);
 
         if (isOmahaVariant(variant)) {
@@ -1157,14 +1162,14 @@ export default function GamePage() {
           const holes = Array.isArray(me?.holeCards) ? me.holeCards : [];
           const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
           if (holes.length >= 2 && board.length >= 3) {
-            const low = HandEvaluator.evaluateOmahaLowEightOrBetter(holes, board);
+            const low = wild ? evaluateWildOmahaLow(holes, board, wild) : HandEvaluator.evaluateOmahaLowEightOrBetter(holes, board);
             if (low) lowLabel = describeLow(low.ranks);
           }
       } else if (variant === 'seven-card-stud-hi-lo') {
         const { down, up } = getStudCardsForPlayer(playerId);
         const all = [...(down || []), ...(up || [])];
         if (all.length >= 5) {
-          const low = HandEvaluator.evaluateAceToFiveLow(all);
+          const low = wild ? evaluateWildLow(all, wild) : HandEvaluator.evaluateAceToFiveLow(all);
           if (low) lowLabel = describeLow(low.ranks);
         }
       }
@@ -1179,6 +1184,8 @@ export default function GamePage() {
   // With one card to come: the chance it improves your hand, from the cards you can see
   const myLastCardOdds = useMemo((): string | null => {
     if (!pokerGameState || !playerId || pokerGameState.stage === 'showdown') return null;
+    // These odds don't count wild cards, so they would be wrong
+    if (pokerGameState.wildRule) return null;
     const me = pokerGameState.players?.find((p: any) => p.id === playerId);
     if (!me || me.isFolded) return null;
     const variant = pokerGameState.variant;
@@ -3521,12 +3528,13 @@ export default function GamePage() {
                   const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
 
                   type EvalRes = { playerId: string; name: string; hand: any; label: string };
+                  const wild = wildMatcher(pokerGameState?.wildRule);
                   if (variant === 'razz') {
                     // Razz: the lowest hand wins, so name the server's winners with their lows
                     const lows: Array<{ name: string; label: string }> = contenders.map((p: any) => {
                       const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
                       const all = [...(Array.isArray(st?.downCards) ? st.downCards : []), ...(Array.isArray(st?.upCards) ? st.upCards : [])];
-                      return { name: p.name || p.id, label: all.length >= 5 ? HandEvaluator.evaluateRazzLow(all).description : '' };
+                      return { name: p.name || p.id, label: all.length < 5 ? '' : wild ? evaluateWildRazz(all, wild).description : HandEvaluator.evaluateRazzLow(all).description };
                     });
                     return (
                       <div className="flex flex-wrap items-center gap-2">
@@ -3537,6 +3545,14 @@ export default function GamePage() {
                     );
                   }
                   const evals: EvalRes[] = contenders.map((p: any) => {
+                    if (wild) {
+                      const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
+                      const hole = Array.isArray(p?.holeCards) ? p.holeCards : [];
+                      const best = isStudGame(variant)
+                        ? evaluateWildHigh([...(st?.downCards || []), ...(st?.upCards || [])], wild)
+                        : isOmahaVariant(variant) ? evaluateWildOmaha(hole, board, wild) : evaluateWildHigh([...hole, ...board], wild);
+                      return { playerId: p.id, name: p.name || p.id, hand: { score: best.score }, label: best.name };
+                    }
                     if (isStudGame(variant)) {
                       const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
                       const down = Array.isArray(st?.downCards) ? st.downCards : [];
@@ -3556,7 +3572,7 @@ export default function GamePage() {
                   let best: EvalRes[] = [];
                   for (const e of evals) {
                     if (best.length === 0) { best = [e]; continue; }
-                    const cmp = HandEvaluator.compareHands(e.hand, best[0].hand);
+                    const cmp = wild ? e.hand.score - best[0].hand.score : HandEvaluator.compareHands(e.hand, best[0].hand);
                     if (cmp > 0) best = [e];
                     else if (cmp === 0) best.push(e);
                   }
@@ -3587,7 +3603,7 @@ export default function GamePage() {
           )}
 
           {/* Chance to win during an all-in, when everyone's cards are face up */}
-          {gameStarted && pokerGameState && anyAllIn() && pokerGameState.stage !== 'showdown' && !isStudVariant() && (
+          {gameStarted && pokerGameState && anyAllIn() && pokerGameState.stage !== 'showdown' && !isStudVariant() && !pokerGameState.wildRule && (
             <EquityPanel
               players={getActiveNonFoldedPlayers()}
               board={Array.isArray(pokerGameState.communityCards) ? pokerGameState.communityCards : []}
@@ -3609,8 +3625,8 @@ export default function GamePage() {
               const variant = pokerGameState?.variant;
               const board = pokerGameState.communityCards;
               
-              // Early return: Don't show outs for stud variants, as outs calculation is not supported
-              if (isStudGame(variant)) {
+              // Early return: Don't show outs for stud variants or wild tables, as outs calculation doesn't support them
+              if (isStudGame(variant) || pokerGameState.wildRule) {
                 return null;
               }
               

@@ -11,10 +11,10 @@ import Head from 'next/head';
 import Link from 'next/link';
 import AppShell, { PageHeader } from '../../src/components/AppShell';
 import { useRouter } from 'next/router';
-import type { BettingMode, MixedGameEntry } from '../../src/types/poker';
+import type { BettingMode, MixedGameEntry, WildRule } from '../../src/types/poker';
 import MixedGameSetup from '../../src/components/MixedGameSetup';
 import { defaultBettingModeForVariant } from '../../src/lib/game/variant-mapping';
-import { DEFAULT_HANDS_PER_GAME, HORSE_GAMES } from '../../src/lib/poker/variant-rules';
+import { DEFAULT_HANDS_PER_GAME, HORSE_GAMES, MAX_TABLE_PLAYERS, maxPlayersForGame, supportsWildRule, WILD_RULE_LABELS } from '../../src/lib/poker/variant-rules';
 
 type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'razz' | 'omaha-5' | 'dealers-choice' | 'mixed';
 
@@ -38,7 +38,8 @@ export default function CreateGameRoomPage() {
   const [bigBlindManuallyUpdated, setBigBlindManuallyUpdated] = useState(false);
   const [variant, setVariant] = useState<Variant>('texas-holdem');
   const [bettingMode, setBettingMode] = useState<BettingMode>('no-limit');
-  const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unlimited');
+  const [wildRule, setWildRule] = useState<WildRule | ''>('');
+const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unlimited');
   const [rebuyAmount, setRebuyAmount] = useState(20);
   const [buyIn, setBuyIn] = useState(1000);
   const [allowRunItTwice, setAllowRunItTwice] = useState(false);
@@ -60,6 +61,8 @@ export default function CreateGameRoomPage() {
   const [submitting, setSubmitting] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const seatLimit = maxPlayersForGame(variant, wildRule || undefined);
 
   const signInError = hydrated && !isAuthenticated ? 'You must sign in to create a room.' : null;
 
@@ -117,15 +120,16 @@ export default function CreateGameRoomPage() {
           name: 'New Table',
           visibility,
           gameType: 'poker',
-          maxPlayers,
+          maxPlayers: Math.min(maxPlayers, seatLimit),
           blindLevels: { sb: smallBlind, bb: bigBlind },
           configuration: {
             variant,
-            bettingMode,
+            bettingMode: wildRule ? 'fixed-limit' : bettingMode,
+            wildRule: wildRule || undefined,
             numberOfRebuys: numberOfRebuys === 'unlimited' ? 'unlimited' : Number(numberOfRebuys),
             rebuyAmount: numberOfRebuys !== 0 ? rebuyAmount : undefined,
             buyIn,
-            allowRunItTwice,
+            allowRunItTwice: allowRunItTwice && !wildRule,
             showAllAtShowdown,
             turnTimeSeconds: clampSetting(turnTimeSeconds, MIN_TURN_SECONDS, MAX_TURN_SECONDS, DEFAULT_TURN_SECONDS),
             timeBanks: clampSetting(timeBanks, 0, MAX_TIME_BANKS, DEFAULT_TIME_BANKS),
@@ -240,7 +244,8 @@ export default function CreateGameRoomPage() {
                 setVariant(next);
                 // Start from the usual betting for the game (Omaha pot limit, Razz fixed limit)
                 if (next !== 'dealers-choice' && next !== 'mixed') setBettingMode(defaultBettingModeForVariant(next));
-              }}
+                if (!supportsWildRule(next)) setWildRule('');
+}}
             >
               <option value="texas-holdem">Texas Hold&apos;em</option>
               <option value="omaha">Omaha</option>
@@ -263,10 +268,10 @@ export default function CreateGameRoomPage() {
             <label className="label">Betting mode</label>
             <select
               className="input"
-              value={bettingMode}
+              value={wildRule ? 'fixed-limit' : bettingMode}
               onChange={e => setBettingMode(e.target.value as BettingMode)}
-              disabled={variant === 'dealers-choice' || variant === 'mixed'}
-            >
+              disabled={variant === 'dealers-choice' || variant === 'mixed' || !!wildRule}
+>
               <option value="no-limit">No Limit</option>
               <option value="pot-limit">Pot Limit</option>
               <option value="fixed-limit">Fixed Limit</option>
@@ -276,6 +281,7 @@ export default function CreateGameRoomPage() {
                 Bets and raises are one big blind early in the hand and two big blinds later, up to four bets per round.
               </p>
             )}
+            {wildRule && <p className="hint">Games with wild cards are always fixed limit.</p>}
             {variant === 'mixed' && (
               <p className="hint">Each game in the mix sets its own betting.</p>
             )}
@@ -289,12 +295,30 @@ export default function CreateGameRoomPage() {
               type="number"
               className="input"
               min={2}
-              max={9}
-              value={maxPlayers}
+              max={seatLimit}
+              value={Math.min(maxPlayers, seatLimit)}
               onChange={e => setMaxPlayers(parseInt(e.target.value || '0', 10))}
             />
+            {wildRule && seatLimit < MAX_TABLE_PLAYERS && (
+              <p className="hint">This game seats at most {seatLimit} so the deck can&apos;t run out.</p>
+            )}
           </div>
-        </div>
+          {supportsWildRule(variant) && (
+            <div>
+              <label className="label" htmlFor="wild-rule">Wild cards</label>
+              <select
+                id="wild-rule"
+                className="input"
+                value={wildRule}
+                onChange={e => setWildRule(e.target.value as WildRule | '')}
+              >
+                <option value="">None</option>
+                <option value="deuces">{WILD_RULE_LABELS['deuces']}</option>
+                <option value="one-eyed-jacks">{WILD_RULE_LABELS['one-eyed-jacks']} (J♠ and J♥)</option>
+              </select>
+            </div>
+          )}
+</div>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="label">Small blind</label>
@@ -484,9 +508,10 @@ export default function CreateGameRoomPage() {
             <input
               type="checkbox"
               className="checkbox"
-              checked={allowRunItTwice}
+              checked={allowRunItTwice && !wildRule}
+              disabled={!!wildRule}
               onChange={e => setAllowRunItTwice(e.target.checked)}
-            />
+/>
             <span>Allow run it twice</span>
           </label>
           <p className="hint">

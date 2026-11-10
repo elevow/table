@@ -205,4 +205,41 @@ describe('POST /api/games/rooms/create', () => {
     expect((await call(createHandler, 'POST', room('mixed'))).status).toBe(201);
     expect(mockCreateRoom.mock.calls[1][0].createdBy).toBe('u1');
   });
+
+  describe('wild cards', () => {
+    const wild = (variant: string, maxPlayers = 6, extra: Record<string, unknown> = {}) => ({
+      name: 'T', gameType: 'poker', maxPlayers, configuration: { variant, wildRule: 'deuces', ...extra },
+    });
+    beforeEach(() => {
+      mockCaller.current = caller('u1', ['room.create', 'room.choose_variant']);
+      mockCreateRoom.mockResolvedValue({ id: 'r1' });
+    });
+
+    test('force fixed limit and turn run it twice off, whatever the client sent', async () => {
+      const r = await call(createHandler, 'POST', wild('texas-holdem', 6, { bettingMode: 'no-limit', allowRunItTwice: true }));
+      expect(r.status).toBe(201);
+      expect(mockCreateRoom.mock.calls[0][0].configuration).toMatchObject({ wildRule: 'deuces', bettingMode: 'fixed-limit', allowRunItTwice: false });
+    });
+
+    test('an unknown wild rule is dropped and leaves the table alone', async () => {
+      await call(createHandler, 'POST', { ...wild('texas-holdem', 6, { bettingMode: 'no-limit' }), configuration: { variant: 'texas-holdem', wildRule: 'everything', bettingMode: 'no-limit' } });
+      const saved = mockCreateRoom.mock.calls[0][0].configuration;
+      expect(saved.wildRule).toBeUndefined();
+      expect(saved.bettingMode).toBe('no-limit');
+    });
+
+    test('seven-card games seat at most seven', async () => {
+      expect((await call(createHandler, 'POST', wild('seven-card-stud', 8))).status).toBe(400);
+      expect((await call(createHandler, 'POST', wild('razz', 9))).status).toBe(400);
+      expect(mockCreateRoom).not.toHaveBeenCalled();
+      expect((await call(createHandler, 'POST', wild('seven-card-stud', 7))).status).toBe(201);
+      expect((await call(createHandler, 'POST', wild('texas-holdem', 9))).status).toBe(201);
+    });
+
+    test("are refused on Dealer's Choice and mixed games", async () => {
+      expect((await call(createHandler, 'POST', wild('dealers-choice'))).status).toBe(400);
+      expect((await call(createHandler, 'POST', wild('mixed'))).status).toBe(400);
+      expect(mockCreateRoom).not.toHaveBeenCalled();
+    });
+  });
 });

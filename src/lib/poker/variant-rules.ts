@@ -1,4 +1,4 @@
-import type { BettingMode, GameVariant, MixedGameEntry } from '../../types/poker';
+import type { BettingMode, GameVariant, MixedGameEntry, WildRule } from '../../types/poker';
 
 /**
  * Facts about each game variant, in one place so the engine, the server routes and the table
@@ -33,6 +33,29 @@ export const BETTING_MODE_LABELS: Record<BettingMode, string> = {
   'pot-limit': 'Pot Limit',
   'fixed-limit': 'Fixed Limit',
 };
+
+export const WILD_RULE_LABELS: Record<WildRule, string> = {
+  'deuces': 'Deuces Wild',
+  'one-eyed-jacks': 'One-Eyed Jacks Wild',
+};
+
+export function parseWildRule(v: unknown): WildRule | undefined {
+  return v === 'deuces' || v === 'one-eyed-jacks' ? v : undefined;
+}
+
+export const MAX_TABLE_PLAYERS = 9;
+// Seven cards each for seven players is 49 of the 52, so an eighth player could not be dealt in
+export const MAX_SEVEN_CARD_WILD_PLAYERS = 7;
+
+/** The most players a table can seat for this game. */
+export function maxPlayersForGame(variant?: string | null, wildRule?: WildRule): number {
+  return wildRule && isSevenCardStudVariant(variant) ? MAX_SEVEN_CARD_WILD_PLAYERS : MAX_TABLE_PLAYERS;
+}
+
+/** Dealer's Choice and mixed games change the game each hand, so a wild option does not apply. */
+export function supportsWildRule(variant?: string | null): boolean {
+  return variant !== 'dealers-choice' && variant !== 'mixed';
+}
 
 export function isGameVariant(v: unknown): v is GameVariant {
   return typeof v === 'string' && (ALL_VARIANTS as string[]).includes(v);

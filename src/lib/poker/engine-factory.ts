@@ -34,6 +34,7 @@ export function createPokerEngine(opts: EngineFactoryOptions): PokerEngine {
     {
       bettingMode: mode,
   variant: variant as any,
+      wildRule: opts.state?.wildRule,
       requireRunItTwiceUnanimous: requireRit,
       runItTwicePersistence: persistence,
     }

@@ -7,6 +7,7 @@ import {
 } from '../../../../src/lib/auth/access-control';
 import { newInviteCode, stripPrivacyKeys } from '../../../../src/lib/server/room-privacy';
 import { apiHandler } from '../../../../src/lib/api/handler';
+import { maxPlayersForGame, parseWildRule, supportsWildRule } from '../../../../src/lib/poker/variant-rules';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -29,6 +30,16 @@ export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max:
   }
   const userId = access.userId;
 
+  // Wild cards fix some of the table's rules, whatever the client sent
+  const wildRule = parseWildRule(req.body?.configuration?.wildRule);
+  if (wildRule && !supportsWildRule(variant)) {
+    return res.status(400).json({ error: "Wild cards can't be used with Dealer's Choice or mixed games" });
+  }
+  const seatLimit = maxPlayersForGame(variant, wildRule);
+  if (wildRule && Number(req.body?.maxPlayers) > seatLimit) {
+    return res.status(400).json({ error: `This game seats at most ${seatLimit} players` });
+  }
+
   const pool = getPool();
   const safeLog = createSafeAudit(pool);
 
@@ -49,6 +60,8 @@ export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max:
       ...stripPrivacyKeys(body.configuration),
       visibility,
       ...(visibility === 'private' ? { inviteCode: newInviteCode(), members: [] } : {}),
+      wildRule,
+      ...(wildRule ? { bettingMode: 'fixed-limit', allowRunItTwice: false } : {}),
     };
     const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 60) : 'New Table';
     const payload = { ...body, name, configuration, createdBy: userId };

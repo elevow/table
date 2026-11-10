@@ -110,17 +110,19 @@ function createRes(): NextApiResponse & { status: jest.Mock; json: jest.Mock } {
 
 // With the button on index 0, player b is the dealer's-choice chooser.
 // dealersChoiceHandCount is the number of hands started since the last variant choice.
-function createEngine(stage: string, dealersChoiceHandCount = 0) {
+function createEngine(stage: string, dealersChoiceHandCount = 0, extra: Record<string, unknown> = {}) {
   const state: any = {
     stage,
     dealerPosition: 0,
     dealersChoiceHandCount,
     players: [{ id: 'a', name: 'A', stack: 100 }, { id: 'b', name: 'B', stack: 100 }],
+    ...extra,
   };
   return {
     getState: jest.fn(() => ({ ...state })),
     setVariant: jest.fn(),
     setBettingMode: jest.fn(),
+    setWildRule: jest.fn(),
     startNewHand: jest.fn(),
     pauseForDealerChoice: jest.fn(() => {
       state.stage = 'awaiting-dealer-choice';
@@ -302,6 +304,70 @@ describe('/api/games/next-hand', () => {
       expect(engine.setVariant).toHaveBeenCalledWith(variant);
       expect(engine.setBettingMode).toHaveBeenCalledWith(mode);
     }
+  });
+
+  describe("dealer's choice wild cards", () => {
+    // Eight players, chooser b still at index 1
+    const eightPlayers = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(id => ({ id, name: id.toUpperCase(), stack: 100 }));
+
+    it('plays a wild pick at fixed limit on a no-limit table', async () => {
+      const engine = createEngine('awaiting-dealer-choice');
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      const res = createRes();
+      await handler(createReq({ tableId: 't1', playerId: 'b', variant: 'omaha', wildRule: 'deuces' }), res);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(engine.setWildRule).toHaveBeenCalledWith('deuces');
+      expect(engine.setBettingMode).toHaveBeenCalledWith('fixed-limit');
+      expect(engine.startNewHand).toHaveBeenCalled();
+    });
+
+    it('clears the wilds and goes back to the normal betting when the next pick has none', async () => {
+      const engine = createEngine('awaiting-dealer-choice', 0, { wildRule: 'deuces' });
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      await handler(createReq({ tableId: 't1', playerId: 'b', variant: 'texas-holdem' }), createRes());
+      expect(engine.setWildRule).toHaveBeenCalledWith(undefined);
+      expect(engine.setBettingMode).toHaveBeenCalledWith('no-limit');
+    });
+
+    it('refuses wilds in a seven-card game with more than seven players', async () => {
+      const engine = createEngine('awaiting-dealer-choice', 0, { players: eightPlayers });
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      const res = createRes();
+      await handler(createReq({ tableId: 't1', playerId: 'b', variant: 'seven-card-stud', wildRule: 'one-eyed-jacks' }), res);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(engine.startNewHand).not.toHaveBeenCalled();
+    });
+
+    it('allows wilds in a board game with eight players', async () => {
+      const engine = createEngine('awaiting-dealer-choice', 0, { players: eightPlayers });
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      const res = createRes();
+      await handler(createReq({ tableId: 't1', playerId: 'b', variant: 'texas-holdem', wildRule: 'deuces' }), res);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(engine.setWildRule).toHaveBeenCalledWith('deuces');
+    });
+
+    it('ends the round early when players joining take a seven-card wild game over its cap', async () => {
+      const engine = createEngine('showdown', 1, { players: eightPlayers, variant: 'razz', wildRule: 'deuces' });
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());
+      expect(engine.pauseForDealerChoice).toHaveBeenCalled();
+      expect(engine.startNewHand).not.toHaveBeenCalled();
+    });
+
+    it('ignores a wild rule sent to a table that is not dealer\'s choice', async () => {
+      const engine = createEngine('showdown');
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+      await handler(createReq({ tableId: 't1', playerId: 'a', wildRule: 'deuces' }), createRes());
+      expect(engine.setWildRule).not.toHaveBeenCalled();
+      expect(engine.startNewHand).toHaveBeenCalled();
+    });
   });
 
   it('a mixed-game room just starts the next hand; the engine moves the rotation on', async () => {

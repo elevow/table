@@ -9,6 +9,9 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   // Razz: seven-card stud played for the lowest hand. 'omaha-5': Omaha with five hole cards.
   | 'razz' | 'omaha-5';
 
+// A table option that makes some cards wild; unset means no wild cards
+export type WildRule = 'deuces' | 'one-eyed-jacks';
+
 // How much a player may bet: any amount, up to the pot, or one fixed bet per bet or raise
 export type BettingMode = 'no-limit' | 'pot-limit' | 'fixed-limit';
 
@@ -165,6 +168,8 @@ export interface TableState {
   variant?: GameVariant;
   // Betting mode for the table: 'no-limit' (default), 'pot-limit' or 'fixed-limit'
   bettingMode?: BettingMode;
+  // Room option: which cards are wild for the whole game (unset = none)
+  wildRule?: WildRule;
   // Fixed limit: full bets and raises made on the current street (the big blind counts as the
   // first one preflop; a stud bring-in does not). Betting is capped at FIXED_LIMIT_CAP.
   limitBets?: number;
@@ -242,7 +247,9 @@ export enum HandRank {
   FullHouse = 7,
   FourOfAKind = 8,
   StraightFlush = 9,
-  RoyalFlush = 10
+  RoyalFlush = 10,
+  // Only possible with wild cards
+  FiveOfAKind = 11
 }
 
 export interface HandRanking {

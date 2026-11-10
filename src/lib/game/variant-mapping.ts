@@ -1,4 +1,4 @@
-import type { BettingMode as EngineBettingMode, GameVariant } from '../../types/poker';
+import type { BettingMode as EngineBettingMode, GameVariant, WildRule } from '../../types/poker';
 
 type PokerVariant =
   | GameVariant
@@ -34,10 +34,12 @@ export function defaultBettingModeForVariant(variant: PokerVariant): BettingMode
 export function resolveVariantAndMode(options: {
   variant?: string;
   bettingMode?: string;
+  wildRule?: WildRule;
 }): { variant: PokerVariant; bettingMode: BettingMode } {
   const variant = (options.variant || 'texas-holdem') as PokerVariant;
   const defaultMode = defaultBettingModeForVariant(variant);
-  const bettingMode = (options.bettingMode || defaultMode) as BettingMode;
+  // Any game with wild cards is played fixed limit
+  const bettingMode = (options.wildRule ? 'fixed-limit' : options.bettingMode || defaultMode) as BettingMode;
 
   return { variant, bettingMode };
 }

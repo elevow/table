@@ -169,7 +169,7 @@ export class HandEvaluator {
     return [category, ...groups.map(g => g[0])];
   }
 
-  private static combinations<T>(arr: T[], k: number): T[][] {
+  static combinations<T>(arr: T[], k: number): T[][] {
     const res: T[][] = [];
     const backtrack = (start: number, path: T[]) => {
       if (path.length === k) { res.push([...path]); return; }

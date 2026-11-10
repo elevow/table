@@ -11,8 +11,8 @@ import { clearRunItState, enrichStateWithRunIt } from '../../../src/lib/poker/ru
 import { sanitizeStateForPlayer, sanitizeStateForBroadcast } from '../../../src/lib/poker/state-sanitizer';
 import { getLastActionAt, getOrRestoreEngine, persistEngineState } from '../../../src/lib/poker/engine-persistence';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
-import type { MixedGameEntry, TableState } from '../../../src/types/poker';
-import { ALL_VARIANTS, HORSE_GAMES, parseHandsPerGame, parseMixedGames } from '../../../src/lib/poker/variant-rules';
+import type { MixedGameEntry, TableState, WildRule } from '../../../src/types/poker';
+import { ALL_VARIANTS, HORSE_GAMES, parseHandsPerGame, parseMixedGames, parseWildRule, supportsWildRule } from '../../../src/lib/poker/variant-rules';
 import { apiHandler } from '../../../src/lib/api/handler';
 import { TABLE_CLOSED_RESPONSE } from '../../../src/lib/server/room-config';
 
@@ -40,6 +40,7 @@ const DEFAULT_TURN_SECONDS = BASE_TURN_MS / 1000;
 type RoomGameSettings = {
   variant?: string;
   bettingMode?: string;
+  wildRule?: WildRule;
   smallBlind: number;
   bigBlind: number;
   allowRunItTwice: boolean;
@@ -86,6 +87,7 @@ async function loadRoomGameSettings(tableId: string): Promise<RoomGameSettings |
   return {
     variant: typeof config.variant === 'string' ? config.variant : undefined,
     bettingMode: typeof config.bettingMode === 'string' ? config.bettingMode : undefined,
+    wildRule: supportsWildRule(typeof config.variant === 'string' ? config.variant : undefined) ? parseWildRule(config.wildRule) : undefined,
     smallBlind: positiveNumber(blinds.sb, blinds.smallBlind) ?? 1,
     bigBlind: positiveNumber(blinds.bb, blinds.bigBlind) ?? 2,
     allowRunItTwice: config.allowRunItTwice === true,
@@ -208,6 +210,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     const { variant: resolvedVariant, bettingMode: resolvedMode } = resolveVariantAndMode({
       variant: roomSettings.variant,
       bettingMode: roomSettings.bettingMode,
+      wildRule: roomSettings.wildRule,
     });
   const isDealersChoice = resolvedVariant === 'dealers-choice';
     // Mixed games start with the first game of the list (HORSE if the room's list is unusable)
@@ -235,7 +238,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     if (!g.roomConfigs) g.roomConfigs = new Map<string, any>();
 
     // Create new engine for table (replace any existing)
-    const engine = new PokerEngine(tableId, engPlayers as any, smallBlind, bigBlind, { variant: engineVariant as any, bettingMode: engineMode });
+    const engine = new PokerEngine(tableId, engPlayers as any, smallBlind, bigBlind, { variant: engineVariant as any, bettingMode: engineMode, wildRule: roomSettings.wildRule });
     engine.setAllowRunItTwice(roomSettings.allowRunItTwice);
     engine.setShowAllAtShowdown(roomSettings.showAllAtShowdown);
     engine.setAllowStraddle(roomSettings.allowStraddle);

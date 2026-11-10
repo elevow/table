@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking, GameVariant, RunItTwicePrompt, HandActionEntry, BettingMode, MixedGameEntry } from '../../types/poker';
+import { TableState, Player, Card, GameStage, PlayerAction, HandResult, HandRanking, GameVariant, RunItTwicePrompt, HandActionEntry, BettingMode, MixedGameEntry, WildRule } from '../../types/poker';
 import { RunItTwiceOutcomeInput } from '../../types/game-history';
 import { HandEvaluator } from './hand-evaluator';
 import { PotCalculator, SidePot } from './pot-calculator';
@@ -13,6 +13,7 @@ import {
   MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS,
 } from '../shared/turn-clock';
 import { holeCardCount, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
+import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, wildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
 import { revealedPlayerIds } from './state-sanitizer';
 import { debugFlags, runtime } from '../config/env';
@@ -39,6 +40,7 @@ export class PokerEngine {
     runItTwicePersistence: undefined as | { handId?: string; onOutcome?: (input: RunItTwiceOutcomeInput) => Promise<void> } | undefined,
   requireRunItTwiceUnanimous: false as boolean,
   variant: undefined as undefined | GameVariant,
+  wildRule: undefined as undefined | WildRule,
   };
 
   constructor(tableId: string, players: Player[], smallBlind: number, bigBlind: number, options?: Partial<typeof PokerEngine.defaultOptions>) {
@@ -65,6 +67,9 @@ export class PokerEngine {
     // Set variant on state only when provided (keep undefined as default Hold'em)
     if (opts.variant) {
       this.state.variant = opts.variant;
+    }
+    if (opts.wildRule) {
+      this.state.wildRule = opts.wildRule;
     }
   // Configure optional RIT persistence
   this.ritPersistence = opts.runItTwicePersistence;
@@ -455,7 +460,8 @@ export class PokerEngine {
 
   /** Whether this table offers run it twice after an all-in. */
   public setAllowRunItTwice(allow: boolean): void {
-    this.state.allowRunItTwice = allow;
+    // Run It Twice evaluates each board without wild cards, so wild tables play one board
+    this.state.allowRunItTwice = allow && !this.state.wildRule;
   }
 
   /** Whether everyone still in at a showdown must show, instead of losers mucking. */
@@ -1566,6 +1572,7 @@ export class PokerEngine {
 
   const potsToDistribute = this.buildPots(activePlayers);
     this.log(`Pots to distribute: ${JSON.stringify(potsToDistribute)}`);
+  const wild = wildMatcher(this.state.wildRule);
 
   // Special handling: Omaha Hi-Lo (US-052)
   if (this.state.variant === 'omaha-hi-lo') {
@@ -1584,6 +1591,11 @@ export class PokerEngine {
       // Precompute high hand ranks
       const highStrengths = new Map<string, { score: number; view: { cards: Card[]; description: string } }>();
       activePlayers.forEach(p => {
+        if (wild) {
+          const best = evaluateWildOmaha(p.holeCards || [], this.state.communityCards, wild);
+          highStrengths.set(p.id, { score: best.score, view: { cards: best.cards, description: best.name } });
+          return;
+        }
         const hr = HandEvaluator.getOmahaHandRanking(p.holeCards || [], this.state.communityCards);
         const score = computeHighScore(hr.cards, hr.rank);
         highStrengths.set(p.id, { score, view: { cards: hr.cards, description: hr.name } });
@@ -1592,7 +1604,9 @@ export class PokerEngine {
       // Precompute low evaluations (8-or-better, Ace-to-Five), store ranks arrays for comparison
       const lowEvals = new Map<string, { ranks: number[] }>();
       activePlayers.forEach(p => {
-        const low = HandEvaluator.evaluateOmahaLowEightOrBetter(p.holeCards || [], this.state.communityCards);
+        const low = wild
+          ? evaluateWildOmahaLow(p.holeCards || [], this.state.communityCards, wild)
+          : HandEvaluator.evaluateOmahaLowEightOrBetter(p.holeCards || [], this.state.communityCards);
         if (low) lowEvals.set(p.id, { ranks: low.ranks });
       });
 
@@ -1712,6 +1726,12 @@ export class PokerEngine {
       activePlayers.forEach(p => {
         const st = this.state.studState?.playerCards[p.id];
         const all = st ? [...(st.downCards || []), ...(st.upCards || [])] : [];
+        if (wild) {
+          highStrengths.set(p.id, { score: evaluateWildHigh(all, wild).score });
+          const wildLow = evaluateWildLow(all, wild);
+          if (wildLow) lowEvals.set(p.id, { ranks: wildLow.ranks });
+          return;
+        }
         const hr = HandEvaluator.getHandRanking(all, []);
         const score = computeHighScore(hr.cards, hr.rank);
         highStrengths.set(p.id, { score });
@@ -1785,6 +1805,18 @@ export class PokerEngine {
       activePlayers.forEach(p => {
         const st = this.state.studState?.playerCards[p.id];
         const all = st ? [...(st.downCards || []), ...(st.upCards || [])] : [];
+        if (this.state.variant === 'razz' && wild) {
+          const low = evaluateWildRazz(all, wild);
+          strengths.set(p.id, low.strength);
+          handViews.set(p.id, { cards: low.lowCards, description: low.description });
+          return;
+        }
+        if (wild) {
+          const best = evaluateWildHigh(all, wild);
+          strengths.set(p.id, best.score);
+          handViews.set(p.id, { cards: best.cards, description: best.name });
+          return;
+        }
         if (this.state.variant === 'razz') {
           // Razz: the best ace-to-five low takes the whole pot
           const low = HandEvaluator.evaluateRazzLow(all);
@@ -1849,6 +1881,14 @@ export class PokerEngine {
     const strengths = new Map<string, number>();
     const handViews = new Map<string, { cards: Card[]; description: string }>();
     activePlayers.forEach(p => {
+      if (wild) {
+        const best = isOmahaVariant(this.state.variant)
+          ? evaluateWildOmaha(p.holeCards || [], this.state.communityCards, wild)
+          : evaluateWildHigh([...(p.holeCards || []), ...this.state.communityCards], wild);
+        strengths.set(p.id, best.score);
+        handViews.set(p.id, { cards: best.cards, description: best.name });
+        return;
+      }
   const hr = (isOmahaVariant(this.state.variant)
         ? HandEvaluator.getOmahaHandRanking
         : HandEvaluator.getHandRanking
@@ -1903,6 +1943,12 @@ export class PokerEngine {
   // Set stage to indicate hand is over
   this.state.stage = 'showdown';
   this.state.activePlayer = '';
+  }
+
+  /** Dealer's Choice: the wild cards for the hands the dealer chose; undefined for none. */
+  public setWildRule(rule?: WildRule): void {
+    if (rule) this.state.wildRule = rule;
+    else delete this.state.wildRule;
   }
 
   // Allow changing variant at runtime before a hand starts

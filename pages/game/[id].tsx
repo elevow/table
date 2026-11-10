@@ -17,7 +17,7 @@ import { runItVoters, tallyRunItVotes } from '../../src/lib/shared/run-it-vote';
 import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 import { useCheckTurn } from '../../src/hooks/useCheckTurn';
-import { Card, Player, GameVariant } from '../../src/types/poker';
+import { Card, Player, GameVariant, WildRule } from '../../src/types/poker';
 import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import { useDisplaySettings } from '../../src/hooks/useDisplaySettings';
@@ -40,10 +40,11 @@ import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
 import SidePanelTabs from '../../src/components/SidePanelTabs';
 import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
+import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, wildMatcher } from '../../src/lib/poker/wild-hands';
 import SplashAnimation, { splashInPlay } from '../../src/components/SplashAnimation';
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
-import { ALL_VARIANTS, VARIANT_LABELS, gameLabel, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
+import { ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, isOmahaVariant, isStudVariant as isStudGame, wildAllowedFor } from '../../src/lib/poker/variant-rules';
 import { studCardOrder } from '../../src/lib/shared/stud-cards';
 import TableCard from '../../src/components/TableCard';
 import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/components/PlayerNotesPanel';
@@ -592,6 +593,8 @@ export default function GamePage() {
   // Dealer's Choice: pending choice prompt from server
   const [awaitingDealerChoice, setAwaitingDealerChoice] = useState<null | { dealerId?: string; allowedVariants?: string[]; current?: string }>(null);
   const [selectedVariantDC, setSelectedVariantDC] = useState<string>('texas-holdem');
+  // Wild cards the dealer picks with the game; '' for none
+  const [selectedWildDC, setSelectedWildDC] = useState<WildRule | ''>('');
   // Track if the dealer has manually changed the selection to avoid overwriting with stale prompts
   const userChangedVariantRef = useRef<boolean>(false);
   const lastAwaitingDealerIdRef = useRef<string | undefined>(undefined);
@@ -620,6 +623,7 @@ export default function GamePage() {
       userChangedVariantRef.current = false;
       lastAwaitingDealerIdRef.current = incomingDealerId;
       setSelectedVariantDC(prompt.current || 'texas-holdem');
+      setSelectedWildDC('');
     } else if (!userChangedVariantRef.current && prompt.current) {
       setSelectedVariantDC(prompt.current);
     }
@@ -628,7 +632,7 @@ export default function GamePage() {
       allowedVariants: prompt.allowedVariants || allowedDealerChoiceVariants.current,
       current: prompt.current || 'texas-holdem',
     });
-  }, [setAwaitingDealerChoice, setSelectedVariantDC]);
+  }, [setAwaitingDealerChoice, setSelectedVariantDC, setSelectedWildDC]);
 
   const computeDealerChoicePrompt = useCallback((state: any) => {
     if (!state || state.stage !== 'awaiting-dealer-choice') return null;
@@ -1115,11 +1119,14 @@ export default function GamePage() {
         return top?.rank ? `${top.rank === 'A' ? 'Ace' : top.rank === 'K' ? 'King' : top.rank === 'Q' ? 'Queen' : top.rank === 'J' ? 'Jack' : top.rank} High` : null;
       };
 
+      const wild = wildMatcher(pokerGameState?.wildRule);
+
       const computeHighLabel = (): string | null => {
         if (isStudGame(variant)) {
           const { down, up } = getStudCardsForPlayer(playerId);
           const all = [...(down || []), ...(up || [])];
           if (!all || all.length === 0) return null;
+          if (wild) return variant === 'razz' ? evaluateWildRazz(all, wild).description : evaluateWildHigh(all, wild).name;
           // Razz is played for the lowest hand
           if (variant === 'razz') return HandEvaluator.evaluateRazzLow(all).description;
           if (all.length < 5) return partialLabel(all);
@@ -1131,6 +1138,7 @@ export default function GamePage() {
         const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
         if (!holes || holes.length === 0) return null;
         const known = [...holes, ...board];
+        if (wild) return isOmahaVariant(variant) ? evaluateWildOmaha(holes, board, wild).name : evaluateWildHigh(known, wild).name;
         if (known.length < 5) return partialLabel(known);
 
         if (isOmahaVariant(variant)) {
@@ -1157,14 +1165,14 @@ export default function GamePage() {
           const holes = Array.isArray(me?.holeCards) ? me.holeCards : [];
           const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
           if (holes.length >= 2 && board.length >= 3) {
-            const low = HandEvaluator.evaluateOmahaLowEightOrBetter(holes, board);
+            const low = wild ? evaluateWildOmahaLow(holes, board, wild) : HandEvaluator.evaluateOmahaLowEightOrBetter(holes, board);
             if (low) lowLabel = describeLow(low.ranks);
           }
       } else if (variant === 'seven-card-stud-hi-lo') {
         const { down, up } = getStudCardsForPlayer(playerId);
         const all = [...(down || []), ...(up || [])];
         if (all.length >= 5) {
-          const low = HandEvaluator.evaluateAceToFiveLow(all);
+          const low = wild ? evaluateWildLow(all, wild) : HandEvaluator.evaluateAceToFiveLow(all);
           if (low) lowLabel = describeLow(low.ranks);
         }
       }
@@ -1179,6 +1187,8 @@ export default function GamePage() {
   // With one card to come: the chance it improves your hand, from the cards you can see
   const myLastCardOdds = useMemo((): string | null => {
     if (!pokerGameState || !playerId || pokerGameState.stage === 'showdown') return null;
+    // These odds don't count wild cards, so they would be wrong
+    if (pokerGameState.wildRule) return null;
     const me = pokerGameState.players?.find((p: any) => p.id === playerId);
     if (!me || me.isFolded) return null;
     const variant = pokerGameState.variant;
@@ -2480,7 +2490,7 @@ export default function GamePage() {
                 Rebuys: {roomConfig.numberOfRebuys === 'unlimited' ? 'Unlimited' : roomConfig.numberOfRebuys}
               </span>
             )}
-            {tableExtras?.allowRunItTwice && (
+            {tableExtras?.allowRunItTwice && !pokerGameState?.wildRule && (
               <span
                 className="badge badge-violet"
                 title="After an all-in, the weakest hand can choose to run the board more than once"
@@ -2681,6 +2691,11 @@ export default function GamePage() {
                   : [...ALL_VARIANTS];
                 const isMeDealer = dealerId && dealerId === playerId;
                 const labelMap: Record<string, string> = VARIANT_LABELS;
+                // Seven-card games take wilds only with 7 or fewer players
+                const seatedCount = Array.isArray(pokerGameState?.players) ? pokerGameState.players.length : 0;
+                const wildOk = wildAllowedFor(selectedVariantDC, seatedCount);
+                const wildDC = wildOk ? selectedWildDC : '';
+                const choiceLabel = `${labelMap[selectedVariantDC] || selectedVariantDC}${wildDC ? ` (${WILD_RULE_LABELS[wildDC]})` : ''}`;
                 if (isMeDealer) {
                   return (
                     <div>
@@ -2706,12 +2721,37 @@ export default function GamePage() {
                           </label>
                         ))}
                       </div>
+                      <div className="flex flex-wrap items-center gap-3 mt-3">
+                        <span className="text-sm font-medium">Wild cards</span>
+                        {([['', 'None'], ['deuces', WILD_RULE_LABELS['deuces']], ['one-eyed-jacks', WILD_RULE_LABELS['one-eyed-jacks']]] as Array<[WildRule | '', string]>).map(([rule, label]) => {
+                          const disabled = !!rule && !wildOk;
+                          return (
+                            <label key={rule || 'none'} className={`px-3 py-1.5 rounded-sm border text-sm select-none ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${wildDC === rule ? 'bg-fuchsia-700 text-white border-fuchsia-600' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-amber-300 dark:border-amber-600'}`}>
+                              <input
+                                type="radio"
+                                name="dc-wild"
+                                className="hidden"
+                                value={rule}
+                                checked={wildDC === rule}
+                                disabled={disabled}
+                                onChange={() => setSelectedWildDC(rule)}
+                              />
+                              {label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs mt-1 opacity-80">
+                        {wildOk
+                          ? 'Wild hands are fixed limit, and five of a kind is the top hand.'
+                          : `Wild cards in seven-card games need ${MAX_SEVEN_CARD_WILD_PLAYERS} or fewer players.`}
+                      </p>
                       <div className="mt-3">
                         <button
                           onClick={async () => {
                             try {
                               if (!id || !playerId) return;
-                              const response = await api.post('/api/games/next-hand', { tableId: id, playerId, variant: selectedVariantDC });
+                              const response = await api.post('/api/games/next-hand', { tableId: id, playerId, variant: selectedVariantDC, ...(wildDC ? { wildRule: wildDC } : {}) });
                               if (!response.ok) {
                                 console.warn('Dealer choice failed:', response.error);
                               }
@@ -2721,7 +2761,7 @@ export default function GamePage() {
                           }}
                           className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-sm shadow-sm"
                         >
-                          Start {labelMap[selectedVariantDC] || selectedVariantDC}
+                          Start {choiceLabel}
                         </button>
                       </div>
                     </div>
@@ -3521,12 +3561,13 @@ export default function GamePage() {
                   const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
 
                   type EvalRes = { playerId: string; name: string; hand: any; label: string };
+                  const wild = wildMatcher(pokerGameState?.wildRule);
                   if (variant === 'razz') {
                     // Razz: the lowest hand wins, so name the server's winners with their lows
                     const lows: Array<{ name: string; label: string }> = contenders.map((p: any) => {
                       const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
                       const all = [...(Array.isArray(st?.downCards) ? st.downCards : []), ...(Array.isArray(st?.upCards) ? st.upCards : [])];
-                      return { name: p.name || p.id, label: all.length >= 5 ? HandEvaluator.evaluateRazzLow(all).description : '' };
+                      return { name: p.name || p.id, label: all.length < 5 ? '' : wild ? evaluateWildRazz(all, wild).description : HandEvaluator.evaluateRazzLow(all).description };
                     });
                     return (
                       <div className="flex flex-wrap items-center gap-2">
@@ -3537,6 +3578,14 @@ export default function GamePage() {
                     );
                   }
                   const evals: EvalRes[] = contenders.map((p: any) => {
+                    if (wild) {
+                      const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
+                      const hole = Array.isArray(p?.holeCards) ? p.holeCards : [];
+                      const best = isStudGame(variant)
+                        ? evaluateWildHigh([...(st?.downCards || []), ...(st?.upCards || [])], wild)
+                        : isOmahaVariant(variant) ? evaluateWildOmaha(hole, board, wild) : evaluateWildHigh([...hole, ...board], wild);
+                      return { playerId: p.id, name: p.name || p.id, hand: { score: best.score }, label: best.name };
+                    }
                     if (isStudGame(variant)) {
                       const st = (pokerGameState as any)?.studState?.playerCards?.[p.id];
                       const down = Array.isArray(st?.downCards) ? st.downCards : [];
@@ -3556,7 +3605,7 @@ export default function GamePage() {
                   let best: EvalRes[] = [];
                   for (const e of evals) {
                     if (best.length === 0) { best = [e]; continue; }
-                    const cmp = HandEvaluator.compareHands(e.hand, best[0].hand);
+                    const cmp = wild ? e.hand.score - best[0].hand.score : HandEvaluator.compareHands(e.hand, best[0].hand);
                     if (cmp > 0) best = [e];
                     else if (cmp === 0) best.push(e);
                   }
@@ -3587,7 +3636,7 @@ export default function GamePage() {
           )}
 
           {/* Chance to win during an all-in, when everyone's cards are face up */}
-          {gameStarted && pokerGameState && anyAllIn() && pokerGameState.stage !== 'showdown' && !isStudVariant() && (
+          {gameStarted && pokerGameState && anyAllIn() && pokerGameState.stage !== 'showdown' && !isStudVariant() && !pokerGameState.wildRule && (
             <EquityPanel
               players={getActiveNonFoldedPlayers()}
               board={Array.isArray(pokerGameState.communityCards) ? pokerGameState.communityCards : []}
@@ -3609,8 +3658,8 @@ export default function GamePage() {
               const variant = pokerGameState?.variant;
               const board = pokerGameState.communityCards;
               
-              // Early return: Don't show outs for stud variants, as outs calculation is not supported
-              if (isStudGame(variant)) {
+              // Early return: Don't show outs for stud variants or wild tables, as outs calculation doesn't support them
+              if (isStudGame(variant) || pokerGameState.wildRule) {
                 return null;
               }
               

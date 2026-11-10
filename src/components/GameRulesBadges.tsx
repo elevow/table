@@ -1,6 +1,6 @@
 import React from 'react';
 import type { TableState } from '../types/poker';
-import { describeMixedRotation, gameLabel, isHoldemVariant, isStudVariant } from '../lib/poker/variant-rules';
+import { describeMixedRotation, gameLabel, isHoldemVariant, isStudVariant, WILD_RULE_LABELS } from '../lib/poker/variant-rules';
 
 interface Props {
   state?: TableState | null;
@@ -27,6 +27,11 @@ export default function GameRulesBadges({ state }: Props) {
         >
           Now: {gameLabel(mixed.current)} · Next: {gameLabel(mixed.next)}{' '}
           {mixed.handsLeft === 0 ? 'next hand' : `in ${mixed.handsLeft} hand${mixed.handsLeft === 1 ? '' : 's'}`}
+        </span>
+      )}
+      {state.wildRule && (
+        <span className={`${badge} bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/60 dark:text-fuchsia-100`} title="A wild card counts as whatever makes your hand best. Five of a kind is the top hand.">
+          {WILD_RULE_LABELS[state.wildRule]}
         </span>
       )}
       {!mixed && state.bettingMode === 'fixed-limit' && (

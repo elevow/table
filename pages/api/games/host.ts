@@ -12,7 +12,7 @@ import {
 import { publishTableEvent } from '../../../src/lib/realtime/publisher';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { MIN_TURN_SECONDS, MAX_TURN_SECONDS, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS } from '../../../src/lib/shared/turn-clock';
-import { isStudVariant } from '../../../src/lib/poker/variant-rules';
+import { isStudVariant, parseWildRule } from '../../../src/lib/poker/variant-rules';
 import { apiHandler } from '../../../src/lib/api/handler';
 
 type HostAction =
@@ -175,7 +175,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
         break; // also applied to the running game below
       }
       case 'allow-run-it-twice': {
-        await updateRoomConfig(tableId, { allowRunItTwice: !!body.allow });
+        await updateRoomConfig(tableId, { allowRunItTwice: !!body.allow && !parseWildRule((room.configuration as { wildRule?: unknown }).wildRule) });
         await publishTableEvent(tableId, { type: 'settings' }).catch(() => {});
         break; // also applied to the running game below
       }

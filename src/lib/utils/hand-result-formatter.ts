@@ -2,6 +2,7 @@ import type { TableState, Card, Player } from '../../types/poker';
 import { HandEvaluator } from '../poker/hand-evaluator';
 import type { HandInterface } from '../../types/poker-engine';
 import { isOmahaVariant as isOmahaGame, isStudVariant } from '../poker/variant-rules';
+import { evaluateWildHigh, evaluateWildOmaha, evaluateWildRazz, wildMatcher } from '../poker/wild-hands';
 
 /**
  * System sender ID used for hand result messages
@@ -34,6 +35,8 @@ interface PlayerHandEvaluation {
   player: Player;
   hand: HandInterface;
   label: string;
+  // Set on wild tables, where hands compare by score
+  wildScore?: number;
 }
 
 /**
@@ -133,6 +136,7 @@ export function formatHandResult(state: TableState): FormattedHandResult | null 
  */
 function formatRazzResult(state: TableState): FormattedHandResult | null {
   const winnerIds = Array.isArray(state.handWinners) ? state.handWinners : [];
+  const wild = wildMatcher(state.wildRule);
   const winners: HandWinner[] = winnerIds.map(id => {
     const player = (state.players || []).find(p => p.id === id);
     const st = state.studState?.playerCards?.[id];
@@ -141,7 +145,7 @@ function formatRazzResult(state: TableState): FormattedHandResult | null {
       playerId: id,
       playerName: player ? getPlayerName(player) : id.slice(0, 6),
       amount: state.handResult?.winnings?.[id] || 0,
-      handDescription: all.length >= 5 ? HandEvaluator.evaluateRazzLow(all).description : undefined,
+      handDescription: all.length < 5 ? undefined : wild ? evaluateWildRazz(all, wild).description : HandEvaluator.evaluateRazzLow(all).description,
     };
   });
   if (winners.length === 0) return null;
@@ -267,10 +271,22 @@ function formatHandResultBase(state: TableState): FormattedHandResult | null {
   try {
     // Evaluate all active players' hands
     const evaluations: PlayerHandEvaluation[] = [];
-    
+    const wild = wildMatcher(state.wildRule);
+
     for (const player of activePlayers) {
       const holeCards = player.holeCards || [];
-      
+
+      if (wild) {
+        const minHole = isOmahaVariant(variant) ? 4 : 2;
+        if (holeCards.length >= minHole) {
+          const best = isOmahaVariant(variant)
+            ? evaluateWildOmaha(holeCards, communityCards, wild)
+            : evaluateWildHigh([...holeCards, ...communityCards], wild);
+          evaluations.push({ player, hand: { rank: best.rank, description: best.name, cards: [] }, label: best.name, wildScore: best.score });
+        }
+        continue;
+      }
+
       if (isOmahaVariant(variant)) {
         if (holeCards.length >= 4 && communityCards.length >= 3) {
           const { hand } = HandEvaluator.evaluateOmahaHand(holeCards, communityCards);
@@ -294,7 +310,9 @@ function formatHandResultBase(state: TableState): FormattedHandResult | null {
     // Find the best hand(s)
     let bestEvals: PlayerHandEvaluation[] = [evaluations[0]];
     for (let i = 1; i < evaluations.length; i++) {
-      const cmp = HandEvaluator.compareHands(evaluations[i].hand, bestEvals[0].hand);
+      const cmp = wild
+        ? (evaluations[i].wildScore as number) - (bestEvals[0].wildScore as number)
+        : HandEvaluator.compareHands(evaluations[i].hand, bestEvals[0].hand);
       if (cmp > 0) {
         bestEvals = [evaluations[i]];
       } else if (cmp === 0) {

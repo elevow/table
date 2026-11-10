@@ -2,7 +2,7 @@ import { getPool } from '../../../../src/lib/database/pool';
 import { getSessionUser } from '../../../../src/lib/auth/auth-utils';
 import { getUserAccess, hasPermission } from '../../../../src/lib/auth/access-control';
 import { countSeatedInConfig } from '../../../../src/lib/shared/game-seats';
-import { BETTING_MODE_LABELS, isBettingMode, variantLabel } from '../../../../src/lib/poker/variant-rules';
+import { BETTING_MODE_LABELS, isBettingMode, parseWildRule, variantLabel, WILD_RULE_LABELS } from '../../../../src/lib/poker/variant-rules';
 import { apiHandler } from '../../../../src/lib/api/handler';
 import { envFlag } from '../../../../src/lib/config/env';
 
@@ -31,7 +31,8 @@ const COLUMNS = `r.id, r.name, r.max_players, r.blind_levels, r.status, r.create
 function gameName(config: Record<string, any>): string {
   if (config.variant === 'dealers-choice') return 'Dealer\'s Choice';
   if (config.variant === 'mixed') return 'Mixed games';
-  const variant = variantLabel(config.variant);
+  const wildRule = parseWildRule(config.wildRule);
+  const variant = `${variantLabel(config.variant)}${wildRule ? ` (${WILD_RULE_LABELS[wildRule]})` : ''}`;
   return isBettingMode(config.bettingMode) ? `${BETTING_MODE_LABELS[config.bettingMode]} ${variant}` : variant;
 }
 

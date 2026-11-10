@@ -120,7 +120,8 @@ export async function runGameAction(opts: {
   const autoRunoutDebug = debugFlags.autoRunout;
   const autoEligible = isAutoRunoutEligible(gameState);
   let issuedPrompt = null;
-  if (autoEligible && RUN_IT_TWICE_DECISIONS_ENABLED && gameState.allowRunItTwice) {
+  // Wild hands (a Dealer's Choice pick) play one board: Run It Twice evaluates without wild cards
+  if (autoEligible && RUN_IT_TWICE_DECISIONS_ENABLED && gameState.allowRunItTwice && !gameState.wildRule) {
     const postCommunityCount = Array.isArray(gameState.communityCards) ? gameState.communityCards.length : 0;
     const preCommunityCount = preActionCommunity.length;
     const boardAdvanced = postCommunityCount > preCommunityCount;

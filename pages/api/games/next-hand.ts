@@ -19,8 +19,8 @@ import { getDealerChoiceChooserId } from '../../../src/lib/poker/dealer-choice';
 import { getPool } from '../../../src/lib/database/pool';
 import { GameService } from '../../../src/lib/services/game-service';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
-import type { BettingMode, GameVariant } from '../../../src/types/poker';
-import { ALL_VARIANTS } from '../../../src/lib/poker/variant-rules';
+import type { BettingMode, GameVariant, WildRule } from '../../../src/types/poker';
+import { ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, parseWildRule, wildAllowedFor } from '../../../src/lib/poker/variant-rules';
 import { loadRoom, isTableClosed, TABLE_CLOSED_RESPONSE } from '../../../src/lib/server/room-config';
 import { keepTablesMoving, prepareTournamentHand, tournamentTableOf } from '../../../src/lib/tournament/table-rooms';
 import { apiHandler } from '../../../src/lib/api/handler';
@@ -67,7 +67,9 @@ function getNextHandLocks(): Set<string> {
 
 export default apiHandler({ methods: 'POST' }, async (req, res) => {
   try {
-    const { tableId, playerId: claimedPlayerId, variant: rawVariant } = req.body;
+    const { tableId: rawTableId, playerId: claimedPlayerId, variant: rawVariant, wildRule: rawWildRule } = req.body;
+    // The table id ends up in log lines, so line breaks can't be allowed to forge entries
+    const tableId: string | undefined = typeof rawTableId === 'string' ? rawTableId.replace(/[\r\n]/g, '') : undefined;
 
     const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.play');
     if (!playerId) return;
@@ -76,6 +78,8 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     const isValidVariant = (v: unknown): v is GameVariant => 
       typeof v === 'string' && DEFAULT_DEALERS_CHOICE_VARIANTS.includes(v as GameVariant);
     const variant: GameVariant | undefined = isValidVariant(rawVariant) ? rawVariant : undefined;
+    // Dealer's Choice: wild cards the dealer picked with the game
+    const wildRule: WildRule | undefined = parseWildRule(rawWildRule);
 
     if (!tableId) {
       return res.status(400).json({ error: 'Missing tableId' });
@@ -207,6 +211,10 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
         if (getDealerChoiceChooserId(currentState) !== playerId) {
           return res.status(403).json({ error: 'Only the dealer can choose the variant' });
         }
+        // Seven cards each for more than seven players would run the deck out
+        if (wildRule && !wildAllowedFor(variant, playerCount)) {
+          return res.status(400).json({ error: `Wild cards in seven-card games need ${MAX_SEVEN_CARD_WILD_PLAYERS} or fewer players` });
+        }
       }
 
       // Check for busted players and issue rebuy prompts
@@ -261,15 +269,22 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
         return res.status(200).json({ success: true, awaitingRebuyDecisions: true, pending: pendingRebuyCount(tableId), waitingFor });
       }
 
-      const applyVariantAndStart = async ({ chosenVariant }: { chosenVariant?: GameVariant } = {}) => {
+      const applyVariantAndStart = async ({ chosenVariant, chosenWildRule }: { chosenVariant?: GameVariant; chosenWildRule?: WildRule } = {}) => {
         let mutated = false;
         if (chosenVariant) {
           if (typeof engine.setVariant === 'function') {
             engine.setVariant(chosenVariant);
           }
-          // Omaha games play pot limit and razz fixed limit; other games keep the room's betting mode
+          // The choice lasts until the next one, so a game picked without wilds clears them
+          if (typeof engine.setWildRule === 'function') {
+            engine.setWildRule(chosenWildRule);
+          }
+          // Wild games play fixed limit, Omaha games pot limit and razz fixed limit; other games
+          // keep the room's betting mode
           const variantDefault = defaultBettingModeForVariant(chosenVariant);
-          const nextMode = variantDefault !== 'no-limit' ? variantDefault : (roomConfig.bettingMode || 'no-limit');
+          const nextMode = chosenWildRule
+            ? 'fixed-limit'
+            : variantDefault !== 'no-limit' ? variantDefault : (roomConfig.bettingMode || 'no-limit');
           if (typeof engine.setBettingMode === 'function') {
             engine.setBettingMode(nextMode);
           }
@@ -339,7 +354,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
 
       if (isDealersChoice) {
         if (variant) {
-          return applyVariantAndStart({ chosenVariant: variant });
+          return applyVariantAndStart({ chosenVariant: variant, chosenWildRule: wildRule });
         }
 
         if (awaitingDealerChoiceStage) {
@@ -351,7 +366,10 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
         const roundLength = (playerCount > 0 ? playerCount : 1) + 1;
         const handsThisRound = Number(currentState.dealersChoiceHandCount) || 0;
 
-        if (handsThisRound >= roundLength) {
+        // Players who sat down mid-round can take a seven-card wild game over its cap, so the
+        // round ends there and the next dealer chooses
+        const overWildCap = !!currentState.wildRule && !wildAllowedFor(currentState.variant, playerCount);
+        if (handsThisRound >= roundLength || overWildCap) {
           return promptDealerChoice();
         }
 

@@ -1,4 +1,5 @@
 import type Redis from 'ioredis';
+import type { RedisOptions } from 'ioredis';
 import { rateLimit as localRateLimit } from './rate-limit';
 import { envString, runtime } from '../config/env';
 
@@ -27,20 +28,27 @@ function warn(message: string, error?: unknown) {
   console.warn(`[shared-rate-limit] ${message}; using the per-instance limiter`, error ?? '');
 }
 
+/** Options for the rate limiter's Redis client at this URL. */
+export function redisClientOptions(url: string): RedisOptions {
+  // Upstash only accepts TLS, whichever scheme the URL was copied with
+  const useTls = url.startsWith('rediss://') || new URL(url).hostname.endsWith('.upstash.io');
+  return {
+    tls: useTls ? {} : undefined,
+    connectTimeout: 2_000,
+    commandTimeout: 1_000,
+    maxRetriesPerRequest: 1,
+    // ioredis 6 speaks RESP3 by default; keep RESP2, which every Redis host (Upstash included) accepts
+    protocol: 2,
+  };
+}
+
 async function connect(): Promise<RedisLike | null> {
   const url = envString('REDIS_URL');
   // Tests never talk to the real store, even when .env.local sets REDIS_URL
   if (!url || runtime.isTest) return null;
   try {
     const { default: IORedis } = await import('ioredis');
-    // Upstash only accepts TLS, whichever scheme the URL was copied with
-    const useTls = url.startsWith('rediss://') || new URL(url).hostname.endsWith('.upstash.io');
-    const redis = new IORedis(url, {
-      tls: useTls ? {} : undefined,
-      connectTimeout: 2_000,
-      commandTimeout: 1_000,
-      maxRetriesPerRequest: 1,
-    });
+    const redis = new IORedis(url, redisClientOptions(url));
     redis.on('error', (e: unknown) => warn('Redis connection error', e));
     return redis;
   } catch (e) {

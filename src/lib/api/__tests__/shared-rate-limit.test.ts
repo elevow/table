@@ -1,7 +1,7 @@
 const mockLocalRateLimit = jest.fn();
 jest.mock('../rate-limit', () => ({ rateLimit: (...args: any[]) => mockLocalRateLimit(...args) }));
 
-import { sharedRateLimit, setSharedRateLimitClient } from '../shared-rate-limit';
+import { redisClientOptions, sharedRateLimit, setSharedRateLimitClient } from '../shared-rate-limit';
 
 /** A stand-in Redis that runs the hit script's logic against a Map. */
 function fakeRedis() {
@@ -86,5 +86,17 @@ describe('sharedRateLimit', () => {
     } finally {
       if (saved === undefined) delete process.env.REDIS_URL; else process.env.REDIS_URL = saved;
     }
+  });
+});
+
+describe('redisClientOptions', () => {
+  it('keeps the old Redis protocol (RESP2) that ioredis 5 used', () => {
+    expect(redisClientOptions('redis://localhost:6379').protocol).toBe(2);
+  });
+
+  it('uses TLS for Upstash and rediss:// URLs only', () => {
+    expect(redisClientOptions('redis://default:x@eu1-test.upstash.io:6379').tls).toEqual({});
+    expect(redisClientOptions('rediss://cache.example.com:6380').tls).toEqual({});
+    expect(redisClientOptions('redis://localhost:6379').tls).toBeUndefined();
   });
 });

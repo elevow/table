@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { useHydrated } from '../hooks/useHydrated';
 import Avatar from './Avatar';
 import { useUserAvatar } from '../hooks/useUserAvatar';
 
@@ -25,17 +26,18 @@ export function BrandMark({ className = 'h-8 w-8' }: { className?: string }) {
 
 /** The signed-in user's name as stored at login, or null for guests. */
 export function useStoredUsername(): string | null {
-  const [name, setName] = useState<string | null>(null);
-  useEffect(() => {
+  // Read once hydrated, so the server render and the first client render agree
+  const hydrated = useHydrated();
+  return useMemo(() => {
+    if (!hydrated) return null;
     try {
       const raw = localStorage.getItem('user');
       const user = raw ? JSON.parse(raw) : null;
-      setName(user?.username || null);
+      return user?.username || null;
     } catch {
-      setName(null);
+      return null;
     }
-  }, []);
-  return name;
+  }, [hydrated]);
 }
 
 /**

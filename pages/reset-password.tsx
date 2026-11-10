@@ -15,12 +15,10 @@ const ResetPassword: NextPage = () => {
   const [success, setSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Validate that we have required query parameters
-  useEffect(() => {
-    if (router.isReady && (!token || !email)) {
-      setError('Invalid reset link. Please request a new password reset.');
-    }
-  }, [router.isReady, token, email]);
+  // A link missing its token or email can't work; say so straight away
+  const linkError = router.isReady && (!token || !email)
+    ? 'Invalid reset link. Please request a new password reset.'
+    : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -232,7 +230,7 @@ const ResetPassword: NextPage = () => {
                 </div>
               )}
 
-              {error && (
+              {(error || linkError) && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
                   <div className="flex">
                     <div className="shrink-0">
@@ -241,7 +239,7 @@ const ResetPassword: NextPage = () => {
                       </svg>
                     </div>
                     <div className="ml-3">
-                      <p>{error}</p>
+                      <p>{error || linkError}</p>
                     </div>
                   </div>
                 </div>

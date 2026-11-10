@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useHydrated } from '../../src/hooks/useHydrated';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -35,16 +36,17 @@ export default function TournamentPage() {
       }
     } catch { /* notifications unavailable */ }
   };
-  const { view, error, errorCode, reload, levelLeft, breakLeft } = useTournamentView(id, onEvents);
-  viewRef.current = view;
-  const [notifyState, setNotifyState] = useState<'unavailable' | 'default' | 'granted' | 'denied'>('unavailable');
-  useEffect(() => {
-    if (typeof Notification !== 'undefined') setNotifyState(Notification.permission as 'default' | 'granted' | 'denied');
-  }, []);
-  const [signedIn, setSignedIn] = useState(false);
+  const { view, error, errorCode, reload, levelLeft, breakLeft, now } = useTournamentView(id, onEvents);
+  // Kept for onEvents, which runs later; updated after render as React requires
+  useEffect(() => { viewRef.current = view; }, [view]);
+  // Browser-only, so read once hydrated; the answer to a permission request replaces it
+  const hydrated = useHydrated();
+  const [askedState, setNotifyState] = useState<'default' | 'granted' | 'denied' | null>(null);
+  const notifyState = askedState
+    ?? (hydrated && typeof Notification !== 'undefined' ? Notification.permission as 'default' | 'granted' | 'denied' : 'unavailable');
+  const signedIn = hydrated && !!authHeaders().Authorization;
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  useEffect(() => setSignedIn(!!authHeaders().Authorization), []);
 
   const act = async (action: 'register' | 'unregister' | 'rebuy' | 'add-on' | 'reenter') => {
     if (!id) return;
@@ -96,7 +98,7 @@ export default function TournamentPage() {
       {view.status === 'setup' && view.startsAt && (
         <p className="text-center text-sm">
           Starts at {new Date(view.startsAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
-          {view.startsAt > Date.now() ? ` (in ${formatClock(view.startsAt - Date.now())})` : ''}
+          {view.startsAt > now ? ` (in ${formatClock(view.startsAt - now)})` : ''}
           {view.minPlayers ? `. Needs ${view.minPlayers} players; ${view.players.entrants} registered.` : '.'}
         </p>
       )}

@@ -13,6 +13,7 @@ export default function FriendsDemo() {
 
   useEffect(() => {
     const ctl = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the API; the loading/error state it sets is the point
     setError(null);
     fetchRelationshipStatus(me, peer, ctl.signal)
       .then(setStatus)

@@ -38,6 +38,7 @@ export default function AlertDetailPage() {
     }
   }, [id]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the API; the loading/error state it sets is the point
   useEffect(() => { load(); }, [load]);
 
   const setStatus = async (status: 'new' | 'acknowledged' | 'resolved') => {

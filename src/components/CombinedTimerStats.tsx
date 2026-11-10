@@ -34,7 +34,7 @@ interface CombinedHUDProps {
 function CombinedTimerStats({ tableId, playerId, gameId, onShowSettings, gameState }: CombinedHUDProps) {
   // Timer states
   const [timer, setTimer] = useState<TimerState>(undefined);
-  const [now, setNow] = useState<number>(Date.now());
+  const [now, setNow] = useState<number>(() => Date.now());
   const [bank, setBank] = useState<number>(0);
   // Hand tracking refs for session stat updates
   const lastStageRef = useRef<string | undefined>(undefined);

@@ -9,6 +9,19 @@ import AppShell, { useStoredUsername } from '../src/components/AppShell';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { MAX_AVATAR_FILE_BYTES, shrinkAvatar, uploadErrorMessage } from '../src/utils/avatar-image';
 
+const Row = ({ label, onClick, right }: { label: string; onClick?: () => void; right?: React.ReactNode }) => (
+  <button
+    onClick={onClick}
+    className="flex w-full items-center justify-between px-5 py-3.5 text-left text-sm text-gray-800 transition-colors hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/3"
+  >
+    <span className="font-medium">{label}</span>
+    <span className="flex items-center gap-2 text-gray-400 dark:text-gray-500">
+      {right}
+      <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M7.2 14.8a1 1 0 010-1.4L10.6 10 7.2 6.6a1 1 0 111.4-1.4l4.1 4.1a1 1 0 010 1.4l-4.1 4.1a1 1 0 01-1.4 0z" clipRule="evenodd" /></svg>
+    </span>
+  </button>
+);
+
 const Profile: NextPage = () => {
   const router = useRouter();
   const username = useStoredUsername();
@@ -165,19 +178,6 @@ const Profile: NextPage = () => {
   const triggerFileSelect = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
-
-  const Row = ({ label, onClick, right }: { label: string; onClick?: () => void; right?: React.ReactNode }) => (
-    <button
-      onClick={onClick}
-      className="flex w-full items-center justify-between px-5 py-3.5 text-left text-sm text-gray-800 transition-colors hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/3"
-    >
-      <span className="font-medium">{label}</span>
-      <span className="flex items-center gap-2 text-gray-400 dark:text-gray-500">
-        {right}
-        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M7.2 14.8a1 1 0 010-1.4L10.6 10 7.2 6.6a1 1 0 111.4-1.4l4.1 4.1a1 1 0 010 1.4l-4.1 4.1a1 1 0 01-1.4 0z" clipRule="evenodd" /></svg>
-      </span>
-    </button>
-  );
 
   return (
     <AppShell>

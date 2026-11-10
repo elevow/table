@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { useHydrated } from '../hooks/useHydrated';
 
 export type SidePanelTab = { id: string; label: string; content: React.ReactNode };
 
@@ -17,19 +18,18 @@ const readSaved = (): string | null => {
  * hidden, so live panels keep their data and subscriptions. The last tab chosen is remembered.
  */
 export default function SidePanelTabs({ tabs }: { tabs: SidePanelTab[] }) {
-  const [chosen, setChosen] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
   const buttons = useRef<Record<string, HTMLButtonElement | null>>({});
-
-  useEffect(() => {
-    setChosen(readSaved());
-  }, []);
+  // The tab chosen here, else the one remembered from last time (read once hydrated)
+  const hydrated = useHydrated();
+  const chosen = picked ?? (hydrated ? readSaved() : null);
 
   if (tabs.length === 0) return null;
   // A remembered tab that isn't offered right now (e.g. Hand between games) falls back to the first
   const active = tabs.some(t => t.id === chosen) ? (chosen as string) : tabs[0].id;
 
   const choose = (id: string, focus = false) => {
-    setChosen(id);
+    setPicked(id);
     try {
       window.localStorage.setItem(STORAGE_KEY, id);
     } catch {

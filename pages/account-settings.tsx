@@ -1,22 +1,18 @@
 import type { NextPage } from 'next';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useHydrated } from '../src/hooks/useHydrated';
 
 const AccountSettings: NextPage = () => {
   const router = useRouter();
-  const [playerName, setPlayerName] = useState('');
+  // What's typed here, else the saved name (read once hydrated)
+  const [typedName, setPlayerName] = useState<string | null>(null);
+  const hydrated = useHydrated();
+  const playerName = typedName ?? (hydrated ? localStorage.getItem('playerName') ?? '' : '');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
-  // Load current player name from localStorage on component mount
-  useEffect(() => {
-    const savedPlayerName = localStorage.getItem('playerName');
-    if (savedPlayerName) {
-      setPlayerName(savedPlayerName);
-    }
-  }, []);
-
   const handleSavePlayerName = async (e: React.FormEvent) => {
     e.preventDefault();
     

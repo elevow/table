@@ -436,7 +436,6 @@ export class EfficientDataRetrievalService {
     
     // Log recommendations for manual review (skip in CI)
     if (!runtime.isCI) {
-      // eslint-disable-next-line no-console
       console.log('Optimization recommendations generated:', {
         dataAccess: recommendations.dataAccess.suggestions.length,
         database: recommendations.database.indexRecommendations.length,

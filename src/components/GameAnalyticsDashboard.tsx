@@ -83,6 +83,7 @@ export const useGameAnalytics = (refreshInterval: number = 5000) => {
   }, [collector]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the API; the loading/error state it sets is the point
     refreshAnalytics();
 
     const interval = setInterval(refreshAnalytics, refreshInterval);

@@ -41,12 +41,12 @@ export default function HandReplayPage() {
 
   // Autoplay one step at a time
   useEffect(() => {
-    if (!playing) return;
-    if (frameIndex >= last) {
-      setPlaying(false);
-      return;
-    }
-    const t = setTimeout(() => setFrameIndex(i => Math.min(last, i + 1)), STEP_MS);
+    if (!playing || frameIndex >= last) return;
+    const t = setTimeout(() => {
+      setFrameIndex(Math.min(last, frameIndex + 1));
+      // Autoplay stops on reaching the last step
+      if (frameIndex + 1 >= last) setPlaying(false);
+    }, STEP_MS);
     return () => clearTimeout(t);
   }, [playing, frameIndex, last]);
 

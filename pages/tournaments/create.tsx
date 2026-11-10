@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import TournamentSetupForm from '../../src/components/tournament/TournamentSetupForm';
 import { loadPermissions, postTournamentAction } from '../../src/lib/tournament/client';
 import { authHeaders } from '../../src/utils/auth-headers';
+import { useHydrated } from '../../src/hooks/useHydrated';
 import type { TournamentConfig } from '../../src/types/tournament';
 import type { TournamentState } from '../../src/types/tournament-management';
 
@@ -13,7 +14,9 @@ export default function CreateTournamentPage() {
   const router = useRouter();
   // Assumed until permissions load; the API refuses without tournament.create anyway
   const [canCreate, setCanCreate] = useState(true);
-  const [signedIn, setSignedIn] = useState(true);
+  // Assumed signed in until hydrated, so the page doesn't flash a sign-in warning
+  const hydrated = useHydrated();
+  const signedIn = !hydrated || !!authHeaders().Authorization;
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,10 +25,7 @@ export default function CreateTournamentPage() {
   const [formKey, setFormKey] = useState(0);
 
   useEffect(() => {
-    if (!authHeaders().Authorization) {
-      setSignedIn(false);
-      return;
-    }
+    if (!authHeaders().Authorization) return;
     loadPermissions().then(p => { if (p) setCanCreate(p.includes('tournament.create')); });
   }, []);
 

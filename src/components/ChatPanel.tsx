@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, memo, useCallback } from 'react';
 import type { ChatMessage } from '../types/chat';
 import { useSupabaseChatRealtime } from '../hooks/useSupabaseChatRealtime';
+import { useHydrated } from '../hooks/useHydrated';
 import { authHeaders, getStoredAuthToken } from '../utils/auth-headers';
 
 interface ChatPanelProps {
@@ -31,7 +32,11 @@ function loadMuted(): Record<string, string> {
 }
 
 function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
-  const [muted, setMuted] = useState<Record<string, string>>({});
+  // Mutes changed here, else the ones saved in this browser (read once hydrated)
+  const [changedMutes, setMuted] = useState<Record<string, string> | null>(null);
+  const hydrated = useHydrated();
+  const savedMutes = useMemo(() => (hydrated ? loadMuted() : {}), [hydrated]);
+  const muted = changedMutes ?? savedMutes;
   // The tournament director, if this is a tournament table: always heard, so never mutable
   const [directorId, setDirectorId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -163,11 +168,9 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
     fetchMessages();
   }, [gameId, fetchMessages]);
 
-  useEffect(() => { setMuted(loadMuted()); }, []);
-
   const setMutedFor = (senderId: string, name: string | null) => {
     setMuted(prev => {
-      const next = { ...prev };
+      const next = { ...(prev ?? savedMutes) };
       if (name === null) delete next[senderId];
       else next[senderId] = name;
       try { localStorage.setItem(MUTED_KEY, JSON.stringify(next)); } catch {}
@@ -206,7 +209,6 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
   // Server API broadcasts to the room; no client emit needed
     } catch (err) {
       // minimal: log only
-      // eslint-disable-next-line no-console
       console.error('Send failed', err);
     } finally {
       setLoading(false);
@@ -282,7 +284,6 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
         }
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('Reaction failed', err);
     } finally {
       setReacting(null);
@@ -339,7 +340,6 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
         throw new Error(e?.error || 'Failed to delete');
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('Delete failed', err);
     } finally {
       setDeleting(null);

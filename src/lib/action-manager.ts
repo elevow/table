@@ -38,12 +38,10 @@ export class ActionManager {
     // If AUTO_RUNOUT_DEBUG is enabled, make console.debug visible via console.log and announce
     try {
       if (process?.env?.AUTO_RUNOUT_DEBUG) {
-        // eslint-disable-next-line no-console
         console.log('[auto-runout] debug enabled via AUTO_RUNOUT_DEBUG=1');
         const originalDebug = (console as any).debug?.bind(console) || ((..._args: any[]) => {});
         (console as any).debug = (...args: any[]) => {
           try {
-            // eslint-disable-next-line no-console
             console.log(...args);
           } catch {
             try { originalDebug(...args); } catch {}

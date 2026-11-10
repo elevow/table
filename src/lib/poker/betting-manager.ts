@@ -71,7 +71,6 @@ export class BettingManager {
 
     if (debugFlags.poker) {
       const mode = players.length === 2 ? 'HU' : 'RING';
-      // eslint-disable-next-line no-console
       console.log(`[DEBUG] Blinds (${mode}) dealerIdx=${typeof dealerPosition==='number'?dealerPosition:'n/a'} | SB=${smallBlindPlayer.id} (pos=${smallBlindPlayer.position}) BB=${bigBlindPlayer.id} (pos=${bigBlindPlayer.position})`);
     }
 
@@ -79,7 +78,6 @@ export class BettingManager {
     const bbAmount = this.placeBet(bigBlindPlayer, this.bigBlind);
 
     if (debugFlags.poker) {
-      // eslint-disable-next-line no-console
       console.log(`[DEBUG] Posted blinds: SB ${smallBlindPlayer.id}=${sbAmount} BB ${bigBlindPlayer.id}=${bbAmount} -> potDelta=${sbAmount+bbAmount}`);
     }
 

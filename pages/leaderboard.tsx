@@ -47,6 +47,7 @@ export default function LeaderboardPage() {
       .finally(() => setLoading(false));
   }, [metric]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- loads from the API; the loading/error state it sets is the point
   useEffect(() => { loadBoard(); }, [loadBoard]);
 
   const loadHidden = useCallback(() => {

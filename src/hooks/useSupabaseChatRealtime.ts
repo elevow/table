@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import { useLatest } from './useLatest';
 import { getSupabaseBrowser } from '../lib/realtime/supabaseClient';
 import type { ChatMessage } from '../types/chat';
 
@@ -15,8 +16,7 @@ type ChatCallbacks = {
  * Use this when transport mode is 'supabase' to receive chat updates in real-time.
  */
 export function useSupabaseChatRealtime(roomId?: string, callbacks?: ChatCallbacks) {
-  const cbsRef = useRef<ChatCallbacks | undefined>(callbacks);
-  cbsRef.current = callbacks;
+  const cbsRef = useLatest<ChatCallbacks | undefined>(callbacks);
 
   useEffect(() => {
     if (!roomId) return;
@@ -36,5 +36,5 @@ export function useSupabaseChatRealtime(roomId?: string, callbacks?: ChatCallbac
     return () => {
       try { channel.unsubscribe(); } catch {}
     };
-  }, [roomId]);
+  }, [roomId, cbsRef]);
 }

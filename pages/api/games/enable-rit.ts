@@ -40,7 +40,8 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     if (!prompt || !runItVoters(prompt).includes(playerId)) {
       return res.status(400).json({ error: 'No active Run-It-Twice prompt for this player' });
     }
-    if ((!RUN_IT_TWICE_DECISIONS_ENABLED || !gameState.allowRunItTwice) && runs > 1) {
+    // Run It Twice evaluates boards without wild cards, so wild hands play one board
+    if ((!RUN_IT_TWICE_DECISIONS_ENABLED || !gameState.allowRunItTwice || gameState.wildRule) && runs > 1) {
       return res.status(403).json({ error: 'Run-It-Twice is temporarily disabled' });
     }
 

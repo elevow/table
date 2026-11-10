@@ -1,6 +1,6 @@
 import { DeckManager } from '../deck-manager';
 import { PokerEngine } from '../poker-engine';
-import { maxPlayersForGame, parseWildRule, supportsWildRule } from '../variant-rules';
+import { maxPlayersForGame, parseWildRule, supportsWildRule, wildAllowedFor } from '../variant-rules';
 import {
   evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, wildMatcher,
 } from '../wild-hands';
@@ -251,5 +251,23 @@ describe('showdowns through the engine', () => {
     const plain = engineFor('texas-holdem');
     plain.setAllowRunItTwice(true);
     expect(plain.getState().allowRunItTwice).toBe(true);
+  });
+
+  test("dealer's choice: a wild pick counts at showdown, and the next pick can clear it", () => {
+    stackDeck(FIVE_STUD);
+    const engine = engineFor('five-card-stud');
+    engine.setWildRule('deuces');
+    playToShowdown(engine);
+    expect(stack(engine, 'a')).toBeGreaterThan(100);
+    engine.setWildRule(undefined);
+    expect(engine.getState().wildRule).toBeUndefined();
+    expect('wildRule' in PokerEngine.fromSerialized(engine.serialize() as any).getState()).toBe(false);
+  });
+
+  test('wildAllowedFor: seven-card games up to 7 players, other games any table size', () => {
+    expect(wildAllowedFor('razz', 7)).toBe(true);
+    expect(wildAllowedFor('seven-card-stud', 8)).toBe(false);
+    expect(wildAllowedFor('texas-holdem', 9)).toBe(true);
+    expect(wildAllowedFor('five-card-stud', 9)).toBe(true);
   });
 });

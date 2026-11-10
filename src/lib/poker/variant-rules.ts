@@ -52,7 +52,15 @@ export function maxPlayersForGame(variant?: string | null, wildRule?: WildRule):
   return wildRule && isSevenCardStudVariant(variant) ? MAX_SEVEN_CARD_WILD_PLAYERS : MAX_TABLE_PLAYERS;
 }
 
-/** Dealer's Choice and mixed games change the game each hand, so a wild option does not apply. */
+/** Whether a game can be played with wild cards by this many players (Dealer's Choice picks). */
+export function wildAllowedFor(variant: string | null | undefined, playerCount: number): boolean {
+  return playerCount <= maxPlayersForGame(variant, 'deuces');
+}
+
+/**
+ * Whether the room-level wild option applies. Dealer's Choice picks wilds per hand instead, and
+ * mixed games change the game each hand.
+ */
 export function supportsWildRule(variant?: string | null): boolean {
   return variant !== 'dealers-choice' && variant !== 'mixed';
 }

@@ -17,7 +17,7 @@ import { runItVoters, tallyRunItVotes } from '../../src/lib/shared/run-it-vote';
 import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 import { useCheckTurn } from '../../src/hooks/useCheckTurn';
-import { Card, Player, GameVariant } from '../../src/types/poker';
+import { Card, Player, GameVariant, WildRule } from '../../src/types/poker';
 import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import { useDisplaySettings } from '../../src/hooks/useDisplaySettings';
@@ -44,7 +44,7 @@ import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmaha
 import SplashAnimation, { splashInPlay } from '../../src/components/SplashAnimation';
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
-import { ALL_VARIANTS, VARIANT_LABELS, gameLabel, isOmahaVariant, isStudVariant as isStudGame } from '../../src/lib/poker/variant-rules';
+import { ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, isOmahaVariant, isStudVariant as isStudGame, wildAllowedFor } from '../../src/lib/poker/variant-rules';
 import { studCardOrder } from '../../src/lib/shared/stud-cards';
 import TableCard from '../../src/components/TableCard';
 import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/components/PlayerNotesPanel';
@@ -593,6 +593,8 @@ export default function GamePage() {
   // Dealer's Choice: pending choice prompt from server
   const [awaitingDealerChoice, setAwaitingDealerChoice] = useState<null | { dealerId?: string; allowedVariants?: string[]; current?: string }>(null);
   const [selectedVariantDC, setSelectedVariantDC] = useState<string>('texas-holdem');
+  // Wild cards the dealer picks with the game; '' for none
+  const [selectedWildDC, setSelectedWildDC] = useState<WildRule | ''>('');
   // Track if the dealer has manually changed the selection to avoid overwriting with stale prompts
   const userChangedVariantRef = useRef<boolean>(false);
   const lastAwaitingDealerIdRef = useRef<string | undefined>(undefined);
@@ -621,6 +623,7 @@ export default function GamePage() {
       userChangedVariantRef.current = false;
       lastAwaitingDealerIdRef.current = incomingDealerId;
       setSelectedVariantDC(prompt.current || 'texas-holdem');
+      setSelectedWildDC('');
     } else if (!userChangedVariantRef.current && prompt.current) {
       setSelectedVariantDC(prompt.current);
     }
@@ -629,7 +632,7 @@ export default function GamePage() {
       allowedVariants: prompt.allowedVariants || allowedDealerChoiceVariants.current,
       current: prompt.current || 'texas-holdem',
     });
-  }, [setAwaitingDealerChoice, setSelectedVariantDC]);
+  }, [setAwaitingDealerChoice, setSelectedVariantDC, setSelectedWildDC]);
 
   const computeDealerChoicePrompt = useCallback((state: any) => {
     if (!state || state.stage !== 'awaiting-dealer-choice') return null;
@@ -2487,7 +2490,7 @@ export default function GamePage() {
                 Rebuys: {roomConfig.numberOfRebuys === 'unlimited' ? 'Unlimited' : roomConfig.numberOfRebuys}
               </span>
             )}
-            {tableExtras?.allowRunItTwice && (
+            {tableExtras?.allowRunItTwice && !pokerGameState?.wildRule && (
               <span
                 className="badge badge-violet"
                 title="After an all-in, the weakest hand can choose to run the board more than once"
@@ -2688,6 +2691,11 @@ export default function GamePage() {
                   : [...ALL_VARIANTS];
                 const isMeDealer = dealerId && dealerId === playerId;
                 const labelMap: Record<string, string> = VARIANT_LABELS;
+                // Seven-card games take wilds only with 7 or fewer players
+                const seatedCount = Array.isArray(pokerGameState?.players) ? pokerGameState.players.length : 0;
+                const wildOk = wildAllowedFor(selectedVariantDC, seatedCount);
+                const wildDC = wildOk ? selectedWildDC : '';
+                const choiceLabel = `${labelMap[selectedVariantDC] || selectedVariantDC}${wildDC ? ` (${WILD_RULE_LABELS[wildDC]})` : ''}`;
                 if (isMeDealer) {
                   return (
                     <div>
@@ -2713,12 +2721,37 @@ export default function GamePage() {
                           </label>
                         ))}
                       </div>
+                      <div className="flex flex-wrap items-center gap-3 mt-3">
+                        <span className="text-sm font-medium">Wild cards</span>
+                        {([['', 'None'], ['deuces', WILD_RULE_LABELS['deuces']], ['one-eyed-jacks', WILD_RULE_LABELS['one-eyed-jacks']]] as Array<[WildRule | '', string]>).map(([rule, label]) => {
+                          const disabled = !!rule && !wildOk;
+                          return (
+                            <label key={rule || 'none'} className={`px-3 py-1.5 rounded-sm border text-sm select-none ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${wildDC === rule ? 'bg-fuchsia-700 text-white border-fuchsia-600' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-amber-300 dark:border-amber-600'}`}>
+                              <input
+                                type="radio"
+                                name="dc-wild"
+                                className="hidden"
+                                value={rule}
+                                checked={wildDC === rule}
+                                disabled={disabled}
+                                onChange={() => setSelectedWildDC(rule)}
+                              />
+                              {label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs mt-1 opacity-80">
+                        {wildOk
+                          ? 'Wild hands are fixed limit, and five of a kind is the top hand.'
+                          : `Wild cards in seven-card games need ${MAX_SEVEN_CARD_WILD_PLAYERS} or fewer players.`}
+                      </p>
                       <div className="mt-3">
                         <button
                           onClick={async () => {
                             try {
                               if (!id || !playerId) return;
-                              const response = await api.post('/api/games/next-hand', { tableId: id, playerId, variant: selectedVariantDC });
+                              const response = await api.post('/api/games/next-hand', { tableId: id, playerId, variant: selectedVariantDC, ...(wildDC ? { wildRule: wildDC } : {}) });
                               if (!response.ok) {
                                 console.warn('Dealer choice failed:', response.error);
                               }
@@ -2728,7 +2761,7 @@ export default function GamePage() {
                           }}
                           className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-sm shadow-sm"
                         >
-                          Start {labelMap[selectedVariantDC] || selectedVariantDC}
+                          Start {choiceLabel}
                         </button>
                       </div>
                     </div>

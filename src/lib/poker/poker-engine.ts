@@ -1945,6 +1945,12 @@ export class PokerEngine {
   this.state.activePlayer = '';
   }
 
+  /** Dealer's Choice: the wild cards for the hands the dealer chose; undefined for none. */
+  public setWildRule(rule?: WildRule): void {
+    if (rule) this.state.wildRule = rule;
+    else delete this.state.wildRule;
+  }
+
   // Allow changing variant at runtime before a hand starts
   public setVariant(variant: GameVariant): void {
     if (variant) {

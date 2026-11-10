@@ -2,7 +2,7 @@
  * Tests for chip display utilities
  */
 
-import { formatChipsAsBB, formatChips } from '../chip-display';
+import { formatChipsAsBB, formatChips, formatDollars } from '../chip-display';
 
 describe('formatChipsAsBB', () => {
   it('should format chips as Big Blinds with 1 decimal by default', () => {
@@ -59,5 +59,19 @@ describe('formatChips', () => {
 
   it('should handle large numbers with locale formatting', () => {
     expect(formatChips(1000000, 100, false)).toBe('1,000,000');
+  });
+});
+
+describe('formatDollars', () => {
+  it('drops the cents from whole amounts', () => {
+    expect(formatDollars(20)).toBe('$20');
+    expect(formatDollars(19.999)).toBe('$20');
+    expect(formatDollars(1500)).toBe('$1,500');
+  });
+
+  it('keeps two decimals otherwise', () => {
+    expect(formatDollars(20.5)).toBe('$20.50');
+    expect(formatDollars(0.25)).toBe('$0.25');
+    expect(formatDollars(1500.5)).toBe('$1,500.50');
   });
 });

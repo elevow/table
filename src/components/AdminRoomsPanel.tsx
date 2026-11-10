@@ -194,6 +194,7 @@ export default function AdminRoomsPanel() {
     'five-card-stud': 'Five Card Stud',
     'razz': 'Razz',
     'omaha-5': '5-Card Omaha',
+    'follow-the-queen': 'Follow the Queen',
     'mixed': 'Mixed Games',
     'poker': 'Poker',
   };

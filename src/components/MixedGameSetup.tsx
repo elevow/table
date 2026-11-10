@@ -3,6 +3,7 @@ import type { BettingMode, GameVariant, MixedGameEntry } from '../types/poker';
 import {
   ALL_VARIANTS,
   BETTING_MODE_LABELS,
+  hasBuiltInWilds,
   MIXED_GAME_PRESETS,
   VARIANT_LABELS,
 } from '../lib/poker/variant-rules';
@@ -86,6 +87,8 @@ export default function MixedGameSetup({ games, handsPerGame, onChange }: Props)
                 className={`${inputClass} py-1`}
                 value={g.bettingMode}
                 onChange={e => setMode(g.variant, e.target.value as BettingMode)}
+                // Games with wild cards are always fixed limit
+                disabled={hasBuiltInWilds(g.variant)}
               >
                 {(Object.keys(BETTING_MODE_LABELS) as BettingMode[]).map(m => (
                   <option key={m} value={m}>{BETTING_MODE_LABELS[m]}</option>

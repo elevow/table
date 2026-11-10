@@ -9,11 +9,44 @@ import { HandEvaluator } from './hand-evaluator';
 
 export type WildMatcher = (card: Card) => boolean;
 
-/** Which cards a table's wild rule makes wild; null when nothing is wild. */
-export function wildMatcher(rule?: WildRule): WildMatcher | null {
+/**
+ * Follow the Queen: the rank of the face-up card dealt right after the last face-up queen, or
+ * undefined when no card has followed one yet (a queen dealt last leaves only queens wild).
+ * A queen followed by another queen waits for the next card that isn't one.
+ */
+export function followTheQueenRank(upCardOrder: Card[] = []): Card['rank'] | undefined {
+  let rank: Card['rank'] | undefined;
+  let afterQueen = false;
+  for (const card of upCardOrder) {
+    if (!card) continue;
+    if (card.rank === 'Q') {
+      rank = undefined;
+      afterQueen = true;
+    } else if (afterQueen) {
+      rank = card.rank;
+      afterQueen = false;
+    }
+  }
+  return rank;
+}
+
+/**
+ * Which cards a wild rule makes wild; null when nothing is wild. Follow the Queen also needs the
+ * face-up cards in the order they were dealt.
+ */
+export function wildMatcher(rule?: WildRule, upCardOrder?: Card[]): WildMatcher | null {
   if (rule === 'deuces') return card => card.rank === '2';
   if (rule === 'one-eyed-jacks') return card => card.rank === 'J' && (card.suit === 'spades' || card.suit === 'hearts');
+  if (rule === 'follow-the-queen') {
+    const follow = followTheQueenRank(upCardOrder);
+    return card => card.rank === 'Q' || card.rank === follow;
+  }
   return null;
+}
+
+/** The wild cards of a table's current hand. */
+export function tableWildMatcher(state?: { wildRule?: WildRule; studState?: { upCardOrder?: Card[] } } | null): WildMatcher | null {
+  return wildMatcher(state?.wildRule, state?.studState?.upCardOrder);
 }
 
 /** A best hand; higher scores win and equal scores tie. */

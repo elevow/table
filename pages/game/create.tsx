@@ -14,9 +14,11 @@ import { useRouter } from 'next/router';
 import type { BettingMode, MixedGameEntry, WildRule } from '../../src/types/poker';
 import MixedGameSetup from '../../src/components/MixedGameSetup';
 import { defaultBettingModeForVariant } from '../../src/lib/game/variant-mapping';
-import { DEFAULT_HANDS_PER_GAME, HORSE_GAMES, MAX_TABLE_PLAYERS, maxPlayersForGame, supportsWildRule, WILD_RULE_LABELS } from '../../src/lib/poker/variant-rules';
+import {
+  DEFAULT_HANDS_PER_GAME, HORSE_GAMES, MAX_TABLE_PLAYERS, hasBuiltInWilds, maxPlayersForGame, maxPlayersForMixedGames, supportsWildRule, WILD_RULE_LABELS,
+} from '../../src/lib/poker/variant-rules';
 
-type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'razz' | 'omaha-5' | 'dealers-choice' | 'mixed';
+type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'razz' | 'omaha-5' | 'follow-the-queen' | 'dealers-choice' | 'mixed';
 
 function readAuthToken(): string | null {
   try {
@@ -62,7 +64,9 @@ export default function CreateGameRoomPage() {
   const [isNavigating, setIsNavigating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const seatLimit = maxPlayersForGame(variant, wildRule || undefined);
+  const seatLimit = variant === 'mixed' ? maxPlayersForMixedGames(mixedGames) : maxPlayersForGame(variant, wildRule || undefined);
+  // Games with wild cards are fixed limit and play one board
+  const fixedLimitOnly = !!wildRule || hasBuiltInWilds(variant);
 
   const signInError = hydrated && !isAuthenticated ? 'You must sign in to create a room.' : null;
 
@@ -124,12 +128,12 @@ export default function CreateGameRoomPage() {
           blindLevels: { sb: smallBlind, bb: bigBlind },
           configuration: {
             variant,
-            bettingMode: wildRule ? 'fixed-limit' : bettingMode,
+            bettingMode: fixedLimitOnly ? 'fixed-limit' : bettingMode,
             wildRule: wildRule || undefined,
             numberOfRebuys: numberOfRebuys === 'unlimited' ? 'unlimited' : Number(numberOfRebuys),
             rebuyAmount: numberOfRebuys !== 0 ? rebuyAmount : undefined,
             buyIn,
-            allowRunItTwice: allowRunItTwice && !wildRule,
+            allowRunItTwice: allowRunItTwice && !fixedLimitOnly,
             showAllAtShowdown,
             turnTimeSeconds: clampSetting(turnTimeSeconds, MIN_TURN_SECONDS, MAX_TURN_SECONDS, DEFAULT_TURN_SECONDS),
             timeBanks: clampSetting(timeBanks, 0, MAX_TIME_BANKS, DEFAULT_TIME_BANKS),
@@ -244,8 +248,10 @@ export default function CreateGameRoomPage() {
                 setVariant(next);
                 // Start from the usual betting for the game (Omaha pot limit, Razz fixed limit)
                 if (next !== 'dealers-choice' && next !== 'mixed') setBettingMode(defaultBettingModeForVariant(next));
-                if (!supportsWildRule(next)) setWildRule('');
-                else setMaxPlayers(m => Math.min(m, maxPlayersForGame(next, wildRule || undefined)));
+                const keepsWild = supportsWildRule(next);
+                if (!keepsWild) setWildRule('');
+                // A lower seat limit brings the player count down with it
+                if (next !== 'mixed') setMaxPlayers(m => Math.min(m, maxPlayersForGame(next, keepsWild ? wildRule || undefined : undefined)));
               }}
             >
               <option value="texas-holdem">Texas Hold&apos;em</option>
@@ -256,9 +262,15 @@ export default function CreateGameRoomPage() {
               <option value="five-card-stud">Five-Card Stud</option>
               <option value="razz">Razz (Seven-Card Stud, lowest hand wins)</option>
               <option value="omaha-5">5-Card Omaha</option>
+              <option value="follow-the-queen">Follow the Queen (Seven-Card Stud, queens wild)</option>
               <option value="dealers-choice">Dealer&apos;s Choice (dealer selects each hand)</option>
               <option value="mixed">Mixed Games (rotate every few hands)</option>
             </select>
+            {variant === 'follow-the-queen' && (
+              <p className="hint">
+                Queens are wild. When a queen is dealt face up, the rank of the next face-up card is wild too, replacing any earlier one. If the last face-up card is a queen, only queens are wild.
+              </p>
+            )}
             {variant === 'dealers-choice' && (
               <p className="hint">
                 The dealer will choose the variant before each hand. Betting mode will adapt to the chosen variant (Omaha variants default to Pot-Limit).
@@ -269,9 +281,9 @@ export default function CreateGameRoomPage() {
             <label className="label">Betting mode</label>
             <select
               className="input"
-              value={wildRule ? 'fixed-limit' : bettingMode}
+              value={fixedLimitOnly ? 'fixed-limit' : bettingMode}
               onChange={e => setBettingMode(e.target.value as BettingMode)}
-              disabled={variant === 'dealers-choice' || variant === 'mixed' || !!wildRule}
+              disabled={variant === 'dealers-choice' || variant === 'mixed' || fixedLimitOnly}
             >
               <option value="no-limit">No Limit</option>
               <option value="pot-limit">Pot Limit</option>
@@ -282,7 +294,7 @@ export default function CreateGameRoomPage() {
                 Bets and raises are one big blind early in the hand and two big blinds later, up to four bets per round.
               </p>
             )}
-            {wildRule && <p className="hint">Games with wild cards are always fixed limit.</p>}
+            {fixedLimitOnly && <p className="hint">Games with wild cards are always fixed limit.</p>}
             {variant === 'mixed' && (
               <p className="hint">Each game in the mix sets its own betting.</p>
             )}
@@ -300,7 +312,7 @@ export default function CreateGameRoomPage() {
               value={maxPlayers}
               onChange={e => setMaxPlayers(parseInt(e.target.value || '0', 10))}
             />
-            {wildRule && seatLimit < MAX_TABLE_PLAYERS && (
+            {seatLimit < MAX_TABLE_PLAYERS && (
               <p className="hint">This game seats at most {seatLimit} so the deck can&apos;t run out.</p>
             )}
           </div>
@@ -514,8 +526,8 @@ export default function CreateGameRoomPage() {
             <input
               type="checkbox"
               className="checkbox"
-              checked={allowRunItTwice && !wildRule}
-              disabled={!!wildRule}
+              checked={allowRunItTwice && !fixedLimitOnly}
+              disabled={fixedLimitOnly}
               onChange={e => setAllowRunItTwice(e.target.checked)}
             />
             <span>Allow run it twice</span>

@@ -17,6 +17,9 @@ export function defaultBettingModeForVariant(variant: PokerVariant): BettingMode
     case 'razz':
       // Razz is a limit game; it is new, so there is no existing default to keep
       return 'fixed-limit';
+    case 'follow-the-queen':
+      // Any game with wild cards is played fixed limit
+      return 'fixed-limit';
     case 'seven-card-stud':
     case 'seven-card-stud-hi-lo':
     case 'five-card-stud':
@@ -39,7 +42,7 @@ export function resolveVariantAndMode(options: {
   const variant = (options.variant || 'texas-holdem') as PokerVariant;
   const defaultMode = defaultBettingModeForVariant(variant);
   // Any game with wild cards is played fixed limit
-  const bettingMode = (options.wildRule ? 'fixed-limit' : options.bettingMode || defaultMode) as BettingMode;
+  const bettingMode = (options.wildRule || variant === 'follow-the-queen' ? 'fixed-limit' : options.bettingMode || defaultMode) as BettingMode;
 
   return { variant, bettingMode };
 }

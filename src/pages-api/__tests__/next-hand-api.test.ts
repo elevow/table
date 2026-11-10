@@ -360,6 +360,36 @@ describe('/api/games/next-hand', () => {
       expect(engine.startNewHand).not.toHaveBeenCalled();
     });
 
+    it('plays a Follow the Queen pick at fixed limit, and refuses it with more than seven players', async () => {
+      const engine = createEngine('awaiting-dealer-choice');
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      const res = createRes();
+      await handler(createReq({ tableId: 't1', playerId: 'b', variant: 'follow-the-queen' }), res);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(engine.setVariant).toHaveBeenCalledWith('follow-the-queen');
+      expect(engine.setBettingMode).toHaveBeenCalledWith('fixed-limit');
+
+      jest.clearAllMocks();
+      (global as any).__NEXT_HAND_LOCKS__ = undefined;
+      const crowded = createEngine('awaiting-dealer-choice', 0, { players: eightPlayers });
+      mockGetOrRestoreEngine.mockResolvedValue(crowded);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      const refused = createRes();
+      await handler(createReq({ tableId: 't1', playerId: 'b', variant: 'follow-the-queen' }), refused);
+      expect(refused.status).toHaveBeenCalledWith(400);
+      expect(crowded.startNewHand).not.toHaveBeenCalled();
+    });
+
+    it('ends a Follow the Queen round early when players joining take it past seven', async () => {
+      const engine = createEngine('showdown', 1, { players: eightPlayers, variant: 'follow-the-queen', wildRule: 'follow-the-queen' });
+      mockGetOrRestoreEngine.mockResolvedValue(engine);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());
+      expect(engine.pauseForDealerChoice).toHaveBeenCalled();
+      expect(engine.startNewHand).not.toHaveBeenCalled();
+    });
+
     it('ignores a wild rule sent to a table that is not dealer\'s choice', async () => {
       const engine = createEngine('showdown');
       mockGetOrRestoreEngine.mockResolvedValue(engine);

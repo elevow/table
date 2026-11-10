@@ -39,7 +39,7 @@ export default function CreateGameRoomPage() {
   const [variant, setVariant] = useState<Variant>('texas-holdem');
   const [bettingMode, setBettingMode] = useState<BettingMode>('no-limit');
   const [wildRule, setWildRule] = useState<WildRule | ''>('');
-const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unlimited');
+  const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unlimited');
   const [rebuyAmount, setRebuyAmount] = useState(20);
   const [buyIn, setBuyIn] = useState(1000);
   const [allowRunItTwice, setAllowRunItTwice] = useState(false);
@@ -245,7 +245,8 @@ const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unli
                 // Start from the usual betting for the game (Omaha pot limit, Razz fixed limit)
                 if (next !== 'dealers-choice' && next !== 'mixed') setBettingMode(defaultBettingModeForVariant(next));
                 if (!supportsWildRule(next)) setWildRule('');
-}}
+                else setMaxPlayers(m => Math.min(m, maxPlayersForGame(next, wildRule || undefined)));
+              }}
             >
               <option value="texas-holdem">Texas Hold&apos;em</option>
               <option value="omaha">Omaha</option>
@@ -271,7 +272,7 @@ const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unli
               value={wildRule ? 'fixed-limit' : bettingMode}
               onChange={e => setBettingMode(e.target.value as BettingMode)}
               disabled={variant === 'dealers-choice' || variant === 'mixed' || !!wildRule}
->
+            >
               <option value="no-limit">No Limit</option>
               <option value="pot-limit">Pot Limit</option>
               <option value="fixed-limit">Fixed Limit</option>
@@ -296,7 +297,7 @@ const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unli
               className="input"
               min={2}
               max={seatLimit}
-              value={Math.min(maxPlayers, seatLimit)}
+              value={maxPlayers}
               onChange={e => setMaxPlayers(parseInt(e.target.value || '0', 10))}
             />
             {wildRule && seatLimit < MAX_TABLE_PLAYERS && (
@@ -310,7 +311,12 @@ const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unli
                 id="wild-rule"
                 className="input"
                 value={wildRule}
-                onChange={e => setWildRule(e.target.value as WildRule | '')}
+                onChange={e => {
+                  const next = e.target.value as WildRule | '';
+                  setWildRule(next);
+                  // A lower seat limit brings the player count down with it
+                  setMaxPlayers(m => Math.min(m, maxPlayersForGame(variant, next || undefined)));
+                }}
               >
                 <option value="">None</option>
                 <option value="deuces">{WILD_RULE_LABELS['deuces']}</option>
@@ -318,7 +324,7 @@ const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unli
               </select>
             </div>
           )}
-</div>
+        </div>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="label">Small blind</label>
@@ -511,7 +517,7 @@ const [numberOfRebuys, setNumberOfRebuys] = useState<'unlimited' | number>('unli
               checked={allowRunItTwice && !wildRule}
               disabled={!!wildRule}
               onChange={e => setAllowRunItTwice(e.target.checked)}
-/>
+            />
             <span>Allow run it twice</span>
           </label>
           <p className="hint">

@@ -67,7 +67,9 @@ function getNextHandLocks(): Set<string> {
 
 export default apiHandler({ methods: 'POST' }, async (req, res) => {
   try {
-    const { tableId, playerId: claimedPlayerId, variant: rawVariant, wildRule: rawWildRule } = req.body;
+    const { tableId: rawTableId, playerId: claimedPlayerId, variant: rawVariant, wildRule: rawWildRule } = req.body;
+    // The table id ends up in log lines, so line breaks can't be allowed to forge entries
+    const tableId: string | undefined = typeof rawTableId === 'string' ? rawTableId.replace(/[\r\n]/g, '') : undefined;
 
     const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.play');
     if (!playerId) return;

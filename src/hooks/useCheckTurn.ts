@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { authHeaders } from '../utils/auth-headers';
 import { usePolling } from './usePolling';
+import { useLatest } from './useLatest';
 
 interface TurnStatus {
   isMyTurn: boolean;
@@ -49,8 +50,7 @@ export function useCheckTurn(
   const previousTurnStatusRef = useRef<TurnStatus | null>(null);
   // Kept in a ref: callers pass an inline function, and a new one each render must not restart
   // polling (it used to, which fired a request on every render)
-  const onTurnChangeRef = useRef(onTurnChange);
-  onTurnChangeRef.current = onTurnChange;
+  const onTurnChangeRef = useLatest(onTurnChange);
   const isCheckingRef = useRef(false);
   const isMountedRef = useRef(true);
 
@@ -124,7 +124,7 @@ export function useCheckTurn(
       }
       isCheckingRef.current = false;
     }
-  }, [tableId, playerId]);
+  }, [tableId, playerId, onTurnChangeRef]);
 
   useEffect(() => {
     isMountedRef.current = true;

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useLatest } from '../hooks/useLatest';
 import {
   buildAnnouncements,
   mergeAnnouncements,
@@ -29,8 +30,7 @@ export default function TableAnnouncer({ gameState, viewerId, nameOf, formatAmou
   const queueRef = useRef<string[]>([]);
   const firstQueuedAtRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const ctxRef = useRef({ nameOf, formatAmount });
-  ctxRef.current = { nameOf, formatAmount };
+  const ctxRef = useLatest({ nameOf, formatAmount });
 
   useEffect(() => {
     // A different viewer (signing in, switching seats) starts from a fresh baseline
@@ -59,7 +59,7 @@ export default function TableAnnouncer({ gameState, viewerId, nameOf, formatAmou
       setText('');
       setTimeout(() => setText(merged), 50);
     }, delay);
-  }, [gameState, viewerId]);
+  }, [gameState, viewerId, ctxRef]);
 
   useEffect(() => () => {
     if (timerRef.current) clearTimeout(timerRef.current);

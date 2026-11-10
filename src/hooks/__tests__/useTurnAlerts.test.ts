@@ -219,6 +219,15 @@ describe('useTurnAlerts', () => {
       endTurn();
       expect(document.title).toBe('Table');
     });
+
+    it('stops listening for focus and blur once the turn ends', () => {
+      const remove = jest.spyOn(window, 'removeEventListener');
+      const { endTurn } = startTurn();
+      endTurn();
+      expect(remove).toHaveBeenCalledWith('focus', expect.any(Function));
+      expect(remove).toHaveBeenCalledWith('blur', expect.any(Function));
+      remove.mockRestore();
+    });
   });
 
   it('warns once per turn when time runs low', () => {

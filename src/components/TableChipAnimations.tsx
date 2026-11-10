@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { chipSnapshot, diffChipMoves, POT, type ChipMove, type ChipSnapshot } from '../lib/shared/table-animations';
 import type { SeatAnchor } from './SeatReactionBubbles';
+import { useLatest } from '../hooks/useLatest';
 
 interface Props {
   anchors: SeatAnchor[];
@@ -30,8 +31,7 @@ const prefersReducedMotion = () => {
 export default function TableChipAnimations({ anchors, gameState }: Props) {
   const [sprites, setSprites] = useState<Sprite[]>([]);
   const prevRef = useRef<ChipSnapshot | null>(null);
-  const anchorsRef = useRef(anchors);
-  anchorsRef.current = anchors;
+  const anchorsRef = useLatest(anchors);
   const timersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
   useEffect(() => {
@@ -53,10 +53,11 @@ export default function TableChipAnimations({ anchors, gameState }: Props) {
       if (fromPoint && toPoint) fresh.push({ ...move, fromPoint, toPoint });
     }
     if (fresh.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- starts the animation for chips that just moved; a timer ends it
     setSprites(prev => [...prev.filter(s => !fresh.some(f => f.id === s.id)), ...fresh]);
     const ids = new Set(fresh.map(s => s.id));
     timersRef.current.push(setTimeout(() => setSprites(prev => prev.filter(s => !ids.has(s.id))), CHIP_LIFETIME_MS));
-  }, [gameState]);
+  }, [gameState, anchorsRef]);
 
   useEffect(() => () => timersRef.current.forEach(clearTimeout), []);
 

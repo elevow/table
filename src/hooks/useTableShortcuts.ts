@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { classifyShortcutTarget, resolveShortcut, type ShortcutCommand } from '../lib/shared/table-shortcuts';
+import { useLatest } from './useLatest';
 
 /** How long the first press of A waits for the confirming second press. */
 export const ALL_IN_CONFIRM_MS = 3000;
@@ -27,8 +28,7 @@ export function useTableShortcuts({ enabled, onFold, onCheckOrCall }: Options) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [allInArmed, setAllInArmed] = useState(false);
   const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stateRef = useRef({ enabled, onFold, onCheckOrCall, allInArmed, helpOpen });
-  stateRef.current = { enabled, onFold, onCheckOrCall, allInArmed, helpOpen };
+  const stateRef = useLatest({ enabled, onFold, onCheckOrCall, allInArmed, helpOpen });
 
   const disarm = useCallback(() => {
     if (armTimerRef.current) clearTimeout(armTimerRef.current);
@@ -36,10 +36,14 @@ export function useTableShortcuts({ enabled, onFold, onCheckOrCall }: Options) {
     setAllInArmed(false);
   }, []);
 
-  // An all-in armed on one turn must not carry over to the next
-  useEffect(() => {
-    if (!enabled) disarm();
-  }, [enabled, disarm]);
+  // An all-in armed on one turn must not carry over to the next. Adjusted during render, React's
+  // pattern for state that follows a changing value; a leftover arm timer only sets it false again,
+  // and arming afresh replaces that timer.
+  const [armingEnabled, setArmingEnabled] = useState(enabled);
+  if (armingEnabled !== enabled) {
+    setArmingEnabled(enabled);
+    if (!enabled) setAllInArmed(false);
+  }
 
   useEffect(() => () => {
     if (armTimerRef.current) clearTimeout(armTimerRef.current);
@@ -111,7 +115,7 @@ export function useTableShortcuts({ enabled, onFold, onCheckOrCall }: Options) {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [disarm]);
+  }, [disarm, stateRef]);
 
   return { helpOpen, setHelpOpen, allInArmed };
 }

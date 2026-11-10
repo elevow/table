@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLatest } from './useLatest';
 import { authHeaders } from '../utils/auth-headers';
 import { TIMEOUT_GRACE_MS, bankTimeMs, turnTimeMs } from '../lib/shared/turn-clock';
 
@@ -48,32 +49,35 @@ export function useTurnClock(opts: {
     : null;
 
   // Local deadlines for the current turn, fixed when the turn is first seen so later copies of the
-  // same state (broadcast, action response, refresh) don't make the countdown jump around
-  const turnRef = useRef<{ key: string; deadline: number; baseEnd: number } | null>(null);
-  if (!turnKey) {
-    turnRef.current = null;
-  } else if (turnRef.current?.key !== turnKey) {
-    const deadline = Date.now() + (state!.turnTimeRemainingMs as number);
-    const bankMs = bankTimeMs(state!.players?.find(p => p.id === state!.activePlayer), state!);
-    turnRef.current = { key: turnKey, deadline, baseEnd: deadline - bankMs };
-  }
-
+  // same state (broadcast, action response, refresh) don't make the countdown jump around. They're
+  // set while rendering the turn for the first time, React's pattern for state that follows a
+  // changing value: React re-renders straight away with them, before anything is shown.
+  const [turn, setTurn] = useState<{ key: string; deadline: number; baseEnd: number } | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  if ((turn?.key ?? null) !== turnKey) {
+    if (!turnKey) {
+      setTurn(null);
+    } else {
+      // eslint-disable-next-line react-hooks/purity -- the deadline is measured from when the turn is first seen
+      const seenAt = Date.now();
+      const deadline = seenAt + (state!.turnTimeRemainingMs as number);
+      const bankMs = bankTimeMs(state!.players?.find(p => p.id === state!.activePlayer), state!);
+      setTurn({ key: turnKey, deadline, baseEnd: deadline - bankMs });
+      setNow(seenAt);
+    }
+  }
   useEffect(() => {
     if (!turnKey) return;
-    setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(timer);
   }, [turnKey]);
 
-  const remainingMs = turnRef.current ? turnRef.current.deadline - now : null;
+  const remainingMs = turn ? turn.deadline - now : null;
   const expired = remainingMs !== null && remainingMs <= -TIMEOUT_GRACE_MS;
 
   // Latest values for the request, without restarting it on every render
-  const onStateRef = useRef(onState);
-  onStateRef.current = onState;
-  const turnSeqRef = useRef(state?.turnSeq);
-  turnSeqRef.current = state?.turnSeq;
+  const onStateRef = useLatest(onState);
+  const turnSeqRef = useLatest(state?.turnSeq);
   const [retryNonce, setRetryNonce] = useState(0);
 
   // Once the turn has run out, ask the server to enforce it
@@ -117,10 +121,10 @@ export function useTurnClock(opts: {
       clearTimeout(timer);
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [enforce, turnKey, expired, retryNonce, tableId, playerId]);
+  }, [enforce, turnKey, expired, retryNonce, tableId, playerId, onStateRef, turnSeqRef]);
 
-  if (!turnRef.current || !state?.activePlayer) return NO_CLOCK;
-  const baseRemainingMs = Math.max(0, turnRef.current.baseEnd - now);
+  if (!turn || !state?.activePlayer) return NO_CLOCK;
+  const baseRemainingMs = Math.max(0, turn.baseEnd - now);
   return {
     activePlayer: state.activePlayer,
     remainingMs,

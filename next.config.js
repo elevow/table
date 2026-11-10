@@ -8,9 +8,7 @@ module.exports = (phase, { defaultConfig }) => {
   
   return {
     reactStrictMode: true,
-    // Enable SWC minification for improved build times
-    swcMinify: true,
-    
+
     webpack: (config, { dev, isServer }) => {
       // Keep the chunk size reasonable
       config.optimization.splitChunks = {

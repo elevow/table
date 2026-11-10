@@ -2,7 +2,7 @@
  * Production-Ready Email Service for Password Reset and Notifications
  * 
  * Features:
- * - Multiple email provider support (SendGrid, AWS SES, SMTP)
+ * - Multiple email provider support (SendGrid, SMTP)
  * - Automatic failover and retry logic
  * - Rate limiting and abuse prevention
  * - Professional HTML email templates
@@ -75,7 +75,6 @@ export class EmailService {
   private config: EmailConfig;
   private rateLimiter: EmailRateLimiter;
   private sendGridClient: any;
-  private awsSES: any;
   private smtpTransporter: any;
 
   constructor(config?: EmailConfig) {
@@ -94,18 +93,6 @@ export class EmailService {
             const sgMail = require('@sendgrid/mail');
             sgMail.setApiKey(this.config.sendgrid.apiKey);
             this.sendGridClient = sgMail;
-          }
-          break;
-
-        case 'aws-ses':
-          if (this.config.awsSes) {
-            const AWS = require('aws-sdk');
-            AWS.config.update({
-              accessKeyId: this.config.awsSes.accessKeyId,
-              secretAccessKey: this.config.awsSes.secretAccessKey,
-              region: this.config.awsSes.region
-            });
-            this.awsSES = new AWS.SES();
           }
           break;
 
@@ -224,8 +211,6 @@ export class EmailService {
       switch (this.config.provider) {
         case 'sendgrid':
           return await this.sendWithSendGrid(options);
-        case 'aws-ses':
-          return await this.sendWithAWSSES(options);
         case 'smtp':
           return await this.sendWithSMTP(options);
         default:
@@ -263,43 +248,6 @@ export class EmailService {
       success: true,
       messageId: response[0]?.headers?.['x-message-id'],
       provider: 'sendgrid'
-    };
-  }
-
-  private async sendWithAWSSES(options: SendEmailOptions): Promise<EmailResult> {
-    if (!this.awsSES) {
-      throw new Error('AWS SES not configured');
-    }
-
-    const params = {
-      Destination: {
-        ToAddresses: [options.to]
-      },
-      Message: {
-        Body: {
-          Html: {
-            Charset: 'UTF-8',
-            Data: options.html
-          },
-          Text: {
-            Charset: 'UTF-8',
-            Data: options.text
-          }
-        },
-        Subject: {
-          Charset: 'UTF-8',
-          Data: options.subject
-        }
-      },
-      Source: options.from || this.config.fromEmail,
-      ReplyToAddresses: options.replyTo ? [options.replyTo] : undefined
-    };
-
-    const response = await this.awsSES.sendEmail(params).promise();
-    return {
-      success: true,
-      messageId: response.MessageId,
-      provider: 'aws-ses'
     };
   }
 

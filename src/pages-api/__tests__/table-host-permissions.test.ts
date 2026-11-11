@@ -271,6 +271,14 @@ describe('POST /api/games/rooms/create', () => {
     });
   });
 
+  test("Nicaragua is only a Dealer's Choice pick, not a room's game or part of a mixed game", async () => {
+    mockCaller.current = caller('u1', ['room.create', 'room.choose_variant']);
+    mockCreateRoom.mockResolvedValue({ id: 'r1' });
+    const room = (configuration: Record<string, unknown>) => ({ name: 'T', gameType: 'poker', maxPlayers: 6, configuration });
+    expect((await call(createHandler, 'POST', room({ variant: 'nicaragua' }))).status).toBe(400);
+    expect(mockCreateRoom).not.toHaveBeenCalled();
+  });
+
   describe.each(['baseball', 'midnight-baseball'])('%s', (variant) => {
     const room = (maxPlayers: number, configuration: Record<string, unknown>) => ({ name: 'T', gameType: 'poker', maxPlayers, configuration });
     beforeEach(() => {

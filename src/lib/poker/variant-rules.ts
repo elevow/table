@@ -1,4 +1,4 @@
-import type { BettingMode, GameVariant, MixedGameEntry, WildRule } from '../../types/poker';
+import type { BettingMode, GameVariant, MixedGameEntry, NicaraguaMethod, WildRule } from '../../types/poker';
 
 /**
  * Facts about each game variant, in one place so the engine, the server routes and the table
@@ -16,6 +16,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'razz',
   'five-card-stud',
   'five-card-draw',
+  'nicaragua',
   'follow-the-queen',
   'baseball',
   'midnight-baseball',
@@ -31,6 +32,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'razz': 'Razz',
   'five-card-stud': 'Five-Card Stud',
   'five-card-draw': 'Five-Card Draw',
+  'nicaragua': 'Nicaragua',
   'follow-the-queen': 'Follow the Queen',
   'baseball': 'Baseball',
   'midnight-baseball': 'Midnight Baseball',
@@ -84,7 +86,32 @@ export function isBaseballVariant(variant?: string | null): boolean {
  * the card they keep is an ace.
  */
 export function isDrawVariant(variant?: string | null): boolean {
-  return variant === 'five-card-draw';
+  return variant === 'five-card-draw' || variant === 'nicaragua';
+}
+
+/**
+ * Nicaragua: five-card draw where whoever opens picks how the hand is won and, unless they win,
+ * pays the size of the pot into a new one for another hand. Offered only in Dealer's Choice, as
+ * one game that lasts until an opener wins.
+ */
+export function isNicaraguaVariant(variant?: string | null): boolean {
+  return variant === 'nicaragua';
+}
+
+/** Games only a Dealer's Choice dealer can pick, not a room's game or part of a mixed game. */
+export function isDealersChoiceOnly(variant?: string | null): boolean {
+  return isNicaraguaVariant(variant);
+}
+
+export const NICARAGUA_METHOD_LABELS: Record<NicaraguaMethod, string> = {
+  'high': 'Highest hand wins',
+  'low': 'Lowest hand wins',
+  'high-count': 'Highest count wins',
+  'low-count': 'Lowest count wins',
+};
+
+export function isNicaraguaMethod(v: unknown): v is NicaraguaMethod {
+  return v === 'high' || v === 'low' || v === 'high-count' || v === 'low-count';
 }
 
 /**
@@ -130,7 +157,8 @@ export function variantAllowedFor(variant: string | null | undefined, playerCoun
  * Choice picks). Games with their own wild cards can't.
  */
 export function wildAllowedFor(variant: string | null | undefined, playerCount: number): boolean {
-  return !hasBuiltInWilds(variant) && playerCount <= maxPlayersForGame(variant, 'deuces');
+  // Nicaragua's counts and low hands have no place for a wild card
+  return !hasBuiltInWilds(variant) && !isNicaraguaVariant(variant) && playerCount <= maxPlayersForGame(variant, 'deuces');
 }
 
 /**
@@ -221,7 +249,7 @@ export function parseMixedGames(
   const games: MixedGameEntry[] = [];
   for (const item of raw.slice(0, MAX_MIXED_GAMES)) {
     const variant = typeof item === 'string' ? item : (item as { variant?: unknown })?.variant;
-    if (!isGameVariant(variant)) continue;
+    if (!isGameVariant(variant) || isDealersChoiceOnly(variant)) continue;
     const mode = typeof item === 'object' && item ? (item as { bettingMode?: unknown }).bettingMode : undefined;
     // Games with wild cards are always fixed limit
     const bettingMode = hasBuiltInWilds(variant) ? 'fixed-limit' : isBettingMode(mode) ? mode : defaultMode(variant);

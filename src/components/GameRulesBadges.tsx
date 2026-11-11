@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Card, TableState, WildRule } from '../types/poker';
-import { describeMixedRotation, gameLabel, isHoldemVariant, isStudVariant, WILD_RULE_LABELS } from '../lib/poker/variant-rules';
+import { describeMixedRotation, gameLabel, isHoldemVariant, isStudVariant, NICARAGUA_METHOD_LABELS, WILD_RULE_LABELS } from '../lib/poker/variant-rules';
 import { followTheQueenRank } from '../lib/poker/wild-hands';
 
 interface Props {
@@ -34,6 +34,8 @@ export default function GameRulesBadges({ state }: Props) {
   if (!state) return null;
   const mixed = describeMixedRotation(state.mixedGame);
   const anteApplies = (state.ante || 0) > 0 && !isStudVariant(state.variant);
+  const nicaragua = state.variant === 'nicaragua' ? state.nicaragua : undefined;
+  const opener = nicaragua?.opener ? state.players?.find(p => p.id === nicaragua.opener) : undefined;
   const bountyApplies = (state.sevenDeuceBounty || 0) > 0 && isHoldemVariant(state.variant);
   return (
     <>
@@ -53,6 +55,16 @@ export default function GameRulesBadges({ state }: Props) {
           title={(state.variant === 'midnight-baseball' ? MIDNIGHT_TITLE : WILD_TITLES[state.wildRule]) || 'A wild card counts as whatever makes your hand best. Five of a kind is the top hand.'}
         >
           {wildLabel(state)}
+        </span>
+      )}
+      {nicaragua && (
+        <span
+          className={`${badge} bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-100`}
+          title="Nicaragua: whoever opens picks how the hand is won. If they don't win, they pay the size of the pot into the next hand, until an opener wins."
+        >
+          {nicaragua.method
+            ? `${NICARAGUA_METHOD_LABELS[nicaragua.method]}${opener ? ` · ${opener.name || 'Opener'} opened` : ''}`
+            : 'Opener picks how to win'}
         </span>
       )}
       {!mixed && state.bettingMode === 'fixed-limit' && (

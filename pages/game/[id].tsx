@@ -18,7 +18,8 @@ import { runItVoters, tallyRunItVotes } from '../../src/lib/shared/run-it-vote';
 import OutsDisplay from '../../src/components/OutsDisplay';
 import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 import { useCheckTurn } from '../../src/hooks/useCheckTurn';
-import { Card, Player, GameVariant, WildRule } from '../../src/types/poker';
+import { Card, Player, GameVariant, NicaraguaMethod, WildRule } from '../../src/types/poker';
+import { describeNicaraguaHand } from '../../src/lib/poker/nicaragua';
 import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import { useDisplaySettings } from '../../src/hooks/useDisplaySettings';
@@ -46,7 +47,7 @@ import SplashAnimation, { splashInPlay } from '../../src/components/SplashAnimat
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
 import {
-  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, hasBuiltInWilds, isDrawVariant, isOmahaVariant,
+  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, NICARAGUA_METHOD_LABELS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, hasBuiltInWilds, isDrawVariant, isOmahaVariant,
   isStudVariant as isStudGame, maxPlayersForGame, variantAllowedFor, wildAllowedFor,
 } from '../../src/lib/poker/variant-rules';
 import { studCardOrder } from '../../src/lib/shared/stud-cards';
@@ -946,6 +947,8 @@ export default function GamePage() {
   const [splashArmed, setSplashArmed] = useState(false);
   const splashArmedRef = useLatest(splashArmed);
 
+  // Nicaragua: how the hand is won if this player opens
+  const [nicaraguaMethod, setNicaraguaMethod] = useState<NicaraguaMethod>('high');
   const handlePokerAction = useCallback(async (action: string, amount?: number, extra?: { discards?: number[] }) => {
     if (!pokerGameState || !playerId) {
       console.warn('Cannot perform action: missing game state or player ID');
@@ -976,6 +979,9 @@ export default function GamePage() {
         action,
         amount,
         ...(extra || {}),
+        // Nicaragua: the opening bet says how the hand is won
+        ...(pokerGameState.variant === 'nicaragua' && pokerGameState.stage === 'preflop' && !pokerGameState.nicaragua?.opener
+          && (action === 'bet' || action === 'raise') ? { method: nicaraguaMethod } : {}),
         ...(splash ? { splash: true } : {}),
         // The decision this click answers; the server refuses it if the game has moved on
         expectedTurnSeq: typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
@@ -1011,7 +1017,7 @@ export default function GamePage() {
         pendingActionRef.current = false;
       }, 500);
     }
-  }, [pokerGameState, playerId, id, splashArmedRef]);
+  }, [pokerGameState, playerId, id, splashArmedRef, nicaraguaMethod]);
 
   const handleFold = useCallback(() => handlePokerAction('fold'), [handlePokerAction]);
   const handleCheck = useCallback(() => handlePokerAction('check'), [handlePokerAction]);
@@ -1145,6 +1151,8 @@ export default function GamePage() {
         const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
         if (!holes || holes.length === 0) return null;
         const known = [...holes, ...board];
+        const nicaraguaWay = variant === 'nicaragua' ? pokerGameState?.nicaragua?.method : undefined;
+        if (nicaraguaWay) return describeNicaraguaHand(holes, nicaraguaWay);
         if (wild) return isOmahaVariant(variant) ? evaluateWildOmaha(holes, board, wild).name : evaluateWildHigh(known, wild).name;
         if (known.length < 5) return partialLabel(known);
 
@@ -2771,7 +2779,11 @@ export default function GamePage() {
                           );
                         })}
                       </div>
-                      {builtInWilds ? (
+                      {selectedVariantDC === 'nicaragua' ? (
+                        <p className="text-xs mt-3 opacity-80">
+                          Five-card draw. Whoever opens picks how the hand is won: highest hand, lowest hand (ace-to-five), highest count or lowest count, with picture cards 10 and aces 1 or 11. If the opener doesn&apos;t win, they pay the size of the pot into the next hand. It lasts until an opener wins, then the next player chooses.
+                        </p>
+                      ) : builtInWilds ? (
                         <p className="text-xs mt-3 opacity-80">
                           {selectedVariantDC === 'baseball'
                             ? '3s and 9s are wild. A face-up 4 gets an extra card face down; a face-up 3 means match the pot or fold.'
@@ -3036,6 +3048,25 @@ export default function GamePage() {
               )}
               {showHandValue && myLastCardOdds && (
                 <div className="mb-3 text-sm text-gray-700 dark:text-gray-200" aria-label="Chance to improve">{myLastCardOdds}</div>
+              )}
+              {pokerGameState?.variant === 'nicaragua' && pokerGameState?.stage === 'preflop' && !pokerGameState?.nicaragua?.opener && !myDrawPending && (
+                <div className="mb-3" role="radiogroup" aria-label="If you open, the hand is won by">
+                  <div className="mb-1 text-xs text-gray-600 dark:text-gray-400">If you open, you pick how the hand is won:</div>
+                  <div className="flex flex-wrap gap-1">
+                    {(Object.keys(NICARAGUA_METHOD_LABELS) as NicaraguaMethod[]).map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        role="radio"
+                        aria-checked={nicaraguaMethod === m}
+                        onClick={() => setNicaraguaMethod(m)}
+                        className={`btn btn-sm ${nicaraguaMethod === m ? 'btn-secondary ring-2 ring-emerald-400' : 'btn-ghost'}`}
+                      >
+                        {NICARAGUA_METHOD_LABELS[m]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
               {myDrawPending ? (
                 <div className="flex flex-col gap-2">
@@ -3685,6 +3716,23 @@ export default function GamePage() {
 
                   type EvalRes = { playerId: string; name: string; hand: any; label: string };
                   const wild = tableWildMatcher(pokerGameState);
+                  if (variant === 'nicaragua') {
+                    const way = pokerGameState?.nicaragua?.method || 'high';
+                    if (contenders.length === 0 || !serverWinners.length) {
+                      return <div>Nobody opened, so the pot carries to the next hand.</div>;
+                    }
+                    const hands: Array<{ name: string; label: string }> = contenders.map((p: any) => ({
+                      name: p.name || p.id,
+                      label: Array.isArray(p.holeCards) && p.holeCards.length ? describeNicaraguaHand(p.holeCards, way) : '',
+                    }));
+                    return (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold">{hands.map(h => h.name).join(', ')}</span>
+                        <span>{hands.length > 1 ? 'split the pot' : 'wins the pot'}</span>
+                        {hands[0]?.label ? <span className="opacity-80">({hands[0].label})</span> : null}
+                      </div>
+                    );
+                  }
                   if (variant === 'razz') {
                     // Razz: the lowest hand wins, so name the server's winners with their lows
                     const lows: Array<{ name: string; label: string }> = contenders.map((p: any) => {

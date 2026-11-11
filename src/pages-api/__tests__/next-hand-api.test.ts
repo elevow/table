@@ -420,6 +420,26 @@ describe('/api/games/next-hand', () => {
       expect(midRound.startNewHand).not.toHaveBeenCalled();
     });
 
+    it('keeps dealing Nicaragua, however long the round, until an opener wins; then the next dealer chooses', async () => {
+      // A full round's hands have been played, but the game is not over
+      const going = createEngine('showdown', 9, { variant: 'nicaragua', nicaragua: { opener: 'a', carry: 6 } });
+      mockGetOrRestoreEngine.mockResolvedValue(going);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());
+      expect(going.startNewHand).toHaveBeenCalled();
+      expect(going.pauseForDealerChoice).not.toHaveBeenCalled();
+
+      jest.clearAllMocks();
+      (global as any).__NEXT_HAND_LOCKS__ = undefined;
+      // The first hand of the game: an opener won straight away
+      const over = createEngine('showdown', 1, { variant: 'nicaragua', nicaragua: { opener: 'a', carry: 0, over: true } });
+      mockGetOrRestoreEngine.mockResolvedValue(over);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());
+      expect(over.pauseForDealerChoice).toHaveBeenCalled();
+      expect(over.startNewHand).not.toHaveBeenCalled();
+    });
+
     it('ignores a wild rule sent to a table that is not dealer\'s choice', async () => {
       const engine = createEngine('showdown');
       mockGetOrRestoreEngine.mockResolvedValue(engine);

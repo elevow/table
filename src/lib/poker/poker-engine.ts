@@ -12,9 +12,10 @@ import {
   MAX_TIME_BANK_SECONDS, bankTimeMs, clampSetting, timeBankMs, turnTimeMs,
   MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS,
 } from '../shared/turn-clock';
-import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isDrawVariant, isMidnightBaseballVariant, MIDNIGHT_FLIP_MS, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
+import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isDrawVariant, isNicaraguaMethod, isNicaraguaVariant, isMidnightBaseballVariant, MIDNIGHT_FLIP_MS, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
+import { describeNicaraguaHand, nicaraguaScore } from './nicaragua';
 import { revealedPlayerIds } from './state-sanitizer';
 import { debugFlags, runtime } from '../config/env';
 
@@ -294,7 +295,9 @@ export class PokerEngine {
     this.advanceMixedGame();
     this.deckManager.resetDeck();
     this.gameStateManager.resetPlayerStates();
-    this.gameStateManager.rotateDealerButton();
+    // Nicaragua deals every hand of its game from the same button, so the next player after the
+    // dealer who chose it chooses once it is over
+    if (!this.nicaraguaContinues()) this.gameStateManager.rotateDealerButton();
     this.dealInWaitingPlayers();
     // Sitting-out (and still waiting) players keep their seat and stack but take no part in the hand
     this.state.players.forEach(p => {
@@ -338,7 +341,10 @@ export class PokerEngine {
     } else if (isDrawVariant(this.state.variant)) {
       // Draw games: antes and no blinds; the first player after the button opens
       this.dealHoleCards();
-      this.postGameAntes('preflop');
+      // Nicaragua: later hands of the game are played for the pot carried over, with no antes
+      const carry = this.startNicaraguaHand();
+      if (carry > 0) this.state.pot += carry;
+      else this.postGameAntes('preflop');
       if (this.state.bettingMode === 'fixed-limit') this.state.limitBets = 0;
       if (this.bettorsLeft() >= 2) this.gameStateManager.startBettingRound('preflop');
       else this.startDraw();
@@ -359,7 +365,15 @@ export class PokerEngine {
 
   private logAction(entry: HandActionEntry): void {
     if (!this.state.handActions) this.state.handActions = [];
-    this.state.handActions.push(entry);
+    const actions = this.state.handActions;
+    // Nicaragua's refill is logged as the hand settles, which happens inside the action that
+    // ended it; that action is logged after, so it goes before the refill
+    const last = actions[actions.length - 1];
+    if (last && last.stage === 'showdown' && last.action === 'match-pot' && entry.stage !== 'showdown') {
+      actions.splice(actions.length - 1, 0, entry);
+      return;
+    }
+    actions.push(entry);
   }
 
   /** Put chips from a player's stack into the pot as a forced bet (blind, straddle, ante). */
@@ -1140,7 +1154,12 @@ export class PokerEngine {
       }
       if (action.type !== 'bet') throw new Error('Bring it in or complete the bet');
     }
+    const opening = this.nicaraguaOpening(action);
     this.applyAction(action);
+    if (opening && actor && this.state.nicaragua) {
+      this.state.nicaragua.opener = actor.id;
+      this.state.nicaragua.method = opening;
+    }
     // Completing straight away settles the bring-in
     if (bringIn && action.playerId === bringIn.player) delete bringIn.pending;
     if (actor) {
@@ -1148,6 +1167,7 @@ export class PokerEngine {
       const entry: HandActionEntry = { playerId: actor.id, action: action.type, put, stage };
       if (action.type === 'call' || action.type === 'bet' || action.type === 'raise') entry.amount = betBefore + put;
       if (source === 'timeout') entry.auto = true;
+      if (opening) entry.method = opening;
       this.logAction(entry);
     }
     this.finishDecision(actor, source, now);
@@ -1272,7 +1292,8 @@ export class PokerEngine {
       this.returnUncalledBet();
       // Draw games: the draw follows the first round; the showdown follows the second
       if (isDrawVariant(this.state.variant)) {
-        if (this.state.stage === 'preflop') this.startDraw();
+        if (this.state.stage === 'preflop' && isNicaraguaVariant(this.state.variant) && !this.state.nicaragua?.opener) this.endUnopenedNicaragua();
+        else if (this.state.stage === 'preflop') this.startDraw();
         else this.determineWinner();
         return;
       }
@@ -1530,6 +1551,80 @@ export class PokerEngine {
     const holder = this.midnightHolder();
     return this.nextInSeatOrder(afterId, p => !p.isFolded && p.id !== holder?.id
       && (this.state.studState?.playerCards[p.id]?.downCards.length || 0) > 0);
+  }
+
+  /** Nicaragua: whether the next hand carries on the game (it has a pot carried over and no winner yet). */
+  private nicaraguaContinues(): boolean {
+    const game = this.state.nicaragua;
+    return isNicaraguaVariant(this.state.variant) && !!game && !game.over && (game.carry || 0) > 0;
+  }
+
+  /**
+   * Nicaragua, as a hand starts: the chips carried into it from earlier hands of the game (none
+   * starts a new game, with antes). Other games drop the record of a finished game.
+   */
+  private startNicaraguaHand(): number {
+    if (!isNicaraguaVariant(this.state.variant)) {
+      if (!(this.state.nicaragua?.carry)) delete this.state.nicaragua;
+      return 0;
+    }
+    if (!this.nicaraguaContinues()) {
+      this.state.nicaragua = { carry: 0 };
+      return 0;
+    }
+    const game = this.state.nicaragua!;
+    delete game.opener;
+    delete game.method;
+    return game.carry || 0;
+  }
+
+  /**
+   * Nicaragua: the first bet before the draw opens, and the opener says how the hand is won.
+   * Returns that method for the opening bet; anything else returns undefined.
+   */
+  private nicaraguaOpening(action: PlayerAction): PlayerAction['method'] {
+    if (!isNicaraguaVariant(this.state.variant) || this.state.stage !== 'preflop' || this.state.nicaragua?.opener) return undefined;
+    if (action.type !== 'bet' && action.type !== 'raise') return undefined;
+    if (!isNicaraguaMethod(action.method)) throw new Error('Choose how the hand is won before you open');
+    return action.method;
+  }
+
+  /** Nicaragua: nobody opened, so the pot carries into the next hand of the game. */
+  private endUnopenedNicaragua(): void {
+    const game = (this.state.nicaragua ||= {});
+    const pot = this.state.pot;
+    game.carry = pot;
+    this.state.pot = 0;
+    this.state.currentBet = 0;
+    this.state.players.forEach(p => { p.currentBet = 0; });
+    this.state.stage = 'showdown';
+    this.state.activePlayer = '';
+    this.state.handWinners = [];
+    this.state.handResult = { pot, winnings: {} };
+    this.startTurnClock(Date.now());
+  }
+
+  /**
+   * Nicaragua, once the pot is awarded: an opener who won any of it ends the game. Otherwise the
+   * opener pays the size of the pot (or all they have) into a new pot for another hand. A hand
+   * nobody opened that still ended (everyone else folded) also ends the game.
+   */
+  private finishNicaraguaHand(pot: number, winnings: Record<string, number>): void {
+    const game = (this.state.nicaragua ||= {});
+    game.carry = 0;
+    const opener = this.state.players.find(p => p.id === game.opener);
+    if (!opener || (winnings[opener.id] || 0) > 0) {
+      game.over = true;
+      return;
+    }
+    const refill = Math.max(0, Math.min(pot, opener.stack));
+    if (refill <= 0) {
+      game.over = true;
+      return;
+    }
+    opener.stack -= refill;
+    game.carry = refill;
+    this.logAction({ playerId: opener.id, action: 'match-pot', amount: refill, put: refill, stage: 'showdown' });
   }
 
   /** Players still able to bet: in the hand and not all-in. */
@@ -1854,8 +1949,9 @@ export class PokerEngine {
     delete this.state.drawState;
     const stacksBefore = new Map(this.state.players.map(p => [p.id, p.stack]));
     const starts = this.state.handStartStacks;
+    const nicaraguaCarry = this.state.nicaragua?.carry || 0;
     const potBefore = starts && this.state.players.every(p => typeof starts[p.id] === 'number')
-      ? this.state.players.reduce((sum, p) => sum + Math.max(0, starts[p.id] - p.stack), 0)
+      ? this.state.players.reduce((sum, p) => sum + Math.max(0, starts[p.id] - p.stack), 0) + nicaraguaCarry
       : this.state.pot;
     this.settleHand();
     if (this.state.stage === 'showdown') {
@@ -1868,6 +1964,7 @@ export class PokerEngine {
         if (won > 0) winnings[p.id] = won;
       });
       this.state.handResult = { pot: potBefore, winnings };
+      if (isNicaraguaVariant(this.state.variant)) this.finishNicaraguaHand(potBefore, winnings);
       // A winner turned face up with 7-2 collects the bounty now
       this.maybeAwardSevenDeuceBounty();
       this.startTurnClock(Date.now());
@@ -2290,6 +2387,13 @@ export class PokerEngine {
     const strengths = new Map<string, number>();
     const handViews = new Map<string, { cards: Card[]; description: string }>();
     activePlayers.forEach(p => {
+      if (isNicaraguaVariant(this.state.variant)) {
+        // The opener's method decides who wins
+        const method = this.state.nicaragua?.method || 'high';
+        strengths.set(p.id, nicaraguaScore(p.holeCards || [], method));
+        handViews.set(p.id, { cards: p.holeCards || [], description: describeNicaraguaHand(p.holeCards || [], method) });
+        return;
+      }
       if (wild) {
         const best = isOmahaVariant(this.state.variant)
           ? evaluateWildOmaha(p.holeCards || [], this.state.communityCards, wild)
@@ -2397,11 +2501,14 @@ export class PokerEngine {
         isFolded: p.isFolded || !activePlayers.some(a => a.id === p.id),
       }));
       const contributedTotal = contributions.reduce((sum, c) => sum + c.contributed, 0);
-      if (contributedTotal === potTotal) {
+      // Nicaragua: the pot carried from earlier hands is in the pot but was put in by nobody this hand
+      const carried = isNicaraguaVariant(this.state.variant) ? this.state.nicaragua?.carry || 0 : 0;
+      if (contributedTotal + carried === potTotal) {
         // Baseball: chips paid to match the pot are dead money that any player still in can win,
         // not a bet the others had to call, so they stay out of the side-pot split
         const matched = this.state.studState?.potMatched || {};
-        let dead = 0;
+        // The carried pot is dead money the same way
+        let dead = carried;
         contributions.forEach(c => {
           const m = Math.min(c.contributed, matched[c.id] || 0);
           c.contributed -= m;

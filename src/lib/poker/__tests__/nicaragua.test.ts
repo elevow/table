@@ -154,6 +154,33 @@ describe('Nicaragua', () => {
     expect(player(engine, 'a').stack).toBe(101);
   });
 
+  test('a player who sits down during the game waits for the next one', () => {
+    stackDecks([HIGH, LOW], [LOW, HIGH]);
+    const engine = nicaragua();
+    engine.startNewHand();
+    playOpened(engine, 'low-count');
+    engine.syncSeatedPlayers([{ id: 'c', name: 'c', seatNumber: 3, chips: 100 }]);
+    engine.startNewHand();
+    const s = engine.getState();
+    expect(s.nicaragua?.players).toEqual(['a', 'b']);
+    expect(player(engine, 'c')).toMatchObject({ isFolded: true, stack: 100 });
+    expect(player(engine, 'c').holeCards || []).toHaveLength(0);
+    expect(player(engine, 'a').holeCards).toHaveLength(5);
+    expect(s.pot).toBe(6);
+  });
+
+  test('when the game is left without two of its players, the carried pot goes to the one still here', () => {
+    stackDecks([HIGH, LOW]);
+    const engine = nicaragua();
+    engine.startNewHand();
+    playOpened(engine, 'low-count');
+    expect(engine.getState().nicaragua?.carry).toBe(6);
+    // b won the hand and leaves with the winnings; a's refill goes back to a
+    engine.removePlayer('b');
+    expect(engine.getState().nicaragua).toMatchObject({ carry: 0, over: true });
+    expect(player(engine, 'a').stack).toBe(97);
+  });
+
   test('an opener who folds has lost, and refills the pot', () => {
     stackDecks([HIGH, LOW]);
     const engine = nicaragua();

@@ -340,9 +340,10 @@ export class PokerEngine {
       }
     } else if (isDrawVariant(this.state.variant)) {
       // Draw games: antes and no blinds; the first player after the button opens
-      this.dealHoleCards();
-      // Nicaragua: later hands of the game are played for the pot carried over, with no antes
+      // Nicaragua: later hands of the game are played for the pot carried over, with no antes,
+      // and only by the players who started the game
       const carry = this.startNicaraguaHand();
+      this.dealHoleCards();
       if (carry > 0) this.state.pot += carry;
       else this.postGameAntes('preflop');
       if (this.state.bettingMode === 'fixed-limit') this.state.limitBets = 0;
@@ -1036,6 +1037,8 @@ export class PokerEngine {
     if (this.state.stage !== 'showdown') {
       this.forceFold(playerId);
     }
+    // Between hands, a Nicaragua game can be left without enough players to carry on
+    if (this.state.stage === 'showdown' || this.state.stage === 'awaiting-dealer-choice') this.settleStrandedNicaragua();
   }
 
   private dealHoleCards(): void {
@@ -1045,8 +1048,9 @@ export class PokerEngine {
       for (let i = 0; i < this.state.players.length; i++) {
         const playerPosition = (this.state.dealerPosition + 1 + i) % this.state.players.length;
         const player = this.state.players[playerPosition];
-        if (sitsOutOfHand(player, this.state)) continue;
-        
+        // Players already out of the hand as it starts (sitting out, or not in a Nicaragua game)
+        if (sitsOutOfHand(player, this.state) || player.isFolded) continue;
+
         if (!player.holeCards) {
           player.holeCards = [];
         }
@@ -1569,12 +1573,22 @@ export class PokerEngine {
       return 0;
     }
     if (!this.nicaraguaContinues()) {
-      this.state.nicaragua = { carry: 0 };
+      // Everyone dealt into the first hand is in the game
+      this.state.nicaragua = { carry: 0, players: this.state.players.filter(p => !p.isFolded).map(p => p.id) };
       return 0;
     }
     const game = this.state.nicaragua!;
     delete game.opener;
     delete game.method;
+    // Players who sat down during the game wait for the next one: they put nothing into the pot
+    if (Array.isArray(game.players)) {
+      this.state.players.forEach(p => {
+        if (!game.players!.includes(p.id)) {
+          p.isFolded = true;
+          p.hasActed = true;
+        }
+      });
+    }
     return game.carry || 0;
   }
 
@@ -1601,6 +1615,7 @@ export class PokerEngine {
     this.state.activePlayer = '';
     this.state.handWinners = [];
     this.state.handResult = { pot, winnings: {} };
+    this.settleStrandedNicaragua();
     this.startTurnClock(Date.now());
   }
 
@@ -1613,7 +1628,8 @@ export class PokerEngine {
     const game = (this.state.nicaragua ||= {});
     game.carry = 0;
     const opener = this.state.players.find(p => p.id === game.opener);
-    if (!opener || (winnings[opener.id] || 0) > 0) {
+    // An opener who has left the table has nothing to refill with
+    if (!opener || this.removedPlayers.has(opener.id) || (winnings[opener.id] || 0) > 0) {
       game.over = true;
       return;
     }
@@ -1625,6 +1641,31 @@ export class PokerEngine {
     opener.stack -= refill;
     game.carry = refill;
     this.logAction({ playerId: opener.id, action: 'match-pot', amount: refill, put: refill, stage: 'showdown' });
+    this.settleStrandedNicaragua();
+  }
+
+  /**
+   * Nicaragua between hands: with fewer than two of the game's players still at the table, the
+   * game can't go on, so the carried pot is paid out and the game ends. It goes to the game's
+   * player still here, or, if none is, split among everyone still at the table.
+   */
+  private settleStrandedNicaragua(): void {
+    const game = this.state.nicaragua;
+    const carry = game?.carry || 0;
+    if (!isNicaraguaVariant(this.state.variant) || !game || game.over || carry <= 0) return;
+    const here = this.state.players.filter(p => !this.removedPlayers.has(p.id));
+    const inGame = here.filter(p => !Array.isArray(game.players) || game.players.includes(p.id));
+    if (inGame.length >= 2) return;
+    const recipients = inGame.length > 0 ? inGame : here;
+    if (recipients.length === 0) return;
+    const share = Math.floor(carry / recipients.length);
+    let odd = carry - share * recipients.length;
+    recipients.forEach(p => {
+      p.stack += share + (odd > 0 ? 1 : 0);
+      if (odd > 0) odd -= 1;
+    });
+    game.carry = 0;
+    game.over = true;
   }
 
   /** Players still able to bet: in the hand and not all-in. */

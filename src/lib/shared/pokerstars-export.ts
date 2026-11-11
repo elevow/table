@@ -40,6 +40,7 @@ const GAME_NAME: Record<string, string> = {
   razz: 'Razz',
   'omaha-5': '5 Card Omaha',
   'follow-the-queen': 'Follow the Queen',
+  'baseball': 'Baseball',
 };
 
 const LIMIT_NAME: Record<string, string> = {
@@ -258,6 +259,14 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
     // Bomb pots skip preflop betting, so after the antes the first action is already on the flop
     if (!dealt) deal();
     if (a.stage !== stage) advanceTo(a.stage);
+
+    // Baseball: matching the pot after a face-up 3 is dead money, not a bet on the street
+    if (a.action === 'match-pot') {
+      stacks.set(a.playerId, (stacks.get(a.playerId) ?? 0) - a.put);
+      const allIn = a.put > 0 && (stacks.get(a.playerId) ?? 0) <= 0 ? ' and is all-in' : '';
+      lines.push(`${name(a.playerId)}: matches the pot for ${money(a.put)}${allIn}`);
+      continue;
+    }
 
     const before = streetBets.get(a.playerId) ?? 0;
     streetBets.set(a.playerId, before + a.put);

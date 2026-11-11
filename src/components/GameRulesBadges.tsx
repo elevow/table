@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Card, TableState } from '../types/poker';
+import type { Card, TableState, WildRule } from '../types/poker';
 import { describeMixedRotation, gameLabel, isHoldemVariant, isStudVariant, WILD_RULE_LABELS } from '../lib/poker/variant-rules';
 import { followTheQueenRank } from '../lib/poker/wild-hands';
 
@@ -10,6 +10,12 @@ interface Props {
 const badge = 'inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full';
 
 const RANK_PLURAL: Partial<Record<Card['rank'], string>> = { J: 'Jacks', K: 'Kings', A: 'Aces' };
+
+// The badge's tooltip for games whose wild cards come with special rules
+const WILD_TITLES: Partial<Record<WildRule, string>> = {
+  'follow-the-queen': 'Queens are wild, and so is the rank of the card dealt face up after the last face-up queen. Five of a kind is the top hand.',
+  'baseball': '3s and 9s are wild. A 4 dealt face up gets an extra card face down; a 3 dealt face up means match the pot or fold. Five of a kind is the top hand.',
+};
 
 /** "Deuces Wild"; in Follow the Queen, what is wild right now, such as "Queens & 7s Wild". */
 function wildLabel(state: TableState): string {
@@ -42,9 +48,7 @@ export default function GameRulesBadges({ state }: Props) {
       {state.wildRule && (
         <span
           className={`${badge} bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/60 dark:text-fuchsia-100`}
-          title={state.wildRule === 'follow-the-queen'
-            ? 'Queens are wild, and so is the rank of the card dealt face up after the last face-up queen. Five of a kind is the top hand.'
-            : 'A wild card counts as whatever makes your hand best. Five of a kind is the top hand.'}
+          title={WILD_TITLES[state.wildRule] || 'A wild card counts as whatever makes your hand best. Five of a kind is the top hand.'}
         >
           {wildLabel(state)}
         </span>

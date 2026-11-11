@@ -16,6 +16,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'razz',
   'five-card-stud',
   'follow-the-queen',
+  'baseball',
 ];
 
 export const VARIANT_LABELS: Record<GameVariant, string> = {
@@ -28,6 +29,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'razz': 'Razz',
   'five-card-stud': 'Five-Card Stud',
   'follow-the-queen': 'Follow the Queen',
+  'baseball': 'Baseball',
 };
 
 export const BETTING_MODE_LABELS: Record<BettingMode, string> = {
@@ -40,24 +42,44 @@ export const WILD_RULE_LABELS: Record<WildRule, string> = {
   'deuces': 'Deuces Wild',
   'one-eyed-jacks': 'One-Eyed Jacks Wild',
   'follow-the-queen': 'Queens Wild',
+  'baseball': '3s & 9s Wild',
 };
 
-/** A wild option a host or dealer can choose; Follow the Queen's wilds come with that game instead. */
+/** A wild option a host or dealer can choose; games with their own wild cards set them instead. */
 export function parseWildRule(v: unknown): WildRule | undefined {
   return v === 'deuces' || v === 'one-eyed-jacks' ? v : undefined;
 }
 
+// Games whose wild cards are part of the game, not a table option
+const BUILT_IN_WILDS: Partial<Record<GameVariant, WildRule>> = {
+  'follow-the-queen': 'follow-the-queen',
+  'baseball': 'baseball',
+};
+
+/** The wild cards a game comes with, if it has its own. */
+export function builtInWildRule(variant?: string | null): WildRule | undefined {
+  return variant ? BUILT_IN_WILDS[variant as GameVariant] : undefined;
+}
+
 /** Games whose wild cards are part of the game, not a table option. */
 export function hasBuiltInWilds(variant?: string | null): boolean {
-  return variant === 'follow-the-queen';
+  return !!builtInWildRule(variant);
+}
+
+/** Baseball deals an extra card for each face-up 4 and asks a face-up 3 to match the pot. */
+export function isBaseballVariant(variant?: string | null): boolean {
+  return variant === 'baseball';
 }
 
 export const MAX_TABLE_PLAYERS = 9;
 // Seven cards each for seven players is 49 of the 52, so an eighth player could not be dealt in
 export const MAX_SEVEN_CARD_WILD_PLAYERS = 7;
+// Baseball's face-up 4s can each deal an extra card: six players need 42 cards plus up to 4 more
+export const MAX_BASEBALL_PLAYERS = 6;
 
 /** The most players a table can seat for this game. */
 export function maxPlayersForGame(variant?: string | null, wildRule?: WildRule): number {
+  if (isBaseballVariant(variant)) return MAX_BASEBALL_PLAYERS;
   const wild = !!wildRule || hasBuiltInWilds(variant);
   return wild && isSevenCardStudVariant(variant) ? MAX_SEVEN_CARD_WILD_PLAYERS : MAX_TABLE_PLAYERS;
 }
@@ -74,7 +96,7 @@ export function variantAllowedFor(variant: string | null | undefined, playerCoun
 
 /**
  * Whether a game can take the Deuces or One-Eyed Jacks option with this many players (Dealer's
- * Choice picks). Follow the Queen has its own wild cards, so it can't.
+ * Choice picks). Games with their own wild cards can't.
  */
 export function wildAllowedFor(variant: string | null | undefined, playerCount: number): boolean {
   return !hasBuiltInWilds(variant) && playerCount <= maxPlayersForGame(variant, 'deuces');
@@ -98,12 +120,12 @@ export function isBettingMode(v: unknown): v is BettingMode {
 
 /** Stud games: no board; each player has their own down and up cards. */
 export function isStudVariant(v?: string | null): boolean {
-  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud' || v === 'razz' || v === 'follow-the-queen';
+  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball';
 }
 
 /** Stud games dealt to seven cards (third to seventh street). */
 export function isSevenCardStudVariant(v?: string | null): boolean {
-  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'razz' || v === 'follow-the-queen';
+  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball';
 }
 
 /** Omaha games: the best hand uses exactly two hole cards and three board cards. */

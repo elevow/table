@@ -89,6 +89,24 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'baseball': {
+    variant: 'baseball',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [
+      { type: 'hand-info' },
+      { type: 'stud-exposed-cards' },
+    ],
+    helpContent: {
+      title: 'Baseball',
+      summary: 'Seven‑card stud with 3s and 9s wild.',
+      bullets: [
+        'A 4 dealt face up gets you an extra card, face down',
+        'A 3 dealt face up means match the pot or fold',
+        'Five of a kind is the top hand; always fixed limit, at most 6 players',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'seven-card-stud-hi-lo': {
     variant: 'seven-card-stud-hi-lo',
     controls: [

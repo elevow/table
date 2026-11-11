@@ -19,6 +19,9 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   // Dealer's Choice only: five-card draw where the opener picks how the hand is won and, unless
   // they win, refills the pot for another hand
   | 'nicaragua'
+  // Seven cards; pass 3, 2 and 1 to the left with betting after each, keep five, then turn them up
+  // one at a time with betting after each
+  | 'pass-the-trash'
   // Baseball dealt all face down: nobody looks, and each player turns cards until they beat the high hand
   | 'midnight-baseball';
 
@@ -98,6 +101,8 @@ export interface HandActionEntry {
     | 'match-pot'
     // Draw games: swapped drawCount cards (0 = stood pat)
     | 'draw'
+    // Pass the Trash: passed drawCount cards to the left; kept five
+    | 'pass' | 'keep'
     // Paid after the hand, straight to the player in toPlayerId rather than into the pot
     | 'bounty'
     // The part of a bet nobody could call, handed back when the betting round ends (put is negative)
@@ -231,6 +236,10 @@ export interface TableState {
   // the cards thrown away so far, which are shuffled back in if the deck runs out (never sent to
   // players)
   drawState?: { pending: string[]; muck?: Card[] };
+  // Pass the Trash: step is the position in the hand's sequence (passes, betting, keeping five,
+  // turning cards); during a pass or the keep, pending players choose at once on one clock, and
+  // picks holds their choices (each player sees only their own)
+  trash?: { step: number; pending?: string[]; picks?: Record<string, number[]>; startedAt?: number; deadline?: number };
   // Nicaragua, one game lasting until an opener wins: the opener and the way they chose this hand
   // is won, and carry, chips in the pot from earlier hands of the game (the opener's refill, or a
   // pot nobody opened). over: an opener won, so the next dealer chooses. players: those dealt
@@ -270,7 +279,9 @@ export interface PlayerAction {
   // bring-in: the stud bring-in player posting the bring-in rather than completing
   // match-pot: Baseball, a player dealt a face-up 3 paying the size of the pot to stay in
   // draw: a draw game's draw, swapping the cards at the discards positions in holeCards
-  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw';
+  // pass: Pass the Trash, passing the down cards at discards to the left; keep: keeping the five
+  // down cards at discards, in the order they will be turned up
+  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw' | 'pass' | 'keep';
   playerId: string;
   tableId: string;
   amount?: number;

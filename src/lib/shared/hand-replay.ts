@@ -29,6 +29,8 @@ const VERB: Record<HandActionEntry['action'], string> = {
   'bring-in': 'brings it in',
   'match-pot': 'matches the pot with',
   draw: 'draws',
+  pass: 'passes cards',
+  keep: 'keeps five cards',
   fold: 'folds',
   check: 'checks',
   call: 'calls',
@@ -70,6 +72,10 @@ export function describeAction(
     const n = a.drawCount || 0;
     const what = n === 0 ? 'stands pat' : `draws ${n} card${n === 1 ? '' : 's'}`;
     return `${name} ${what}${a.auto ? ' (timed out)' : ''}`;
+  }
+  if (a.action === 'pass') {
+    const n = a.drawCount || 0;
+    return `${name} passes ${n} card${n === 1 ? '' : 's'} to the left${a.auto ? ' (timed out)' : ''}`;
   }
   if (a.action === 'bounty') {
     const to = a.toPlayerId ? nameOf?.(a.toPlayerId) : undefined;

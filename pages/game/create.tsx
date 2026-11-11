@@ -18,7 +18,7 @@ import {
   DEFAULT_HANDS_PER_GAME, HORSE_GAMES, MAX_TABLE_PLAYERS, hasBuiltInWilds, maxPlayersForGame, maxPlayersForMixedGames, supportsWildRule, WILD_RULE_LABELS,
 } from '../../src/lib/poker/variant-rules';
 
-type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'five-card-draw' | 'razz' | 'omaha-5' | 'follow-the-queen' | 'baseball' | 'midnight-baseball' | 'dealers-choice' | 'mixed';
+type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'five-card-draw' | 'pass-the-trash' | 'razz' | 'omaha-5' | 'follow-the-queen' | 'baseball' | 'midnight-baseball' | 'dealers-choice' | 'mixed';
 
 function readAuthToken(): string | null {
   try {
@@ -261,6 +261,7 @@ export default function CreateGameRoomPage() {
               <option value="seven-card-stud-hi-lo">Seven-Card Stud Hi-Lo (8 or Better)</option>
               <option value="five-card-stud">Five-Card Stud</option>
               <option value="five-card-draw">Five-Card Draw</option>
+              <option value="pass-the-trash">Pass the Trash (pass 3-2-1, keep five, roll them up)</option>
               <option value="razz">Razz (Seven-Card Stud, lowest hand wins)</option>
               <option value="omaha-5">5-Card Omaha</option>
               <option value="follow-the-queen">Follow the Queen (Seven-Card Stud, queens wild)</option>
@@ -269,6 +270,11 @@ export default function CreateGameRoomPage() {
               <option value="dealers-choice">Dealer&apos;s Choice (dealer selects each hand)</option>
               <option value="mixed">Mixed Games (rotate every few hands)</option>
             </select>
+            {variant === 'pass-the-trash' && (
+              <p className="hint">
+                Seven cards each, face down. Pass 3 to the left, then 2, then 1, with betting after each; keep five, then turn them up one at a time with betting after each. Seats up to 7.
+              </p>
+            )}
             {variant === 'five-card-draw' && (
               <p className="hint">
                 Everyone antes and gets five cards. After a round of betting, each player can swap up to 3 cards (4 if they keep an ace), then there is a final round of betting. Seats up to 7.

@@ -50,17 +50,17 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
 
     // Build PlayerAction object
     const playerAction = {
-      type: action.toLowerCase() as 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw',
+      type: action.toLowerCase() as 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw' | 'pass' | 'keep',
       playerId,
       tableId,
       amount,
-      discards: Array.isArray(discards) ? discards.slice(0, 5).map(Number) : undefined,
+      discards: Array.isArray(discards) ? discards.slice(0, 7).map(Number) : undefined,
       method: isNicaraguaMethod(method) ? method : undefined,
       timestamp: Date.now(),
     };
 
     // Validate action type
-    const validActions = ['fold', 'check', 'call', 'bet', 'raise', 'bring-in', 'match-pot', 'draw'];
+    const validActions = ['fold', 'check', 'call', 'bet', 'raise', 'bring-in', 'match-pot', 'draw', 'pass', 'keep'];
     if (!validActions.includes(playerAction.type)) {
       return res.status(400).json({ error: `Unknown action: ${action}` });
     }

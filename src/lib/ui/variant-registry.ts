@@ -193,6 +193,22 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'pass-the-trash': {
+    variant: 'pass-the-trash',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }, { type: 'stud-exposed-cards' }],
+    helpContent: {
+      title: 'Pass the Trash',
+      summary: 'Seven cards each, all face down. Pass cards to the left, keep five, then turn them up one at a time.',
+      bullets: [
+        'Pass 3 cards to the left, bet; pass 2, bet; pass 1, bet',
+        'Keep five cards, picking the order you will turn them up',
+        'Turn one card up at a time, with betting after each; the best hand wins',
+        'Everyone passes and keeps at the same time; running out of time passes your lowest cards or keeps your best five',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'razz': {
     variant: 'razz',
     controls: [commonControls.bet, commonControls.check, commonControls.fold],

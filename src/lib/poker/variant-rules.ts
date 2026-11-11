@@ -13,6 +13,8 @@ export const ALL_VARIANTS: GameVariant[] = [
   'omaha-hi-lo',
   'seven-card-stud',
   'seven-card-stud-hi-lo',
+  'high-chicago',
+  'low-chicago',
   'razz',
   'five-card-stud',
   'five-card-draw',
@@ -29,6 +31,8 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'omaha-hi-lo': 'Omaha Hi-Lo',
   'seven-card-stud': 'Seven-Card Stud',
   'seven-card-stud-hi-lo': 'Seven-Card Stud Hi-Lo',
+  'high-chicago': 'High Chicago',
+  'low-chicago': 'Low Chicago',
   'razz': 'Razz',
   'five-card-stud': 'Five-Card Stud',
   'five-card-draw': 'Five-Card Draw',
@@ -179,12 +183,12 @@ export function isBettingMode(v: unknown): v is BettingMode {
 
 /** Stud games: no board; each player has their own down and up cards. */
 export function isStudVariant(v?: string | null): boolean {
-  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball' || v === 'midnight-baseball';
+  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball' || v === 'midnight-baseball' || v === 'high-chicago' || v === 'low-chicago';
 }
 
 /** Stud games dealt seven cards each (Midnight Baseball deals all seven at once, face down). */
 export function isSevenCardStudVariant(v?: string | null): boolean {
-  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball' || v === 'midnight-baseball';
+  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball' || v === 'midnight-baseball' || v === 'high-chicago' || v === 'low-chicago';
 }
 
 /** Omaha games: the best hand uses exactly two hole cards and three board cards. */

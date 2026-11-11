@@ -126,9 +126,24 @@ export function formatSevenDeuceBounty(state: TableState): string | null {
  */
 export function formatHandResult(state: TableState): FormattedHandResult | null {
   const result = formatHandResultBase(state);
-  const bountyLine = formatSevenDeuceBounty(state);
-  if (!result || !bountyLine) return result;
-  return { ...result, message: `${result.message} | ${bountyLine}` };
+  const extra = [formatChicagoSpades(state), formatSevenDeuceBounty(state)].filter(Boolean);
+  if (extra.length === 0) return result;
+  // Stud showdowns have no line of their own here; a Chicago spade still gets one
+  if (!result) return { message: extra.join(' | '), winners: [], isWinByFold: false };
+  return { ...result, message: [result.message, ...extra].join(' | ') };
+}
+
+const SUIT_SYMBOL: Record<string, string> = { spades: '♠', hearts: '♥', diamonds: '♦', clubs: '♣' };
+
+/** High and Low Chicago: who won half the pot with their spade in the hole. */
+function formatChicagoSpades(state: TableState): string | null {
+  const wins = state.chicagoResult || [];
+  if (state.stage !== 'showdown' || wins.length === 0) return null;
+  return wins.map(w => {
+    const player = (state.players || []).find(p => p.id === w.playerId);
+    const name = player ? getPlayerName(player) : w.playerId.slice(0, 6);
+    return `${name} wins $${w.amount} with the ${w.card.rank}${SUIT_SYMBOL[w.card.suit] || ''} in the hole`;
+  }).join(', ');
 }
 
 /**

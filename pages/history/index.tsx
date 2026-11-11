@@ -22,6 +22,8 @@ const VARIANT_LABEL: Record<string, string> = {
   'baseball': 'Baseball',
   'five-card-draw': 'Five-Card Draw',
   'nicaragua': 'Nicaragua',
+  'high-chicago': 'High Chicago',
+  'low-chicago': 'Low Chicago',
   'midnight-baseball': 'Midnight Baseball',
 };
 

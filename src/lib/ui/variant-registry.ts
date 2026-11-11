@@ -193,6 +193,35 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'high-chicago': {
+    variant: 'high-chicago',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }, { type: 'stud-exposed-cards' }],
+    helpContent: {
+      title: 'High Chicago',
+      summary: 'Seven-card stud where the highest spade in the hole wins half the pot.',
+      bullets: [
+        'The best hand wins the other half',
+        'With no spade in the hole among the players left, the best hand takes it all',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
+  'low-chicago': {
+    variant: 'low-chicago',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }, { type: 'stud-exposed-cards' }],
+    helpContent: {
+      title: 'Low Chicago',
+      summary: 'Seven-card stud where the lowest spade in the hole wins half the pot.',
+      bullets: [
+        'Aces are high, so the 2 of spades is the best spade',
+        'The best hand wins the other half',
+        'With no spade in the hole among the players left, the best hand takes it all',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'razz': {
     variant: 'razz',
     controls: [commonControls.bet, commonControls.check, commonControls.fold],

@@ -16,6 +16,7 @@ import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isD
 import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
 import { describeNicaraguaHand, nicaraguaScore } from './nicaragua';
+import { chicagoSpade, chicagoSpadeScore, isChicagoVariant } from './chicago';
 import { revealedPlayerIds } from './state-sanitizer';
 import { debugFlags, runtime } from '../config/env';
 
@@ -310,6 +311,7 @@ export class PokerEngine {
     delete this.state.shownCards;
     delete this.state.handResult;
     delete this.state.lastHiLoResult;
+    delete this.state.chicagoResult;
     delete this.state.straddle;
     delete this.state.sevenDeuceResult;
     this.state.handId = randomUUID();
@@ -2336,7 +2338,7 @@ export class PokerEngine {
     }
 
   // Stud showdown path: evaluate with stud cards (best 5 from available)
-  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'five-card-stud' || this.state.variant === 'razz' || hasBuiltInWilds(this.state.variant)) {
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'five-card-stud' || this.state.variant === 'razz' || hasBuiltInWilds(this.state.variant) || isChicagoVariant(this.state.variant)) {
       const rankWeight: Record<Card['rank'], number> = {
         '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14,
       };
@@ -2377,10 +2379,32 @@ export class PokerEngine {
         handViews.set(p.id, { cards: hr.cards, description: hr.name });
       });
 
+      // Chicago: half of each pot goes to the best spade in the hole among its players (the
+      // high hand gets the odd chip); with no spade in the hole among them, the high hand takes it
+      let handPots = potsToDistribute;
+      const spadeWins = new Map<string, number>();
+      if (isChicagoVariant(this.state.variant)) {
+        const downOf = (id: string) => this.state.studState?.playerCards[id]?.downCards;
+        handPots = potsToDistribute.map(pot => {
+          let best: string | undefined;
+          let bestScore = 0;
+          pot.eligiblePlayers.forEach(id => {
+            const score = chicagoSpadeScore(downOf(id), this.state.variant);
+            if (score > bestScore) { best = id; bestScore = score; }
+          });
+          if (!best) return pot;
+          const half = Math.floor(pot.amount / 2);
+          spadeWins.set(best, (spadeWins.get(best) || 0) + half);
+          return { ...pot, amount: pot.amount - half };
+        });
+        this.state.chicagoResult = Array.from(spadeWins.entries()).map(([playerId, amount]) => ({
+          playerId, amount, card: chicagoSpade(downOf(playerId), this.state.variant)!,
+        }));
+      }
       const distribution = this.state.players.map(p => ({ playerId: p.id, winAmount: 0, strength: strengths.get(p.id) }));
-      PotCalculator.distributePots(potsToDistribute, distribution);
+      PotCalculator.distributePots(handPots, distribution);
       this.state.players.forEach(p => {
-        const win = distribution.find(d => d.playerId === p.id)?.winAmount || 0;
+        const win = (distribution.find(d => d.playerId === p.id)?.winAmount || 0) + (spadeWins.get(p.id) || 0);
         if (win > 0) { p.stack += win; this.log(`Awarded ${win} to ${p.id} (stack now: ${p.stack})`); }
       });
       this.state.players.forEach(p => { p.currentBet = 0; });

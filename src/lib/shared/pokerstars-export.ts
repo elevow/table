@@ -41,6 +41,7 @@ const GAME_NAME: Record<string, string> = {
   'omaha-5': '5 Card Omaha',
   'follow-the-queen': 'Follow the Queen',
   'baseball': 'Baseball',
+  'midnight-baseball': 'Midnight Baseball',
 };
 
 const LIMIT_NAME: Record<string, string> = {

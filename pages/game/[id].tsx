@@ -2746,6 +2746,8 @@ export default function GamePage() {
                         <p className="text-xs mt-3 opacity-80">
                           {selectedVariantDC === 'baseball'
                             ? '3s and 9s are wild. A face-up 4 gets an extra card face down; a face-up 3 means match the pot or fold.'
+                            : selectedVariantDC === 'midnight-baseball'
+                            ? 'All cards face down and nobody looks; each player turns cards until they beat the high hand, then everyone bets. 3s and 9s are wild, a 4 turned up gets an extra card, a 3 turned up means match the pot or fold.'
                             : 'Queens are wild, and so is the rank of the card dealt face up after the last face-up queen.'}
                           {' '}Fixed limit; five of a kind is the top hand.
                         </p>
@@ -3009,7 +3011,7 @@ export default function GamePage() {
               {myPotMatchPending ? (
                 <div className="flex flex-col gap-2">
                   <p className="text-sm text-gray-700 dark:text-gray-300">
-                    You were dealt a 3 face up. Match the pot to stay in, or fold.
+                    {pokerGameState?.variant === 'midnight-baseball' ? 'You turned up a 3' : 'You were dealt a 3 face up'}. Match the pot to stay in, or fold.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button

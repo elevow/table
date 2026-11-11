@@ -2,7 +2,7 @@ import type { TableState, Card, Player } from '../../types/poker';
 import { HandEvaluator } from '../poker/hand-evaluator';
 import type { HandInterface } from '../../types/poker-engine';
 import { isOmahaVariant as isOmahaGame, isStudVariant } from '../poker/variant-rules';
-import { evaluateWildHigh, evaluateWildOmaha, evaluateWildRazz, wildMatcher } from '../poker/wild-hands';
+import { evaluateWildHigh, evaluateWildOmaha, evaluateWildRazz, tableWildMatcher } from '../poker/wild-hands';
 
 /**
  * System sender ID used for hand result messages
@@ -136,7 +136,7 @@ export function formatHandResult(state: TableState): FormattedHandResult | null 
  */
 function formatRazzResult(state: TableState): FormattedHandResult | null {
   const winnerIds = Array.isArray(state.handWinners) ? state.handWinners : [];
-  const wild = wildMatcher(state.wildRule);
+  const wild = tableWildMatcher(state);
   const winners: HandWinner[] = winnerIds.map(id => {
     const player = (state.players || []).find(p => p.id === id);
     const st = state.studState?.playerCards?.[id];
@@ -271,7 +271,7 @@ function formatHandResultBase(state: TableState): FormattedHandResult | null {
   try {
     // Evaluate all active players' hands
     const evaluations: PlayerHandEvaluation[] = [];
-    const wild = wildMatcher(state.wildRule);
+    const wild = tableWildMatcher(state);
 
     for (const player of activePlayers) {
       const holeCards = player.holeCards || [];

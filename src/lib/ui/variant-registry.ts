@@ -71,6 +71,24 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'follow-the-queen': {
+    variant: 'follow-the-queen',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [
+      { type: 'hand-info' },
+      { type: 'stud-exposed-cards' },
+    ],
+    helpContent: {
+      title: 'Follow the Queen',
+      summary: 'Seven‑card stud with wild cards: queens, and the rank of the card dealt face up after the last face‑up queen.',
+      bullets: [
+        'Each face‑up queen makes the next face‑up card’s rank wild, replacing the earlier one',
+        'If the last face‑up card is a queen, only queens are wild',
+        'Five of a kind is the top hand; always fixed limit',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'seven-card-stud-hi-lo': {
     variant: 'seven-card-stud-hi-lo',
     controls: [

@@ -1,12 +1,22 @@
 import React from 'react';
-import type { TableState } from '../types/poker';
+import type { Card, TableState } from '../types/poker';
 import { describeMixedRotation, gameLabel, isHoldemVariant, isStudVariant, WILD_RULE_LABELS } from '../lib/poker/variant-rules';
+import { followTheQueenRank } from '../lib/poker/wild-hands';
 
 interface Props {
   state?: TableState | null;
 }
 
 const badge = 'inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full';
+
+const RANK_PLURAL: Partial<Record<Card['rank'], string>> = { J: 'Jacks', K: 'Kings', A: 'Aces' };
+
+/** "Deuces Wild"; in Follow the Queen, what is wild right now, such as "Queens & 7s Wild". */
+function wildLabel(state: TableState): string {
+  if (state.wildRule !== 'follow-the-queen') return state.wildRule ? WILD_RULE_LABELS[state.wildRule] : '';
+  const follow = followTheQueenRank(state.studState?.upCardOrder);
+  return follow ? `Queens & ${RANK_PLURAL[follow] || `${follow}s`} Wild` : 'Queens Wild';
+}
 
 /**
  * Table header badges for the rules in play: fixed-limit betting, antes, the 7-2 bounty and,
@@ -30,8 +40,13 @@ export default function GameRulesBadges({ state }: Props) {
         </span>
       )}
       {state.wildRule && (
-        <span className={`${badge} bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/60 dark:text-fuchsia-100`} title="A wild card counts as whatever makes your hand best. Five of a kind is the top hand.">
-          {WILD_RULE_LABELS[state.wildRule]}
+        <span
+          className={`${badge} bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/60 dark:text-fuchsia-100`}
+          title={state.wildRule === 'follow-the-queen'
+            ? 'Queens are wild, and so is the rank of the card dealt face up after the last face-up queen. Five of a kind is the top hand.'
+            : 'A wild card counts as whatever makes your hand best. Five of a kind is the top hand.'}
+        >
+          {wildLabel(state)}
         </span>
       )}
       {!mixed && state.bettingMode === 'fixed-limit' && (

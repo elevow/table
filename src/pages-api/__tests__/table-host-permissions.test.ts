@@ -236,10 +236,38 @@ describe('POST /api/games/rooms/create', () => {
       expect((await call(createHandler, 'POST', wild('texas-holdem', 9))).status).toBe(201);
     });
 
-    test("are refused on Dealer's Choice and mixed games", async () => {
+    test("are refused on Dealer's Choice, mixed games and Follow the Queen", async () => {
       expect((await call(createHandler, 'POST', wild('dealers-choice'))).status).toBe(400);
       expect((await call(createHandler, 'POST', wild('mixed'))).status).toBe(400);
+      expect((await call(createHandler, 'POST', wild('follow-the-queen'))).status).toBe(400);
       expect(mockCreateRoom).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Follow the Queen', () => {
+    const ftq = (maxPlayers: number, extra: Record<string, unknown> = {}) => ({
+      name: 'T', gameType: 'poker', maxPlayers, configuration: { variant: 'follow-the-queen', ...extra },
+    });
+    beforeEach(() => {
+      mockCaller.current = caller('u1', ['room.create', 'room.choose_variant']);
+      mockCreateRoom.mockResolvedValue({ id: 'r1' });
+    });
+
+    test('plays fixed limit without run it twice, and seats at most seven', async () => {
+      expect((await call(createHandler, 'POST', ftq(8))).status).toBe(400);
+      const r = await call(createHandler, 'POST', ftq(7, { bettingMode: 'no-limit', allowRunItTwice: true }));
+      expect(r.status).toBe(201);
+      expect(mockCreateRoom.mock.calls[0][0].configuration).toMatchObject({ bettingMode: 'fixed-limit', allowRunItTwice: false });
+      expect(mockCreateRoom.mock.calls[0][0].configuration.wildRule).toBeUndefined();
+    });
+
+    test('a mixed game that includes it seats at most seven', async () => {
+      const mixed = (maxPlayers: number) => ({
+        name: 'T', gameType: 'poker', maxPlayers,
+        configuration: { variant: 'mixed', mixedGames: [{ variant: 'texas-holdem', bettingMode: 'no-limit' }, { variant: 'follow-the-queen', bettingMode: 'fixed-limit' }] },
+      });
+      expect((await call(createHandler, 'POST', mixed(8))).status).toBe(400);
+      expect((await call(createHandler, 'POST', mixed(7))).status).toBe(201);
     });
   });
 });

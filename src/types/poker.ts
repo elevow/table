@@ -7,10 +7,13 @@ export type GameStage =
 // Game variant type - shared across TableState and PokerEngine
 export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud'
   // Razz: seven-card stud played for the lowest hand. 'omaha-5': Omaha with five hole cards.
-  | 'razz' | 'omaha-5';
+  | 'razz' | 'omaha-5'
+  // Seven-card stud where queens are wild, and so is the rank of the card dealt face up after the last face-up queen
+  | 'follow-the-queen';
 
-// A table option that makes some cards wild; unset means no wild cards
-export type WildRule = 'deuces' | 'one-eyed-jacks';
+// Which cards are wild; unset means none. Deuces and one-eyed jacks are a table option;
+// 'follow-the-queen' is set by the Follow the Queen game itself.
+export type WildRule = 'deuces' | 'one-eyed-jacks' | 'follow-the-queen';
 
 // How much a player may bet: any amount, up to the pot, or one fixed bet per bet or raise
 export type BettingMode = 'no-limit' | 'pot-limit' | 'fixed-limit';
@@ -205,6 +208,8 @@ export interface TableState {
   studState?: {
     // downCount replaces downCards for other players: how many they hold, not which
     playerCards: Record<string, { downCards: Card[]; upCards: Card[]; downCount?: number }>;
+    // Follow the Queen: every face-up card in the order it was dealt, which decides the wild rank
+    upCardOrder?: Card[];
     // pending: the bring-in player has yet to choose between bringing it in and completing
     bringIn?: { amount: number; player: string; pending?: boolean };
   };

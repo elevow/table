@@ -20,7 +20,9 @@ import { getPool } from '../../../src/lib/database/pool';
 import { GameService } from '../../../src/lib/services/game-service';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import type { BettingMode, GameVariant, WildRule } from '../../../src/types/poker';
-import { ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, parseWildRule, wildAllowedFor } from '../../../src/lib/poker/variant-rules';
+import {
+  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, maxPlayersForGame, parseWildRule, variantAllowedFor, variantLabel, wildAllowedFor,
+} from '../../../src/lib/poker/variant-rules';
 import { loadRoom, isTableClosed, TABLE_CLOSED_RESPONSE } from '../../../src/lib/server/room-config';
 import { keepTablesMoving, prepareTournamentHand, tournamentTableOf } from '../../../src/lib/tournament/table-rooms';
 import { apiHandler } from '../../../src/lib/api/handler';
@@ -212,6 +214,9 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
           return res.status(403).json({ error: 'Only the dealer can choose the variant' });
         }
         // Seven cards each for more than seven players would run the deck out
+        if (!variantAllowedFor(variant, playerCount)) {
+          return res.status(400).json({ error: `${variantLabel(variant)} needs ${maxPlayersForGame(variant)} or fewer players` });
+        }
         if (wildRule && !wildAllowedFor(variant, playerCount)) {
           return res.status(400).json({ error: `Wild cards in seven-card games need ${MAX_SEVEN_CARD_WILD_PLAYERS} or fewer players` });
         }
@@ -368,7 +373,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
 
         // Players who sat down mid-round can take a seven-card wild game over its cap, so the
         // round ends there and the next dealer chooses
-        const overWildCap = !!currentState.wildRule && !wildAllowedFor(currentState.variant, playerCount);
+        const overWildCap = playerCount > maxPlayersForGame(currentState.variant, currentState.wildRule);
         if (handsThisRound >= roundLength || overWildCap) {
           return promptDealerChoice();
         }

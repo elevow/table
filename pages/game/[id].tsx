@@ -40,11 +40,14 @@ import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
 import SidePanelTabs from '../../src/components/SidePanelTabs';
 import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
-import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, wildMatcher } from '../../src/lib/poker/wild-hands';
+import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from '../../src/lib/poker/wild-hands';
 import SplashAnimation, { splashInPlay } from '../../src/components/SplashAnimation';
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
-import { ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, isOmahaVariant, isStudVariant as isStudGame, wildAllowedFor } from '../../src/lib/poker/variant-rules';
+import {
+  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, hasBuiltInWilds, isOmahaVariant,
+  isStudVariant as isStudGame, maxPlayersForGame, variantAllowedFor, wildAllowedFor,
+} from '../../src/lib/poker/variant-rules';
 import { studCardOrder } from '../../src/lib/shared/stud-cards';
 import TableCard from '../../src/components/TableCard';
 import PlayerNotesPanel, { fetchNotes, type NotesMap } from '../../src/components/PlayerNotesPanel';
@@ -1119,7 +1122,7 @@ export default function GamePage() {
         return top?.rank ? `${top.rank === 'A' ? 'Ace' : top.rank === 'K' ? 'King' : top.rank === 'Q' ? 'Queen' : top.rank === 'J' ? 'Jack' : top.rank} High` : null;
       };
 
-      const wild = wildMatcher(pokerGameState?.wildRule);
+      const wild = tableWildMatcher(pokerGameState);
 
       const computeHighLabel = (): string | null => {
         if (isStudGame(variant)) {
@@ -2695,6 +2698,9 @@ export default function GamePage() {
                 const seatedCount = Array.isArray(pokerGameState?.players) ? pokerGameState.players.length : 0;
                 const wildOk = wildAllowedFor(selectedVariantDC, seatedCount);
                 const wildDC = wildOk ? selectedWildDC : '';
+                // Follow the Queen brings its own wild cards, and like any wild seven-card game needs 7 or fewer players
+                const builtInWilds = hasBuiltInWilds(selectedVariantDC);
+                const selectedAllowed = variantAllowedFor(selectedVariantDC, seatedCount);
                 const choiceLabel = `${labelMap[selectedVariantDC] || selectedVariantDC}${wildDC ? ` (${WILD_RULE_LABELS[wildDC]})` : ''}`;
                 if (isMeDealer) {
                   return (
@@ -2704,23 +2710,36 @@ export default function GamePage() {
                         <h3 className="text-lg font-semibold">Choose the variant for this hand</h3>
                       </div>
                       <div className="flex flex-wrap gap-3 mt-2">
-                        {allowed.map(v => (
-                          <label key={v} className={`px-3 py-1.5 rounded-sm border text-sm cursor-pointer select-none ${selectedVariantDC === v ? 'bg-amber-600 text-white border-amber-500' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-amber-300 dark:border-amber-600'}`}> 
-                            <input
-                              type="radio"
-                              name="dc-variant"
-                              className="hidden"
-                              value={v}
-                              checked={selectedVariantDC === v}
-                              onChange={() => {
-                                userChangedVariantRef.current = true;
-                                setSelectedVariantDC(v);
-                              }}
-                            />
-                            {labelMap[v] || v}
-                          </label>
-                        ))}
+                        {allowed.map(v => {
+                          const tooMany = !variantAllowedFor(v, seatedCount);
+                          return (
+                            <label
+                              key={v}
+                              title={tooMany ? `Needs ${maxPlayersForGame(v)} or fewer players` : undefined}
+                              className={`px-3 py-1.5 rounded-sm border text-sm select-none ${tooMany ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${selectedVariantDC === v ? 'bg-amber-600 text-white border-amber-500' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-amber-300 dark:border-amber-600'}`}
+                            >
+                              <input
+                                type="radio"
+                                name="dc-variant"
+                                className="hidden"
+                                value={v}
+                                checked={selectedVariantDC === v}
+                                disabled={tooMany}
+                                onChange={() => {
+                                  userChangedVariantRef.current = true;
+                                  setSelectedVariantDC(v);
+                                }}
+                              />
+                              {labelMap[v] || v}
+                            </label>
+                          );
+                        })}
                       </div>
+                      {builtInWilds ? (
+                        <p className="text-xs mt-3 opacity-80">
+                          Queens are wild, and so is the rank of the card dealt face up after the last face-up queen. Fixed limit; five of a kind is the top hand.
+                        </p>
+                      ) : (<>
                       <div className="flex flex-wrap items-center gap-3 mt-3">
                         <span className="text-sm font-medium">Wild cards</span>
                         {([['', 'None'], ['deuces', WILD_RULE_LABELS['deuces']], ['one-eyed-jacks', WILD_RULE_LABELS['one-eyed-jacks']]] as Array<[WildRule | '', string]>).map(([rule, label]) => {
@@ -2746,8 +2765,10 @@ export default function GamePage() {
                           ? 'Wild hands are fixed limit, and five of a kind is the top hand.'
                           : `Wild cards in seven-card games need ${MAX_SEVEN_CARD_WILD_PLAYERS} or fewer players.`}
                       </p>
+                      </>)}
                       <div className="mt-3">
                         <button
+                          disabled={!selectedAllowed}
                           onClick={async () => {
                             try {
                               if (!id || !playerId) return;
@@ -2759,7 +2780,7 @@ export default function GamePage() {
                               console.warn('Dealer choice failed:', err);
                             }
                           }}
-                          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-sm shadow-sm"
+                          className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-sm shadow-sm"
                         >
                           Start {choiceLabel}
                         </button>
@@ -3561,7 +3582,7 @@ export default function GamePage() {
                   const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
 
                   type EvalRes = { playerId: string; name: string; hand: any; label: string };
-                  const wild = wildMatcher(pokerGameState?.wildRule);
+                  const wild = tableWildMatcher(pokerGameState);
                   if (variant === 'razz') {
                     // Razz: the lowest hand wins, so name the server's winners with their lows
                     const lows: Array<{ name: string; label: string }> = contenders.map((p: any) => {

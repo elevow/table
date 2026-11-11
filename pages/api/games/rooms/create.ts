@@ -7,7 +7,10 @@ import {
 } from '../../../../src/lib/auth/access-control';
 import { newInviteCode, stripPrivacyKeys } from '../../../../src/lib/server/room-privacy';
 import { apiHandler } from '../../../../src/lib/api/handler';
-import { maxPlayersForGame, parseWildRule, supportsWildRule } from '../../../../src/lib/poker/variant-rules';
+import {
+  hasBuiltInWilds, maxPlayersForGame, maxPlayersForMixedGames, parseMixedGames, parseWildRule, supportsWildRule,
+} from '../../../../src/lib/poker/variant-rules';
+import { defaultBettingModeForVariant } from '../../../../src/lib/game/variant-mapping';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -33,12 +36,17 @@ export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max:
   // Wild cards fix some of the table's rules, whatever the client sent
   const wildRule = parseWildRule(req.body?.configuration?.wildRule);
   if (wildRule && !supportsWildRule(variant)) {
-    return res.status(400).json({ error: "Wild cards can't be used with Dealer's Choice or mixed games" });
+    return res.status(400).json({ error: "This game can't take the wild card option" });
   }
-  const seatLimit = maxPlayersForGame(variant, wildRule);
-  if (wildRule && Number(req.body?.maxPlayers) > seatLimit) {
+  // Seven cards each for more than seven players would run the deck out in wild stud games;
+  // a mixed game seats only as many as every game in its list can deal to
+  const seatLimit = variant === 'mixed'
+    ? maxPlayersForMixedGames(parseMixedGames(req.body?.configuration?.mixedGames, defaultBettingModeForVariant))
+    : maxPlayersForGame(variant, wildRule);
+  if (Number(req.body?.maxPlayers) > seatLimit) {
     return res.status(400).json({ error: `This game seats at most ${seatLimit} players` });
   }
+  const fixedLimitOnly = !!wildRule || hasBuiltInWilds(variant);
 
   const pool = getPool();
   const safeLog = createSafeAudit(pool);
@@ -61,7 +69,7 @@ export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max:
       visibility,
       ...(visibility === 'private' ? { inviteCode: newInviteCode(), members: [] } : {}),
       wildRule,
-      ...(wildRule ? { bettingMode: 'fixed-limit', allowRunItTwice: false } : {}),
+      ...(fixedLimitOnly ? { bettingMode: 'fixed-limit', allowRunItTwice: false } : {}),
     };
     const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 60) : 'New Table';
     const payload = { ...body, name, configuration, createdBy: userId };

@@ -13,7 +13,7 @@ import {
   MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS,
 } from '../shared/turn-clock';
 import { holeCardCount, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
-import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, wildMatcher } from './wild-hands';
+import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
 import { revealedPlayerIds } from './state-sanitizer';
 import { debugFlags, runtime } from '../config/env';
@@ -71,6 +71,7 @@ export class PokerEngine {
     if (opts.wildRule) {
       this.state.wildRule = opts.wildRule;
     }
+    this.syncBuiltInWilds();
   // Configure optional RIT persistence
   this.ritPersistence = opts.runItTwicePersistence;
     // Configure unanimous-consent toggle
@@ -1299,6 +1300,14 @@ export class PokerEngine {
     if (!this.state.studState) this.state.studState = { playerCards: {} };
   }
 
+  /** Give a player a face-up card; Follow the Queen also notes the order face-up cards come out. */
+  private dealUpCard(playerId: string, card: Card): void {
+    const stud = this.state.studState!;
+    if (!stud.playerCards[playerId]) stud.playerCards[playerId] = { downCards: [], upCards: [] };
+    stud.playerCards[playerId].upCards.push(card);
+    if (this.state.variant === 'follow-the-queen') (stud.upCardOrder ||= []).push(card);
+  }
+
   private dealStudInitial(): void {
     this.ensureStudState();
     if (this.state.variant === 'five-card-stud') {
@@ -1312,8 +1321,7 @@ export class PokerEngine {
       for (const p of this.state.players) {
         if (sitsOutOfHand(p, this.state)) continue;
         const c = this.deckManager.dealCard();
-        if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
-        if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
+        if (c) this.dealUpCard(p.id, c);
       }
     } else {
       // Seven-card stud: 2 down, 1 up initially
@@ -1328,8 +1336,7 @@ export class PokerEngine {
       for (const p of this.state.players) {
         if (sitsOutOfHand(p, this.state)) continue;
         const c = this.deckManager.dealCard();
-        if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
-        if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
+        if (c) this.dealUpCard(p.id, c);
       }
     }
   }
@@ -1346,8 +1353,7 @@ export class PokerEngine {
       for (const p of this.state.players) {
         if (p.isFolded || sitsOutOfHand(p, this.state)) continue;
         const c = this.deckManager.dealCard();
-        if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
-        if (c) this.state.studState!.playerCards[p.id].upCards.push(c);
+        if (c) this.dealUpCard(p.id, c);
       }
     }
   }
@@ -1572,7 +1578,7 @@ export class PokerEngine {
 
   const potsToDistribute = this.buildPots(activePlayers);
     this.log(`Pots to distribute: ${JSON.stringify(potsToDistribute)}`);
-  const wild = wildMatcher(this.state.wildRule);
+  const wild = tableWildMatcher(this.state);
 
   // Special handling: Omaha Hi-Lo (US-052)
   if (this.state.variant === 'omaha-hi-lo') {
@@ -1789,7 +1795,7 @@ export class PokerEngine {
     }
 
   // Stud showdown path: evaluate with stud cards (best 5 from available)
-  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'five-card-stud' || this.state.variant === 'razz') {
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'five-card-stud' || this.state.variant === 'razz' || this.state.variant === 'follow-the-queen') {
       const rankWeight: Record<Card['rank'], number> = {
         '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14,
       };
@@ -1949,6 +1955,13 @@ export class PokerEngine {
   public setWildRule(rule?: WildRule): void {
     if (rule) this.state.wildRule = rule;
     else delete this.state.wildRule;
+    this.syncBuiltInWilds();
+  }
+
+  /** Follow the Queen always plays its own wild cards; leaving it drops them. */
+  private syncBuiltInWilds(): void {
+    if (this.state.variant === 'follow-the-queen') this.state.wildRule = 'follow-the-queen';
+    else if (this.state.wildRule === 'follow-the-queen') delete this.state.wildRule;
   }
 
   // Allow changing variant at runtime before a hand starts
@@ -1958,6 +1971,7 @@ export class PokerEngine {
     } else {
       delete (this.state as any).variant;
     }
+    this.syncBuiltInWilds();
   }
 
   // US-029: Execute run-it-twice using separate decks/boards per run and equal pot split

@@ -15,6 +15,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'seven-card-stud-hi-lo',
   'razz',
   'five-card-stud',
+  'follow-the-queen',
 ];
 
 export const VARIANT_LABELS: Record<GameVariant, string> = {
@@ -26,6 +27,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'seven-card-stud-hi-lo': 'Seven-Card Stud Hi-Lo',
   'razz': 'Razz',
   'five-card-stud': 'Five-Card Stud',
+  'follow-the-queen': 'Follow the Queen',
 };
 
 export const BETTING_MODE_LABELS: Record<BettingMode, string> = {
@@ -37,10 +39,17 @@ export const BETTING_MODE_LABELS: Record<BettingMode, string> = {
 export const WILD_RULE_LABELS: Record<WildRule, string> = {
   'deuces': 'Deuces Wild',
   'one-eyed-jacks': 'One-Eyed Jacks Wild',
+  'follow-the-queen': 'Queens Wild',
 };
 
+/** A wild option a host or dealer can choose; Follow the Queen's wilds come with that game instead. */
 export function parseWildRule(v: unknown): WildRule | undefined {
   return v === 'deuces' || v === 'one-eyed-jacks' ? v : undefined;
+}
+
+/** Games whose wild cards are part of the game, not a table option. */
+export function hasBuiltInWilds(variant?: string | null): boolean {
+  return variant === 'follow-the-queen';
 }
 
 export const MAX_TABLE_PLAYERS = 9;
@@ -49,12 +58,26 @@ export const MAX_SEVEN_CARD_WILD_PLAYERS = 7;
 
 /** The most players a table can seat for this game. */
 export function maxPlayersForGame(variant?: string | null, wildRule?: WildRule): number {
-  return wildRule && isSevenCardStudVariant(variant) ? MAX_SEVEN_CARD_WILD_PLAYERS : MAX_TABLE_PLAYERS;
+  const wild = !!wildRule || hasBuiltInWilds(variant);
+  return wild && isSevenCardStudVariant(variant) ? MAX_SEVEN_CARD_WILD_PLAYERS : MAX_TABLE_PLAYERS;
 }
 
-/** Whether a game can be played with wild cards by this many players (Dealer's Choice picks). */
+/** The most players a mixed-game room can seat: the lowest limit of the games in its list. */
+export function maxPlayersForMixedGames(games: MixedGameEntry[] | null | undefined): number {
+  return Math.min(MAX_TABLE_PLAYERS, ...(games || []).map(g => maxPlayersForGame(g.variant)));
+}
+
+/** Whether this many players can play a game (Dealer's Choice picks). */
+export function variantAllowedFor(variant: string | null | undefined, playerCount: number): boolean {
+  return playerCount <= maxPlayersForGame(variant);
+}
+
+/**
+ * Whether a game can take the Deuces or One-Eyed Jacks option with this many players (Dealer's
+ * Choice picks). Follow the Queen has its own wild cards, so it can't.
+ */
 export function wildAllowedFor(variant: string | null | undefined, playerCount: number): boolean {
-  return playerCount <= maxPlayersForGame(variant, 'deuces');
+  return !hasBuiltInWilds(variant) && playerCount <= maxPlayersForGame(variant, 'deuces');
 }
 
 /**
@@ -62,7 +85,7 @@ export function wildAllowedFor(variant: string | null | undefined, playerCount: 
  * mixed games change the game each hand.
  */
 export function supportsWildRule(variant?: string | null): boolean {
-  return variant !== 'dealers-choice' && variant !== 'mixed';
+  return variant !== 'dealers-choice' && variant !== 'mixed' && !hasBuiltInWilds(variant);
 }
 
 export function isGameVariant(v: unknown): v is GameVariant {
@@ -75,12 +98,12 @@ export function isBettingMode(v: unknown): v is BettingMode {
 
 /** Stud games: no board; each player has their own down and up cards. */
 export function isStudVariant(v?: string | null): boolean {
-  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud' || v === 'razz';
+  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud' || v === 'razz' || v === 'follow-the-queen';
 }
 
 /** Stud games dealt to seven cards (third to seventh street). */
 export function isSevenCardStudVariant(v?: string | null): boolean {
-  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'razz';
+  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'razz' || v === 'follow-the-queen';
 }
 
 /** Omaha games: the best hand uses exactly two hole cards and three board cards. */
@@ -147,7 +170,9 @@ export function parseMixedGames(
     const variant = typeof item === 'string' ? item : (item as { variant?: unknown })?.variant;
     if (!isGameVariant(variant)) continue;
     const mode = typeof item === 'object' && item ? (item as { bettingMode?: unknown }).bettingMode : undefined;
-    games.push({ variant, bettingMode: isBettingMode(mode) ? mode : defaultMode(variant) });
+    // Games with wild cards are always fixed limit
+    const bettingMode = hasBuiltInWilds(variant) ? 'fixed-limit' : isBettingMode(mode) ? mode : defaultMode(variant);
+    games.push({ variant, bettingMode });
   }
   return games.length > 0 ? games : null;
 }

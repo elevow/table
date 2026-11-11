@@ -1,8 +1,10 @@
 import { DeckManager } from '../deck-manager';
 import { PokerEngine } from '../poker-engine';
-import { maxPlayersForGame, parseWildRule, supportsWildRule, wildAllowedFor } from '../variant-rules';
 import {
-  evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, wildMatcher,
+  maxPlayersForGame, maxPlayersForMixedGames, parseMixedGames, parseWildRule, supportsWildRule, variantAllowedFor, wildAllowedFor,
+} from '../variant-rules';
+import {
+  evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, followTheQueenRank, wildMatcher,
 } from '../wild-hands';
 import { resolveVariantAndMode } from '../../game/variant-mapping';
 import { formatHandResult } from '../../utils/hand-result-formatter';
@@ -262,6 +264,75 @@ describe('showdowns through the engine', () => {
     engine.setWildRule(undefined);
     expect(engine.getState().wildRule).toBeUndefined();
     expect('wildRule' in PokerEngine.fromSerialized(engine.serialize() as any).getState()).toBe(false);
+  });
+
+  describe('Follow the Queen', () => {
+    // a: 3c 9h down; 9s 7s 9d 2c up; 8h down. b: Kd Kc down; Qh 5s Jd (last) up; 3h down.
+    // b's face-up queen makes a's 7 (the next face-up card) wild: a has four nines, b three kings.
+    const deal = (bLastUp: string) => `3c Kd 9h Kc 9s Qh 7s 5s 9d Jd 2c ${bLastUp} 8h 3h`;
+
+    test('the card dealt face up after a queen is wild, and wins the pot', () => {
+      stackDeck(deal('6c'));
+      const engine = engineFor('follow-the-queen');
+      const state = playToShowdown(engine);
+      expect(state.wildRule).toBe('follow-the-queen');
+      expect(state.studState?.upCardOrder?.map(x => `${x.rank}${x.suit[0]}`)).toEqual(['9s', 'Qh', '7s', '5s', '9d', 'Jd', '2c', '6c']);
+      expect(stack(engine, 'a')).toBeGreaterThan(100);
+    });
+
+    test('a queen dealt last leaves only queens wild', () => {
+      stackDeck(deal('Qd'));
+      const engine = engineFor('follow-the-queen');
+      playToShowdown(engine);
+      // a's 7 is no longer wild (three nines); b's two queens make four kings
+      expect(stack(engine, 'b')).toBeGreaterThan(100);
+    });
+
+    test('the up-card order is only kept for Follow the Queen', () => {
+      stackDeck(deal('6c'));
+      const engine = engineFor('seven-card-stud');
+      expect(playToShowdown(engine).studState?.upCardOrder).toBeUndefined();
+    });
+
+    test('the game always plays its own wild cards, whatever else is set', () => {
+      const engine = engineFor('follow-the-queen');
+      engine.setWildRule(undefined);
+      expect(engine.getState().wildRule).toBe('follow-the-queen');
+      engine.setVariant('omaha');
+      expect(engine.getState().wildRule).toBeUndefined();
+      engine.setVariant('follow-the-queen');
+      expect(engine.getState().wildRule).toBe('follow-the-queen');
+      const restored = PokerEngine.fromSerialized(engine.serialize() as any);
+      expect(restored.getState().wildRule).toBe('follow-the-queen');
+    });
+
+    test('followTheQueenRank: the rank after the last face-up queen', () => {
+      const rank = (s: string) => followTheQueenRank(s ? cards(s) : []);
+      expect(rank('')).toBeUndefined();
+      expect(rank('9s 7h Kd')).toBeUndefined();
+      expect(rank('Qh 7s')).toBe('7');
+      expect(rank('Qh 7s 4d')).toBe('7');
+      expect(rank('Qh 7s Qd')).toBeUndefined();
+      expect(rank('Qh 7s Qd Kc')).toBe('K');
+      expect(rank('Qh Qd 5c')).toBe('5');
+      const wild = wildMatcher('follow-the-queen', cards('Qh 7s'))!;
+      expect(wild(c('Qc'))).toBe(true);
+      expect(wild(c('7d'))).toBe(true);
+      expect(wild(c('8d'))).toBe(false);
+    });
+
+    test('table rules: 7 players, fixed limit, no wild option', () => {
+      expect(maxPlayersForGame('follow-the-queen')).toBe(7);
+      expect(variantAllowedFor('follow-the-queen', 8)).toBe(false);
+      expect(variantAllowedFor('follow-the-queen', 7)).toBe(true);
+      expect(supportsWildRule('follow-the-queen')).toBe(false);
+      expect(wildAllowedFor('follow-the-queen', 2)).toBe(false);
+      expect(resolveVariantAndMode({ variant: 'follow-the-queen', bettingMode: 'no-limit' }).bettingMode).toBe('fixed-limit');
+      expect(parseWildRule('follow-the-queen')).toBeUndefined();
+      expect(maxPlayersForMixedGames([{ variant: 'texas-holdem', bettingMode: 'no-limit' }, { variant: 'follow-the-queen', bettingMode: 'fixed-limit' }])).toBe(7);
+      expect(maxPlayersForMixedGames([{ variant: 'texas-holdem', bettingMode: 'no-limit' }])).toBe(9);
+      expect(parseMixedGames([{ variant: 'follow-the-queen', bettingMode: 'no-limit' }], () => 'no-limit')).toEqual([{ variant: 'follow-the-queen', bettingMode: 'fixed-limit' }]);
+    });
   });
 
   test('wildAllowedFor: seven-card games up to 7 players, other games any table size', () => {

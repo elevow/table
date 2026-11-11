@@ -21,6 +21,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'baseball',
   'midnight-baseball',
   'pineapple',
+  'crazy-pineapple',
 ];
 
 export const VARIANT_LABELS: Record<GameVariant, string> = {
@@ -35,6 +36,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'five-card-draw': 'Five-Card Draw',
   'nicaragua': 'Nicaragua',
   'pineapple': 'Pineapple',
+  'crazy-pineapple': 'Crazy Pineapple',
   'follow-the-queen': 'Follow the Queen',
   'baseball': 'Baseball',
   'midnight-baseball': 'Midnight Baseball',
@@ -130,10 +132,12 @@ export const MIDNIGHT_FLIP_MS = 2000;
 
 /**
  * Pineapple games deal three hole cards and everyone throws one away, all at once, when the
- * betting on this stage is over: Pineapple after the preflop betting. Undefined for other games.
+ * betting on this stage is over: Pineapple after the preflop betting, Crazy Pineapple after the
+ * flop betting. Undefined for other games.
  */
 export function pineappleDiscardStage(variant?: string | null): GameStage | undefined {
   if (variant === 'pineapple') return 'preflop';
+  if (variant === 'crazy-pineapple') return 'flop';
   return undefined;
 }
 

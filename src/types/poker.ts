@@ -21,6 +21,8 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   | 'nicaragua'
   // Hold'em with three hole cards; each player throws one away after the preflop betting
   | 'pineapple'
+  // Pineapple with the discard after the flop betting instead
+  | 'crazy-pineapple'
   // Baseball dealt all face down: nobody looks, and each player turns cards until they beat the high hand
   | 'midnight-baseball';
 

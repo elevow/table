@@ -371,6 +371,10 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
         if (isNicaraguaVariant(currentState.variant)) {
           return currentState.nicaragua && !currentState.nicaragua.over ? applyVariantAndStart() : promptDealerChoice();
         }
+        // Guts likewise lasts until one player goes in alone
+        if (currentState.variant === 'guts') {
+          return currentState.guts && !currentState.guts.over ? applyVariantAndStart() : promptDealerChoice();
+        }
 
         // A round is players + 1 hands, so the next chooser is also the next dealer. The count
         // comes from the saved game state; server memory doesn't survive across instances.

@@ -25,6 +25,7 @@ type HostAction =
   | { action: 'show-all-at-showdown'; show: boolean }
   | { action: 'set-turn-time'; seconds: number }
   | { action: 'set-hand-delay'; seconds: number }
+  | { action: 'set-guts-cap'; bigBlinds: number }
   | { action: 'adjust-time-banks'; targetId: string; delta: number }
   | { action: 'bomb-pot'; anteBB: number | null }
   | { action: 'kick'; targetId: string }
@@ -45,6 +46,7 @@ const ACTION_PERMISSIONS: Record<HostAction['action'], string> = {
   'show-all-at-showdown': 'room.configure',
   'set-turn-time': 'room.configure',
   'set-hand-delay': 'room.configure',
+  'set-guts-cap': 'room.configure',
   'adjust-time-banks': 'room.configure',
   'bomb-pot': 'room.configure',
   'kick': 'room.kick_player',
@@ -215,6 +217,11 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
         await updateRoomConfig(tableId, { handDelaySeconds: Math.round(seconds) });
         break;
       }
+      case 'set-guts-cap': {
+        const bb = Number(body.bigBlinds);
+        if (!Number.isFinite(bb) || bb < 1 || bb > 1000) return res.status(400).json({ error: 'The Guts cap must be 1-1000 big blinds' });
+        break;
+      }
       case 'adjust-time-banks':
         if (!body.targetId || !Number.isFinite(Number(body.delta)) || Number(body.delta) === 0) {
           return res.status(400).json({ error: 'Choose a player and how many time banks to add or remove' });
@@ -245,6 +252,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       else if (body.action === 'show-all-at-showdown') engine.setShowAllAtShowdown(!!body.show);
       else if (body.action === 'set-turn-time') engine.setTurnTime(Number(body.seconds));
       else if (body.action === 'set-hand-delay') engine.setHandDelay(Number(body.seconds));
+      else if (body.action === 'set-guts-cap') engine.setGutsCap(Number(body.bigBlinds));
       else if (body.action === 'adjust-time-banks') engine.adjustTimeBanks(body.targetId, Number(body.delta));
       else if (body.action === 'bomb-pot') {
         const variant = engine.getState().variant;

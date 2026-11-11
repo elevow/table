@@ -440,6 +440,23 @@ describe('/api/games/next-hand', () => {
       expect(over.startNewHand).not.toHaveBeenCalled();
     });
 
+    it('keeps dealing Guts until one player goes in alone; then the next dealer chooses', async () => {
+      const going = createEngine('showdown', 9, { variant: 'guts', guts: { carry: 4, ins: ['a', 'b'] } });
+      mockGetOrRestoreEngine.mockResolvedValue(going);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());
+      expect(going.startNewHand).toHaveBeenCalled();
+
+      jest.clearAllMocks();
+      (global as any).__NEXT_HAND_LOCKS__ = undefined;
+      const over = createEngine('showdown', 1, { variant: 'guts', guts: { carry: 0, over: true } });
+      mockGetOrRestoreEngine.mockResolvedValue(over);
+      setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
+      await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());
+      expect(over.pauseForDealerChoice).toHaveBeenCalled();
+      expect(over.startNewHand).not.toHaveBeenCalled();
+    });
+
     it('ignores a wild rule sent to a table that is not dealer\'s choice', async () => {
       const engine = createEngine('showdown');
       mockGetOrRestoreEngine.mockResolvedValue(engine);

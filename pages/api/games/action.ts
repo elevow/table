@@ -50,7 +50,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
 
     // Build PlayerAction object
     const playerAction = {
-      type: action.toLowerCase() as 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw',
+      type: action.toLowerCase() as 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw' | 'in' | 'out',
       playerId,
       tableId,
       amount,
@@ -60,7 +60,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     };
 
     // Validate action type
-    const validActions = ['fold', 'check', 'call', 'bet', 'raise', 'bring-in', 'match-pot', 'draw'];
+    const validActions = ['fold', 'check', 'call', 'bet', 'raise', 'bring-in', 'match-pot', 'draw', 'in', 'out'];
     if (!validActions.includes(playerAction.type)) {
       return res.status(400).json({ error: `Unknown action: ${action}` });
     }

@@ -17,6 +17,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'five-card-stud',
   'five-card-draw',
   'nicaragua',
+  'guts',
   'follow-the-queen',
   'baseball',
   'midnight-baseball',
@@ -33,6 +34,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'five-card-stud': 'Five-Card Stud',
   'five-card-draw': 'Five-Card Draw',
   'nicaragua': 'Nicaragua',
+  'guts': 'Guts',
   'follow-the-queen': 'Follow the Queen',
   'baseball': 'Baseball',
   'midnight-baseball': 'Midnight Baseball',
@@ -100,7 +102,7 @@ export function isNicaraguaVariant(variant?: string | null): boolean {
 
 /** Games only a Dealer's Choice dealer can pick, not a room's game or part of a mixed game. */
 export function isDealersChoiceOnly(variant?: string | null): boolean {
-  return isNicaraguaVariant(variant);
+  return isNicaraguaVariant(variant) || variant === 'guts';
 }
 
 export const NICARAGUA_METHOD_LABELS: Record<NicaraguaMethod, string> = {
@@ -158,7 +160,7 @@ export function variantAllowedFor(variant: string | null | undefined, playerCoun
  */
 export function wildAllowedFor(variant: string | null | undefined, playerCount: number): boolean {
   // Nicaragua's counts and low hands have no place for a wild card
-  return !hasBuiltInWilds(variant) && !isNicaraguaVariant(variant) && playerCount <= maxPlayersForGame(variant, 'deuces');
+  return !hasBuiltInWilds(variant) && !isDealersChoiceOnly(variant) && playerCount <= maxPlayersForGame(variant, 'deuces');
 }
 
 /**

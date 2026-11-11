@@ -97,7 +97,8 @@ export function revealedPlayerIds(state: TableState): Set<string> {
   if (inHand.length >= 2) {
     // States saved before winners were recorded keep the old rule of showing everyone still in
     const winners = state.handWinners;
-    const mustShow = isAllInSituation(state) || state.showAllAtShowdown || !Array.isArray(winners)
+    // Guts: every player who went in turns their cards up
+    const mustShow = isAllInSituation(state) || state.showAllAtShowdown || state.variant === 'guts' || !Array.isArray(winners)
       ? inHand
       : inHand.filter(p => winners.includes(p.id));
     mustShow.forEach(p => revealed.add(p.id));
@@ -186,6 +187,11 @@ function sanitizeState(state: TableState, viewerId: string | null): TableState {
   }
   if (state.runItTwice) {
     result.runItTwice = sanitizeRunItTwice(state);
+  }
+  // Guts: until everyone has declared, a player sees only their own choice
+  if (state.guts?.declared && (state.guts.pending?.length || 0) > 0) {
+    const own = viewerId ? state.guts.declared[viewerId] : undefined;
+    result.guts = { ...state.guts, declared: own && viewerId ? { [viewerId]: own } : {} };
   }
   return result;
 }

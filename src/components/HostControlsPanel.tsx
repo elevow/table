@@ -32,6 +32,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
   const [kickId, setKickId] = useState<string>('');
   const [turnSeconds, setTurnSeconds] = useState<string>('');
   const [delaySeconds, setDelaySeconds] = useState<string>('');
+  const [gutsCap, setGutsCap] = useState<string>('');
   const [confirmClose, setConfirmClose] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -289,6 +290,31 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
                 onClick={() => send('delay', { action: 'set-hand-delay', seconds: Number(delaySeconds) }).then(() => setDelaySeconds(''))}
               >
                 Set pause
+              </button>
+            </div>
+          </div>
+        )}
+        {/* Guts: shown while it is being played, or while the dealer picks a game */}
+        {canConfigure && gameState && (gameState.variant === 'guts' || gameState.stage === 'awaiting-dealer-choice') && (
+          <div>
+            <div className="mb-2 eyebrow">Guts: losers pay up to {gameState.gutsCapBB ?? 10} BB</div>
+            <div className="flex items-center gap-1">
+              <input
+                aria-label="Most a losing Guts player pays, in big blinds"
+                type="number"
+                min={1}
+                max={1000}
+                value={gutsCap}
+                onChange={e => setGutsCap(e.target.value)}
+                placeholder="BB"
+                className="w-16 input h-9! px-2.5!"
+              />
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={!!busy || !(Number(gutsCap) >= 1 && Number(gutsCap) <= 1000)}
+                onClick={() => send('guts', { action: 'set-guts-cap', bigBlinds: Number(gutsCap) }).then(() => setGutsCap(''))}
+              >
+                Set cap
               </button>
             </div>
           </div>

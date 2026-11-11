@@ -20,6 +20,7 @@ import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 import { useCheckTurn } from '../../src/hooks/useCheckTurn';
 import { Card, Player, GameVariant, NicaraguaMethod, WildRule } from '../../src/types/poker';
 import { describeNicaraguaHand } from '../../src/lib/poker/nicaragua';
+import { describeGutsHand } from '../../src/lib/poker/guts';
 import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import { useDisplaySettings } from '../../src/hooks/useDisplaySettings';
@@ -956,7 +957,9 @@ export default function GamePage() {
     }
 
     const isFold = action === 'fold';
-    if (!isFold && pokerGameState?.activePlayer && pokerGameState.activePlayer !== playerId) {
+    // Guts declarations are made by everyone at once, whoever the clock shows on
+    const isDeclare = action === 'in' || action === 'out';
+    if (!isFold && !isDeclare && pokerGameState?.activePlayer && pokerGameState.activePlayer !== playerId) {
       console.warn('Action blocked: not your turn', { action, activePlayer: pokerGameState.activePlayer, playerId });
       return;
     }
@@ -973,7 +976,7 @@ export default function GamePage() {
     if (splash) setSplashArmed(false);
 
     try {
-      const response = await api.post('/api/games/action', {
+      const send = () => api.post('/api/games/action', {
         tableId: id,
         playerId,
         action,
@@ -983,9 +986,13 @@ export default function GamePage() {
         ...(pokerGameState.variant === 'nicaragua' && pokerGameState.stage === 'preflop' && !pokerGameState.nicaragua?.opener
           && (action === 'bet' || action === 'raise') ? { method: nicaraguaMethod } : {}),
         ...(splash ? { splash: true } : {}),
-        // The decision this click answers; the server refuses it if the game has moved on
-        expectedTurnSeq: typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
+        // The decision this click answers; the server refuses it if the game has moved on. Other
+        // players' declarations move the game on too, so a declaration doesn't send it
+        expectedTurnSeq: !isDeclare && typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
       });
+      let response = await send();
+      // Another player's declaration can land at the same moment; this one is still owed, so send it again
+      if (!response.ok && isDeclare && response.data?.code === 'STALE_GAME_STATE') response = await send();
 
       if (!response.ok) {
         const err = response.data;
@@ -1151,6 +1158,7 @@ export default function GamePage() {
         const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
         if (!holes || holes.length === 0) return null;
         const known = [...holes, ...board];
+        if (variant === 'guts') return describeGutsHand(holes);
         const nicaraguaWay = variant === 'nicaragua' ? pokerGameState?.nicaragua?.method : undefined;
         if (nicaraguaWay) return describeNicaraguaHand(holes, nicaraguaWay);
         if (wild) return isOmahaVariant(variant) ? evaluateWildOmaha(holes, board, wild).name : evaluateWildHigh(known, wild).name;
@@ -1572,7 +1580,12 @@ export default function GamePage() {
   }, [preAction, isMyTurn, me, myOwed, pokerGameState?.runItTwicePrompt, myBringInPending, myPotMatchPending, myDrawPending, handlePokerAction]);
 
   // Keyboard shortcuts work only while the Your Turn panel is showing (same conditions as the panel)
-  const actionPanelOpen = !!(gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt);
+  // Guts: everyone declares in or out at once
+  const gutsPending: string[] = Array.isArray(pokerGameState?.guts?.pending) ? pokerGameState.guts.pending : [];
+  const gutsDeclaring = pokerGameState?.variant === 'guts' && gutsPending.length > 0;
+  const myGutsChoice: 'in' | 'out' | undefined = playerId ? pokerGameState?.guts?.declared?.[playerId] : undefined;
+  const myGutsPending = !!playerId && gutsPending.includes(playerId);
+  const actionPanelOpen = !!(gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && !gutsDeclaring);
   const shortcuts = useTableShortcuts({
     enabled: actionPanelOpen,
     // The bring-in cannot fold; check/call posts the bring-in
@@ -2779,7 +2792,11 @@ export default function GamePage() {
                           );
                         })}
                       </div>
-                      {selectedVariantDC === 'nicaragua' ? (
+                      {selectedVariantDC === 'guts' ? (
+                        <p className="text-xs mt-3 opacity-80">
+                          Two cards each; everyone declares in or out at the same time. The best hand among those in takes the pot, and each who lost pays the size of the pot, up to the host&apos;s cap, into the next one. Nobody in carries the pot. It lasts until one player goes in alone, then the next player chooses.
+                        </p>
+                      ) : selectedVariantDC === 'nicaragua' ? (
                         <p className="text-xs mt-3 opacity-80">
                           Five-card draw. Whoever opens picks how the hand is won: highest hand, lowest hand (ace-to-five), highest count or lowest count, with picture cards 10 and aces 1 or 11. If the opener doesn&apos;t win, they pay the size of the pot into the next hand. It lasts until an opener wins, then the next player chooses.
                         </p>
@@ -2963,8 +2980,40 @@ export default function GamePage() {
             )}
           </div>
 
+          {/* Guts: everyone declares in or out at the same time */}
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && myGutsPending && (
+            <div className="lg:col-span-2 surface max-sm:bg-gray-50! max-sm:dark:bg-gray-800! p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))]">
+              <h3 className="mb-2 text-base font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
+                In or out?
+              </h3>
+              <TurnClockBar clock={turnClock} />
+              <div className="flex gap-2 pt-2" aria-label="Your cards">
+                {(Array.isArray(me?.holeCards) ? (me.holeCards as Card[]) : []).map(card => (
+                  <TableCard key={`${card.rank}-${card.suit}`} card={card} size="sm" highContrast={highContrastCards} />
+                ))}
+              </div>
+              <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
+                Everyone decides at the same time. If you go in and lose, you pay the size of the pot{(pokerGameState?.gutsCapBB ?? 10) > 0 ? `, up to $${(pokerGameState?.gutsCapBB ?? 10) * (Number(pokerGameState?.bigBlind) || 0)},` : ''} into the next pot. Running out of time counts as out.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={() => handlePokerAction('out')} className="btn btn-lg act-fold max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base">
+                  Out
+                </button>
+                <button onClick={() => handlePokerAction('in')} className="btn btn-lg act-call max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base">
+                  In
+                </button>
+              </div>
+            </div>
+          )}
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && gutsDeclaring && !myGutsPending && (
+            <p className="lg:col-span-2 mt-4 text-sm text-gray-600 dark:text-gray-400" role="status">
+              {myGutsChoice ? `You're ${myGutsChoice}. ` : ''}Waiting for {gutsPending.length === 1 ? 'one more player' : `${gutsPending.length} players`} to decide.
+            </p>
+          )}
+
           {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}
-          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && (
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && !gutsDeclaring && (
             <div className="lg:col-span-2 surface max-sm:bg-gray-50! max-sm:dark:bg-gray-800! p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <h3 className="text-base font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
@@ -3716,6 +3765,20 @@ export default function GamePage() {
 
                   type EvalRes = { playerId: string; name: string; hand: any; label: string };
                   const wild = tableWildMatcher(pokerGameState);
+                  if (variant === 'guts') {
+                    if (!serverWinners.length) return <div>Nobody went in, so the pot carries to the next hand.</div>;
+                    const hands: Array<{ name: string; label: string }> = contenders.map((p: any) => ({
+                      name: p.name || p.id,
+                      label: Array.isArray(p.holeCards) && p.holeCards.length ? describeGutsHand(p.holeCards) : '',
+                    }));
+                    return (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold">{hands.map(h => h.name).join(', ')}</span>
+                        <span>{hands.length > 1 ? 'split the pot' : 'wins the pot'}</span>
+                        {hands[0]?.label ? <span className="opacity-80">({hands[0].label})</span> : null}
+                      </div>
+                    );
+                  }
                   if (variant === 'nicaragua') {
                     const way = pokerGameState?.nicaragua?.method || 'high';
                     if (contenders.length === 0 || !serverWinners.length) {

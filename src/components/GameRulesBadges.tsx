@@ -35,6 +35,7 @@ export default function GameRulesBadges({ state }: Props) {
   const mixed = describeMixedRotation(state.mixedGame);
   const anteApplies = (state.ante || 0) > 0 && !isStudVariant(state.variant);
   const nicaragua = state.variant === 'nicaragua' ? state.nicaragua : undefined;
+  const gutsCap = state.variant === 'guts' ? (state.gutsCapBB ?? 10) * state.bigBlind : 0;
   const opener = nicaragua?.opener ? state.players?.find(p => p.id === nicaragua.opener) : undefined;
   const bountyApplies = (state.sevenDeuceBounty || 0) > 0 && isHoldemVariant(state.variant);
   return (
@@ -65,6 +66,14 @@ export default function GameRulesBadges({ state }: Props) {
           {nicaragua.method
             ? `${NICARAGUA_METHOD_LABELS[nicaragua.method]}${opener ? ` · ${opener.name || 'Opener'} opened` : ''}`
             : 'Opener picks how to win'}
+        </span>
+      )}
+      {gutsCap > 0 && (
+        <span
+          className={`${badge} bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-100`}
+          title="Guts: players who go in and lose pay the size of the pot, up to this much, into the next pot"
+        >
+          Losers pay up to ${gutsCap}
         </span>
       )}
       {!mixed && state.bettingMode === 'fixed-limit' && (

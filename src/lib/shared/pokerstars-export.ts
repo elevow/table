@@ -43,6 +43,7 @@ const GAME_NAME: Record<string, string> = {
   'baseball': 'Baseball',
   'five-card-draw': '5 Card Draw',
   'nicaragua': 'Nicaragua',
+  'guts': 'Guts',
   'midnight-baseball': 'Midnight Baseball',
 };
 
@@ -285,6 +286,12 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
         break;
       case 'check':
         lines.push(`${who}: checks`);
+        break;
+      case 'in':
+        lines.push(`${who}: goes in`);
+        break;
+      case 'out':
+        lines.push(`${who}: stays out`);
         break;
       case 'draw':
         lines.push(a.drawCount ? `${who}: discards ${a.drawCount} card${a.drawCount === 1 ? '' : 's'}` : `${who}: stands pat`);

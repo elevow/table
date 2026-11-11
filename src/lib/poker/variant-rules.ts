@@ -85,6 +85,10 @@ export function isMidnightBaseballVariant(variant?: string | null): boolean {
   return variant === 'midnight-baseball';
 }
 
+// Midnight Baseball: the table shows each turned card this long before the next, and the clock
+// gives the next player to act that time back
+export const MIDNIGHT_FLIP_MS = 2000;
+
 export const MAX_TABLE_PLAYERS = 9;
 // Seven cards each for seven players is 49 of the 52, so an eighth player could not be dealt in
 export const MAX_SEVEN_CARD_WILD_PLAYERS = 7;

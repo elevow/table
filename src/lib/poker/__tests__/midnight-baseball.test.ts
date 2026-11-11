@@ -59,7 +59,7 @@ describe('Midnight Baseball', () => {
     expect(up(engine, 'a')).toEqual(['Kc']);
     expect(up(engine, 'b')).toEqual([]);
     expect(s.studState?.playerCards.b.downCards).toHaveLength(7);
-    expect(s.studState?.midnight).toEqual({ holder: 'a', turn: 'b' });
+    expect(s.studState?.midnight).toMatchObject({ holder: 'a', turn: 'b' });
     expect(s.activePlayer).toBe('a');
     expect(s.currentBet).toBe(0);
     expect(s.studState?.bringIn).toBeUndefined();
@@ -200,6 +200,23 @@ describe('Midnight Baseball', () => {
       expect(s.stage).toBe('showdown');
       expect(s.players.reduce((sum, p) => sum + p.stack, 0)).toBe(total);
     }
+  });
+
+  test('records the order cards are turned, and gives the next player the time they take to show', () => {
+    stackDeck('Kc 2h 5d 6d 7s 8c Jh', 'Qc Ac 2c 5h 6h 7h 10s');
+    const engine = midnight();
+    const t0 = Date.now();
+    engine.startNewHand();
+    expect(engine.getState().studState?.midnight?.flips).toEqual(['a']);
+    // One card turned: 2 seconds on top of the usual time
+    const first = engine.getState().turnDeadline! - t0;
+    act(engine, 'check');
+    const t1 = Date.now();
+    act(engine, 'check');
+    expect(engine.getState().studState?.midnight?.flips).toEqual(['a', 'b', 'b']);
+    const second = engine.getState().turnDeadline! - t1;
+    expect(second - first).toBeGreaterThanOrEqual(2000 - 50);
+    expect(second - first).toBeLessThanOrEqual(2000 + 50);
   });
 
   test('a betting pause survives saving and restoring the game', () => {

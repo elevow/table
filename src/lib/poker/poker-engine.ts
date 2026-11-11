@@ -12,7 +12,7 @@ import {
   MAX_TIME_BANK_SECONDS, bankTimeMs, clampSetting, timeBankMs, turnTimeMs,
   MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS,
 } from '../shared/turn-clock';
-import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isMidnightBaseballVariant, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
+import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isMidnightBaseballVariant, MIDNIGHT_FLIP_MS, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
 import { revealedPlayerIds } from './state-sanitizer';
@@ -35,6 +35,8 @@ export class PokerEngine {
   private ritConsents: Set<string> = new Set();
   // Baseball: players dealt a face-up 3 on the street being dealt, in deal order
   private dealtThrees: string[] = [];
+  // Midnight Baseball: time the table spends showing the cards just turned, added to the next clock
+  private revealMs = 0;
 
   // Optional engine options to configure behavior such as betting mode
   public static defaultOptions = {
@@ -907,13 +909,17 @@ export class PokerEngine {
       ? this.state.players.find(p => p.id === this.state.activePlayer)
       : undefined;
     if (!player) {
+      this.revealMs = 0;
       delete this.state.turnStartedAt;
       delete this.state.turnDeadline;
       return;
     }
     if (this.actForAwayPlayer(player, now)) return;
-    this.state.turnStartedAt = now;
-    this.state.turnDeadline = now + turnTimeMs(this.state) + bankTimeMs(player, this.state);
+    // The table shows any cards just turned before the decision, so that time is added
+    const reveal = this.revealMs;
+    this.revealMs = 0;
+    this.state.turnStartedAt = now + reveal;
+    this.state.turnDeadline = now + reveal + turnTimeMs(this.state) + bankTimeMs(player, this.state);
   }
 
   /**
@@ -1578,6 +1584,8 @@ export class PokerEngine {
         continue;
       }
       this.dealUpCard(player.id, down.shift()!);
+      (mb.flips ||= []).push(player.id);
+      this.revealMs += MIDNIGHT_FLIP_MS;
       const turnedThree = this.dealtThrees.includes(player.id);
       this.dealtThrees = [];
       // As in Baseball, nothing is asked once nobody else can bet

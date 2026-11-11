@@ -225,7 +225,9 @@ export interface TableState {
     potMatched?: Record<string, number>;
     // Midnight Baseball: holder has the high hand showing (it opens each betting round); turn is
     // the player turning cards to beat it
-    midnight?: { holder?: string; turn?: string };
+    // flips: whose card was turned, one entry per card in the order they were turned, so the
+    // table can show them one at a time
+    midnight?: { holder?: string; turn?: string; flips?: string[] };
   };
 }
 

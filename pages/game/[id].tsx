@@ -2,6 +2,7 @@ import { useRouter } from 'next/router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLatest } from '../../src/hooks/useLatest';
 import { useHydrated } from '../../src/hooks/useHydrated';
+import { useMidnightReveal } from '../../src/hooks/useMidnightReveal';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
@@ -507,7 +508,9 @@ export default function GamePage() {
   
   // Game state
   const [gameStarted, setGameStarted] = useState(false);
-  const [pokerGameState, setPokerGameState] = useState<any>(null);
+  const [serverGameState, setPokerGameState] = useState<any>(null);
+  // Midnight Baseball's turned cards are shown one at a time; everything else is the server's state
+  const pokerGameState = useMidnightReveal(serverGameState);
   const pokerStageRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     pokerStageRef.current = pokerGameState?.stage;

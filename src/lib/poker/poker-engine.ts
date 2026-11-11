@@ -12,7 +12,7 @@ import {
   MAX_TIME_BANK_SECONDS, bankTimeMs, clampSetting, timeBankMs, turnTimeMs,
   MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS,
 } from '../shared/turn-clock';
-import { holeCardCount, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
+import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
 import { revealedPlayerIds } from './state-sanitizer';
@@ -33,7 +33,9 @@ export class PokerEngine {
   // Optional unanimous-consent requirement and consent tracking for RIT
   private requireRitUnanimous: boolean = false;
   private ritConsents: Set<string> = new Set();
-  
+  // Baseball: players dealt a face-up 3 on the street being dealt, in deal order
+  private dealtThrees: string[] = [];
+
   // Optional engine options to configure behavior such as betting mode
   public static defaultOptions = {
     bettingMode: 'no-limit' as BettingMode,
@@ -253,6 +255,8 @@ export class PokerEngine {
     } else {
       this.dealStudUpCards(1);
     }
+    // Once the betting is over, a face-up 3 asks nothing more of anyone
+    this.dealtThrees = [];
     this.state.activePlayer = '';
   }
 
@@ -313,11 +317,11 @@ export class PokerEngine {
   this.rabbitPreviewed = 0;
   if (isStudVariant(this.state.variant)) {
       if (this.state.bettingMode === 'fixed-limit') this.state.limitBets = 0;
+      this.dealtThrees = [];
       this.dealStudInitial();
       this.postStudAntes();
       // Stud uses bring-in instead of blinds
-      this.computeStudBringIn();
-      this.gameStateManager.startBettingRound('third');
+      this.openStudStreet('third');
     } else if (this.state.bombPotNext) {
       this.startBombPot(this.state.bombPotNext.anteBB);
     } else {
@@ -908,11 +912,19 @@ export class PokerEngine {
    */
   private actForAwayPlayer(player: Player, now: number): boolean {
     if (!this.state.tournamentRules || !player.isSittingOut || this.state.paused || this.state.runItTwicePrompt) return false;
-    const type: 'check' | 'fold' | 'bring-in' = this.pendingBringIn()?.player === player.id
-      ? 'bring-in'
-      : player.currentBet < this.state.currentBet ? 'fold' : 'check';
+    const type = this.timeoutAction(player);
     this.applyDecision({ type, playerId: player.id, tableId: this.state.tableId, timestamp: now } as PlayerAction, 'timeout', now);
     return true;
+  }
+
+  /**
+   * What the table does for a player who doesn't act: check when that is free, otherwise fold.
+   * The bring-in cannot fold or check, so it is brought in; a face-up 3 in Baseball folds.
+   */
+  public timeoutAction(player: Player): 'check' | 'fold' | 'bring-in' {
+    if (this.pendingPotMatch()?.queue[0] === player.id) return 'fold';
+    if (this.pendingBringIn()?.player === player.id) return 'bring-in';
+    return player.currentBet < this.state.currentBet ? 'fold' : 'check';
   }
 
   /** Charge the time a player took beyond the base turn time to their time bank. */
@@ -940,10 +952,7 @@ export class PokerEngine {
     }
     const player = this.state.players.find(p => p.id === playerId);
     if (!player) throw new Error('Player not found');
-    // The bring-in cannot fold or check: running out of time brings it in
-    const action: 'check' | 'fold' | 'bring-in' = this.pendingBringIn()?.player === playerId
-      ? 'bring-in'
-      : player.currentBet < this.state.currentBet ? 'fold' : 'check';
+    const action = this.timeoutAction(player);
     this.applyDecision({ type: action, playerId, tableId: this.state.tableId, timestamp: now }, 'timeout', now);
     player.timeBank = 0;
     if (typeof player.timeBanks === 'number') player.timeBanks = 0;
@@ -1069,6 +1078,15 @@ export class PokerEngine {
     const stage = this.state.stage;
     const stackBefore = actor?.stack ?? 0;
     const betBefore = actor?.currentBet ?? 0;
+    // Baseball: a face-up 3 must match the pot or fold before anyone bets
+    const potMatch = this.pendingPotMatch();
+    if (potMatch) {
+      if (!actor || action.playerId !== potMatch.queue[0]) throw new Error('Invalid action: not player\'s turn');
+      this.decidePotMatch(actor, action.type, source);
+      this.finishDecision(actor, source, now);
+      return;
+    }
+    if (action.type === 'match-pot') throw new Error('There is no pot to match');
     // Stud third street opens with the bring-in player choosing: bring it in, or complete to a
     // full bet. Folding or checking is not allowed.
     const bringIn = this.pendingBringIn();
@@ -1286,7 +1304,8 @@ export class PokerEngine {
         this.determineWinner();
         return;
       }
-      this.gameStateManager.startBettingRound(nextStage);
+      if (isStudVariant(this.state.variant)) this.openStudStreet(nextStage);
+      else this.gameStateManager.startBettingRound(nextStage);
     }
   }
 
@@ -1300,12 +1319,96 @@ export class PokerEngine {
     if (!this.state.studState) this.state.studState = { playerCards: {} };
   }
 
-  /** Give a player a face-up card; Follow the Queen also notes the order face-up cards come out. */
+  /**
+   * Give a player a face-up card. Follow the Queen also notes the order face-up cards come out.
+   * In Baseball a face-up 4 deals the player an extra card face down straight away, and a face-up
+   * 3 is noted so the player can match the pot or fold before the betting.
+   */
   private dealUpCard(playerId: string, card: Card): void {
     const stud = this.state.studState!;
     if (!stud.playerCards[playerId]) stud.playerCards[playerId] = { downCards: [], upCards: [] };
     stud.playerCards[playerId].upCards.push(card);
     if (this.state.variant === 'follow-the-queen') (stud.upCardOrder ||= []).push(card);
+    if (isBaseballVariant(this.state.variant)) {
+      if (card.rank === '4') {
+        const extra = this.deckManager.dealCard();
+        if (extra) stud.playerCards[playerId].downCards.push(extra);
+      } else if (card.rank === '3') {
+        this.dealtThrees.push(playerId);
+      }
+    }
+  }
+
+  /**
+   * Open betting on a stud street that has just been dealt. In Baseball, anyone dealt a face-up 3
+   * first matches the pot or folds, one at a time in deal order.
+   */
+  private openStudStreet(stage: GameStage): void {
+    const threes = this.dealtThrees.filter(id => {
+      const p = this.state.players.find(pl => pl.id === id);
+      return !!p && !p.isFolded && p.stack > 0;
+    });
+    this.dealtThrees = [];
+    if (threes.length > 0 && this.state.pot > 0 && this.getActivePlayers().length > 1) {
+      this.state.stage = stage;
+      this.state.studState!.potMatch = { queue: threes, stage };
+      this.state.activePlayer = threes[0];
+      return;
+    }
+    this.startStudBetting(stage);
+  }
+
+  private startStudBetting(stage: GameStage): void {
+    // The bring-in is worked out once any face-up 3s on third street have matched or folded
+    if (stage === 'third') this.computeStudBringIn();
+    this.gameStateManager.startBettingRound(stage);
+  }
+
+  /** The Baseball match-the-pot decisions still to be made this street, if any. */
+  private pendingPotMatch(): { queue: string[]; stage: GameStage } | undefined {
+    const match = this.state.studState?.potMatch;
+    return match && match.queue.length > 0 && this.state.stage === match.stage ? match : undefined;
+  }
+
+  /** A player dealt a face-up 3 pays the size of the pot to stay in, or folds. */
+  private decidePotMatch(player: Player, type: PlayerAction['type'], source: 'player' | 'timeout'): void {
+    const match = this.pendingPotMatch()!;
+    const stage = this.state.stage;
+    if (type === 'match-pot' || type === 'call') {
+      const pay = this.postForced(player, this.state.pot, false);
+      const matched = (this.state.studState!.potMatched ||= {});
+      matched[player.id] = (matched[player.id] || 0) + pay;
+      this.logAction({ playerId: player.id, action: 'match-pot', amount: pay, put: pay, stage, ...(source === 'timeout' ? { auto: true } : {}) });
+    } else if (type === 'fold') {
+      player.isFolded = true;
+      player.hasActed = true;
+      this.logAction({ playerId: player.id, action: 'fold', put: 0, stage, ...(source === 'timeout' ? { auto: true } : {}) });
+    } else {
+      throw new Error('Match the pot or fold');
+    }
+    match.queue.shift();
+    this.continuePotMatch();
+  }
+
+  /** Move on to the next face-up 3, or open the betting once everyone has decided. */
+  private continuePotMatch(): void {
+    const match = this.state.studState?.potMatch;
+    if (!match) return;
+    match.queue = match.queue.filter(id => {
+      const p = this.state.players.find(pl => pl.id === id);
+      return !!p && !p.isFolded && p.stack > 0;
+    });
+    if (this.getActivePlayers().length <= 1) {
+      delete this.state.studState!.potMatch;
+      this.determineWinner();
+      return;
+    }
+    if (match.queue.length > 0) {
+      this.state.activePlayer = match.queue[0];
+      return;
+    }
+    delete this.state.studState!.potMatch;
+    this.startStudBetting(match.stage);
   }
 
   private dealStudInitial(): void {
@@ -1449,6 +1552,7 @@ export class PokerEngine {
 
   /** Settle the hand and record who won chips, which decides whose cards are shown. */
   private determineWinner(): void {
+    if (this.state.studState) delete this.state.studState.potMatch;
     const stacksBefore = new Map(this.state.players.map(p => [p.id, p.stack]));
     const starts = this.state.handStartStacks;
     const potBefore = starts && this.state.players.every(p => typeof starts[p.id] === 'number')
@@ -1795,7 +1899,7 @@ export class PokerEngine {
     }
 
   // Stud showdown path: evaluate with stud cards (best 5 from available)
-  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'five-card-stud' || this.state.variant === 'razz' || this.state.variant === 'follow-the-queen') {
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'five-card-stud' || this.state.variant === 'razz' || hasBuiltInWilds(this.state.variant)) {
       const rankWeight: Record<Card['rank'], number> = {
         '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14,
       };
@@ -1958,10 +2062,12 @@ export class PokerEngine {
     this.syncBuiltInWilds();
   }
 
-  /** Follow the Queen always plays its own wild cards; leaving it drops them. */
+  /** Games with their own wild cards always play them; leaving such a game drops them. */
   private syncBuiltInWilds(): void {
-    if (this.state.variant === 'follow-the-queen') this.state.wildRule = 'follow-the-queen';
-    else if (this.state.wildRule === 'follow-the-queen') delete this.state.wildRule;
+    const own = builtInWildRule(this.state.variant);
+    if (own) this.state.wildRule = own;
+    // A game's own wild rule is named after the game
+    else if (this.state.wildRule && hasBuiltInWilds(this.state.wildRule)) delete this.state.wildRule;
   }
 
   // Allow changing variant at runtime before a hand starts
@@ -1993,7 +2099,17 @@ export class PokerEngine {
       }));
       const contributedTotal = contributions.reduce((sum, c) => sum + c.contributed, 0);
       if (contributedTotal === potTotal) {
-        return PotCalculator.calculatePotsFromContributions(contributions);
+        // Baseball: chips paid to match the pot are dead money that any player still in can win,
+        // not a bet the others had to call, so they stay out of the side-pot split
+        const matched = this.state.studState?.potMatched || {};
+        let dead = 0;
+        contributions.forEach(c => {
+          const m = Math.min(c.contributed, matched[c.id] || 0);
+          c.contributed -= m;
+          dead += m;
+        });
+        const pots = PotCalculator.calculatePotsFromContributions(contributions);
+        return dead > 0 ? [{ amount: dead, eligiblePlayers: activePlayers.map(p => p.id) }, ...pots] : pots;
       }
       this.log(`Hand contributions (${contributedTotal}) do not match pot (${potTotal}); using current-round bets`);
     }

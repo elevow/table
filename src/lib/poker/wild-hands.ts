@@ -37,6 +37,7 @@ export function followTheQueenRank(upCardOrder: Card[] = []): Card['rank'] | und
 export function wildMatcher(rule?: WildRule, upCardOrder?: Card[]): WildMatcher | null {
   if (rule === 'deuces') return card => card.rank === '2';
   if (rule === 'one-eyed-jacks') return card => card.rank === 'J' && (card.suit === 'spades' || card.suit === 'hearts');
+  if (rule === 'baseball') return card => card.rank === '3' || card.rank === '9';
   if (rule === 'follow-the-queen') {
     const follow = followTheQueenRank(upCardOrder);
     return card => card.rank === 'Q' || card.rank === follow;

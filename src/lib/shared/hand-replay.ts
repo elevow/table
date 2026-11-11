@@ -27,6 +27,7 @@ const VERB: Record<HandActionEntry['action'], string> = {
   straddle: 'straddles',
   ante: 'antes',
   'bring-in': 'brings it in',
+  'match-pot': 'matches the pot with',
   fold: 'folds',
   check: 'checks',
   call: 'calls',

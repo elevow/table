@@ -9,11 +9,13 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   // Razz: seven-card stud played for the lowest hand. 'omaha-5': Omaha with five hole cards.
   | 'razz' | 'omaha-5'
   // Seven-card stud where queens are wild, and so is the rank of the card dealt face up after the last face-up queen
-  | 'follow-the-queen';
+  | 'follow-the-queen'
+  // Seven-card stud with 3s and 9s wild; a face-up 4 deals an extra card, a face-up 3 means match the pot or fold
+  | 'baseball';
 
 // Which cards are wild; unset means none. Deuces and one-eyed jacks are a table option;
-// 'follow-the-queen' is set by the Follow the Queen game itself.
-export type WildRule = 'deuces' | 'one-eyed-jacks' | 'follow-the-queen';
+// 'follow-the-queen' and 'baseball' are set by those games themselves.
+export type WildRule = 'deuces' | 'one-eyed-jacks' | 'follow-the-queen' | 'baseball';
 
 // How much a player may bet: any amount, up to the pot, or one fixed bet per bet or raise
 export type BettingMode = 'no-limit' | 'pot-limit' | 'fixed-limit';
@@ -80,6 +82,8 @@ export interface Player {
 export interface HandActionEntry {
   playerId: string;
   action: 'small-blind' | 'big-blind' | 'straddle' | 'ante' | 'bring-in' | 'fold' | 'check' | 'call' | 'bet' | 'raise'
+    // Baseball: paid the size of the pot to stay in after a face-up 3
+    | 'match-pot'
     // Paid after the hand, straight to the player in toPlayerId rather than into the pot
     | 'bounty'
     // The part of a bet nobody could call, handed back when the betting round ends (put is negative)
@@ -212,6 +216,11 @@ export interface TableState {
     upCardOrder?: Card[];
     // pending: the bring-in player has yet to choose between bringing it in and completing
     bringIn?: { amount: number; player: string; pending?: boolean };
+    // Baseball: players dealt a face-up 3 this street who must still match the pot or fold, in
+    // deal order, before the betting on that street opens
+    potMatch?: { queue: string[]; stage: GameStage };
+    // Baseball: chips each player paid to match the pot; dead money that any player left in can win
+    potMatched?: Record<string, number>;
   };
 }
 
@@ -226,7 +235,8 @@ export interface BettingRound {
 
 export interface PlayerAction {
   // bring-in: the stud bring-in player posting the bring-in rather than completing
-  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in';
+  // match-pot: Baseball, a player dealt a face-up 3 paying the size of the pot to stay in
+  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot';
   playerId: string;
   tableId: string;
   amount?: number;

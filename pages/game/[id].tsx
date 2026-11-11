@@ -1507,6 +1507,12 @@ export default function GamePage() {
   const myBringInPending = !!(isMyTurn && pokerGameState?.stage === 'third' && studBringIn?.pending && studBringIn.player === playerId);
   const bringInAmount = Number(studBringIn?.amount) || 0;
   const completeAmount = Math.min(Number(pokerGameState?.bigBlind) || 0, Math.max(0, Number(me?.stack) || 0));
+  // Baseball: a face-up 3 means paying the size of the pot to stay in, or folding
+  const potMatch = pokerGameState?.studState?.potMatch;
+  const potMatchPlayerId = potMatch && potMatch.stage === pokerGameState?.stage ? potMatch.queue?.[0] : undefined;
+  const myPotMatchPending = !!(isMyTurn && potMatchPlayerId === playerId);
+  const potMatchAmount = Math.min(Number(pokerGameState?.pot) || 0, Math.max(0, Number(me?.stack) || 0));
+  const potMatchIsAllIn = (Number(me?.stack) || 0) <= (Number(pokerGameState?.pot) || 0);
 
   // A pre-action applies to one betting round
   // (adjusted during render, React's recommended way to reset state when something changes)
@@ -1527,16 +1533,17 @@ export default function GamePage() {
     if (!preAction || !isMyTurn || !me || me.isFolded) return;
     // A Run It Twice decision is not a betting turn
     if (pokerGameState?.runItTwicePrompt) return;
-    // Nor is the stud bring-in: that choice is the player's to make
+    // Nor is the stud bring-in, or matching the pot after a Baseball face-up 3: those choices are
+    // the player's to make
     // Carrying out the queued pre-action is this effect's job; clearing it stops it firing twice
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (myBringInPending) { setPreAction(null); return; }
+    if (myBringInPending || myPotMatchPending) { setPreAction(null); return; }
     const result = resolvePreAction(preAction, myOwed);
     setPreAction(null);
     if (result.action === 'cancel') return;
     if (result.action === 'call') handlePokerAction('call', result.amount);
     else handlePokerAction(result.action);
-  }, [preAction, isMyTurn, me, myOwed, pokerGameState?.runItTwicePrompt, myBringInPending, handlePokerAction]);
+  }, [preAction, isMyTurn, me, myOwed, pokerGameState?.runItTwicePrompt, myBringInPending, myPotMatchPending, handlePokerAction]);
 
   // Keyboard shortcuts work only while the Your Turn panel is showing (same conditions as the panel)
   const actionPanelOpen = !!(gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt);
@@ -1544,7 +1551,7 @@ export default function GamePage() {
     enabled: actionPanelOpen,
     // The bring-in cannot fold; check/call posts the bring-in
     onFold: () => { if (!myBringInPending) handleFold(); },
-    onCheckOrCall: () => (myBringInPending ? handlePokerAction('bring-in') : myOwed > 0 ? handlePokerAction('call', myOwed) : handleCheck()),
+    onCheckOrCall: () => (myPotMatchPending ? handlePokerAction('match-pot') : myBringInPending ? handlePokerAction('bring-in') : myOwed > 0 ? handlePokerAction('call', myOwed) : handleCheck()),
   });
 
   // Emote reactions shown over seats
@@ -2698,7 +2705,7 @@ export default function GamePage() {
                 const seatedCount = Array.isArray(pokerGameState?.players) ? pokerGameState.players.length : 0;
                 const wildOk = wildAllowedFor(selectedVariantDC, seatedCount);
                 const wildDC = wildOk ? selectedWildDC : '';
-                // Follow the Queen brings its own wild cards, and like any wild seven-card game needs 7 or fewer players
+                // Follow the Queen and Baseball bring their own wild cards and have their own seat limits
                 const builtInWilds = hasBuiltInWilds(selectedVariantDC);
                 const selectedAllowed = variantAllowedFor(selectedVariantDC, seatedCount);
                 const choiceLabel = `${labelMap[selectedVariantDC] || selectedVariantDC}${wildDC ? ` (${WILD_RULE_LABELS[wildDC]})` : ''}`;
@@ -2737,7 +2744,10 @@ export default function GamePage() {
                       </div>
                       {builtInWilds ? (
                         <p className="text-xs mt-3 opacity-80">
-                          Queens are wild, and so is the rank of the card dealt face up after the last face-up queen. Fixed limit; five of a kind is the top hand.
+                          {selectedVariantDC === 'baseball'
+                            ? '3s and 9s are wild. A face-up 4 gets an extra card face down; a face-up 3 means match the pot or fold.'
+                            : 'Queens are wild, and so is the rank of the card dealt face up after the last face-up queen.'}
+                          {' '}Fixed limit; five of a kind is the top hand.
                         </p>
                       ) : (<>
                       <div className="flex flex-wrap items-center gap-3 mt-3">
@@ -2977,7 +2987,7 @@ export default function GamePage() {
               })()}
               {/* Pot Odds Display */}
               {renderPotOdds()}
-              {!myBringInPending && !(pokerGameState?.splashUsedBy || []).includes(playerId) && (
+              {!myBringInPending && !myPotMatchPending && !(pokerGameState?.splashUsedBy || []).includes(playerId) && (
                 <div className="mb-3 flex items-center gap-2">
                   <button
                     type="button"
@@ -2996,7 +3006,27 @@ export default function GamePage() {
               {showHandValue && myLastCardOdds && (
                 <div className="mb-3 text-sm text-gray-700 dark:text-gray-200" aria-label="Chance to improve">{myLastCardOdds}</div>
               )}
-              {myBringInPending ? (
+              {myPotMatchPending ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    You were dealt a 3 face up. Match the pot to stay in, or fold.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleFold}
+                      className="btn btn-lg act-fold max-sm:min-h-[48px] max-sm:text-base w-[calc(25%-0.5rem)] sm:w-[calc(30%-0.375rem)]"
+                    >
+                      Fold
+                    </button>
+                    <button
+                      onClick={() => handlePokerAction('match-pot')}
+                      className="btn btn-lg act-call max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                    >
+                      Match the pot {showStackInBB ? formatChips(potMatchAmount, pokerGameState?.bigBlind || null, true) : `$${potMatchAmount}`}{potMatchIsAllIn ? ' (all-in)' : ''}
+                    </button>
+                  </div>
+                </div>
+              ) : myBringInPending ? (
                 <div className="flex flex-col gap-2">
                   <p className="text-sm text-gray-700 dark:text-gray-300">
                     You have the {pokerGameState?.variant === 'razz' ? 'highest' : 'lowest'} up card, so you open the betting. Bring it in, or complete to a full bet.

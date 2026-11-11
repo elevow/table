@@ -270,4 +270,28 @@ describe('POST /api/games/rooms/create', () => {
       expect((await call(createHandler, 'POST', mixed(7))).status).toBe(201);
     });
   });
+
+  describe('Baseball', () => {
+    const room = (maxPlayers: number, configuration: Record<string, unknown>) => ({ name: 'T', gameType: 'poker', maxPlayers, configuration });
+    beforeEach(() => {
+      mockCaller.current = caller('u1', ['room.create', 'room.choose_variant']);
+      mockCreateRoom.mockResolvedValue({ id: 'r1' });
+    });
+
+    test('plays fixed limit without run it twice, and seats at most six', async () => {
+      expect((await call(createHandler, 'POST', room(7, { variant: 'baseball' }))).status).toBe(400);
+      const r = await call(createHandler, 'POST', room(6, { variant: 'baseball', bettingMode: 'pot-limit', allowRunItTwice: true }));
+      expect(r.status).toBe(201);
+      expect(mockCreateRoom.mock.calls[0][0].configuration).toMatchObject({ bettingMode: 'fixed-limit', allowRunItTwice: false });
+      expect((await call(createHandler, 'POST', room(6, { variant: 'baseball', wildRule: 'deuces' }))).status).toBe(400);
+    });
+
+    test('a mixed game that includes it seats at most six', async () => {
+      const mixed = (maxPlayers: number) => room(maxPlayers, {
+        variant: 'mixed', mixedGames: [{ variant: 'razz', bettingMode: 'fixed-limit' }, { variant: 'baseball', bettingMode: 'fixed-limit' }],
+      });
+      expect((await call(createHandler, 'POST', mixed(7))).status).toBe(400);
+      expect((await call(createHandler, 'POST', mixed(6))).status).toBe(201);
+    });
+  });
 });

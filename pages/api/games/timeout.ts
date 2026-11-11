@@ -71,11 +71,15 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     if (!timedOut) {
       return res.status(409).json({ error: 'The turn has not timed out', code: 'NOT_TIMED_OUT', remainingMs: null });
     }
-    // A stud bring-in cannot fold or check: the clock brings it in
+    // A stud bring-in cannot fold or check: the clock brings it in. A Baseball face-up 3 that
+    // hasn't matched the pot folds.
     const bringIn = state.studState?.bringIn;
-    const action = bringIn?.pending && bringIn.player === timedOut.id && state.stage === 'third'
-      ? 'bring-in'
-      : timedOut.currentBet < state.currentBet ? 'fold' : 'check';
+    const potMatch = state.studState?.potMatch;
+    const action = potMatch?.queue?.[0] === timedOut.id && potMatch.stage === state.stage
+      ? 'fold'
+      : bringIn?.pending && bringIn.player === timedOut.id && state.stage === 'third'
+        ? 'bring-in'
+        : timedOut.currentBet < state.currentBet ? 'fold' : 'check';
     const satOut = (timedOut.consecutiveTimeouts || 0) + 1 >= TIMEOUTS_BEFORE_SIT_OUT;
 
     const result = await runGameAction({

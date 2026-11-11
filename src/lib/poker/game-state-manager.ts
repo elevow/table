@@ -1,5 +1,5 @@
 import { Card, TableState, GameStage, Player } from '../../types/poker';
-import { isSevenCardStudVariant, isStudVariant } from './variant-rules';
+import { isDrawVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { HandEvaluator } from './hand-evaluator';
 import { debugFlags } from '../config/env';
 
@@ -134,7 +134,10 @@ export class GameStateManager {
       const n = dealtIn.length;
       const dealerIdx = Math.max(0, dealtIn.indexOf(this.state.players[this.state.dealerPosition]));
       let firstIndex: number;
-      if (n === 2) {
+      if (isDrawVariant(this.state.variant)) {
+        // Draw games have no blinds: the first player after the button opens both rounds
+        firstIndex = (dealerIdx + 1) % n;
+      } else if (n === 2) {
         // HU rules: dealer posts SB and acts first preflop; postflop non-dealer (BB) acts first
         firstIndex = stage === 'preflop' ? dealerIdx : (dealerIdx + 1) % n;
       } else {

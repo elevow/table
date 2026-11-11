@@ -2,6 +2,8 @@
 export type GameStage =
   | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' // Hold'em/Omaha
   | 'third' | 'fourth' | 'fifth' | 'sixth' | 'seventh' // Seven-card Stud
+  // Draw games: 'preflop' is the betting before the draw; 'draw' is the draw and the betting after it
+  | 'draw'
   | 'awaiting-dealer-choice'; // Dealer's Choice pre-hand pause
 
 // Game variant type - shared across TableState and PokerEngine
@@ -12,6 +14,8 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   | 'follow-the-queen'
   // Seven-card stud with 3s and 9s wild; a face-up 4 deals an extra card, a face-up 3 means match the pot or fold
   | 'baseball'
+  // Five cards each, one round of betting, a draw, and another round of betting
+  | 'five-card-draw'
   // Baseball dealt all face down: nobody looks, and each player turns cards until they beat the high hand
   | 'midnight-baseball';
 
@@ -86,6 +90,8 @@ export interface HandActionEntry {
   action: 'small-blind' | 'big-blind' | 'straddle' | 'ante' | 'bring-in' | 'fold' | 'check' | 'call' | 'bet' | 'raise'
     // Baseball: paid the size of the pot to stay in after a face-up 3
     | 'match-pot'
+    // Draw games: swapped drawCount cards (0 = stood pat)
+    | 'draw'
     // Paid after the hand, straight to the player in toPlayerId rather than into the pot
     | 'bounty'
     // The part of a bet nobody could call, handed back when the betting round ends (put is negative)
@@ -99,6 +105,8 @@ export interface HandActionEntry {
   stage: GameStage;
   // Taken by the turn clock rather than the player
   auto?: boolean;
+  // Draw: how many cards were swapped
+  drawCount?: number;
 }
 
 export interface TableState {
@@ -211,6 +219,10 @@ export interface TableState {
   // US-052/US-054: Low hand qualifier value (defaults to 8 for Hi-Lo variants)
   lowHandQualifier?: 8;
   // US-053: Seven-card Stud per-player cards and bring-in tracking
+  // Draw games, during the draw: players still to draw, in order (the first is drawing now), and
+  // the cards thrown away so far, which are shuffled back in if the deck runs out (never sent to
+  // players)
+  drawState?: { pending: string[]; muck?: Card[] };
   studState?: {
     // downCount replaces downCards for other players: how many they hold, not which
     playerCards: Record<string, { downCards: Card[]; upCards: Card[]; downCount?: number }>;
@@ -244,10 +256,12 @@ export interface BettingRound {
 export interface PlayerAction {
   // bring-in: the stud bring-in player posting the bring-in rather than completing
   // match-pot: Baseball, a player dealt a face-up 3 paying the size of the pot to stay in
-  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot';
+  // draw: a draw game's draw, swapping the cards at the discards positions in holeCards
+  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw';
   playerId: string;
   tableId: string;
   amount?: number;
+  discards?: number[];
   timestamp: number;
 }
 

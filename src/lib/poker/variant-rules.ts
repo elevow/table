@@ -15,6 +15,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'seven-card-stud-hi-lo',
   'razz',
   'five-card-stud',
+  'five-card-draw',
   'follow-the-queen',
   'baseball',
   'midnight-baseball',
@@ -29,6 +30,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'seven-card-stud-hi-lo': 'Seven-Card Stud Hi-Lo',
   'razz': 'Razz',
   'five-card-stud': 'Five-Card Stud',
+  'five-card-draw': 'Five-Card Draw',
   'follow-the-queen': 'Follow the Queen',
   'baseball': 'Baseball',
   'midnight-baseball': 'Midnight Baseball',
@@ -78,6 +80,14 @@ export function isBaseballVariant(variant?: string | null): boolean {
 }
 
 /**
+ * Draw games: five cards each, betting, one draw, betting. Players draw up to 3 cards, or 4 when
+ * the card they keep is an ace.
+ */
+export function isDrawVariant(variant?: string | null): boolean {
+  return variant === 'five-card-draw';
+}
+
+/**
  * Midnight Baseball: every card is dealt face down and nobody looks. In turn, each player turns
  * cards face up until their face-up cards beat the high hand showing, and the betting follows.
  */
@@ -90,6 +100,8 @@ export function isMidnightBaseballVariant(variant?: string | null): boolean {
 export const MIDNIGHT_FLIP_MS = 2000;
 
 export const MAX_TABLE_PLAYERS = 9;
+// Five cards each for seven players is 35; the draw reshuffles the discards if the deck runs out
+export const MAX_DRAW_PLAYERS = 7;
 // Seven cards each for seven players is 49 of the 52, so an eighth player could not be dealt in
 export const MAX_SEVEN_CARD_WILD_PLAYERS = 7;
 // Baseball's face-up 4s can each deal an extra card: six players need 42 cards plus up to 4 more
@@ -98,6 +110,7 @@ export const MAX_BASEBALL_PLAYERS = 6;
 /** The most players a table can seat for this game. */
 export function maxPlayersForGame(variant?: string | null, wildRule?: WildRule): number {
   if (isBaseballVariant(variant)) return MAX_BASEBALL_PLAYERS;
+  if (isDrawVariant(variant)) return MAX_DRAW_PLAYERS;
   const wild = !!wildRule || hasBuiltInWilds(variant);
   return wild && isSevenCardStudVariant(variant) ? MAX_SEVEN_CARD_WILD_PLAYERS : MAX_TABLE_PLAYERS;
 }
@@ -156,9 +169,9 @@ export function isHoldemVariant(v?: string | null): boolean {
   return !v || v === 'texas-holdem';
 }
 
-/** Hole cards dealt in a board game (Hold'em or Omaha). */
+/** Hole cards dealt in a board game (Hold'em or Omaha), or a draw game's hand. */
 export function holeCardCount(v?: string | null): number {
-  if (v === 'omaha-5') return 5;
+  if (v === 'omaha-5' || isDrawVariant(v)) return 5;
   if (v === 'omaha' || v === 'omaha-hi-lo') return 4;
   return 2;
 }

@@ -1,5 +1,5 @@
 import { randomInt } from 'crypto';
-import { isOmahaVariant } from './variant-rules';
+import { isDrawVariant, isOmahaVariant } from './variant-rules';
 import { HandEvaluator } from './hand-evaluator';
 import { RunItTwicePrompt, TableState, Card, GameStage } from '../../types/poker';
 import { HandInterface } from '../../types/poker-engine';
@@ -101,6 +101,8 @@ export const enrichStateWithRunIt = (tableId: string, state: TableState | any) =
  * Checks if the current game state is eligible for auto-runout.
  */
 export const isAutoRunoutEligible = (state: any): boolean => {
+  // Draw games have no board: the engine plays out the draw and showdown itself
+  if (isDrawVariant(state?.variant)) return false;
   const players = Array.isArray(state?.players) ? state.players : [];
   const activeCount = players.filter((p: any) => !(p.isFolded || (p as any).folded)).length;
   if (activeCount < 2) return false;

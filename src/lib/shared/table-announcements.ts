@@ -13,6 +13,7 @@ interface ActionLike {
   amount?: number;
   put?: number;
   auto?: boolean;
+  drawCount?: number;
 }
 
 export interface AnnounceSnapshot {
@@ -97,6 +98,7 @@ export function describeAction(entry: ActionLike, name: string, fmt: (n: number)
     case 'ante': text = `${name} antes ${fmt(put)}`; break;
     case 'bring-in': text = `${name} brings in for ${fmt(put)}`; break;
     case 'match-pot': text = `${name} matches the pot for ${fmt(put)}`; break;
+    case 'draw': text = entry.drawCount ? `${name} draws ${entry.drawCount}` : `${name} stands pat`; break;
     case 'uncalled': text = `Uncalled ${fmt(-put)} returned to ${name}`; break;
     default: text = null;
   }

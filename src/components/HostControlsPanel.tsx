@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { authHeaders } from '../utils/auth-headers';
 import type { TableExtras } from '../hooks/useTableExtras';
-import { isStudVariant } from '../lib/poker/variant-rules';
+import { isDrawVariant, isStudVariant } from '../lib/poker/variant-rules';
 import { MIN_TURN_SECONDS, MAX_TURN_SECONDS, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, handDelayMs, turnTimeMs } from '../lib/shared/turn-clock';
 
 interface Props {
@@ -58,7 +58,8 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
   const paused = !!gameState?.paused;
   const pending = gameState?.pendingBlinds;
   const bomb = gameState?.bombPotNext;
-  const stud = isStudVariant(gameState?.variant);
+  // Stud and draw games have no board: no bomb pots, straddles or run it twice
+  const stud = isStudVariant(gameState?.variant) || isDrawVariant(gameState?.variant);
   const can = (permission: string) => (extras.hostPermissions || []).includes(permission);
   const canConfigure = can('room.configure');
   const isPrivate = extras.visibility === 'private';

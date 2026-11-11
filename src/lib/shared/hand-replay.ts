@@ -28,6 +28,7 @@ const VERB: Record<HandActionEntry['action'], string> = {
   ante: 'antes',
   'bring-in': 'brings it in',
   'match-pot': 'matches the pot with',
+  draw: 'draws',
   fold: 'folds',
   check: 'checks',
   call: 'calls',
@@ -40,6 +41,7 @@ const VERB: Record<HandActionEntry['action'], string> = {
 const STREET_LABELS: Partial<Record<GameStage, string>> = {
   preflop: 'Preflop', flop: 'Flop', turn: 'Turn', river: 'River', showdown: 'Showdown',
   third: '3rd street', fourth: '4th street', fifth: '5th street', sixth: '6th street', seventh: '7th street',
+  draw: 'Draw',
 };
 
 // Five-card stud deals one down and one up card, so its first betting round is 2nd street. The
@@ -51,6 +53,7 @@ const FIVE_CARD_STUD_STREETS: Partial<Record<GameStage, string>> = {
 /** What to call a street in an action log, e.g. "Flop" or "4th street". */
 export function streetLabel(stage: GameStage, variant?: string | null): string {
   if (variant === 'five-card-stud' && FIVE_CARD_STUD_STREETS[stage]) return FIVE_CARD_STUD_STREETS[stage]!;
+  if (variant === 'five-card-draw' && stage === 'preflop') return 'Before the draw';
   return STREET_LABELS[stage] || stage;
 }
 
@@ -62,6 +65,11 @@ export function describeAction(
 ): string {
   if (a.action === 'uncalled') {
     return `Uncalled ${money(-a.put)} returned to ${name}`;
+  }
+  if (a.action === 'draw') {
+    const n = a.drawCount || 0;
+    const what = n === 0 ? 'stands pat' : `draws ${n} card${n === 1 ? '' : 's'}`;
+    return `${name} ${what}${a.auto ? ' (timed out)' : ''}`;
   }
   if (a.action === 'bounty') {
     const to = a.toPlayerId ? nameOf?.(a.toPlayerId) : undefined;

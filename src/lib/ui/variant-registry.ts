@@ -162,6 +162,21 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'five-card-draw': {
+    variant: 'five-card-draw',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }],
+    helpContent: {
+      title: 'Five‑Card Draw',
+      summary: 'Five cards each, all private. Everyone antes; there is no board.',
+      bullets: [
+        'A round of betting, starting after the button',
+        'The draw: in turn, swap up to 3 cards, or 4 if the card you keep is an ace',
+        'A second round of betting, then the best five‑card hand wins',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'razz': {
     variant: 'razz',
     controls: [commonControls.bet, commonControls.check, commonControls.fold],

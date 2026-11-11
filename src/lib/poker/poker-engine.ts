@@ -12,7 +12,7 @@ import {
   MAX_TIME_BANK_SECONDS, bankTimeMs, clampSetting, timeBankMs, turnTimeMs,
   MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS,
 } from '../shared/turn-clock';
-import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isMidnightBaseballVariant, MIDNIGHT_FLIP_MS, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
+import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isDrawVariant, isMidnightBaseballVariant, MIDNIGHT_FLIP_MS, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
 import { revealedPlayerIds } from './state-sanitizer';
@@ -327,14 +327,21 @@ export class PokerEngine {
       this.dealtThrees = [];
       if (isMidnightBaseballVariant(this.state.variant)) {
         this.dealMidnightBaseball();
-        this.postStudAntes();
+        this.postGameAntes('third');
         this.startMidnightBaseball();
       } else {
         this.dealStudInitial();
-        this.postStudAntes();
+        this.postGameAntes('third');
         // Stud uses bring-in instead of blinds
         this.openStudStreet('third');
       }
+    } else if (isDrawVariant(this.state.variant)) {
+      // Draw games: antes and no blinds; the first player after the button opens
+      this.dealHoleCards();
+      this.postGameAntes('preflop');
+      if (this.state.bettingMode === 'fixed-limit') this.state.limitBets = 0;
+      if (this.bettorsLeft() >= 2) this.gameStateManager.startBettingRound('preflop');
+      else this.startDraw();
     } else if (this.state.bombPotNext) {
       this.startBombPot(this.state.bombPotNext.anteBB);
     } else {
@@ -479,7 +486,8 @@ export class PokerEngine {
   /** Whether this table offers run it twice after an all-in. */
   public setAllowRunItTwice(allow: boolean): void {
     // Run It Twice evaluates each board without wild cards, so wild tables play one board
-    this.state.allowRunItTwice = allow && !this.state.wildRule;
+    // Draw games have no board to run twice
+    this.state.allowRunItTwice = allow && !this.state.wildRule && !isDrawVariant(this.state.variant);
   }
 
   /** Whether everyone still in at a showdown must show, instead of losers mucking. */
@@ -549,16 +557,16 @@ export class PokerEngine {
   }
 
   /**
-   * Stud: everyone dealt in antes before the bring-in. The table's ante is used, or a tenth of the
-   * big blind (at least 1) when the table has none.
+   * Stud and draw games: everyone dealt in antes (in stud, before the bring-in). The table's ante
+   * is used, or a tenth of the big blind (at least 1) when the table has none.
    */
-  private postStudAntes(): void {
+  private postGameAntes(stage: GameStage): void {
     const ante = this.state.ante && this.state.ante > 0
       ? this.state.ante
       : Math.max(1, Math.round(this.state.bigBlind / 10));
     for (const p of this.gameStateManager.dealtInPlayers()) {
       const pay = this.postForced(p, ante, false);
-      if (pay > 0) this.logAction({ playerId: p.id, action: 'ante', put: pay, stage: 'third' });
+      if (pay > 0) this.logAction({ playerId: p.id, action: 'ante', put: pay, stage });
     }
   }
 
@@ -584,7 +592,7 @@ export class PokerEngine {
     const dealerId = players[this.state.dealerPosition]?.id;
     const active = players.filter(p => !sitsOutOfHand(p, this.state));
     const waiting = players.filter(p => p.waitingForBigBlind && !p.isSittingOut);
-    const hasBlinds = !isStudVariant(this.state.variant) && !this.state.bombPotNext;
+    const hasBlinds = !isStudVariant(this.state.variant) && !isDrawVariant(this.state.variant) && !this.state.bombPotNext;
     const dealIn = (p: Player) => {
       delete p.waitingForBigBlind;
       delete p.missedBigBlind;
@@ -938,7 +946,9 @@ export class PokerEngine {
    * What the table does for a player who doesn't act: check when that is free, otherwise fold.
    * The bring-in cannot fold or check, so it is brought in; a face-up 3 in Baseball folds.
    */
-  public timeoutAction(player: Player): 'check' | 'fold' | 'bring-in' {
+  public timeoutAction(player: Player): 'check' | 'fold' | 'bring-in' | 'draw' {
+    // In a draw, the clock stands pat
+    if (this.pendingDraw()?.pending[0] === player.id) return 'draw';
     if (this.pendingPotMatch()?.queue[0] === player.id) return 'fold';
     if (this.pendingBringIn()?.player === player.id) return 'bring-in';
     return player.currentBet < this.state.currentBet ? 'fold' : 'check';
@@ -961,7 +971,7 @@ export class PokerEngine {
    * Act for the player whose clock has run out: check when that is free, otherwise fold.
    * The time bank is used up, and enough timeouts in a row sit the player out from the next hand.
    */
-  public handleTimeout(now: number = Date.now()): { playerId: string; action: 'check' | 'fold' | 'bring-in'; satOut: boolean } {
+  public handleTimeout(now: number = Date.now()): { playerId: string; action: 'check' | 'fold' | 'bring-in' | 'draw'; satOut: boolean } {
     const playerId = this.state.activePlayer;
     const deadline = this.state.turnDeadline;
     if (!playerId || typeof deadline !== 'number' || now < deadline) {
@@ -1104,6 +1114,15 @@ export class PokerEngine {
       return;
     }
     if (action.type === 'match-pot') throw new Error('There is no pot to match');
+    // Draw games: in turn, each player still in swaps cards or stands pat
+    const draw = this.pendingDraw();
+    if (draw) {
+      if (!actor || action.playerId !== draw.pending[0]) throw new Error('Invalid action: not player\'s turn');
+      this.decideDraw(actor, action, source);
+      this.finishDecision(actor, source, now);
+      return;
+    }
+    if (action.type === 'draw') throw new Error('There is no draw now');
     // Stud third street opens with the bring-in player choosing: bring it in, or complete to a
     // full bet. Folding or checking is not allowed.
     const bringIn = this.pendingBringIn();
@@ -1251,6 +1270,12 @@ export class PokerEngine {
 
       // Hand back any part of a bet nobody could match before the next cards come
       this.returnUncalledBet();
+      // Draw games: the draw follows the first round; the showdown follows the second
+      if (isDrawVariant(this.state.variant)) {
+        if (this.state.stage === 'preflop') this.startDraw();
+        else this.determineWinner();
+        return;
+      }
       // Midnight Baseball: the next player turns cards to beat the high hand
       if (isMidnightBaseballVariant(this.state.variant)) {
         this.continueMidnight();
@@ -1740,9 +1765,93 @@ export class PokerEngine {
     if (next) this.state.activePlayer = next.id;
   }
 
+  /** The draw in progress, if any. */
+  private pendingDraw(): { pending: string[]; muck?: Card[] } | undefined {
+    const draw = this.state.drawState;
+    return draw && this.state.stage === 'draw' && draw.pending.length > 0 ? draw : undefined;
+  }
+
+  /**
+   * Draw games: once the first betting round is over, everyone still in draws in turn, starting
+   * after the button. Players who are all-in draw too.
+   */
+  private startDraw(): void {
+    this.state.stage = 'draw';
+    this.state.currentBet = 0;
+    this.state.players.forEach(p => { p.currentBet = 0; p.hasActed = false; });
+    const n = this.state.players.length;
+    const start = this.state.dealerPosition;
+    const pending: string[] = [];
+    for (let i = 1; i <= n; i++) {
+      const p = this.state.players[(start + i) % n];
+      if (p && !p.isFolded && (p.holeCards?.length || 0) > 0 && !pending.includes(p.id)) pending.push(p.id);
+    }
+    this.state.drawState = { pending, muck: [] };
+    this.continueDraw();
+  }
+
+  /**
+   * Swap the cards at the positions in action.discards (none stands pat): up to 3, or 4 when the
+   * card kept is an ace. A player may also fold instead.
+   */
+  private decideDraw(player: Player, action: PlayerAction, source: 'player' | 'timeout'): void {
+    const draw = this.pendingDraw()!;
+    const auto = source === 'timeout' ? { auto: true } : {};
+    if (action.type === 'fold') {
+      player.isFolded = true;
+      player.hasActed = true;
+      this.logAction({ playerId: player.id, action: 'fold', put: 0, stage: 'draw', ...auto });
+    } else if (action.type === 'draw') {
+      const hand = player.holeCards || [];
+      const positions = [...new Set(Array.isArray(action.discards) ? action.discards : [])];
+      if (positions.some(i => !Number.isInteger(i) || i < 0 || i >= hand.length)) throw new Error('Choose cards from your hand to draw');
+      const kept = hand.filter((_, i) => !positions.includes(i));
+      if (positions.length > 4 || (positions.length === 4 && !kept.some(c => c.rank === 'A'))) {
+        throw new Error('You can draw up to 3 cards, or 4 if the card you keep is an ace');
+      }
+      const thrown = positions.map(i => hand[i]);
+      // If the deck runs out, earlier discards are shuffled in; this player's own are not
+      if (this.deckManager.getRemainingDeck().length < thrown.length && (draw.muck?.length || 0) > 0) {
+        this.deckManager.addShuffledToBottom(draw.muck || []);
+        draw.muck = [];
+      }
+      player.holeCards = [...kept, ...this.deckManager.dealCards(thrown.length)];
+      draw.muck = [...(draw.muck || []), ...thrown];
+      this.logAction({ playerId: player.id, action: 'draw', put: 0, drawCount: thrown.length, stage: 'draw', ...auto });
+    } else {
+      throw new Error('Choose cards to draw, or stand pat');
+    }
+    draw.pending.shift();
+    this.continueDraw();
+  }
+
+  /** Move on to the next player to draw; once everyone has, open the betting after the draw. */
+  private continueDraw(): void {
+    const draw = this.state.drawState;
+    if (!draw) return;
+    draw.pending = draw.pending.filter(id => this.state.players.some(p => p.id === id && !p.isFolded));
+    if (this.getActivePlayers().length <= 1) {
+      this.determineWinner();
+      return;
+    }
+    if (draw.pending.length > 0) {
+      this.state.activePlayer = draw.pending[0];
+      return;
+    }
+    delete this.state.drawState;
+    if (this.bettorsLeft() >= 2) {
+      this.gameStateManager.startBettingRound('draw');
+      return;
+    }
+    // Nobody left to bet against: straight to the showdown
+    this.state.activePlayer = '';
+    this.determineWinner();
+  }
+
   /** Settle the hand and record who won chips, which decides whose cards are shown. */
   private determineWinner(): void {
     if (this.state.studState) delete this.state.studState.potMatch;
+    delete this.state.drawState;
     const stacksBefore = new Map(this.state.players.map(p => [p.id, p.stack]));
     const starts = this.state.handStartStacks;
     const potBefore = starts && this.state.players.every(p => typeof starts[p.id] === 'number')

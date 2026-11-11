@@ -6,6 +6,7 @@ import type { GameStage, TableState } from '../../types/poker';
  * - The small bet is the big blind; the big bet is twice the big blind.
  * - Flop games use the small bet preflop and on the flop, the big bet on the turn and river.
  *   Stud uses the small bet on third and fourth street, the big bet from fifth street on.
+ *   Draw games use the small bet before the draw and the big bet after it.
  * - Every bet or raise is exactly one bet. A street is capped at FIXED_LIMIT_CAP bets (a bet and
  *   three raises), heads-up included: we keep the cap at every table size so the rule is the same
  *   for everyone, rather than lifting it when only two players are left.
@@ -18,7 +19,7 @@ import type { GameStage, TableState } from '../../types/poker';
 
 export const FIXED_LIMIT_CAP = 4;
 
-const BIG_BET_STAGES: GameStage[] = ['turn', 'river', 'fifth', 'sixth', 'seventh'];
+const BIG_BET_STAGES: GameStage[] = ['turn', 'river', 'fifth', 'sixth', 'seventh', 'draw'];
 
 /** Size of one bet on this street. */
 export function fixedLimitBetSize(stage: GameStage, bigBlind: number): number {

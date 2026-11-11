@@ -1525,6 +1525,8 @@ export class PokerEngine {
       p.isFolded = true;
       p.hasActed = true;
       this.logAction({ playerId: p.id, action: 'fold', put: 0, stage: this.state.stage });
+      const mb = this.state.studState!.midnight!;
+      (mb.outAt ||= {})[p.id] = mb.flips?.length || 0;
     }
   }
 

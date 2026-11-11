@@ -6,8 +6,9 @@ type PlayerCards = { downCards?: unknown[]; upCards?: unknown[]; downCount?: num
 /**
  * Midnight Baseball turns cards on the server all at once. This shows them one at a time,
  * MIDNIGHT_FLIP_MS apart: until the last one is showing, the table sees the hand as it stood
- * after the cards shown so far, with nobody to act and no result yet. The server adds the same
- * time to the next player's clock.
+ * after the cards shown so far, with nobody to act and no result yet. Players stay in until the
+ * card that put them out is showing, and a settled pot stays in the middle. The server adds the
+ * same time to the next player's clock.
  */
 export function revealFrame<T>(state: T, shown: number): T {
   const s = state as any;
@@ -22,8 +23,20 @@ export function revealFrame<T>(state: T, shown: number): T {
     // Cards not shown yet are still face down, including any revealed at the showdown
     playerCards[id] = { downCards: [], upCards: up, downCount: down + allUp.length - up.length };
   }
+  const outAt: Record<string, number> = s?.studState?.midnight?.outAt || {};
+  const winnings: Record<string, number> = (s.stage === 'showdown' && s.handResult?.winnings) || {};
+  const players = Array.isArray(s.players)
+    ? s.players.map((p: any) => {
+      const stillIn = (p.isFolded || p.folded) && typeof outAt[p.id] === 'number' && outAt[p.id] > shown;
+      const won = winnings[p.id] || 0;
+      return stillIn || won ? { ...p, ...(stillIn ? { isFolded: false, folded: false } : {}), stack: p.stack - won } : p;
+    })
+    : s.players;
   return {
     ...s,
+    players,
+    // Before it is settled the pot is everything put in
+    pot: s.stage === 'showdown' && typeof s.handResult?.pot === 'number' ? s.handResult.pot : s.pot,
     stage: s.stage === 'showdown' ? 'third' : s.stage,
     activePlayer: '',
     handResult: undefined,

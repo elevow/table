@@ -226,8 +226,9 @@ export interface TableState {
     // Midnight Baseball: holder has the high hand showing (it opens each betting round); turn is
     // the player turning cards to beat it
     // flips: whose card was turned, one entry per card in the order they were turned, so the
-    // table can show them one at a time
-    midnight?: { holder?: string; turn?: string; flips?: string[] };
+    // table can show them one at a time. outAt: for each player out of the hand, how many cards
+    // had been turned when they went out, so the table shows them out only from then
+    midnight?: { holder?: string; turn?: string; flips?: string[]; outAt?: Record<string, number> };
   };
 }
 

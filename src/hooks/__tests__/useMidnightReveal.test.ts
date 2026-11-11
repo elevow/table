@@ -64,6 +64,28 @@ describe('useMidnightReveal', () => {
     expect(result.current.handResult).toEqual({ pot: 4, winnings: { b: 4 } });
   });
 
+  test('a player stays in, and the pot stays in the middle, until the card that ends the hand is showing', () => {
+    let current: any = state('h1');
+    const { result, rerender } = renderHook(() => useMidnightReveal(current));
+    current = state('h2', {
+      stage: 'showdown',
+      pot: 0,
+      handResult: { pot: 4, winnings: { b: 4 } },
+      players: [{ id: 'a', stack: 98, isFolded: true }, { id: 'b', stack: 102, isFolded: false }],
+      studState: { ...state('h2').studState, midnight: { holder: 'b', flips: ['a', 'b', 'b'], outAt: { a: 3 } } },
+    });
+    rerender();
+    act(() => { jest.advanceTimersByTime(2000); });
+    act(() => { jest.advanceTimersByTime(2000); });
+    expect(result.current.players[0].isFolded).toBe(false);
+    expect(result.current.pot).toBe(4);
+    expect(result.current.players[1].stack).toBe(98);
+    act(() => { jest.advanceTimersByTime(2000); });
+    expect(result.current.players[0].isFolded).toBe(true);
+    expect(result.current.players[1].stack).toBe(102);
+    expect(result.current.pot).toBe(0);
+  });
+
   test('other games pass straight through', () => {
     const s = { variant: 'texas-holdem', handId: 'h1' };
     const { result } = renderHook(() => useMidnightReveal(s));

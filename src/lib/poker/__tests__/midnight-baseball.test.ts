@@ -91,6 +91,9 @@ describe('Midnight Baseball', () => {
     // a turns every card and never beats ace-queen, so a is out and b takes the pot
     expect(up(engine, 'a')).toHaveLength(7);
     expect(player(engine, 'a').isFolded).toBe(true);
+    // a went out once all nine cards were turned: a's first, b's two, then a's other six
+    expect(engine.getState().studState?.midnight?.flips).toHaveLength(9);
+    expect(engine.getState().studState?.midnight?.outAt).toEqual({ a: 9 });
     expect(engine.getState().stage).toBe('showdown');
     expect(player(engine, 'b').stack).toBe(103);
     expect(player(engine, 'a').stack).toBe(97);

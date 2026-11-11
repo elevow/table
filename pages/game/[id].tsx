@@ -3850,7 +3850,13 @@ export default function GamePage() {
           {/* Less critical component in viewport */}
           <MobileCollapsible title="Chat" className="lg:col-span-2">
           <div ref={chatPanelRef} className="lg:col-span-2 surface p-4 max-sm:mt-0">
-            <ChatPanel gameId={String(id)} playerId={playerId} isAdmin={userRole === 'admin'} />
+            <ChatPanel
+              gameId={String(id)}
+              playerId={playerId}
+              isAdmin={userRole === 'admin'}
+              // Midnight Baseball: the hand result waits until the turned cards are all showing
+              holdSystemMessages={!!serverGameState && pokerGameState?.stage !== serverGameState.stage}
+            />
           </div>
           </MobileCollapsible>
 

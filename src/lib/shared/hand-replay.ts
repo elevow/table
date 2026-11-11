@@ -29,6 +29,7 @@ const VERB: Record<HandActionEntry['action'], string> = {
   'bring-in': 'brings it in',
   'match-pot': 'matches the pot with',
   draw: 'draws',
+  discard: 'throws away a card',
   fold: 'folds',
   check: 'checks',
   call: 'calls',

@@ -12,7 +12,7 @@ import {
   MAX_TIME_BANK_SECONDS, bankTimeMs, clampSetting, timeBankMs, turnTimeMs,
   MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS,
 } from '../shared/turn-clock';
-import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isDrawVariant, isNicaraguaMethod, isNicaraguaVariant, isMidnightBaseballVariant, MIDNIGHT_FLIP_MS, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
+import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isDrawVariant, isNicaraguaMethod, isNicaraguaVariant, pineappleDiscardStage, isMidnightBaseballVariant, MIDNIGHT_FLIP_MS, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
 import { describeNicaraguaHand, nicaraguaScore } from './nicaragua';
@@ -669,6 +669,10 @@ export class PokerEngine {
     if (this.state.stage === 'showdown') return;
     const canAct = this.getActivePlayers().filter(p => !p.isAllIn);
     if (canAct.length > 0) return;
+    if (this.discardOwed()) {
+      this.skipToDiscard();
+      return;
+    }
     this.dealCommunityCards(Math.max(0, 5 - this.state.communityCards.length));
     this.determineWinner();
   }
@@ -937,6 +941,13 @@ export class PokerEngine {
       return;
     }
     if (this.actForAwayPlayer(player, now)) return;
+    // Pineapple's discard: everyone is on the one clock that started with it
+    const discard = this.pendingDiscard();
+    if (discard && typeof discard.deadline === 'number') {
+      this.state.turnStartedAt = discard.startedAt ?? now;
+      this.state.turnDeadline = discard.deadline;
+      return;
+    }
     // The table shows any cards just turned before the decision, so that time is added
     const reveal = this.revealMs;
     this.revealMs = 0;
@@ -960,7 +971,9 @@ export class PokerEngine {
    * What the table does for a player who doesn't act: check when that is free, otherwise fold.
    * The bring-in cannot fold or check, so it is brought in; a face-up 3 in Baseball folds.
    */
-  public timeoutAction(player: Player): 'check' | 'fold' | 'bring-in' | 'draw' {
+  public timeoutAction(player: Player): 'check' | 'fold' | 'bring-in' | 'draw' | 'discard' {
+    // In Pineapple's discard, the clock throws away the lowest card
+    if (this.pendingDiscard()?.pending.includes(player.id)) return 'discard';
     // In a draw, the clock stands pat
     if (this.pendingDraw()?.pending[0] === player.id) return 'draw';
     if (this.pendingPotMatch()?.queue[0] === player.id) return 'fold';
@@ -985,7 +998,7 @@ export class PokerEngine {
    * Act for the player whose clock has run out: check when that is free, otherwise fold.
    * The time bank is used up, and enough timeouts in a row sit the player out from the next hand.
    */
-  public handleTimeout(now: number = Date.now()): { playerId: string; action: 'check' | 'fold' | 'bring-in' | 'draw'; satOut: boolean } {
+  public handleTimeout(now: number = Date.now()): { playerId: string; action: 'check' | 'fold' | 'bring-in' | 'draw' | 'discard'; satOut: boolean } {
     const playerId = this.state.activePlayer;
     const deadline = this.state.turnDeadline;
     if (!playerId || typeof deadline !== 'number' || now < deadline) {
@@ -993,6 +1006,21 @@ export class PokerEngine {
     }
     const player = this.state.players.find(p => p.id === playerId);
     if (!player) throw new Error('Player not found');
+    const discard = this.pendingDiscard();
+    if (discard) {
+      // Everyone still choosing is out of time together
+      const late = this.state.players.filter(p => discard.pending.includes(p.id));
+      late.forEach(p => this.discardLowest(p, true));
+      late.forEach(p => {
+        p.timeBank = 0;
+        if (typeof p.timeBanks === 'number') p.timeBanks = 0;
+        p.consecutiveTimeouts = (p.consecutiveTimeouts || 0) + 1;
+        if (p.consecutiveTimeouts >= TIMEOUTS_BEFORE_SIT_OUT) p.isSittingOut = true;
+      });
+      this.continueDiscard();
+      this.finishDecision(undefined, 'timeout', now);
+      return { playerId, action: 'discard', satOut: !!player.isSittingOut };
+    }
     const action = this.timeoutAction(player);
     this.applyDecision({ type: action, playerId, tableId: this.state.tableId, timestamp: now }, 'timeout', now);
     player.timeBank = 0;
@@ -1137,6 +1165,18 @@ export class PokerEngine {
       return;
     }
     if (action.type === 'draw') throw new Error('There is no draw now');
+    // Pineapple: everyone still holding three cards throws one away, all at once
+    const discard = this.pendingDiscard();
+    if (discard) {
+      if (!actor || !discard.pending.includes(actor.id)) throw new Error('You have already discarded');
+      if (source === 'timeout') this.discardLowest(actor, true);
+      else if (action.type === 'discard') this.decideDiscard(actor, action);
+      else throw new Error('Choose a card to throw away');
+      this.continueDiscard();
+      this.finishDecision(actor, source, now);
+      return;
+    }
+    if (action.type === 'discard') throw new Error('There is nothing to throw away now');
     // Stud third street opens with the bring-in player choosing: bring it in, or complete to a
     // full bet. Folding or checking is not allowed.
     const bringIn = this.pendingBringIn();
@@ -1295,6 +1335,11 @@ export class PokerEngine {
         if (this.state.stage === 'preflop' && isNicaraguaVariant(this.state.variant) && !this.state.nicaragua?.opener) this.endUnopenedNicaragua();
         else if (this.state.stage === 'preflop') this.startDraw();
         else this.determineWinner();
+        return;
+      }
+      // Pineapple: everyone throws a card away before the next cards come
+      if (this.discardOwed() && this.state.stage === pineappleDiscardStage(this.state.variant)) {
+        this.startDiscard();
         return;
       }
       // Midnight Baseball: the next player turns cards to beat the high hand
@@ -1627,6 +1672,89 @@ export class PokerEngine {
     this.logAction({ playerId: opener.id, action: 'match-pot', amount: refill, put: refill, stage: 'showdown' });
   }
 
+  /** Pineapple: someone still in the hand holds three cards and has a card to throw away. */
+  private discardOwed(): boolean {
+    return !!pineappleDiscardStage(this.state.variant) && this.getActivePlayers().some(p => (p.holeCards?.length || 0) > 2);
+  }
+
+  /** Pineapple's discard in progress, if any. */
+  private pendingDiscard(): { pending: string[]; startedAt?: number; deadline?: number } | undefined {
+    const discard = this.state.discardState;
+    return discard && discard.pending.length > 0 ? discard : undefined;
+  }
+
+  /** Nobody can bet: deal on to the stage the discard follows, then discard. */
+  private skipToDiscard(): void {
+    const at = pineappleDiscardStage(this.state.variant);
+    for (let guard = 0; guard < 4 && this.state.stage !== at && this.state.stage !== 'showdown'; guard++) {
+      const next = this.gameStateManager.moveToNextStage();
+      if (next === 'flop') this.dealCommunityCards(3);
+      else if (next === 'turn' || next === 'river') this.dealCommunityCards(1);
+    }
+    this.startDiscard();
+  }
+
+  /**
+   * Pineapple: everyone still in the hand, all-in or not, throws one hole card away. They all
+   * choose at once, on one clock; the clock shows on the first of them still choosing.
+   */
+  private startDiscard(): void {
+    const now = Date.now();
+    const n = this.state.players.length;
+    const pending: string[] = [];
+    for (let i = 1; i <= n; i++) {
+      const p = this.state.players[(this.state.dealerPosition + i) % n];
+      if (p && !p.isFolded && (p.holeCards?.length || 0) > 2 && !pending.includes(p.id)) pending.push(p.id);
+    }
+    this.state.discardState = { pending, startedAt: now, deadline: now + turnTimeMs(this.state) };
+    this.continueDiscard();
+  }
+
+  /** Throw away the hole card at discards[0]. */
+  private decideDiscard(player: Player, action: PlayerAction): void {
+    const hand = player.holeCards || [];
+    const at = Array.isArray(action.discards) ? action.discards[0] : undefined;
+    if (!Number.isInteger(at) || (at as number) < 0 || (at as number) >= hand.length) throw new Error('Choose a card from your hand to throw away');
+    player.holeCards = hand.filter((_, i) => i !== at);
+    this.logAction({ playerId: player.id, action: 'discard', put: 0, stage: this.state.stage });
+  }
+
+  /** Throw away the lowest hole card (aces high), for a player who ran out of time. */
+  private discardLowest(player: Player, auto: boolean): void {
+    const weight: Record<Card['rank'], number> = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+    const hand = player.holeCards || [];
+    if (hand.length <= 2) return;
+    let lowest = 0;
+    hand.forEach((c, i) => { if (weight[c.rank] < weight[hand[lowest].rank]) lowest = i; });
+    player.holeCards = hand.filter((_, i) => i !== lowest);
+    this.logAction({ playerId: player.id, action: 'discard', put: 0, stage: this.state.stage, ...(auto ? { auto: true } : {}) });
+  }
+
+  /** Move the clock to the next player still choosing; once everyone has, deal on and bet. */
+  private continueDiscard(): void {
+    const discard = this.state.discardState;
+    if (!discard) return;
+    discard.pending = discard.pending.filter(id => this.state.players.some(p => p.id === id && !p.isFolded && (p.holeCards?.length || 0) > 2));
+    if (this.getActivePlayers().length <= 1) {
+      delete this.state.discardState;
+      this.determineWinner();
+      return;
+    }
+    if (discard.pending.length > 0) {
+      this.state.activePlayer = discard.pending[0];
+      return;
+    }
+    delete this.state.discardState;
+    const next = this.gameStateManager.moveToNextStage();
+    if (next === 'flop') this.dealCommunityCards(3);
+    else if (next === 'turn' || next === 'river') this.dealCommunityCards(1);
+    else if (next === 'showdown') {
+      this.determineWinner();
+      return;
+    }
+    this.gameStateManager.startBettingRound(next);
+  }
+
   /** Players still able to bet: in the hand and not all-in. */
   private bettorsLeft(): number {
     return this.state.players.filter(p => !p.isFolded && !p.isAllIn).length;
@@ -1947,6 +2075,7 @@ export class PokerEngine {
   private determineWinner(): void {
     if (this.state.studState) delete this.state.studState.potMatch;
     delete this.state.drawState;
+    delete this.state.discardState;
     const stacksBefore = new Map(this.state.players.map(p => [p.id, p.stack]));
     const starts = this.state.handStartStacks;
     const nicaraguaCarry = this.state.nicaragua?.carry || 0;

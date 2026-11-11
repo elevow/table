@@ -8,7 +8,7 @@
  */
 
 import { TableState, Player, Card } from '../../types/poker';
-import { isDrawVariant } from './variant-rules';
+import { isDrawVariant, isMidnightBaseballVariant } from './variant-rules';
 
 /**
  * Checks if the game is in an all-in situation where all active players are all-in.
@@ -150,12 +150,14 @@ function sanitizeState(state: TableState, viewerId: string | null): TableState {
     return { ...playerWithoutCards, holeCards: undefined, holeCount };
   });
 
-  // Stud: down cards are private; up cards are face up for everyone at the table
+  // Stud: down cards are private; up cards are face up for everyone at the table. In Midnight
+  // Baseball nobody looks at a face-down card, their own included, until the showdown.
   let sanitizedStudState = state.studState;
   if (state.studState) {
+    const noPeeking = isMidnightBaseballVariant(state.variant) && state.stage !== 'showdown';
     const sanitizedPlayerCards: Record<string, { downCards: Card[]; upCards: Card[]; downCount?: number }> = {};
     for (const [playerId, cards] of Object.entries(state.studState.playerCards)) {
-      sanitizedPlayerCards[playerId] = canSeePrivateCards(playerId, viewerId, revealedIds)
+      sanitizedPlayerCards[playerId] = !noPeeking && canSeePrivateCards(playerId, viewerId, revealedIds)
         ? cards
         : { downCards: [], upCards: cards.upCards, downCount: cards.downCards.length || cards.downCount || 0 };
     }

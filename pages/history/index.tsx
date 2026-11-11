@@ -21,6 +21,7 @@ const VARIANT_LABEL: Record<string, string> = {
   'follow-the-queen': 'Follow the Queen',
   'baseball': 'Baseball',
   'five-card-draw': 'Five-Card Draw',
+  'midnight-baseball': 'Midnight Baseball',
 };
 
 function variantLabel(v?: string) {

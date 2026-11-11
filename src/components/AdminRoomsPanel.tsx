@@ -197,6 +197,7 @@ export default function AdminRoomsPanel() {
     'follow-the-queen': 'Follow the Queen',
     'baseball': 'Baseball',
     'five-card-draw': 'Five-Card Draw',
+    'midnight-baseball': 'Midnight Baseball',
     'mixed': 'Mixed Games',
     'poker': 'Poker',
   };

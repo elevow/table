@@ -390,14 +390,14 @@ describe('/api/games/next-hand', () => {
       expect(engine.startNewHand).not.toHaveBeenCalled();
     });
 
-    it('offers Baseball with six players but not seven, and ends its round when a seventh joins', async () => {
+    it.each(['baseball', 'midnight-baseball'])('offers %s with six players but not seven, and ends its round when a seventh joins', async (variant) => {
       const six = createEngine('awaiting-dealer-choice', 0, { players: eightPlayers.slice(0, 6) });
       mockGetOrRestoreEngine.mockResolvedValue(six);
       setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
       const res = createRes();
-      await handler(createReq({ tableId: 't1', playerId: 'b', variant: 'baseball' }), res);
+      await handler(createReq({ tableId: 't1', playerId: 'b', variant }), res);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(six.setVariant).toHaveBeenCalledWith('baseball');
+      expect(six.setVariant).toHaveBeenCalledWith(variant);
       expect(six.setBettingMode).toHaveBeenCalledWith('fixed-limit');
 
       jest.clearAllMocks();
@@ -406,13 +406,13 @@ describe('/api/games/next-hand', () => {
       mockGetOrRestoreEngine.mockResolvedValue(seven);
       setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
       const refused = createRes();
-      await handler(createReq({ tableId: 't1', playerId: 'b', variant: 'baseball' }), refused);
+      await handler(createReq({ tableId: 't1', playerId: 'b', variant }), refused);
       expect(refused.status).toHaveBeenCalledWith(400);
       expect(seven.startNewHand).not.toHaveBeenCalled();
 
       jest.clearAllMocks();
       (global as any).__NEXT_HAND_LOCKS__ = undefined;
-      const midRound = createEngine('showdown', 1, { players: eightPlayers.slice(0, 7), variant: 'baseball', wildRule: 'baseball' });
+      const midRound = createEngine('showdown', 1, { players: eightPlayers.slice(0, 7), variant, wildRule: 'baseball' });
       mockGetOrRestoreEngine.mockResolvedValue(midRound);
       setRoomConfig({ ...DEALERS_CHOICE_CONFIG });
       await handler(createReq({ tableId: 't1', playerId: 'a' }), createRes());

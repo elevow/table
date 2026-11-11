@@ -12,7 +12,7 @@ import {
   MAX_TIME_BANK_SECONDS, bankTimeMs, clampSetting, timeBankMs, turnTimeMs,
   MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS,
 } from '../shared/turn-clock';
-import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isDrawVariant, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
+import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isDrawVariant, isMidnightBaseballVariant, MIDNIGHT_FLIP_MS, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
 import { revealedPlayerIds } from './state-sanitizer';
@@ -35,6 +35,8 @@ export class PokerEngine {
   private ritConsents: Set<string> = new Set();
   // Baseball: players dealt a face-up 3 on the street being dealt, in deal order
   private dealtThrees: string[] = [];
+  // Midnight Baseball: time the table spends showing the cards just turned, added to the next clock
+  private revealMs = 0;
 
   // Optional engine options to configure behavior such as betting mode
   public static defaultOptions = {
@@ -235,7 +237,7 @@ export class PokerEngine {
   }
 
   public runStudAllInToShowdown(): void {
-    while (this.state.stage !== 'showdown') {
+    for (let streets = 0; this.state.stage !== 'showdown' && streets < 10; streets++) {
       this.runStudAllInStreet();
     }
   }
@@ -244,6 +246,11 @@ export class PokerEngine {
   public runStudAllInStreet(): void {
     if (!isStudVariant(this.state.variant)) throw new Error('Stud runout requires a stud variant');
     if (this.state.stage === 'showdown') return;
+    // Midnight Baseball has no streets: with nobody left to bet, the cards are turned to the end
+    if (isMidnightBaseballVariant(this.state.variant)) {
+      if (!this.pendingPotMatch()) this.continueMidnight();
+      return;
+    }
 
     const nextStage = this.gameStateManager.moveToNextStage();
     if (nextStage === 'showdown') {
@@ -318,10 +325,16 @@ export class PokerEngine {
   if (isStudVariant(this.state.variant)) {
       if (this.state.bettingMode === 'fixed-limit') this.state.limitBets = 0;
       this.dealtThrees = [];
-      this.dealStudInitial();
-      this.postGameAntes('third');
-      // Stud uses bring-in instead of blinds
-      this.openStudStreet('third');
+      if (isMidnightBaseballVariant(this.state.variant)) {
+        this.dealMidnightBaseball();
+        this.postGameAntes('third');
+        this.startMidnightBaseball();
+      } else {
+        this.dealStudInitial();
+        this.postGameAntes('third');
+        // Stud uses bring-in instead of blinds
+        this.openStudStreet('third');
+      }
     } else if (isDrawVariant(this.state.variant)) {
       // Draw games: antes and no blinds; the first player after the button opens
       this.dealHoleCards();
@@ -904,13 +917,17 @@ export class PokerEngine {
       ? this.state.players.find(p => p.id === this.state.activePlayer)
       : undefined;
     if (!player) {
+      this.revealMs = 0;
       delete this.state.turnStartedAt;
       delete this.state.turnDeadline;
       return;
     }
     if (this.actForAwayPlayer(player, now)) return;
-    this.state.turnStartedAt = now;
-    this.state.turnDeadline = now + turnTimeMs(this.state) + bankTimeMs(player, this.state);
+    // The table shows any cards just turned before the decision, so that time is added
+    const reveal = this.revealMs;
+    this.revealMs = 0;
+    this.state.turnStartedAt = now + reveal;
+    this.state.turnDeadline = now + reveal + turnTimeMs(this.state) + bankTimeMs(player, this.state);
   }
 
   /**
@@ -1259,6 +1276,11 @@ export class PokerEngine {
         else this.determineWinner();
         return;
       }
+      // Midnight Baseball: the next player turns cards to beat the high hand
+      if (isMidnightBaseballVariant(this.state.variant)) {
+        this.continueMidnight();
+        return;
+      }
       this.log(`Moving to next stage from ${this.state.stage}`);
       const nextStage = this.gameStateManager.moveToNextStage();
 
@@ -1433,7 +1455,175 @@ export class PokerEngine {
       return;
     }
     delete this.state.studState!.potMatch;
+    // Midnight Baseball: the player who matched carries on turning cards
+    if (isMidnightBaseballVariant(this.state.variant)) {
+      this.continueMidnight();
+      return;
+    }
     this.startStudBetting(match.stage);
+  }
+
+  /** Midnight Baseball: seven cards each, all face down; nobody may look at their own. */
+  private dealMidnightBaseball(): void {
+    this.ensureStudState();
+    for (let r = 0; r < 7; r++) {
+      for (const p of this.state.players) {
+        if (sitsOutOfHand(p, this.state)) continue;
+        const c = this.deckManager.dealCard();
+        if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
+        if (c) this.state.studState!.playerCards[p.id].downCards.push(c);
+      }
+    }
+  }
+
+  /** The first player after the button turns the first card. */
+  private startMidnightBaseball(): void {
+    this.state.stage = 'third';
+    const dealer = this.state.players[this.state.dealerPosition];
+    const first = this.nextInSeatOrder(dealer?.id, p => !p.isFolded);
+    this.state.studState!.midnight = { turn: first?.id };
+    this.continueMidnight();
+  }
+
+  /** The next player after afterId in seat order (wrapping round) that accept allows. */
+  private nextInSeatOrder(afterId: string | undefined, accept: (p: Player) => boolean): Player | undefined {
+    const players = this.state.players;
+    const n = players.length;
+    const start = players.findIndex(p => p.id === afterId);
+    for (let i = 1; i <= n; i++) {
+      const p = players[(start + i + n) % n];
+      if (p && accept(p)) return p;
+    }
+    return undefined;
+  }
+
+  /** How good a player's face-up cards are; -1 before any are turned. */
+  private showingScore(playerId: string | undefined): number {
+    const up = (playerId && this.state.studState?.playerCards[playerId]?.upCards) || [];
+    if (up.length === 0) return -1;
+    return evaluateWildHigh(up, tableWildMatcher(this.state) || (() => false)).score;
+  }
+
+  /**
+   * Midnight Baseball: the player with the high hand showing, who leads the betting. That is the
+   * last player to beat it; if they have folded, the best hand still in.
+   */
+  private midnightHolder(): Player | undefined {
+    const mb = this.state.studState?.midnight;
+    // Nobody holds it until the first card is turned
+    if (!mb?.holder) return undefined;
+    const held = this.state.players.find(p => p.id === mb.holder);
+    if (held && !held.isFolded) return held;
+    let best: Player | undefined;
+    let bestScore = -1;
+    for (const p of this.state.players) {
+      if (p.isFolded) continue;
+      const score = this.showingScore(p.id);
+      if (score > bestScore) { best = p; bestScore = score; }
+    }
+    mb.holder = best?.id;
+    return best;
+  }
+
+  /** The next player after afterId still in the hand, other than the high hand, with a card left to turn. */
+  private nextMidnightTurn(afterId: string | undefined): Player | undefined {
+    const holder = this.midnightHolder();
+    return this.nextInSeatOrder(afterId, p => !p.isFolded && p.id !== holder?.id
+      && (this.state.studState?.playerCards[p.id]?.downCards.length || 0) > 0);
+  }
+
+  /** Players still able to bet: in the hand and not all-in. */
+  private bettorsLeft(): number {
+    return this.state.players.filter(p => !p.isFolded && !p.isAllIn).length;
+  }
+
+  /**
+   * Players with every card turned who are not holding the high hand can no longer win, so they
+   * are out. When the high hand is all-in they stay in, as they may still win a side pot.
+   */
+  private foldDeadMidnightHands(): void {
+    const holder = this.midnightHolder();
+    if (!holder || holder.isAllIn) return;
+    for (const p of this.state.players) {
+      if (p.isFolded || p.id === holder.id) continue;
+      if ((this.state.studState?.playerCards[p.id]?.downCards.length || 0) > 0) continue;
+      p.isFolded = true;
+      p.hasActed = true;
+      this.logAction({ playerId: p.id, action: 'fold', put: 0, stage: this.state.stage });
+      const mb = this.state.studState!.midnight!;
+      (mb.outAt ||= {})[p.id] = mb.flips?.length || 0;
+    }
+  }
+
+  /**
+   * Open a betting round led by the high hand (or the next player who can bet, if it is all-in).
+   * Returns false when fewer than two players can still bet, so the cards keep being turned.
+   */
+  private openMidnightBetting(): boolean {
+    if (this.bettorsLeft() < 2) return false;
+    const holder = this.midnightHolder();
+    const canAct = (p: Player) => !p.isFolded && !p.isAllIn;
+    const first = holder && canAct(holder) ? holder : this.nextInSeatOrder(holder?.id, canAct);
+    if (!first) return false;
+    this.state.currentBet = 0;
+    this.state.players.forEach(p => { p.currentBet = 0; p.hasActed = false; });
+    if (this.state.bettingMode === 'fixed-limit') this.state.limitBets = 0;
+    this.state.minRaise = this.state.bigBlind;
+    this.state.activePlayer = first.id;
+    return true;
+  }
+
+  /**
+   * Midnight Baseball: the player whose turn it is turns cards one at a time until their face-up
+   * cards beat the high hand, and then the betting opens. A face-up 3 stops to match the pot or
+   * fold first; a face-up 4 adds a face-down card to turn. A player who turns every card without
+   * beating the high hand is out. The hand goes to showdown when nobody else has a card to turn.
+   */
+  private continueMidnight(): void {
+    const stud = this.state.studState!;
+    const mb = (stud.midnight ||= {});
+    for (let guard = 0; guard < 500; guard++) {
+      if (this.getActivePlayers().length <= 1) {
+        this.determineWinner();
+        return;
+      }
+      const holder = this.midnightHolder();
+      const player = this.state.players.find(p => p.id === mb.turn);
+      if (!player || player.isFolded || player.id === holder?.id) {
+        const next = this.nextMidnightTurn(player?.id ?? holder?.id);
+        if (!next) break;
+        mb.turn = next.id;
+        continue;
+      }
+      const score = this.showingScore(player.id);
+      if (score >= 0 && (!holder || score > this.showingScore(holder.id))) {
+        mb.holder = player.id;
+        this.foldDeadMidnightHands();
+        mb.turn = this.nextMidnightTurn(player.id)?.id;
+        if (this.getActivePlayers().length > 1 && this.openMidnightBetting()) return;
+        continue;
+      }
+      const down = stud.playerCards[player.id]?.downCards || [];
+      if (down.length === 0) {
+        // Every card turned without beating the high hand
+        this.foldDeadMidnightHands();
+        mb.turn = this.nextMidnightTurn(player.id)?.id;
+        continue;
+      }
+      this.dealUpCard(player.id, down.shift()!);
+      (mb.flips ||= []).push(player.id);
+      this.revealMs += MIDNIGHT_FLIP_MS;
+      const turnedThree = this.dealtThrees.includes(player.id);
+      this.dealtThrees = [];
+      // As in Baseball, nothing is asked once nobody else can bet
+      if (turnedThree && player.stack > 0 && this.state.pot > 0 && this.bettorsLeft() >= 2) {
+        stud.potMatch = { queue: [player.id], stage: this.state.stage };
+        this.state.activePlayer = player.id;
+        return;
+      }
+    }
+    this.state.activePlayer = '';
+    this.determineWinner();
   }
 
   private dealStudInitial(): void {
@@ -1573,11 +1763,6 @@ export class PokerEngine {
     this.logAction({ playerId: player.id, action: 'bring-in', amount: player.currentBet, put: pay, stage: this.state.stage });
     const next = this.gameStateManager.findNextActivePlayer(player.position);
     if (next) this.state.activePlayer = next.id;
-  }
-
-  /** Players still able to bet: in the hand and not all-in. */
-  private bettorsLeft(): number {
-    return this.state.players.filter(p => !p.isFolded && !p.isAllIn).length;
   }
 
   /** The draw in progress, if any. */

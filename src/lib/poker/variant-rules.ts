@@ -18,6 +18,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'five-card-draw',
   'follow-the-queen',
   'baseball',
+  'midnight-baseball',
 ];
 
 export const VARIANT_LABELS: Record<GameVariant, string> = {
@@ -32,6 +33,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'five-card-draw': 'Five-Card Draw',
   'follow-the-queen': 'Follow the Queen',
   'baseball': 'Baseball',
+  'midnight-baseball': 'Midnight Baseball',
 };
 
 export const BETTING_MODE_LABELS: Record<BettingMode, string> = {
@@ -56,6 +58,7 @@ export function parseWildRule(v: unknown): WildRule | undefined {
 const BUILT_IN_WILDS: Partial<Record<GameVariant, WildRule>> = {
   'follow-the-queen': 'follow-the-queen',
   'baseball': 'baseball',
+  'midnight-baseball': 'baseball',
 };
 
 /** The wild cards a game comes with, if it has its own. */
@@ -68,9 +71,12 @@ export function hasBuiltInWilds(variant?: string | null): boolean {
   return !!builtInWildRule(variant);
 }
 
-/** Baseball deals an extra card for each face-up 4 and asks a face-up 3 to match the pot. */
+/**
+ * Baseball and Midnight Baseball deal an extra card for each face-up 4 and ask a face-up 3 to
+ * match the pot.
+ */
 export function isBaseballVariant(variant?: string | null): boolean {
-  return variant === 'baseball';
+  return variant === 'baseball' || variant === 'midnight-baseball';
 }
 
 /**
@@ -80,6 +86,18 @@ export function isBaseballVariant(variant?: string | null): boolean {
 export function isDrawVariant(variant?: string | null): boolean {
   return variant === 'five-card-draw';
 }
+
+/**
+ * Midnight Baseball: every card is dealt face down and nobody looks. In turn, each player turns
+ * cards face up until their face-up cards beat the high hand showing, and the betting follows.
+ */
+export function isMidnightBaseballVariant(variant?: string | null): boolean {
+  return variant === 'midnight-baseball';
+}
+
+// Midnight Baseball: the table shows each turned card this long before the next, and the clock
+// gives the next player to act that time back
+export const MIDNIGHT_FLIP_MS = 2000;
 
 export const MAX_TABLE_PLAYERS = 9;
 // Five cards each for seven players is 35; the draw reshuffles the discards if the deck runs out
@@ -133,12 +151,12 @@ export function isBettingMode(v: unknown): v is BettingMode {
 
 /** Stud games: no board; each player has their own down and up cards. */
 export function isStudVariant(v?: string | null): boolean {
-  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball';
+  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball' || v === 'midnight-baseball';
 }
 
-/** Stud games dealt to seven cards (third to seventh street). */
+/** Stud games dealt seven cards each (Midnight Baseball deals all seven at once, face down). */
 export function isSevenCardStudVariant(v?: string | null): boolean {
-  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball';
+  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball' || v === 'midnight-baseball';
 }
 
 /** Omaha games: the best hand uses exactly two hole cards and three board cards. */

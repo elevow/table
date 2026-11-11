@@ -20,6 +20,7 @@ import { useSupabaseRealtime } from '../../src/hooks/useSupabaseRealtime';
 import { useCheckTurn } from '../../src/hooks/useCheckTurn';
 import { Card, Player, GameVariant, NicaraguaMethod, WildRule } from '../../src/types/poker';
 import { describeNicaraguaHand } from '../../src/lib/poker/nicaragua';
+import { evaluateBadugi } from '../../src/lib/poker/badugi';
 import { HandInterface } from '../../src/types/poker-engine';
 import { formatPotOdds } from '../../src/lib/poker/pot-odds';
 import { useDisplaySettings } from '../../src/hooks/useDisplaySettings';
@@ -47,7 +48,7 @@ import SplashAnimation, { splashInPlay } from '../../src/components/SplashAnimat
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
 import {
-  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, NICARAGUA_METHOD_LABELS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, hasBuiltInWilds, isDrawVariant, isOmahaVariant,
+  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, NICARAGUA_METHOD_LABELS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, hasBuiltInWilds, drawsCards, isDrawVariant, isOmahaVariant,
   isStudVariant as isStudGame, maxPlayersForGame, variantAllowedFor, wildAllowedFor,
 } from '../../src/lib/poker/variant-rules';
 import { studCardOrder } from '../../src/lib/shared/stud-cards';
@@ -1151,6 +1152,7 @@ export default function GamePage() {
         const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
         if (!holes || holes.length === 0) return null;
         const known = [...holes, ...board];
+        if (variant === 'badugi') return evaluateBadugi(holes).description;
         const nicaraguaWay = variant === 'nicaragua' ? pokerGameState?.nicaragua?.method : undefined;
         if (nicaraguaWay) return describeNicaraguaHand(holes, nicaraguaWay);
         if (wild) return isOmahaVariant(variant) ? evaluateWildOmaha(holes, board, wild).name : evaluateWildHigh(known, wild).name;
@@ -1526,7 +1528,8 @@ export default function GamePage() {
   const potMatchAmount = Math.min(Number(pokerGameState?.pot) || 0, Math.max(0, Number(me?.stack) || 0));
   const potMatchIsAllIn = (Number(me?.stack) || 0) <= (Number(pokerGameState?.pot) || 0);
   // Draw games: in the draw, pick the cards to throw away (up to 3, or 4 keeping an ace)
-  const myDrawPending = !!(isMyTurn && pokerGameState?.stage === 'draw' && pokerGameState?.drawState?.pending?.[0] === playerId);
+  const myDrawPending = !!(isMyTurn && pokerGameState?.drawState?.pending?.[0] === playerId);
+  const badugi = pokerGameState?.variant === 'badugi';
   const myHoleCards: Card[] = Array.isArray(me?.holeCards) ? me.holeCards : [];
   // Picks belong to one decision, so a new hand or turn starts with none
   const drawKey = `${pokerGameState?.handId ?? ''}:${pokerGameState?.turnSeq ?? ''}`;
@@ -1537,7 +1540,8 @@ export default function GamePage() {
     picks: drawPicks.includes(i) ? drawPicks.filter(x => x !== i) : [...drawPicks, i],
   });
   const drawKeepsAce = myHoleCards.some((card, i) => !drawPicks.includes(i) && card?.rank === 'A');
-  const drawAllowed = drawPicks.length <= 3 || (drawPicks.length === 4 && drawKeepsAce);
+  // Badugi draws any number of its four cards
+  const drawAllowed = badugi || drawPicks.length <= 3 || (drawPicks.length === 4 && drawKeepsAce);
   const submitDraw = () => { if (drawAllowed) handlePokerAction('draw', undefined, { discards: drawPicks }); };
 
   // A pre-action applies to one betting round
@@ -3071,7 +3075,7 @@ export default function GamePage() {
               {myDrawPending ? (
                 <div className="flex flex-col gap-2">
                   <p className="text-sm text-gray-700 dark:text-gray-300">
-                    Pick the cards to throw away: up to 3, or 4 if the card you keep is an ace.
+                    {badugi ? 'Pick the cards to throw away, as many as you like.' : 'Pick the cards to throw away: up to 3, or 4 if the card you keep is an ace.'}
                   </p>
                   <div className="flex flex-wrap gap-2 pt-2" role="group" aria-label="Your cards">
                     {myHoleCards.map((card, i) => {
@@ -3716,6 +3720,19 @@ export default function GamePage() {
 
                   type EvalRes = { playerId: string; name: string; hand: any; label: string };
                   const wild = tableWildMatcher(pokerGameState);
+                  if (variant === 'badugi') {
+                    const hands: Array<{ name: string; label: string }> = contenders.map((p: any) => ({
+                      name: p.name || p.id,
+                      label: Array.isArray(p.holeCards) && p.holeCards.length ? evaluateBadugi(p.holeCards).description : '',
+                    }));
+                    return (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold">{hands.map(h => h.name).join(', ')}</span>
+                        <span>{hands.length > 1 ? 'split the pot' : 'wins the pot'}</span>
+                        {hands[0]?.label ? <span className="opacity-80">({hands[0].label})</span> : null}
+                      </div>
+                    );
+                  }
                   if (variant === 'nicaragua') {
                     const way = pokerGameState?.nicaragua?.method || 'high';
                     if (contenders.length === 0 || !serverWinners.length) {
@@ -3807,7 +3824,7 @@ export default function GamePage() {
           )}
 
           {/* Chance to win during an all-in, when everyone's cards are face up */}
-          {gameStarted && pokerGameState && anyAllIn() && pokerGameState.stage !== 'showdown' && !isStudVariant() && !isDrawVariant(pokerGameState.variant) && !pokerGameState.wildRule && (
+          {gameStarted && pokerGameState && anyAllIn() && pokerGameState.stage !== 'showdown' && !isStudVariant() && !drawsCards(pokerGameState.variant) && !pokerGameState.wildRule && (
             <EquityPanel
               players={getActiveNonFoldedPlayers()}
               board={Array.isArray(pokerGameState.communityCards) ? pokerGameState.communityCards : []}

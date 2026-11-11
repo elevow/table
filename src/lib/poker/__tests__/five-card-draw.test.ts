@@ -80,7 +80,7 @@ describe('Five-card draw', () => {
     // b stands pat
     act(engine, 'draw', { discards: [] });
     s = engine.getState();
-    expect(s.drawState).toBeUndefined();
+    expect(s.drawState?.pending).toEqual([]);
     expect(s.stage).toBe('draw');
     expect(s.activePlayer).toBe('a');
     act(engine, 'bet');

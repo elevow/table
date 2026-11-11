@@ -4,6 +4,7 @@ import type { HandInterface } from '../../types/poker-engine';
 import { isOmahaVariant as isOmahaGame, isStudVariant } from '../poker/variant-rules';
 import { evaluateWildHigh, evaluateWildOmaha, evaluateWildRazz, tableWildMatcher } from '../poker/wild-hands';
 import { describeNicaraguaHand } from '../poker/nicaragua';
+import { evaluateBadugi } from '../poker/badugi';
 
 /**
  * System sender ID used for hand result messages
@@ -195,6 +196,27 @@ function formatNicaraguaResult(state: TableState): FormattedHandResult | null {
   return { message: tail ? `${head} | ${tail}` : head, winners, isWinByFold: byFold };
 }
 
+/** Badugi: the winners come from the engine, described as badugi hands. */
+function formatBadugiResult(state: TableState): FormattedHandResult | null {
+  const players = state.players || [];
+  const winnings = state.handResult?.winnings || {};
+  const winners: HandWinner[] = Object.keys(winnings).map(id => {
+    const player = players.find(p => p.id === id);
+    return {
+      playerId: id,
+      playerName: player ? getPlayerName(player) : id.slice(0, 6),
+      amount: winnings[id],
+      handDescription: player?.holeCards?.length ? evaluateBadugi(player.holeCards).description : undefined,
+    };
+  });
+  if (winners.length === 0) return null;
+  const handDesc = winners[0].handDescription ? ` with ${winners[0].handDescription}` : '';
+  const message = winners.length === 1
+    ? `🏆 ${winners[0].playerName} wins${handDesc}`
+    : `🏆 ${winners.map(w => w.playerName).join(', ')} split the pot${handDesc}`;
+  return { message, winners, isWinByFold: false };
+}
+
 function formatHandResultBase(state: TableState): FormattedHandResult | null {
   // Only format if we're at showdown
   if (state.stage !== 'showdown') {
@@ -209,6 +231,7 @@ function formatHandResultBase(state: TableState): FormattedHandResult | null {
   const activePlayers = players.filter(p => !p.isFolded);
 
   if (variant === 'nicaragua') return formatNicaraguaResult(state);
+  if (variant === 'badugi' && activePlayers.length > 1) return formatBadugiResult(state);
   
   // Win by fold: only one player remains
   if (activePlayers.length === 1) {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { authHeaders } from '../utils/auth-headers';
 import type { TableExtras } from '../hooks/useTableExtras';
-import { isDrawVariant, isStudVariant } from '../lib/poker/variant-rules';
+import { drawsCards, isDrawVariant, isStudVariant } from '../lib/poker/variant-rules';
 import { MIN_TURN_SECONDS, MAX_TURN_SECONDS, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, handDelayMs, turnTimeMs } from '../lib/shared/turn-clock';
 
 interface Props {
@@ -185,7 +185,8 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
           </div>
           )}
 
-          {canConfigure && !stud && (
+          {/* Badugi has blinds but no flop for a bomb pot to start on */}
+          {canConfigure && !stud && !drawsCards(gameState?.variant) && (
             <div>
               <div className="mb-2 eyebrow">{bomb ? `Bomb pot next hand (${bomb.anteBB} BB ante)` : 'Bomb pot: everyone antes, betting starts on the flop'}</div>
               <div className="flex items-center gap-1">

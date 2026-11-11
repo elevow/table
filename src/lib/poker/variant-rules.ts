@@ -17,6 +17,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'five-card-stud',
   'five-card-draw',
   'nicaragua',
+  'badugi',
   'follow-the-queen',
   'baseball',
   'midnight-baseball',
@@ -33,6 +34,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'five-card-stud': 'Five-Card Stud',
   'five-card-draw': 'Five-Card Draw',
   'nicaragua': 'Nicaragua',
+  'badugi': 'Badugi',
   'follow-the-queen': 'Follow the Queen',
   'baseball': 'Baseball',
   'midnight-baseball': 'Midnight Baseball',
@@ -126,6 +128,14 @@ export function isMidnightBaseballVariant(variant?: string | null): boolean {
 // gives the next player to act that time back
 export const MIDNIGHT_FLIP_MS = 2000;
 
+/**
+ * Games where players draw cards: five-card draw and Nicaragua, and Badugi (which has blinds and
+ * three draws). There is no board, and hands stay hidden until the showdown.
+ */
+export function drawsCards(variant?: string | null): boolean {
+  return isDrawVariant(variant) || variant === 'badugi';
+}
+
 export const MAX_TABLE_PLAYERS = 9;
 // Five cards each for seven players is 35; the draw reshuffles the discards if the deck runs out
 export const MAX_DRAW_PLAYERS = 7;
@@ -157,8 +167,8 @@ export function variantAllowedFor(variant: string | null | undefined, playerCoun
  * Choice picks). Games with their own wild cards can't.
  */
 export function wildAllowedFor(variant: string | null | undefined, playerCount: number): boolean {
-  // Nicaragua's counts and low hands have no place for a wild card
-  return !hasBuiltInWilds(variant) && !isNicaraguaVariant(variant) && playerCount <= maxPlayersForGame(variant, 'deuces');
+  // Nicaragua's counts, low hands and Badugi have no place for a wild card
+  return !hasBuiltInWilds(variant) && !isNicaraguaVariant(variant) && variant !== 'badugi' && playerCount <= maxPlayersForGame(variant, 'deuces');
 }
 
 /**
@@ -200,7 +210,7 @@ export function isHoldemVariant(v?: string | null): boolean {
 /** Hole cards dealt in a board game (Hold'em or Omaha), or a draw game's hand. */
 export function holeCardCount(v?: string | null): number {
   if (v === 'omaha-5' || isDrawVariant(v)) return 5;
-  if (v === 'omaha' || v === 'omaha-hi-lo') return 4;
+  if (v === 'omaha' || v === 'omaha-hi-lo' || v === 'badugi') return 4;
   return 2;
 }
 

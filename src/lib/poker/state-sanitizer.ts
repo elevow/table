@@ -8,7 +8,7 @@
  */
 
 import { TableState, Player, Card } from '../../types/poker';
-import { isDrawVariant, isMidnightBaseballVariant } from './variant-rules';
+import { drawsCards, isMidnightBaseballVariant } from './variant-rules';
 
 /**
  * Checks if the game is in an all-in situation where all active players are all-in.
@@ -69,7 +69,7 @@ export function shouldRevealHoleCards(state: TableState): boolean {
   }
 
   // Reveal during all-in situations, except in draw games, where the draw is still to come
-  return isAllInSituation(state) && !isDrawVariant(state.variant);
+  return isAllInSituation(state) && !drawsCards(state.variant);
 }
 
 /**
@@ -91,7 +91,7 @@ export function revealedPlayerIds(state: TableState): Set<string> {
   const inHand = state.players.filter(p => !p.isFolded);
   if (state.stage !== 'showdown') {
     // Draw games keep hands hidden until the showdown, as players still draw
-    return new Set(isAllInSituation(state) && !isDrawVariant(state.variant) ? inHand.map(p => p.id) : []);
+    return new Set(isAllInSituation(state) && !drawsCards(state.variant) ? inHand.map(p => p.id) : []);
   }
   const revealed = new Set<string>(state.shownCards || []);
   if (inHand.length >= 2) {

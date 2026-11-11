@@ -16,6 +16,7 @@ import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isD
 import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
 import { describeNicaraguaHand, nicaraguaScore } from './nicaragua';
+import { evaluateBadugi, isBadugiVariant } from './badugi';
 import { revealedPlayerIds } from './state-sanitizer';
 import { debugFlags, runtime } from '../config/env';
 
@@ -502,7 +503,7 @@ export class PokerEngine {
   public setAllowRunItTwice(allow: boolean): void {
     // Run It Twice evaluates each board without wild cards, so wild tables play one board
     // Draw games have no board to run twice
-    this.state.allowRunItTwice = allow && !this.state.wildRule && !isDrawVariant(this.state.variant);
+    this.state.allowRunItTwice = allow && !this.state.wildRule && !isDrawVariant(this.state.variant) && !isBadugiVariant(this.state.variant);
   }
 
   /** Whether everyone still in at a showdown must show, instead of losers mucking. */
@@ -670,6 +671,10 @@ export class PokerEngine {
     if (this.state.stage === 'showdown') return;
     const canAct = this.getActivePlayers().filter(p => !p.isAllIn);
     if (canAct.length > 0) return;
+    if (isBadugiVariant(this.state.variant)) {
+      this.drawRoundOver();
+      return;
+    }
     this.dealCommunityCards(Math.max(0, 5 - this.state.communityCards.length));
     this.determineWinner();
   }
@@ -1294,6 +1299,11 @@ export class PokerEngine {
 
       // Hand back any part of a bet nobody could match before the next cards come
       this.returnUncalledBet();
+      // Badugi: a draw follows each of the first three rounds; the showdown follows the fourth
+      if (isBadugiVariant(this.state.variant)) {
+        this.drawRoundOver();
+        return;
+      }
       // Draw games: the draw follows the first round; the showdown follows the second
       if (isDrawVariant(this.state.variant)) {
         if (this.state.stage === 'preflop' && isNicaraguaVariant(this.state.variant) && !this.state.nicaragua?.opener) this.endUnopenedNicaragua();
@@ -1904,15 +1914,26 @@ export class PokerEngine {
   /** The draw in progress, if any. */
   private pendingDraw(): { pending: string[]; muck?: Card[] } | undefined {
     const draw = this.state.drawState;
-    return draw && this.state.stage === 'draw' && draw.pending.length > 0 ? draw : undefined;
+    return draw && draw.pending.length > 0 ? draw : undefined;
+  }
+
+  /**
+   * Badugi, when a betting round is over (or skipped because nobody can bet): the next draw, or
+   * the showdown after the last round.
+   */
+  private drawRoundOver(): void {
+    const next: Partial<Record<GameStage, GameStage>> = { preflop: 'flop', flop: 'turn', turn: 'river' };
+    const stage = next[this.state.stage];
+    if (stage) this.startDraw(stage);
+    else this.determineWinner();
   }
 
   /**
    * Draw games: once the first betting round is over, everyone still in draws in turn, starting
    * after the button. Players who are all-in draw too.
    */
-  private startDraw(): void {
-    this.state.stage = 'draw';
+  private startDraw(stage: GameStage = 'draw'): void {
+    this.state.stage = stage;
     this.state.currentBet = 0;
     this.state.players.forEach(p => { p.currentBet = 0; p.hasActed = false; });
     const n = this.state.players.length;
@@ -1922,7 +1943,8 @@ export class PokerEngine {
       const p = this.state.players[(start + i) % n];
       if (p && !p.isFolded && (p.holeCards?.length || 0) > 0 && !pending.includes(p.id)) pending.push(p.id);
     }
-    this.state.drawState = { pending, muck: [] };
+    // Badugi draws three times; discards from earlier draws can be shuffled in too
+    this.state.drawState = { pending, muck: this.state.drawState?.muck || [] };
     this.continueDraw();
   }
 
@@ -1936,13 +1958,16 @@ export class PokerEngine {
     if (action.type === 'fold') {
       player.isFolded = true;
       player.hasActed = true;
-      this.logAction({ playerId: player.id, action: 'fold', put: 0, stage: 'draw', ...auto });
+      this.logAction({ playerId: player.id, action: 'fold', put: 0, stage: this.state.stage, ...auto });
     } else if (action.type === 'draw') {
       const hand = player.holeCards || [];
       const positions = [...new Set(Array.isArray(action.discards) ? action.discards : [])];
       if (positions.some(i => !Number.isInteger(i) || i < 0 || i >= hand.length)) throw new Error('Choose cards from your hand to draw');
       const kept = hand.filter((_, i) => !positions.includes(i));
-      if (positions.length > 4 || (positions.length === 4 && !kept.some(c => c.rank === 'A'))) {
+      if (isBadugiVariant(this.state.variant)) {
+        // Badugi: any number of the four cards
+        if (positions.length > 4) throw new Error('You can draw up to 4 cards');
+      } else if (positions.length > 4 || (positions.length === 4 && !kept.some(c => c.rank === 'A'))) {
         throw new Error('You can draw up to 3 cards, or 4 if the card you keep is an ace');
       }
       const thrown = positions.map(i => hand[i]);
@@ -1953,7 +1978,7 @@ export class PokerEngine {
       }
       player.holeCards = [...kept, ...this.deckManager.dealCards(thrown.length)];
       draw.muck = [...(draw.muck || []), ...thrown];
-      this.logAction({ playerId: player.id, action: 'draw', put: 0, drawCount: thrown.length, stage: 'draw', ...auto });
+      this.logAction({ playerId: player.id, action: 'draw', put: 0, drawCount: thrown.length, stage: this.state.stage, ...auto });
     } else {
       throw new Error('Choose cards to draw, or stand pat');
     }
@@ -1974,14 +1999,16 @@ export class PokerEngine {
       this.state.activePlayer = draw.pending[0];
       return;
     }
-    delete this.state.drawState;
+    // The discards stay for any later draw in the hand
+    draw.pending = [];
     if (this.bettorsLeft() >= 2) {
-      this.gameStateManager.startBettingRound('draw');
+      this.gameStateManager.startBettingRound(this.state.stage);
       return;
     }
-    // Nobody left to bet against: straight to the showdown
+    // Nobody left to bet against: Badugi's next draw, or the showdown
     this.state.activePlayer = '';
-    this.determineWinner();
+    if (isBadugiVariant(this.state.variant)) this.drawRoundOver();
+    else this.determineWinner();
   }
 
   /** Settle the hand and record who won chips, which decides whose cards are shown. */
@@ -2428,6 +2455,12 @@ export class PokerEngine {
     const strengths = new Map<string, number>();
     const handViews = new Map<string, { cards: Card[]; description: string }>();
     activePlayers.forEach(p => {
+      if (isBadugiVariant(this.state.variant)) {
+        const best = evaluateBadugi(p.holeCards || []);
+        strengths.set(p.id, best.score);
+        handViews.set(p.id, { cards: best.cards, description: best.description });
+        return;
+      }
       if (isNicaraguaVariant(this.state.variant)) {
         // The opener's method decides who wins
         const method = this.state.nicaragua?.method || 'high';

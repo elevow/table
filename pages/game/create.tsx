@@ -18,7 +18,7 @@ import {
   DEFAULT_HANDS_PER_GAME, HORSE_GAMES, MAX_TABLE_PLAYERS, hasBuiltInWilds, maxPlayersForGame, maxPlayersForMixedGames, supportsWildRule, WILD_RULE_LABELS,
 } from '../../src/lib/poker/variant-rules';
 
-type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'five-card-draw' | 'razz' | 'omaha-5' | 'follow-the-queen' | 'baseball' | 'midnight-baseball' | 'dealers-choice' | 'mixed';
+type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'five-card-draw' | 'razz' | 'omaha-5' | 'courchevel' | 'follow-the-queen' | 'baseball' | 'midnight-baseball' | 'dealers-choice' | 'mixed';
 
 function readAuthToken(): string | null {
   try {
@@ -263,6 +263,7 @@ export default function CreateGameRoomPage() {
               <option value="five-card-draw">Five-Card Draw</option>
               <option value="razz">Razz (Seven-Card Stud, lowest hand wins)</option>
               <option value="omaha-5">5-Card Omaha</option>
+              <option value="courchevel">Courchevel (5-card Omaha, first flop card shown early)</option>
               <option value="follow-the-queen">Follow the Queen (Seven-Card Stud, queens wild)</option>
               <option value="baseball">Baseball (Seven-Card Stud, 3s and 9s wild)</option>
               <option value="midnight-baseball">Midnight Baseball (all face down, 3s and 9s wild)</option>

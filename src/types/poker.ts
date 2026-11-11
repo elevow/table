@@ -19,6 +19,8 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   // Dealer's Choice only: five-card draw where the opener picks how the hand is won and, unless
   // they win, refills the pot for another hand
   | 'nicaragua'
+  // Five-card Omaha with the first flop card dealt face up before the preflop betting
+  | 'courchevel'
   // Baseball dealt all face down: nobody looks, and each player turns cards until they beat the high hand
   | 'midnight-baseball';
 

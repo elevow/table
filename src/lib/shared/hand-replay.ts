@@ -94,8 +94,10 @@ export function buildReplayFrames(hand: HandRecord, money: (n: number) => string
   let pot = 0;
   let stage: GameStage = stud ? 'third' : 'preflop';
 
+  // Courchevel deals the first flop card before the preflop betting
+  const early = hand.variant === 'courchevel' ? 1 : 0;
   const counts = (s: GameStage) => ({
-    boardCount: stud ? 0 : BOARD_BY_STAGE[s] ?? 0,
+    boardCount: stud ? 0 : Math.max(BOARD_BY_STAGE[s] ?? 0, s === 'preflop' ? early : 0),
     upCount: stud ? UP_BY_STAGE[s] ?? 0 : 0,
   });
 

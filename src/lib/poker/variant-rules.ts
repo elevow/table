@@ -10,6 +10,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'texas-holdem',
   'omaha',
   'omaha-5',
+  'courchevel',
   'omaha-hi-lo',
   'seven-card-stud',
   'seven-card-stud-hi-lo',
@@ -26,6 +27,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'texas-holdem': "Texas Hold'em",
   'omaha': 'Omaha',
   'omaha-5': '5-Card Omaha',
+  'courchevel': 'Courchevel',
   'omaha-hi-lo': 'Omaha Hi-Lo',
   'seven-card-stud': 'Seven-Card Stud',
   'seven-card-stud-hi-lo': 'Seven-Card Stud Hi-Lo',
@@ -189,7 +191,7 @@ export function isSevenCardStudVariant(v?: string | null): boolean {
 
 /** Omaha games: the best hand uses exactly two hole cards and three board cards. */
 export function isOmahaVariant(v?: string | null): boolean {
-  return v === 'omaha' || v === 'omaha-hi-lo' || v === 'omaha-5';
+  return v === 'omaha' || v === 'omaha-hi-lo' || v === 'omaha-5' || v === 'courchevel';
 }
 
 /** Hold'em, including tables saved before the variant was recorded. */
@@ -199,7 +201,7 @@ export function isHoldemVariant(v?: string | null): boolean {
 
 /** Hole cards dealt in a board game (Hold'em or Omaha), or a draw game's hand. */
 export function holeCardCount(v?: string | null): number {
-  if (v === 'omaha-5' || isDrawVariant(v)) return 5;
+  if (v === 'omaha-5' || v === 'courchevel' || isDrawVariant(v)) return 5;
   if (v === 'omaha' || v === 'omaha-hi-lo') return 4;
   return 2;
 }

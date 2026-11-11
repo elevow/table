@@ -2,6 +2,7 @@ import { useRouter } from 'next/router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLatest } from '../../src/hooks/useLatest';
 import { useHydrated } from '../../src/hooks/useHydrated';
+import { useMidnightReveal } from '../../src/hooks/useMidnightReveal';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { getPrefetcher, dynamicImport } from '../../src/utils/code-splitting';
@@ -507,7 +508,9 @@ export default function GamePage() {
   
   // Game state
   const [gameStarted, setGameStarted] = useState(false);
-  const [pokerGameState, setPokerGameState] = useState<any>(null);
+  const [serverGameState, setPokerGameState] = useState<any>(null);
+  // Midnight Baseball's turned cards are shown one at a time; everything else is the server's state
+  const pokerGameState = useMidnightReveal(serverGameState);
   const pokerStageRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     pokerStageRef.current = pokerGameState?.stage;
@@ -1821,6 +1824,16 @@ export default function GamePage() {
               top: `calc(${topStr} + ${dy}px)`,
               transform: 'translate(-50%, -50%)'
             };
+            // A stud hand grows to seven cards or more: start the row just past the seat and grow
+            // away from it, so it never runs back under the name plate
+            if (isStudVariant()) {
+              const edge = isNarrowScreen ? 34 : 36;
+              cardStyle = {
+                ...cardStyle,
+                left: `calc(${leftStr} + ${dx > 0 ? edge : -edge}px)`,
+                transform: dx > 0 ? 'translate(0, -50%)' : 'translate(-100%, -50%)',
+              };
+            }
           }
 
           if (isStudVariant()) {
@@ -1835,9 +1848,10 @@ export default function GamePage() {
               <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent stud cards">
                 <div className="flex items-center gap-1">
                   {/* Down cards stay face down until showdown; up cards are always face up */}
-                  {slots.map(({ key, card, faceDown }) => (
+                  {slots.map(({ key, card, faceDown }, i) => (
                     faceDown ? (
-                      <div key={key} className="card-back w-8 h-12">
+                      // Several face-down cards in a row overlap, as in Midnight Baseball
+                      <div key={key} className={`card-back w-8 h-12 ${downSlots.length > 3 && i > 0 && slots[i - 1].faceDown ? '-ml-5' : ''}`}>
                         <div className="card-back-inner"></div>
                       </div>
                     ) : (
@@ -2746,6 +2760,8 @@ export default function GamePage() {
                         <p className="text-xs mt-3 opacity-80">
                           {selectedVariantDC === 'baseball'
                             ? '3s and 9s are wild. A face-up 4 gets an extra card face down; a face-up 3 means match the pot or fold.'
+                            : selectedVariantDC === 'midnight-baseball'
+                            ? 'All cards face down and nobody looks; each player turns cards until they beat the high hand, then everyone bets. 3s and 9s are wild, a 4 turned up gets an extra card, a 3 turned up means match the pot or fold.'
                             : 'Queens are wild, and so is the rank of the card dealt face up after the last face-up queen.'}
                           {' '}Fixed limit; five of a kind is the top hand.
                         </p>
@@ -3009,7 +3025,7 @@ export default function GamePage() {
               {myPotMatchPending ? (
                 <div className="flex flex-col gap-2">
                   <p className="text-sm text-gray-700 dark:text-gray-300">
-                    You were dealt a 3 face up. Match the pot to stay in, or fold.
+                    {pokerGameState?.variant === 'midnight-baseball' ? 'You turned up a 3' : 'You were dealt a 3 face up'}. Match the pot to stay in, or fold.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -3834,7 +3850,13 @@ export default function GamePage() {
           {/* Less critical component in viewport */}
           <MobileCollapsible title="Chat" className="lg:col-span-2">
           <div ref={chatPanelRef} className="lg:col-span-2 surface p-4 max-sm:mt-0">
-            <ChatPanel gameId={String(id)} playerId={playerId} isAdmin={userRole === 'admin'} />
+            <ChatPanel
+              gameId={String(id)}
+              playerId={playerId}
+              isAdmin={userRole === 'admin'}
+              // Midnight Baseball: the hand result waits until the turned cards are all showing
+              holdSystemMessages={!!serverGameState && pokerGameState?.stage !== serverGameState.stage}
+            />
           </div>
           </MobileCollapsible>
 

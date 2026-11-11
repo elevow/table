@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, memo, useCallback } from 'react';
 import type { ChatMessage } from '../types/chat';
 import { useSupabaseChatRealtime } from '../hooks/useSupabaseChatRealtime';
 import { useHydrated } from '../hooks/useHydrated';
+import { useLatest } from '../hooks/useLatest';
 import { authHeaders, getStoredAuthToken } from '../utils/auth-headers';
 
 interface ChatPanelProps {
@@ -18,6 +19,11 @@ interface ChatPanelProps {
    * This should be determined server-side to ensure security.
    */
   isAdmin?: boolean;
+  /**
+   * Hold back system messages (hand results) that arrive while this is true, and show them once
+   * it turns false: Midnight Baseball's result waits until its turned cards are all showing.
+   */
+  holdSystemMessages?: boolean;
 }
 
 // Players this viewer has muted, by ID with the name they had, kept in this browser for every table
@@ -31,7 +37,12 @@ function loadMuted(): Record<string, string> {
   }
 }
 
-function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
+function ChatPanel({ gameId, playerId, isAdmin = false, holdSystemMessages = false }: ChatPanelProps) {
+  // System messages that arrived while held, not shown yet
+  const [held, setHeld] = useState<string[]>([]);
+  const holdRef = useLatest(holdSystemMessages);
+  // Adjusted while rendering, React's pattern for state that follows a changing value
+  if (!holdSystemMessages && held.length > 0) setHeld([]);
   // Mutes changed here, else the ones saved in this browser (read once hydrated)
   const [changedMutes, setMuted] = useState<Record<string, string> | null>(null);
   const hydrated = useHydrated();
@@ -94,8 +105,9 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
     if (!m) return;
     // Skip if this is our own message (already handled optimistically in handleSendMessage)
     if (playerId && m.senderId === playerId) return;
+    if (holdRef.current && m.senderId === 'system') setHeld(prev => [...prev, m.id]);
     setMessages(prev => (prev.some(x => x.id === m.id) ? prev : [...prev, m]));
-  }, [playerId]);
+  }, [playerId, holdRef]);
 
   const handleSupabaseReaction = useCallback((payload: { messageId: string; emoji: string; userId: string }) => {
     if (!payload?.messageId || !payload?.emoji) return;
@@ -180,7 +192,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false }: ChatPanelProps) {
 
   const canMute = (m: ChatMessage) => !!playerId && m.senderId !== playerId && m.senderId !== directorId;
   const isMuted = (senderId: string) => senderId in muted && senderId !== directorId && senderId !== playerId;
-  const visibleMessages = messages.filter(m => !isMuted(m.senderId));
+  const visibleMessages = messages.filter(m => !isMuted(m.senderId) && !held.includes(m.id));
   const hiddenCount = messages.length - visibleMessages.length;
   const mutedHere = Object.entries(muted).filter(([id]) => isMuted(id));
 

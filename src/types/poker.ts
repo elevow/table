@@ -11,10 +11,12 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   // Seven-card stud where queens are wild, and so is the rank of the card dealt face up after the last face-up queen
   | 'follow-the-queen'
   // Seven-card stud with 3s and 9s wild; a face-up 4 deals an extra card, a face-up 3 means match the pot or fold
-  | 'baseball';
+  | 'baseball'
+  // Baseball dealt all face down: nobody looks, and each player turns cards until they beat the high hand
+  | 'midnight-baseball';
 
 // Which cards are wild; unset means none. Deuces and one-eyed jacks are a table option;
-// 'follow-the-queen' and 'baseball' are set by those games themselves.
+// 'follow-the-queen' and 'baseball' are set by those games themselves (Midnight Baseball uses 'baseball').
 export type WildRule = 'deuces' | 'one-eyed-jacks' | 'follow-the-queen' | 'baseball';
 
 // How much a player may bet: any amount, up to the pot, or one fixed bet per bet or raise
@@ -221,6 +223,12 @@ export interface TableState {
     potMatch?: { queue: string[]; stage: GameStage };
     // Baseball: chips each player paid to match the pot; dead money that any player left in can win
     potMatched?: Record<string, number>;
+    // Midnight Baseball: holder has the high hand showing (it opens each betting round); turn is
+    // the player turning cards to beat it
+    // flips: whose card was turned, one entry per card in the order they were turned, so the
+    // table can show them one at a time. outAt: for each player out of the hand, how many cards
+    // had been turned when they went out, so the table shows them out only from then
+    midnight?: { holder?: string; turn?: string; flips?: string[]; outAt?: Record<string, number> };
   };
 }
 

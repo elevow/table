@@ -20,6 +20,7 @@ export function defaultBettingModeForVariant(variant: PokerVariant): BettingMode
       return 'fixed-limit';
     case 'follow-the-queen':
     case 'baseball':
+    case 'midnight-baseball':
       // Any game with wild cards is played fixed limit
       return 'fixed-limit';
     case 'seven-card-stud':

@@ -18,7 +18,7 @@ import {
   DEFAULT_HANDS_PER_GAME, HORSE_GAMES, MAX_TABLE_PLAYERS, hasBuiltInWilds, maxPlayersForGame, maxPlayersForMixedGames, supportsWildRule, WILD_RULE_LABELS,
 } from '../../src/lib/poker/variant-rules';
 
-type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'razz' | 'omaha-5' | 'follow-the-queen' | 'baseball' | 'dealers-choice' | 'mixed';
+type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'razz' | 'omaha-5' | 'follow-the-queen' | 'baseball' | 'midnight-baseball' | 'dealers-choice' | 'mixed';
 
 function readAuthToken(): string | null {
   try {
@@ -264,6 +264,7 @@ export default function CreateGameRoomPage() {
               <option value="omaha-5">5-Card Omaha</option>
               <option value="follow-the-queen">Follow the Queen (Seven-Card Stud, queens wild)</option>
               <option value="baseball">Baseball (Seven-Card Stud, 3s and 9s wild)</option>
+              <option value="midnight-baseball">Midnight Baseball (all face down, 3s and 9s wild)</option>
               <option value="dealers-choice">Dealer&apos;s Choice (dealer selects each hand)</option>
               <option value="mixed">Mixed Games (rotate every few hands)</option>
             </select>
@@ -275,6 +276,11 @@ export default function CreateGameRoomPage() {
             {variant === 'baseball' && (
               <p className="hint">
                 3s and 9s are wild. A 4 dealt face up gets that player an extra card, face down. A 3 dealt face up means that player matches the pot or folds before the betting.
+              </p>
+            )}
+            {variant === 'midnight-baseball' && (
+              <p className="hint">
+                Everyone gets seven cards face down and nobody looks. In turn, each player turns cards face up until they beat the high hand showing, then there is a round of betting. 3s and 9s are wild; a face-up 4 gets an extra card, and a face-up 3 means match the pot or fold.
               </p>
             )}
             {variant === 'dealers-choice' && (

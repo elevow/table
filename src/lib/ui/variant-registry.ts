@@ -107,6 +107,25 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'midnight-baseball': {
+    variant: 'midnight-baseball',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [
+      { type: 'hand-info' },
+      { type: 'stud-exposed-cards' },
+    ],
+    helpContent: {
+      title: 'Midnight Baseball',
+      summary: 'Seven cards each, all face down, and nobody looks. 3s and 9s are wild.',
+      bullets: [
+        'In turn, each player turns cards face up until they beat the high hand showing; then the high hand leads a round of betting',
+        'Turn every card without beating it and you are out',
+        'A 4 turned up gets you an extra face‑down card; a 3 turned up means match the pot or fold',
+        'Five of a kind is the top hand; always fixed limit, at most 6 players',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'seven-card-stud-hi-lo': {
     variant: 'seven-card-stud-hi-lo',
     controls: [

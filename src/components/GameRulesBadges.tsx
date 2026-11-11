@@ -17,6 +17,8 @@ const WILD_TITLES: Partial<Record<WildRule, string>> = {
   'baseball': '3s and 9s are wild. A 4 dealt face up gets an extra card face down; a 3 dealt face up means match the pot or fold. Five of a kind is the top hand.',
 };
 
+const MIDNIGHT_TITLE = 'Every card is dealt face down and nobody looks. In turn, each player turns cards until they beat the high hand showing, then there is a round of betting. 3s and 9s are wild; a 4 turned up gets an extra card, and a 3 turned up means match the pot or fold. Five of a kind is the top hand.';
+
 /** "Deuces Wild"; in Follow the Queen, what is wild right now, such as "Queens & 7s Wild". */
 function wildLabel(state: TableState): string {
   if (state.wildRule !== 'follow-the-queen') return state.wildRule ? WILD_RULE_LABELS[state.wildRule] : '';
@@ -48,7 +50,7 @@ export default function GameRulesBadges({ state }: Props) {
       {state.wildRule && (
         <span
           className={`${badge} bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/60 dark:text-fuchsia-100`}
-          title={WILD_TITLES[state.wildRule] || 'A wild card counts as whatever makes your hand best. Five of a kind is the top hand.'}
+          title={(state.variant === 'midnight-baseball' ? MIDNIGHT_TITLE : WILD_TITLES[state.wildRule]) || 'A wild card counts as whatever makes your hand best. Five of a kind is the top hand.'}
         >
           {wildLabel(state)}
         </span>

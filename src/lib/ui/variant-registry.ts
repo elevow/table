@@ -177,6 +177,22 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'nicaragua': {
+    variant: 'nicaragua',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }],
+    helpContent: {
+      title: 'Nicaragua',
+      summary: "Five‑card draw where the opener picks how the hand is won. A Dealer's Choice game that lasts until an opener wins.",
+      bullets: [
+        'Whoever opens the betting picks: highest hand, lowest hand (ace‑to‑five), highest count or lowest count',
+        'Counts: picture cards are 10, aces 1 or 11',
+        'If the opener doesn’t win, they pay the size of the pot into a new one and another hand is dealt',
+        'The game ends when an opener wins; then the next player chooses',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'razz': {
     variant: 'razz',
     controls: [commonControls.bet, commonControls.check, commonControls.fold],

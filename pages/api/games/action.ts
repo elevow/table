@@ -3,12 +3,13 @@ import { getOrRestoreEngine, STALE_STATE_RESPONSE } from '../../../src/lib/poker
 import { runGameAction } from '../../../src/lib/server/game-action-pipeline';
 import { requirePlayer } from '../../../src/lib/auth/auth-utils';
 import { apiHandler } from '../../../src/lib/api/handler';
+import { isNicaraguaMethod } from '../../../src/lib/poker/variant-rules';
 
 // An all-in runs the board out, with pauses between streets
 export const config = { maxDuration: 60 };
 
 export default apiHandler({ methods: 'POST' }, async (req, res) => {
-  const { tableId, playerId: claimedPlayerId, action, amount, expectedTurnSeq, splash, discards } = (req.body || {}) as {
+  const { tableId, playerId: claimedPlayerId, action, amount, expectedTurnSeq, splash, discards, method } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
     action?: string;
@@ -19,6 +20,8 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     splash?: boolean;
     // Draw: positions in the player's hand of the cards to swap
     discards?: unknown;
+    // Nicaragua: how the hand is won, sent with the opening bet
+    method?: unknown;
   };
 
   const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.play');
@@ -52,6 +55,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       tableId,
       amount,
       discards: Array.isArray(discards) ? discards.slice(0, 5).map(Number) : undefined,
+      method: isNicaraguaMethod(method) ? method : undefined,
       timestamp: Date.now(),
     };
 

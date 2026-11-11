@@ -16,12 +16,18 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   | 'baseball'
   // Five cards each, one round of betting, a draw, and another round of betting
   | 'five-card-draw'
+  // Dealer's Choice only: five-card draw where the opener picks how the hand is won and, unless
+  // they win, refills the pot for another hand
+  | 'nicaragua'
   // Baseball dealt all face down: nobody looks, and each player turns cards until they beat the high hand
   | 'midnight-baseball';
 
 // Which cards are wild; unset means none. Deuces and one-eyed jacks are a table option;
 // 'follow-the-queen' and 'baseball' are set by those games themselves (Midnight Baseball uses 'baseball').
 export type WildRule = 'deuces' | 'one-eyed-jacks' | 'follow-the-queen' | 'baseball';
+
+// Nicaragua: how the opener says the hand is won. Counts: picture cards 10, aces 1 or 11
+export type NicaraguaMethod = 'high' | 'low' | 'high-count' | 'low-count';
 
 // How much a player may bet: any amount, up to the pot, or one fixed bet per bet or raise
 export type BettingMode = 'no-limit' | 'pot-limit' | 'fixed-limit';
@@ -107,6 +113,8 @@ export interface HandActionEntry {
   auto?: boolean;
   // Draw: how many cards were swapped
   drawCount?: number;
+  // Nicaragua: the opening bet, with how the opener says the hand is won
+  method?: NicaraguaMethod;
 }
 
 export interface TableState {
@@ -223,6 +231,10 @@ export interface TableState {
   // the cards thrown away so far, which are shuffled back in if the deck runs out (never sent to
   // players)
   drawState?: { pending: string[]; muck?: Card[] };
+  // Nicaragua, one game lasting until an opener wins: the opener and the way they chose this hand
+  // is won, and carry, chips in the pot from earlier hands of the game (the opener's refill, or a
+  // pot nobody opened). over: an opener won, so the next dealer chooses.
+  nicaragua?: { opener?: string; method?: NicaraguaMethod; carry?: number; over?: boolean };
   studState?: {
     // downCount replaces downCards for other players: how many they hold, not which
     playerCards: Record<string, { downCards: Card[]; upCards: Card[]; downCount?: number }>;
@@ -262,6 +274,8 @@ export interface PlayerAction {
   tableId: string;
   amount?: number;
   discards?: number[];
+  // Nicaragua: how the hand is won, sent with the opening bet
+  method?: NicaraguaMethod;
   timestamp: number;
 }
 

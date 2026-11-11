@@ -3,6 +3,7 @@ import { HandEvaluator } from '../poker/hand-evaluator';
 import type { HandInterface } from '../../types/poker-engine';
 import { isOmahaVariant as isOmahaGame, isStudVariant } from '../poker/variant-rules';
 import { evaluateWildHigh, evaluateWildOmaha, evaluateWildRazz, tableWildMatcher } from '../poker/wild-hands';
+import { describeNicaraguaHand } from '../poker/nicaragua';
 
 /**
  * System sender ID used for hand result messages
@@ -156,6 +157,44 @@ function formatRazzResult(state: TableState): FormattedHandResult | null {
   return { message, winners, isWinByFold: false };
 }
 
+/**
+ * Nicaragua: the winners come from the engine, their hands described by the opener's method,
+ * followed by what happens to the game: the opener refilling the pot, or the game ending.
+ */
+function formatNicaraguaResult(state: TableState): FormattedHandResult | null {
+  const players = state.players || [];
+  const game = state.nicaragua || {};
+  const nameOf = (id: string) => {
+    const player = players.find(p => p.id === id);
+    return player ? getPlayerName(player) : id.slice(0, 6);
+  };
+  const winnings = state.handResult?.winnings || {};
+  const winnerIds = Object.keys(winnings);
+  if (winnerIds.length === 0) {
+    const pot = state.handResult?.pot ?? game.carry ?? 0;
+    return { message: `Nobody opened: the $${pot} pot carries to the next hand`, winners: [], isWinByFold: false };
+  }
+  const byFold = players.filter(p => !p.isFolded).length === 1;
+  const method = game.method || 'high';
+  const winners: HandWinner[] = winnerIds.map(id => {
+    const player = players.find(p => p.id === id);
+    return {
+      playerId: id,
+      playerName: nameOf(id),
+      amount: winnings[id],
+      handDescription: byFold || !player?.holeCards?.length ? undefined : describeNicaraguaHand(player.holeCards, method),
+    };
+  });
+  const handDesc = winners[0].handDescription ? ` with ${winners[0].handDescription}` : '';
+  const head = winners.length === 1
+    ? `🏆 ${winners[0].playerName} wins${byFold ? ' the pot (all others folded)' : handDesc}`
+    : `🏆 ${winners.map(w => w.playerName).join(', ')} split the pot${handDesc}`;
+  const tail = game.over
+    ? 'Nicaragua is over'
+    : game.opener && game.carry ? `${nameOf(game.opener)} pays $${game.carry} into the next pot` : '';
+  return { message: tail ? `${head} | ${tail}` : head, winners, isWinByFold: byFold };
+}
+
 function formatHandResultBase(state: TableState): FormattedHandResult | null {
   // Only format if we're at showdown
   if (state.stage !== 'showdown') {
@@ -168,6 +207,8 @@ function formatHandResultBase(state: TableState): FormattedHandResult | null {
   
   // Find non-folded players
   const activePlayers = players.filter(p => !p.isFolded);
+
+  if (variant === 'nicaragua') return formatNicaraguaResult(state);
   
   // Win by fold: only one player remains
   if (activePlayers.length === 1) {

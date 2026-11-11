@@ -21,7 +21,7 @@ import { GameService } from '../../../src/lib/services/game-service';
 import { defaultBettingModeForVariant } from '../../../src/lib/game/variant-mapping';
 import type { BettingMode, GameVariant, WildRule } from '../../../src/types/poker';
 import {
-  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, maxPlayersForGame, parseWildRule, variantAllowedFor, variantLabel, wildAllowedFor,
+  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, isNicaraguaVariant, maxPlayersForGame, parseWildRule, variantAllowedFor, variantLabel, wildAllowedFor,
 } from '../../../src/lib/poker/variant-rules';
 import { loadRoom, isTableClosed, TABLE_CLOSED_RESPONSE } from '../../../src/lib/server/room-config';
 import { keepTablesMoving, prepareTournamentHand, tournamentTableOf } from '../../../src/lib/tournament/table-rooms';
@@ -364,6 +364,12 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
 
         if (awaitingDealerChoiceStage) {
           return res.status(200).json({ success: true, awaitingChoice: true });
+        }
+
+        // Nicaragua is one game that lasts until an opener wins the pot, however many hands that
+        // takes; then the next dealer chooses
+        if (isNicaraguaVariant(currentState.variant)) {
+          return currentState.nicaragua && !currentState.nicaragua.over ? applyVariantAndStart() : promptDealerChoice();
         }
 
         // A round is players + 1 hands, so the next chooser is also the next dealer. The count

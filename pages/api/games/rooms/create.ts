@@ -8,7 +8,7 @@ import {
 import { newInviteCode, stripPrivacyKeys } from '../../../../src/lib/server/room-privacy';
 import { apiHandler } from '../../../../src/lib/api/handler';
 import {
-  hasBuiltInWilds, maxPlayersForGame, maxPlayersForMixedGames, parseMixedGames, parseWildRule, supportsWildRule,
+  hasBuiltInWilds, isDealersChoiceOnly, maxPlayersForGame, maxPlayersForMixedGames, parseMixedGames, parseWildRule, supportsWildRule,
 } from '../../../../src/lib/poker/variant-rules';
 import { defaultBettingModeForVariant } from '../../../../src/lib/game/variant-mapping';
 
@@ -33,6 +33,10 @@ export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max:
   }
   const userId = access.userId;
 
+  // Nicaragua is one game a Dealer's Choice dealer picks, not a room's game
+  if (isDealersChoiceOnly(variant)) {
+    return res.status(400).json({ error: "This game is only played as a Dealer's Choice pick" });
+  }
   // Wild cards fix some of the table's rules, whatever the client sent
   const wildRule = parseWildRule(req.body?.configuration?.wildRule);
   if (wildRule && !supportsWildRule(variant)) {

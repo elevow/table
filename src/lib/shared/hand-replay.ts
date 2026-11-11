@@ -53,7 +53,7 @@ const FIVE_CARD_STUD_STREETS: Partial<Record<GameStage, string>> = {
 /** What to call a street in an action log, e.g. "Flop" or "4th street". */
 export function streetLabel(stage: GameStage, variant?: string | null): string {
   if (variant === 'five-card-stud' && FIVE_CARD_STUD_STREETS[stage]) return FIVE_CARD_STUD_STREETS[stage]!;
-  if (variant === 'five-card-draw' && stage === 'preflop') return 'Before the draw';
+  if ((variant === 'five-card-draw' || variant === 'nicaragua') && stage === 'preflop') return 'Before the draw';
   return STREET_LABELS[stage] || stage;
 }
 

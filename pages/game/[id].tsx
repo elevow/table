@@ -1824,6 +1824,16 @@ export default function GamePage() {
               top: `calc(${topStr} + ${dy}px)`,
               transform: 'translate(-50%, -50%)'
             };
+            // A stud hand grows to seven cards or more: start the row just past the seat and grow
+            // away from it, so it never runs back under the name plate
+            if (isStudVariant()) {
+              const edge = isNarrowScreen ? 34 : 36;
+              cardStyle = {
+                ...cardStyle,
+                left: `calc(${leftStr} + ${dx > 0 ? edge : -edge}px)`,
+                transform: dx > 0 ? 'translate(0, -50%)' : 'translate(-100%, -50%)',
+              };
+            }
           }
 
           if (isStudVariant()) {
@@ -1838,9 +1848,10 @@ export default function GamePage() {
               <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent stud cards">
                 <div className="flex items-center gap-1">
                   {/* Down cards stay face down until showdown; up cards are always face up */}
-                  {slots.map(({ key, card, faceDown }) => (
+                  {slots.map(({ key, card, faceDown }, i) => (
                     faceDown ? (
-                      <div key={key} className="card-back w-8 h-12">
+                      // Several face-down cards in a row overlap, as in Midnight Baseball
+                      <div key={key} className={`card-back w-8 h-12 ${downSlots.length > 3 && i > 0 && slots[i - 1].faceDown ? '-ml-5' : ''}`}>
                         <div className="card-back-inner"></div>
                       </div>
                     ) : (

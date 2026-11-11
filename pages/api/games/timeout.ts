@@ -72,10 +72,12 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       return res.status(409).json({ error: 'The turn has not timed out', code: 'NOT_TIMED_OUT', remainingMs: null });
     }
     // A stud bring-in cannot fold or check: the clock brings it in. A Baseball face-up 3 that
-    // hasn't matched the pot folds.
+    // hasn't matched the pot folds, and a player who doesn't draw stands pat.
     const bringIn = state.studState?.bringIn;
     const potMatch = state.studState?.potMatch;
-    const action = potMatch?.queue?.[0] === timedOut.id && potMatch.stage === state.stage
+    const action = state.drawState?.pending?.[0] === timedOut.id && state.stage === 'draw'
+      ? 'stand-pat'
+      : potMatch?.queue?.[0] === timedOut.id && potMatch.stage === state.stage
       ? 'fold'
       : bringIn?.pending && bringIn.player === timedOut.id && state.stage === 'third'
         ? 'bring-in'

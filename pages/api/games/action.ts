@@ -8,7 +8,7 @@ import { apiHandler } from '../../../src/lib/api/handler';
 export const config = { maxDuration: 60 };
 
 export default apiHandler({ methods: 'POST' }, async (req, res) => {
-  const { tableId, playerId: claimedPlayerId, action, amount, expectedTurnSeq, splash } = (req.body || {}) as {
+  const { tableId, playerId: claimedPlayerId, action, amount, expectedTurnSeq, splash, discards } = (req.body || {}) as {
     tableId?: string;
     playerId?: string;
     action?: string;
@@ -17,6 +17,8 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     expectedTurnSeq?: number;
     // Make this bet or raise a splash, once per session
     splash?: boolean;
+    // Draw: positions in the player's hand of the cards to swap
+    discards?: unknown;
   };
 
   const playerId = await requirePlayer(req, res, claimedPlayerId, 'game.play');
@@ -45,15 +47,16 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
 
     // Build PlayerAction object
     const playerAction = {
-      type: action.toLowerCase() as 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot',
+      type: action.toLowerCase() as 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw',
       playerId,
       tableId,
       amount,
+      discards: Array.isArray(discards) ? discards.slice(0, 5).map(Number) : undefined,
       timestamp: Date.now(),
     };
 
     // Validate action type
-    const validActions = ['fold', 'check', 'call', 'bet', 'raise', 'bring-in', 'match-pot'];
+    const validActions = ['fold', 'check', 'call', 'bet', 'raise', 'bring-in', 'match-pot', 'draw'];
     if (!validActions.includes(playerAction.type)) {
       return res.status(400).json({ error: `Unknown action: ${action}` });
     }

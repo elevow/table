@@ -8,6 +8,7 @@
  */
 
 import { TableState, Player, Card } from '../../types/poker';
+import { isDrawVariant } from './variant-rules';
 
 /**
  * Checks if the game is in an all-in situation where all active players are all-in.
@@ -67,8 +68,8 @@ export function shouldRevealHoleCards(state: TableState): boolean {
     return state.players.filter(p => !p.isFolded).length >= 2;
   }
 
-  // Reveal during all-in situations
-  return isAllInSituation(state);
+  // Reveal during all-in situations, except in draw games, where the draw is still to come
+  return isAllInSituation(state) && !isDrawVariant(state.variant);
 }
 
 /**
@@ -89,7 +90,8 @@ function canSeePrivateCards(playerId: string, viewerId: string | null, revealedI
 export function revealedPlayerIds(state: TableState): Set<string> {
   const inHand = state.players.filter(p => !p.isFolded);
   if (state.stage !== 'showdown') {
-    return new Set(isAllInSituation(state) ? inHand.map(p => p.id) : []);
+    // Draw games keep hands hidden until the showdown, as players still draw
+    return new Set(isAllInSituation(state) && !isDrawVariant(state.variant) ? inHand.map(p => p.id) : []);
   }
   const revealed = new Set<string>(state.shownCards || []);
   if (inHand.length >= 2) {
@@ -168,6 +170,8 @@ function sanitizeState(state: TableState, viewerId: string | null): TableState {
     players: sanitizedPlayers,
     studState: sanitizedStudState
   };
+  // A draw's discards are never shown
+  if (state.drawState) result.drawState = { pending: state.drawState.pending };
   // Clients count down from what was left when this was sent, not from their own clock
   if (typeof state.turnDeadline === 'number') {
     result.turnTimeRemainingMs = state.turnDeadline - Date.now();

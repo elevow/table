@@ -48,6 +48,14 @@ export class DeckManager {
     return cards;
   }
 
+  /** Shuffle these cards and put them under the rest of the deck (a draw game's discards). */
+  public addShuffledToBottom(cards: Card[]): void {
+    const extra = [...cards];
+    secureShuffle(extra);
+    // Cards are dealt from the end, so the bottom of the deck is the start of the array
+    this.deck = [...extra, ...this.deck];
+  }
+
   // US-031: Snapshot the remaining deck (top of deck is at the end, since we pop())
   public getRemainingDeck(): Card[] {
     return [...this.deck];

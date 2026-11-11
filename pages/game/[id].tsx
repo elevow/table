@@ -45,7 +45,7 @@ import SplashAnimation, { splashInPlay } from '../../src/components/SplashAnimat
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
 import {
-  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, hasBuiltInWilds, isOmahaVariant,
+  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, hasBuiltInWilds, isDrawVariant, isOmahaVariant,
   isStudVariant as isStudGame, maxPlayersForGame, variantAllowedFor, wildAllowedFor,
 } from '../../src/lib/poker/variant-rules';
 import { studCardOrder } from '../../src/lib/shared/stud-cards';
@@ -943,7 +943,7 @@ export default function GamePage() {
   const [splashArmed, setSplashArmed] = useState(false);
   const splashArmedRef = useLatest(splashArmed);
 
-  const handlePokerAction = useCallback(async (action: string, amount?: number) => {
+  const handlePokerAction = useCallback(async (action: string, amount?: number, extra?: { discards?: number[] }) => {
     if (!pokerGameState || !playerId) {
       console.warn('Cannot perform action: missing game state or player ID');
       return;
@@ -972,6 +972,7 @@ export default function GamePage() {
         playerId,
         action,
         amount,
+        ...(extra || {}),
         ...(splash ? { splash: true } : {}),
         // The decision this click answers; the server refuses it if the game has moved on
         expectedTurnSeq: typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
@@ -1513,6 +1514,20 @@ export default function GamePage() {
   const myPotMatchPending = !!(isMyTurn && potMatchPlayerId === playerId);
   const potMatchAmount = Math.min(Number(pokerGameState?.pot) || 0, Math.max(0, Number(me?.stack) || 0));
   const potMatchIsAllIn = (Number(me?.stack) || 0) <= (Number(pokerGameState?.pot) || 0);
+  // Draw games: in the draw, pick the cards to throw away (up to 3, or 4 keeping an ace)
+  const myDrawPending = !!(isMyTurn && pokerGameState?.stage === 'draw' && pokerGameState?.drawState?.pending?.[0] === playerId);
+  const myHoleCards: Card[] = Array.isArray(me?.holeCards) ? me.holeCards : [];
+  // Picks belong to one decision, so a new hand or turn starts with none
+  const drawKey = `${pokerGameState?.handId ?? ''}:${pokerGameState?.turnSeq ?? ''}`;
+  const [drawPickState, setDrawPickState] = useState<{ key: string; picks: number[] }>({ key: '', picks: [] });
+  const drawPicks = drawPickState.key === drawKey ? drawPickState.picks : [];
+  const toggleDrawPick = (i: number) => setDrawPickState({
+    key: drawKey,
+    picks: drawPicks.includes(i) ? drawPicks.filter(x => x !== i) : [...drawPicks, i],
+  });
+  const drawKeepsAce = myHoleCards.some((card, i) => !drawPicks.includes(i) && card?.rank === 'A');
+  const drawAllowed = drawPicks.length <= 3 || (drawPicks.length === 4 && drawKeepsAce);
+  const submitDraw = () => { if (drawAllowed) handlePokerAction('draw', undefined, { discards: drawPicks }); };
 
   // A pre-action applies to one betting round
   // (adjusted during render, React's recommended way to reset state when something changes)
@@ -1533,17 +1548,17 @@ export default function GamePage() {
     if (!preAction || !isMyTurn || !me || me.isFolded) return;
     // A Run It Twice decision is not a betting turn
     if (pokerGameState?.runItTwicePrompt) return;
-    // Nor is the stud bring-in, or matching the pot after a Baseball face-up 3: those choices are
-    // the player's to make
+    // Nor is the stud bring-in, matching the pot after a Baseball face-up 3, or a draw: those
+    // choices are the player's to make
     // Carrying out the queued pre-action is this effect's job; clearing it stops it firing twice
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (myBringInPending || myPotMatchPending) { setPreAction(null); return; }
+    if (myBringInPending || myPotMatchPending || myDrawPending) { setPreAction(null); return; }
     const result = resolvePreAction(preAction, myOwed);
     setPreAction(null);
     if (result.action === 'cancel') return;
     if (result.action === 'call') handlePokerAction('call', result.amount);
     else handlePokerAction(result.action);
-  }, [preAction, isMyTurn, me, myOwed, pokerGameState?.runItTwicePrompt, myBringInPending, myPotMatchPending, handlePokerAction]);
+  }, [preAction, isMyTurn, me, myOwed, pokerGameState?.runItTwicePrompt, myBringInPending, myPotMatchPending, myDrawPending, handlePokerAction]);
 
   // Keyboard shortcuts work only while the Your Turn panel is showing (same conditions as the panel)
   const actionPanelOpen = !!(gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt);
@@ -1551,7 +1566,7 @@ export default function GamePage() {
     enabled: actionPanelOpen,
     // The bring-in cannot fold; check/call posts the bring-in
     onFold: () => { if (!myBringInPending) handleFold(); },
-    onCheckOrCall: () => (myPotMatchPending ? handlePokerAction('match-pot') : myBringInPending ? handlePokerAction('bring-in') : myOwed > 0 ? handlePokerAction('call', myOwed) : handleCheck()),
+    onCheckOrCall: () => (myDrawPending ? submitDraw() : myPotMatchPending ? handlePokerAction('match-pot') : myBringInPending ? handlePokerAction('bring-in') : myOwed > 0 ? handlePokerAction('call', myOwed) : handleCheck()),
   });
 
   // Emote reactions shown over seats
@@ -2538,7 +2553,7 @@ export default function GamePage() {
               <svg className="h-4 w-4 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.8L3 8M3 3v5h5M12 7v5l3 2" /></svg>
               <span className="max-sm:sr-only">Hand history</span>
             </a>
-            {gameStarted && me && tableExtras?.allowStraddle && !isStudVariant() && (pokerGameState?.players?.length || 0) >= 3 && (
+            {gameStarted && me && tableExtras?.allowStraddle && !isStudVariant() && !isDrawVariant(pokerGameState?.variant) && (pokerGameState?.players?.length || 0) >= 3 && (
               <button
                 onClick={toggleStraddle}
                 className={`btn btn-sm ${me.wantsStraddle ? 'btn-warning' : 'btn-ghost'}`}
@@ -2987,7 +3002,7 @@ export default function GamePage() {
               })()}
               {/* Pot Odds Display */}
               {renderPotOdds()}
-              {!myBringInPending && !myPotMatchPending && !(pokerGameState?.splashUsedBy || []).includes(playerId) && (
+              {!myBringInPending && !myPotMatchPending && !myDrawPending && !(pokerGameState?.splashUsedBy || []).includes(playerId) && (
                 <div className="mb-3 flex items-center gap-2">
                   <button
                     type="button"
@@ -3006,7 +3021,48 @@ export default function GamePage() {
               {showHandValue && myLastCardOdds && (
                 <div className="mb-3 text-sm text-gray-700 dark:text-gray-200" aria-label="Chance to improve">{myLastCardOdds}</div>
               )}
-              {myPotMatchPending ? (
+              {myDrawPending ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    Pick the cards to throw away: up to 3, or 4 if the card you keep is an ace.
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-2" role="group" aria-label="Your cards">
+                    {myHoleCards.map((card, i) => {
+                      const picked = drawPicks.includes(i);
+                      return (
+                        <button
+                          key={`${card.rank}-${card.suit}`}
+                          type="button"
+                          onClick={() => toggleDrawPick(i)}
+                          aria-pressed={picked}
+                          aria-label={`${card.rank} of ${card.suit}${picked ? ', throwing away' : ''}`}
+                          className={`rounded-md transition-transform ${picked ? '-translate-y-2 opacity-60 ring-2 ring-red-400' : ''}`}
+                        >
+                          <TableCard card={card} size="sm" highContrast={highContrastCards} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {!drawAllowed && (
+                    <p className="text-xs text-red-700 dark:text-red-300" role="status">To draw 4, keep an ace.</p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleFold}
+                      className="btn btn-lg act-fold max-sm:min-h-[48px] max-sm:text-base w-[calc(25%-0.5rem)] sm:w-[calc(30%-0.375rem)]"
+                    >
+                      Fold
+                    </button>
+                    <button
+                      onClick={submitDraw}
+                      disabled={!drawAllowed}
+                      className="btn btn-lg act-call max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                    >
+                      {drawPicks.length === 0 ? 'Stand pat' : `Draw ${drawPicks.length}`}
+                    </button>
+                  </div>
+                </div>
+              ) : myPotMatchPending ? (
                 <div className="flex flex-col gap-2">
                   <p className="text-sm text-gray-700 dark:text-gray-300">
                     You were dealt a 3 face up. Match the pot to stay in, or fold.
@@ -3687,7 +3743,7 @@ export default function GamePage() {
           )}
 
           {/* Chance to win during an all-in, when everyone's cards are face up */}
-          {gameStarted && pokerGameState && anyAllIn() && pokerGameState.stage !== 'showdown' && !isStudVariant() && !pokerGameState.wildRule && (
+          {gameStarted && pokerGameState && anyAllIn() && pokerGameState.stage !== 'showdown' && !isStudVariant() && !isDrawVariant(pokerGameState.variant) && !pokerGameState.wildRule && (
             <EquityPanel
               players={getActiveNonFoldedPlayers()}
               board={Array.isArray(pokerGameState.communityCards) ? pokerGameState.communityCards : []}

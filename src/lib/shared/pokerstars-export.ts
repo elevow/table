@@ -41,6 +41,7 @@ const GAME_NAME: Record<string, string> = {
   'omaha-5': '5 Card Omaha',
   'follow-the-queen': 'Follow the Queen',
   'baseball': 'Baseball',
+  'five-card-draw': '5 Card Draw',
 };
 
 const LIMIT_NAME: Record<string, string> = {
@@ -230,6 +231,7 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
   const advanceTo = (next: GameStage) => {
     settleStreet();
     for (const s of streetsBetween(stage, next)) streetHeader(s);
+    if (next === 'draw') lines.push('*** FIRST DRAW ***');
     stage = next;
     streetBets = new Map();
     streetMax = 0;
@@ -281,6 +283,9 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
         break;
       case 'check':
         lines.push(`${who}: checks`);
+        break;
+      case 'draw':
+        lines.push(a.drawCount ? `${who}: discards ${a.drawCount} card${a.drawCount === 1 ? '' : 's'}` : `${who}: stands pat`);
         break;
       case 'call':
         lines.push(`${who}: calls ${money(a.put)}${allIn}`);

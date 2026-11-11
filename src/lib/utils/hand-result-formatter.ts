@@ -1,7 +1,7 @@
 import type { TableState, Card, Player } from '../../types/poker';
 import { HandEvaluator } from '../poker/hand-evaluator';
 import type { HandInterface } from '../../types/poker-engine';
-import { isOmahaVariant as isOmahaGame, isStudVariant } from '../poker/variant-rules';
+import { isHiLoVariant as isHiLoGame, isOmahaVariant as isOmahaGame, isStudVariant } from '../poker/variant-rules';
 import { evaluateWildHigh, evaluateWildOmaha, evaluateWildRazz, tableWildMatcher } from '../poker/wild-hands';
 import { describeNicaraguaHand } from '../poker/nicaragua';
 
@@ -44,7 +44,7 @@ interface PlayerHandEvaluation {
  * Checks if the variant is a Hi-Lo variant
  */
 function isHiLoVariant(variant?: string): boolean {
-  return variant === 'omaha-hi-lo' || variant === 'seven-card-stud-hi-lo';
+  return isHiLoGame(variant);
 }
 
 /**

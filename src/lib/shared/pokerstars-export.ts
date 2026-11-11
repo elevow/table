@@ -43,6 +43,7 @@ const GAME_NAME: Record<string, string> = {
   'baseball': 'Baseball',
   'five-card-draw': '5 Card Draw',
   'nicaragua': 'Nicaragua',
+  'big-o': 'Big O Hi/Lo',
   'midnight-baseball': 'Midnight Baseball',
 };
 

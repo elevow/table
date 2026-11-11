@@ -11,6 +11,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'omaha',
   'omaha-5',
   'omaha-hi-lo',
+  'big-o',
   'seven-card-stud',
   'seven-card-stud-hi-lo',
   'razz',
@@ -27,6 +28,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'omaha': 'Omaha',
   'omaha-5': '5-Card Omaha',
   'omaha-hi-lo': 'Omaha Hi-Lo',
+  'big-o': 'Big O',
   'seven-card-stud': 'Seven-Card Stud',
   'seven-card-stud-hi-lo': 'Seven-Card Stud Hi-Lo',
   'razz': 'Razz',
@@ -189,7 +191,17 @@ export function isSevenCardStudVariant(v?: string | null): boolean {
 
 /** Omaha games: the best hand uses exactly two hole cards and three board cards. */
 export function isOmahaVariant(v?: string | null): boolean {
-  return v === 'omaha' || v === 'omaha-hi-lo' || v === 'omaha-5';
+  return v === 'omaha' || v === 'omaha-hi-lo' || v === 'omaha-5' || v === 'big-o';
+}
+
+/** Omaha played high-low with an 8-or-better low: Omaha Hi-Lo, and Big O with five hole cards. */
+export function isOmahaHiLoVariant(v?: string | null): boolean {
+  return v === 'omaha-hi-lo' || v === 'big-o';
+}
+
+/** Games whose pot is split between the best high hand and the best 8-or-better low. */
+export function isHiLoVariant(v?: string | null): boolean {
+  return isOmahaHiLoVariant(v) || v === 'seven-card-stud-hi-lo';
 }
 
 /** Hold'em, including tables saved before the variant was recorded. */
@@ -199,7 +211,7 @@ export function isHoldemVariant(v?: string | null): boolean {
 
 /** Hole cards dealt in a board game (Hold'em or Omaha), or a draw game's hand. */
 export function holeCardCount(v?: string | null): number {
-  if (v === 'omaha-5' || isDrawVariant(v)) return 5;
+  if (v === 'omaha-5' || v === 'big-o' || isDrawVariant(v)) return 5;
   if (v === 'omaha' || v === 'omaha-hi-lo') return 4;
   return 2;
 }

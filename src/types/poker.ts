@@ -233,8 +233,9 @@ export interface TableState {
   drawState?: { pending: string[]; muck?: Card[] };
   // Nicaragua, one game lasting until an opener wins: the opener and the way they chose this hand
   // is won, and carry, chips in the pot from earlier hands of the game (the opener's refill, or a
-  // pot nobody opened). over: an opener won, so the next dealer chooses.
-  nicaragua?: { opener?: string; method?: NicaraguaMethod; carry?: number; over?: boolean };
+  // pot nobody opened). over: an opener won, so the next dealer chooses. players: those dealt
+  // into the game's first hand, the only ones dealt into its later hands.
+  nicaragua?: { opener?: string; method?: NicaraguaMethod; carry?: number; over?: boolean; players?: string[] };
   studState?: {
     // downCount replaces downCards for other players: how many they hold, not which
     playerCards: Record<string, { downCards: Card[]; upCards: Card[]; downCount?: number }>;

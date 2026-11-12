@@ -19,6 +19,8 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   // Dealer's Choice only: five-card draw where the opener picks how the hand is won and, unless
   // they win, refills the pot for another hand
   | 'nicaragua'
+  // Five-card Omaha with the first flop card dealt face up before the preflop betting
+  | 'courchevel'
   // Omaha Hi-Lo (8 or better) dealt with five hole cards
   | 'big-o'
   // Hold'em with three hole cards; each player throws one away after the preflop betting

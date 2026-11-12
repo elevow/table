@@ -198,6 +198,7 @@ export default function AdminRoomsPanel() {
     'baseball': 'Baseball',
     'five-card-draw': 'Five-Card Draw',
     'nicaragua': 'Nicaragua',
+    'courchevel': 'Courchevel',
     'big-o': 'Big O',
     'pineapple': 'Pineapple',
     'crazy-pineapple': 'Crazy Pineapple',

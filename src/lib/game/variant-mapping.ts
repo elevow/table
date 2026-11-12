@@ -15,6 +15,7 @@ export function defaultBettingModeForVariant(variant: PokerVariant): BettingMode
     case 'omaha-hi-lo':
     case 'big-o':
     case 'omaha-5':
+    case 'courchevel':
       return 'pot-limit';
     case 'razz':
       // Razz is a limit game; it is new, so there is no existing default to keep

@@ -193,6 +193,21 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'courchevel': {
+    variant: 'courchevel',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }],
+    helpContent: {
+      title: 'Courchevel',
+      summary: 'Five-card Omaha with the first flop card dealt face up before the preflop betting.',
+      bullets: [
+        'Five hole cards; use exactly two of them and three from the board',
+        'One board card is showing before anyone bets; the other two flop cards come after',
+        'Pot limit by default',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'big-o': {
     variant: 'big-o',
     controls: [commonControls.bet, commonControls.check, commonControls.fold],

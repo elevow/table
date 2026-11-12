@@ -10,6 +10,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'texas-holdem',
   'omaha',
   'omaha-5',
+  'courchevel',
   'omaha-hi-lo',
   'big-o',
   'seven-card-stud',
@@ -29,6 +30,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'texas-holdem': "Texas Hold'em",
   'omaha': 'Omaha',
   'omaha-5': '5-Card Omaha',
+  'courchevel': 'Courchevel',
   'omaha-hi-lo': 'Omaha Hi-Lo',
   'big-o': 'Big O',
   'seven-card-stud': 'Seven-Card Stud',
@@ -206,7 +208,7 @@ export function isSevenCardStudVariant(v?: string | null): boolean {
 
 /** Omaha games: the best hand uses exactly two hole cards and three board cards. */
 export function isOmahaVariant(v?: string | null): boolean {
-  return v === 'omaha' || v === 'omaha-hi-lo' || v === 'omaha-5' || v === 'big-o';
+  return v === 'omaha' || v === 'omaha-hi-lo' || v === 'omaha-5' || v === 'big-o' || v === 'courchevel';
 }
 
 /** Omaha played high-low with an 8-or-better low: Omaha Hi-Lo, and Big O with five hole cards. */
@@ -226,7 +228,7 @@ export function isHoldemVariant(v?: string | null): boolean {
 
 /** Hole cards dealt in a board game (Hold'em or Omaha), or a draw game's hand. */
 export function holeCardCount(v?: string | null): number {
-  if (v === 'omaha-5' || v === 'big-o' || isDrawVariant(v)) return 5;
+  if (v === 'omaha-5' || v === 'big-o' || v === 'courchevel' || isDrawVariant(v)) return 5;
   if (pineappleDiscardStage(v)) return 3;
   if (v === 'omaha' || v === 'omaha-hi-lo') return 4;
   return 2;

@@ -353,6 +353,8 @@ export class PokerEngine {
       this.startBombPot(this.state.bombPotNext.anteBB);
     } else {
       this.dealHoleCards();
+      // Courchevel shows the first flop card before anyone bets
+      if (this.state.variant === 'courchevel') this.dealCommunityCards(1);
       this.postAntes();
   this.postBlinds();
       this.postReturningBigBlinds();
@@ -1403,7 +1405,8 @@ export class PokerEngine {
       } else {
         switch (nextStage) {
           case 'flop':
-            this.dealCommunityCards(3);
+            // Courchevel's first flop card is already out
+            this.dealCommunityCards(Math.max(0, 3 - this.state.communityCards.length));
             break;
           case 'turn':
           case 'river':

@@ -193,6 +193,21 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'big-o': {
+    variant: 'big-o',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }, { type: 'pot-split' }],
+    helpContent: {
+      title: 'Big O',
+      summary: 'Omaha Hi-Lo dealt with five hole cards.',
+      bullets: [
+        'Use exactly two of your five hole cards and three from the board',
+        'The pot splits between the best high hand and the best 8-or-better low',
+        'With no qualifying low, the high hand takes it all',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'pineapple': {
     variant: 'pineapple',
     controls: [commonControls.bet, commonControls.check, commonControls.fold],

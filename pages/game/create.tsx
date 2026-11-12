@@ -18,7 +18,7 @@ import {
   DEFAULT_HANDS_PER_GAME, HORSE_GAMES, MAX_TABLE_PLAYERS, hasBuiltInWilds, maxPlayersForGame, maxPlayersForMixedGames, supportsWildRule, WILD_RULE_LABELS,
 } from '../../src/lib/poker/variant-rules';
 
-type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'five-card-draw' | 'pineapple' | 'crazy-pineapple' | 'razz' | 'omaha-5' | 'follow-the-queen' | 'baseball' | 'midnight-baseball' | 'dealers-choice' | 'mixed';
+type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'big-o' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'five-card-draw' | 'pineapple' | 'crazy-pineapple' | 'razz' | 'omaha-5' | 'follow-the-queen' | 'baseball' | 'midnight-baseball' | 'dealers-choice' | 'mixed';
 
 function readAuthToken(): string | null {
   try {
@@ -259,6 +259,7 @@ export default function CreateGameRoomPage() {
               <option value="crazy-pineapple">Crazy Pineapple (three hole cards through the flop)</option>
               <option value="omaha">Omaha</option>
               <option value="omaha-hi-lo">Omaha Hi-Lo (8 or Better)</option>
+              <option value="big-o">Big O (5-card Omaha Hi-Lo)</option>
               <option value="seven-card-stud">Seven-Card Stud</option>
               <option value="seven-card-stud-hi-lo">Seven-Card Stud Hi-Lo (8 or Better)</option>
               <option value="five-card-stud">Five-Card Stud</option>

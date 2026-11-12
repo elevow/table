@@ -47,7 +47,7 @@ import SplashAnimation, { splashInPlay } from '../../src/components/SplashAnimat
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
 import {
-  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, NICARAGUA_METHOD_LABELS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, hasBuiltInWilds, isDrawVariant, isOmahaVariant,
+  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, NICARAGUA_METHOD_LABELS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, hasBuiltInWilds, isDrawVariant, isHiLoVariant, isOmahaHiLoVariant, isOmahaVariant,
   isStudVariant as isStudGame, maxPlayersForGame, variantAllowedFor, wildAllowedFor,
 } from '../../src/lib/poker/variant-rules';
 import { studCardOrder } from '../../src/lib/shared/stud-cards';
@@ -1182,7 +1182,7 @@ export default function GamePage() {
         return `${ranks.map(lowRankLabel).join('-')} Low`;
       };
 
-      if (variant === 'omaha-hi-lo') {
+      if (isOmahaHiLoVariant(variant)) {
           const holes = Array.isArray(me?.holeCards) ? me.holeCards : [];
           const board = Array.isArray(pokerGameState?.communityCards) ? pokerGameState.communityCards : [];
           if (holes.length >= 2 && board.length >= 3) {
@@ -1844,6 +1844,9 @@ export default function GamePage() {
 
           // Compute position offset based on seat location (push cards slightly further from table center)
           let cardStyle: React.CSSProperties | undefined = undefined;
+          // A row that starts just past the seat and grows away from it, so it never runs back
+          // under the name plate however many cards it holds
+          let edgeStyle: React.CSSProperties | undefined = undefined;
           if (style && style.left && style.top) {
             const leftStr = style.left.toString();
             const topStr = style.top.toString();
@@ -1860,16 +1863,14 @@ export default function GamePage() {
               top: `calc(${topStr} + ${dy}px)`,
               transform: 'translate(-50%, -50%)'
             };
-            // A stud hand grows to seven cards or more: start the row just past the seat and grow
-            // away from it, so it never runs back under the name plate
-            if (isStudVariant()) {
-              const edge = isNarrowScreen ? 34 : 36;
-              cardStyle = {
-                ...cardStyle,
-                left: `calc(${leftStr} + ${dx > 0 ? edge : -edge}px)`,
-                transform: dx > 0 ? 'translate(0, -50%)' : 'translate(-100%, -50%)',
-              };
-            }
+            const edge = isNarrowScreen ? 34 : 36;
+            edgeStyle = {
+              ...cardStyle,
+              left: `calc(${leftStr} + ${dx > 0 ? edge : -edge}px)`,
+              transform: dx > 0 ? 'translate(0, -50%)' : 'translate(-100%, -50%)',
+            };
+            // A stud hand grows to seven cards or more
+            if (isStudVariant()) cardStyle = edgeStyle;
           }
 
           if (isStudVariant()) {
@@ -1910,8 +1911,9 @@ export default function GamePage() {
           }
           if (showFaceUp) {
             const holes = gamePlayer.holeCards as any[];
+            // Two face-up cards fit centred beside the seat; Omaha's four or more would reach back under it
             return (
-              <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (revealed)">
+              <div className="absolute z-0 pointer-events-none" style={holes.length > 2 ? edgeStyle : cardStyle} aria-label="Opponent cards (revealed)">
                 <div className="flex gap-1">
                   {holes.map((card: any, index: number) => (
                     <TableCard key={index} card={card} size="sm" highContrast={highContrastCards} />
@@ -3069,7 +3071,7 @@ export default function GamePage() {
               <TurnClockBar clock={turnClock} />
               {showHandValue && (() => {
                 const summary = getMyHandSummary();
-                const isHiLo = pokerGameState?.variant === 'omaha-hi-lo' || pokerGameState?.variant === 'seven-card-stud-hi-lo';
+                const isHiLo = isHiLoVariant(pokerGameState?.variant);
                 if (isHiLo) {
                   const highDisplay = summary.highLabel || summary.primary || 'Waiting for more cards';
                   const lowDisplay = summary.lowLabel || 'No qualifying low yet';
@@ -3581,7 +3583,7 @@ export default function GamePage() {
                 {(() => {
                   const fmt = (n: number) => (showStackInBB ? formatChips(n, pokerGameState?.bigBlind || null, true) : `$${n}`);
                   const summary = getMyHandSummary();
-                  const isHiLo = pokerGameState?.variant === 'omaha-hi-lo' || pokerGameState?.variant === 'seven-card-stud-hi-lo';
+                  const isHiLo = isHiLoVariant(pokerGameState?.variant);
                   const tiles: Array<{ label: string; value: React.ReactNode }> = [
                     { label: 'Current bet', value: fmt(pokerGameState.currentBet || 0) },
                     { label: 'Pot', value: fmt(pokerGameState.pot || 0) },
@@ -3677,7 +3679,7 @@ export default function GamePage() {
           {/* Hi-Lo showdown panel (non-RIT): show high and low winners from lastHiLoResult */}
           {gameStarted && pokerGameState && (pokerGameState.stage === 'showdown' || getActiveNonFoldedPlayers().length === 1)
             && !pokerGameState.runItTwice?.enabled
-            && ((pokerGameState.variant === 'omaha-hi-lo' || pokerGameState.variant === 'seven-card-stud-hi-lo') && pokerGameState.lastHiLoResult) && (
+            && (isHiLoVariant(pokerGameState.variant) && pokerGameState.lastHiLoResult) && (
             <div className="lg:col-span-2 bg-cyan-50 dark:bg-cyan-900/30 border border-cyan-300 dark:border-cyan-700 text-cyan-900 dark:text-cyan-100 rounded-lg shadow-md p-4 mt-4">
               <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
                 <span className="inline-block px-2 py-0.5 text-xs rounded-sm bg-cyan-600 text-white">Hi-Lo</span>
@@ -3748,7 +3750,7 @@ export default function GamePage() {
           {/* Showdown banner when not RIT: compute true winners instead of assuming the first remaining */}
           {gameStarted && pokerGameState && (pokerGameState.stage === 'showdown' || getActiveNonFoldedPlayers().length === 1)
             && !pokerGameState.runItTwice?.enabled
-            && !(((pokerGameState.variant === 'omaha-hi-lo' || pokerGameState.variant === 'seven-card-stud-hi-lo')) && pokerGameState.lastHiLoResult) && (
+            && !(isHiLoVariant(pokerGameState.variant) && pokerGameState.lastHiLoResult) && (
             <div className="lg:col-span-2 rounded-2xl border border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-400/25 dark:bg-emerald-400/8 dark:text-emerald-100 p-4 mt-4">
               {(() => {
                 const remaining = getActiveNonFoldedPlayers();

@@ -13,6 +13,7 @@ export function defaultBettingModeForVariant(variant: PokerVariant): BettingMode
   switch (variant) {
     case 'omaha':
     case 'omaha-hi-lo':
+    case 'big-o':
     case 'omaha-5':
       return 'pot-limit';
     case 'razz':

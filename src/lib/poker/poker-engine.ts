@@ -12,7 +12,7 @@ import {
   MAX_TIME_BANK_SECONDS, bankTimeMs, clampSetting, timeBankMs, turnTimeMs,
   MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS,
 } from '../shared/turn-clock';
-import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isDrawVariant, isNicaraguaMethod, isNicaraguaVariant, pineappleDiscardStage, isMidnightBaseballVariant, MIDNIGHT_FLIP_MS, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
+import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isDrawVariant, isNicaraguaMethod, isNicaraguaVariant, isOmahaHiLoVariant, pineappleDiscardStage, isMidnightBaseballVariant, MIDNIGHT_FLIP_MS, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
 import { describeNicaraguaHand, nicaraguaScore } from './nicaragua';
@@ -2256,7 +2256,7 @@ export class PokerEngine {
   const wild = tableWildMatcher(this.state);
 
   // Special handling: Omaha Hi-Lo (US-052)
-  if (this.state.variant === 'omaha-hi-lo') {
+  if (isOmahaHiLoVariant(this.state.variant)) {
       // Prepare helpers
       const rankWeight: Record<Card['rank'], number> = {
         '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
@@ -2725,7 +2725,7 @@ export class PokerEngine {
     // Every run's board comes from one deck, so no card appears on two runs
     this.dealRunItTwiceBoards();
     const boards = rit.boards;
-    const hiLo = this.state.variant === 'omaha-hi-lo';
+    const hiLo = isOmahaHiLoVariant(this.state.variant);
     const omaha = isOmahaVariant(this.state.variant);
 
     // Each pot (main and side) is split evenly across the runs; odd chips go to the earliest runs.

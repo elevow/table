@@ -2,7 +2,8 @@
 export type GameStage =
   | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' // Hold'em/Omaha
   | 'third' | 'fourth' | 'fifth' | 'sixth' | 'seventh' // Seven-card Stud
-  // Draw games: 'preflop' is the betting before the draw; 'draw' is the draw and the betting after it
+  // Draw games: 'preflop' is the betting before the draw; 'draw' is the draw and the betting after it.
+  // Badugi's three draws use 'flop', 'turn' and 'river' for the draws and the betting after each
   | 'draw'
   | 'awaiting-dealer-choice'; // Dealer's Choice pre-hand pause
 
@@ -22,6 +23,20 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   // Seven cards; pass 3, 2 and 1 to the left with betting after each, keep five, then turn them up
   // one at a time with betting after each
   | 'pass-the-trash'
+  // Dealer's Choice only: two cards each, everyone declares in or out at once; losers match the pot
+  | 'guts'
+  // Four-card lowball with three draws; the best hand has four different suits and ranks
+  | 'badugi'
+  // Seven-card stud where the highest (or lowest) spade in the hole wins half the pot
+  | 'high-chicago' | 'low-chicago'
+  // Five-card Omaha with the first flop card dealt face up before the preflop betting
+  | 'courchevel'
+  // Omaha Hi-Lo (8 or better) dealt with five hole cards
+  | 'big-o'
+  // Hold'em with three hole cards; each player throws one away after the preflop betting
+  | 'pineapple'
+  // Pineapple with the discard after the flop betting instead
+  | 'crazy-pineapple'
   // Baseball dealt all face down: nobody looks, and each player turns cards until they beat the high hand
   | 'midnight-baseball';
 
@@ -103,6 +118,10 @@ export interface HandActionEntry {
     | 'draw'
     // Pass the Trash: passed drawCount cards to the left; kept five
     | 'pass' | 'keep'
+    // Guts: declared in, or out
+    | 'in' | 'out'
+    // Pineapple: threw away one hole card
+    | 'discard'
     // Paid after the hand, straight to the player in toPlayerId rather than into the pot
     | 'bounty'
     // The part of a bet nobody could call, handed back when the betting round ends (put is negative)
@@ -223,6 +242,8 @@ export interface TableState {
   // When true, the prompt for the current hand has been resolved and should not reappear
   runItTwicePromptDisabled?: boolean;
   // US-052/US-054: Hi-Lo last showdown results (optional, present for omaha-hi-lo or seven-card-stud-hi-lo)
+  // High and Low Chicago: who won half a pot with their spade in the hole, and how much
+  chicagoResult?: Array<{ playerId: string; card: Card; amount: number }>;
   lastHiLoResult?: {
     high: Array<{ playerId: string; amount: number }>;
     low: Array<{ playerId: string; amount: number }> | null;
@@ -240,11 +261,24 @@ export interface TableState {
   // turning cards); during a pass or the keep, pending players choose at once on one clock, and
   // picks holds their choices (each player sees only their own)
   trash?: { step: number; pending?: string[]; picks?: Record<string, number[]>; startedAt?: number; deadline?: number };
+  // Pineapple, while players throw away their third hole card: those still to discard, all
+  // choosing at once against one clock that started at startedAt and runs out at deadline
+  discardState?: { pending: string[]; startedAt?: number; deadline?: number };
   // Nicaragua, one game lasting until an opener wins: the opener and the way they chose this hand
   // is won, and carry, chips in the pot from earlier hands of the game (the opener's refill, or a
   // pot nobody opened). over: an opener won, so the next dealer chooses. players: those dealt
   // into the game's first hand, the only ones dealt into its later hands.
   nicaragua?: { opener?: string; method?: NicaraguaMethod; carry?: number; over?: boolean; players?: string[] };
+  // Guts, one game lasting until exactly one player goes in: carry, over and players as for
+  // Nicaragua. pending: players still to declare, all at once on one clock (startedAt to
+  // deadline); declared: their choices, each shown only to its player until everyone has chosen;
+  // ins: who went in, once revealed.
+  guts?: {
+    carry?: number; over?: boolean; players?: string[];
+    pending?: string[]; declared?: Record<string, 'in' | 'out'>; ins?: string[]; startedAt?: number; deadline?: number;
+  };
+  // Guts: the most a losing player pays into the next pot, in big blinds (the host's setting)
+  gutsCapBB?: number;
   studState?: {
     // downCount replaces downCards for other players: how many they hold, not which
     playerCards: Record<string, { downCards: Card[]; upCards: Card[]; downCount?: number }>;
@@ -279,9 +313,11 @@ export interface PlayerAction {
   // bring-in: the stud bring-in player posting the bring-in rather than completing
   // match-pot: Baseball, a player dealt a face-up 3 paying the size of the pot to stay in
   // draw: a draw game's draw, swapping the cards at the discards positions in holeCards
+  // in, out: Guts, declaring whether to play the hand
+  // discard: Pineapple, throwing away the hole card at discards[0]
   // pass: Pass the Trash, passing the down cards at discards to the left; keep: keeping the five
   // down cards at discards, in the order they will be turned up
-  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw' | 'pass' | 'keep';
+  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw' | 'in' | 'out' | 'discard' | 'pass' | 'keep';
   playerId: string;
   tableId: string;
   amount?: number;

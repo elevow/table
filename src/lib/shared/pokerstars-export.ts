@@ -44,6 +44,14 @@ const GAME_NAME: Record<string, string> = {
   'five-card-draw': '5 Card Draw',
   'nicaragua': 'Nicaragua',
   'pass-the-trash': 'Pass the Trash',
+  'guts': 'Guts',
+  'badugi': 'Badugi',
+  'high-chicago': '7 Card Stud High Chicago',
+  'low-chicago': '7 Card Stud Low Chicago',
+  'courchevel': 'Courchevel',
+  'big-o': 'Big O Hi/Lo',
+  'pineapple': 'Pineapple',
+  'crazy-pineapple': 'Crazy Pineapple',
   'midnight-baseball': 'Midnight Baseball',
 };
 
@@ -235,6 +243,11 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
     settleStreet();
     for (const s of streetsBetween(stage, next)) streetHeader(s);
     if (next === 'draw') lines.push('*** FIRST DRAW ***');
+    // Badugi's three draws come where a flop game has its streets
+    if (String(hand.variant) === 'badugi') {
+      const label: Partial<Record<GameStage, string>> = { flop: 'FIRST', turn: 'SECOND', river: 'THIRD' };
+      if (label[next]) lines.push(`*** ${label[next]} DRAW ***`);
+    }
     stage = next;
     streetBets = new Map();
     streetMax = 0;
@@ -292,6 +305,13 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
         break;
       case 'keep':
         lines.push(`${who}: keeps five cards`);
+      case 'in':
+        lines.push(`${who}: goes in`);
+        break;
+      case 'out':
+        lines.push(`${who}: stays out`);
+      case 'discard':
+        lines.push(`${who}: discards 1 card`);
         break;
       case 'draw':
         lines.push(a.drawCount ? `${who}: discards ${a.drawCount} card${a.drawCount === 1 ? '' : 's'}` : `${who}: stands pat`);

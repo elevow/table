@@ -3,6 +3,7 @@
  * functions: the database lookups some of them need are done by the caller (hand-records.ts).
  */
 import { HandEvaluator } from '../poker/hand-evaluator';
+import { isOmahaHiLoVariant } from '../poker/variant-rules';
 import type { Card, HandRanking } from '../../types/poker';
 import { HandRank } from '../../types/poker';
 import type { HandInterface } from '../../types/poker-engine';
@@ -109,7 +110,7 @@ function hasBicycle(record: HandRecord, p: HandRecordPlayer): boolean {
       const [category, ...ranks] = HandEvaluator.razzLowKey(allCards(p));
       return category === 0 && [...ranks].sort((a, b) => a - b).join() === '1,2,3,4,5';
     }
-    const low = variant === 'omaha-hi-lo'
+    const low = isOmahaHiLoVariant(variant)
       ? HandEvaluator.evaluateOmahaLowEightOrBetter(holeOf(p), record.board)
       : variant === 'seven-card-stud-hi-lo'
         ? HandEvaluator.evaluateAceToFiveLow(allCards(p))

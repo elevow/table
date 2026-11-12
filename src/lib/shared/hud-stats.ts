@@ -34,7 +34,7 @@ export interface HudStats extends HudCounts {
   af: number | null;
 }
 
-const FORCED: ReadonlySet<HandActionEntry['action']> = new Set(['small-blind', 'big-blind', 'straddle', 'ante', 'bring-in', 'match-pot', 'draw', 'pass', 'keep']);
+const FORCED: ReadonlySet<HandActionEntry['action']> = new Set(['small-blind', 'big-blind', 'straddle', 'ante', 'bring-in', 'match-pot', 'draw', 'in', 'out', 'discard', 'pass', 'keep']);
 
 /** First street with voluntary betting: third street in stud games, preflop otherwise. */
 export function firstBettingStreet(variant?: string | null): GameStage {

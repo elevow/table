@@ -1,5 +1,5 @@
 import { randomInt } from 'crypto';
-import { isDrawVariant, isOmahaVariant, isPassTheTrashVariant } from './variant-rules';
+import { drawsCards, isOmahaVariant, isPassTheTrashVariant, pineappleDiscardStage } from './variant-rules';
 import { HandEvaluator } from './hand-evaluator';
 import { RunItTwicePrompt, TableState, Card, GameStage } from '../../types/poker';
 import { HandInterface } from '../../types/poker-engine';
@@ -102,7 +102,9 @@ export const enrichStateWithRunIt = (tableId: string, state: TableState | any) =
  */
 export const isAutoRunoutEligible = (state: any): boolean => {
   // Draw games have no board: the engine plays out the draw and showdown itself
-  if (isDrawVariant(state?.variant) || isPassTheTrashVariant(state?.variant)) return false;
+  if (drawsCards(state?.variant) || isPassTheTrashVariant(state?.variant)) return false;
+  // Pineapple: the discard comes before any more board cards, even all-in
+  if (pineappleDiscardStage(state?.variant) && (state?.players || []).some((p: any) => !p?.isFolded && (p?.holeCards?.length || 0) > 2)) return false;
   const players = Array.isArray(state?.players) ? state.players : [];
   const activeCount = players.filter((p: any) => !(p.isFolded || (p as any).folded)).length;
   if (activeCount < 2) return false;

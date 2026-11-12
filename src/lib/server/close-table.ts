@@ -35,7 +35,8 @@ export async function deleteClosedTable(roomId: string, res: NextApiResponse): P
       await pool.query(`DELETE FROM ${table} WHERE room_id::text = $1`, [roomId]);
     } catch (err: any) {
       // A table this database doesn't have holds nothing to delete
-      if (err?.code !== '42P01') console.warn(`[close-table] Could not clear ${table} for ${roomId}:`, err);
+      // A fixed message, with the room id (which comes from the request) logged as data on one line
+      if (err?.code !== '42P01') console.warn('[close-table] Could not clear a related table', { table, roomId: roomId.replace(/[\r\n]/g, '') }, err);
     }
   }
   await pool.query('DELETE FROM game_rooms WHERE id::text = $1', [roomId]);

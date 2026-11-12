@@ -193,6 +193,21 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'pineapple': {
+    variant: 'pineapple',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }],
+    helpContent: {
+      title: 'Pineapple',
+      summary: "Hold'em dealt with three hole cards.",
+      bullets: [
+        'Bet before the flop holding three cards',
+        'Then everyone throws one away at the same time; running out of time throws away your lowest card',
+        "From the flop on it plays like Hold'em",
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'razz': {
     variant: 'razz',
     controls: [commonControls.bet, commonControls.check, commonControls.fold],

@@ -20,6 +20,9 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   // Dealer's Choice only: five-card draw where the opener picks how the hand is won and, unless
   // they win, refills the pot for another hand
   | 'nicaragua'
+  // Seven cards; pass 3, 2 and 1 to the left with betting after each, keep five, then turn them up
+  // one at a time with betting after each of the first four; the fifth goes straight to the showdown
+  | 'pass-the-trash'
   // Dealer's Choice only: two cards each, everyone declares in or out at once; losers match the pot
   | 'guts'
   // Four-card lowball with three draws; the best hand has four different suits and ranks
@@ -113,6 +116,8 @@ export interface HandActionEntry {
     | 'match-pot'
     // Draw games: swapped drawCount cards (0 = stood pat)
     | 'draw'
+    // Pass the Trash: passed drawCount cards to the left; kept five
+    | 'pass' | 'keep'
     // Guts: declared in, or out
     | 'in' | 'out'
     // Pineapple: threw away one hole card
@@ -252,6 +257,10 @@ export interface TableState {
   // the cards thrown away so far, which are shuffled back in if the deck runs out (never sent to
   // players)
   drawState?: { pending: string[]; muck?: Card[] };
+  // Pass the Trash: step is the position in the hand's sequence (passes, betting, keeping five,
+  // turning cards); during a pass or the keep, pending players choose at once on one clock, and
+  // picks holds their choices (each player sees only their own)
+  trash?: { step: number; pending?: string[]; picks?: Record<string, number[]>; startedAt?: number; deadline?: number };
   // Pineapple, while players throw away their third hole card: those still to discard, all
   // choosing at once against one clock that started at startedAt and runs out at deadline
   discardState?: { pending: string[]; startedAt?: number; deadline?: number };
@@ -306,7 +315,9 @@ export interface PlayerAction {
   // draw: a draw game's draw, swapping the cards at the discards positions in holeCards
   // in, out: Guts, declaring whether to play the hand
   // discard: Pineapple, throwing away the hole card at discards[0]
-  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw' | 'in' | 'out' | 'discard';
+  // pass: Pass the Trash, passing the down cards at discards to the left; keep: keeping the five
+  // down cards at discards, in the order they will be turned up
+  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw' | 'in' | 'out' | 'discard' | 'pass' | 'keep';
   playerId: string;
   tableId: string;
   amount?: number;

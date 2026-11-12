@@ -75,7 +75,9 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     // hasn't matched the pot folds, and a player who doesn't draw stands pat.
     const bringIn = state.studState?.bringIn;
     const potMatch = state.studState?.potMatch;
-    const action = state.guts?.pending?.includes(timedOut.id)
+    const action = state.trash?.pending?.includes(timedOut.id)
+      ? 'trash-auto'
+      : state.guts?.pending?.includes(timedOut.id)
       ? 'out'
       : state.discardState?.pending?.includes(timedOut.id)
       ? 'discard'

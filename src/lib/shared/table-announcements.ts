@@ -98,6 +98,8 @@ export function describeAction(entry: ActionLike, name: string, fmt: (n: number)
     case 'ante': text = `${name} antes ${fmt(put)}`; break;
     case 'bring-in': text = `${name} brings in for ${fmt(put)}`; break;
     case 'match-pot': text = `${name} matches the pot for ${fmt(put)}`; break;
+    case 'pass': text = `${name} passes ${entry.drawCount || 0}`; break;
+    case 'keep': text = `${name} keeps five`; break;
     case 'in': text = `${name} goes in`; break;
     case 'out': text = `${name} stays out`; break;
     case 'discard': text = `${name} throws away a card`; break;

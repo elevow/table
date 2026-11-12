@@ -8,7 +8,7 @@
  */
 
 import { TableState, Player, Card } from '../../types/poker';
-import { drawsCards, isMidnightBaseballVariant, pineappleDiscardStage } from './variant-rules';
+import { drawsCards, isMidnightBaseballVariant, isPassTheTrashVariant, pineappleDiscardStage } from './variant-rules';
 
 /** Pineapple: someone in the hand still holds three cards, so the discard hasn't happened yet. */
 function discardStillOwed(state: TableState): boolean {
@@ -74,7 +74,7 @@ export function shouldRevealHoleCards(state: TableState): boolean {
   }
 
   // Reveal during all-in situations, except in draw games, where the draw is still to come
-  return isAllInSituation(state) && !drawsCards(state.variant) && !discardStillOwed(state);
+  return isAllInSituation(state) && !drawsCards(state.variant) && !isPassTheTrashVariant(state.variant) && !discardStillOwed(state);
 }
 
 /**
@@ -96,7 +96,7 @@ export function revealedPlayerIds(state: TableState): Set<string> {
   const inHand = state.players.filter(p => !p.isFolded);
   if (state.stage !== 'showdown') {
     // Draw games keep hands hidden until the showdown, as players still draw
-    return new Set(isAllInSituation(state) && !drawsCards(state.variant) && !discardStillOwed(state) ? inHand.map(p => p.id) : []);
+    return new Set(isAllInSituation(state) && !drawsCards(state.variant) && !isPassTheTrashVariant(state.variant) && !discardStillOwed(state) ? inHand.map(p => p.id) : []);
   }
   const revealed = new Set<string>(state.shownCards || []);
   if (inHand.length >= 2) {
@@ -192,6 +192,11 @@ function sanitizeState(state: TableState, viewerId: string | null): TableState {
   }
   if (state.runItTwice) {
     result.runItTwice = sanitizeRunItTwice(state);
+  }
+  // Pass the Trash: a player sees only their own pass or keep while others choose
+  if (state.trash?.picks) {
+    const own = viewerId ? state.trash.picks[viewerId] : undefined;
+    result.trash = { ...state.trash, picks: own && viewerId ? { [viewerId]: own } : {} };
   }
   // Guts: until everyone has declared, a player sees only their own choice
   if (state.guts?.declared && (state.guts.pending?.length || 0) > 0) {

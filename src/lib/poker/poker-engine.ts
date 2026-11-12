@@ -12,7 +12,7 @@ import {
   MAX_TIME_BANK_SECONDS, bankTimeMs, clampSetting, timeBankMs, turnTimeMs,
   MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS, DEFAULT_HAND_DELAY_SECONDS,
 } from '../shared/turn-clock';
-import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isDrawVariant, isNicaraguaMethod, isNicaraguaVariant, isOmahaHiLoVariant, pineappleDiscardStage, isMidnightBaseballVariant, MIDNIGHT_FLIP_MS, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
+import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isDrawVariant, isPassTheTrashVariant, isNicaraguaMethod, isNicaraguaVariant, isOmahaHiLoVariant, pineappleDiscardStage, isMidnightBaseballVariant, MIDNIGHT_FLIP_MS, isHoldemVariant, isOmahaVariant, isSevenCardStudVariant, isStudVariant } from './variant-rules';
 import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
 import { describeNicaraguaHand, nicaraguaScore } from './nicaragua';
@@ -255,6 +255,11 @@ export class PokerEngine {
       if (!this.pendingPotMatch()) this.continueMidnight();
       return;
     }
+    // Pass the Trash plays itself out, asking only for passes and the cards to keep
+    if (isPassTheTrashVariant(this.state.variant)) {
+      if (!this.pendingTrash()) this.advanceTrash();
+      return;
+    }
 
     const nextStage = this.gameStateManager.moveToNextStage();
     if (nextStage === 'showdown') {
@@ -336,6 +341,12 @@ export class PokerEngine {
         this.dealMidnightBaseball();
         this.postGameAntes('third');
         this.startMidnightBaseball();
+      } else if (isPassTheTrashVariant(this.state.variant)) {
+        this.dealTrash();
+        this.postGameAntes('third');
+        this.state.stage = 'third';
+        this.state.trash = { step: -1 };
+        this.advanceTrash();
       } else {
         this.dealStudInitial();
         this.postGameAntes('third');
@@ -959,8 +970,9 @@ export class PokerEngine {
       return;
     }
     if (this.actForAwayPlayer(player, now)) return;
-    // Guts' declaration and Pineapple's discard: everyone is on the one clock that started with it
-    const together = this.pendingGuts() || this.pendingDiscard();
+    // Pass the Trash's passes, Guts' declaration and Pineapple's discard: everyone is on the one
+    // clock that started with it
+    const together = this.pendingTrash() || this.pendingGuts() || this.pendingDiscard();
     if (together && typeof together.deadline === 'number') {
       this.state.turnStartedAt = together.startedAt ?? now;
       this.state.turnDeadline = together.deadline;
@@ -989,7 +1001,9 @@ export class PokerEngine {
    * What the table does for a player who doesn't act: check when that is free, otherwise fold.
    * The bring-in cannot fold or check, so it is brought in; a face-up 3 in Baseball folds.
    */
-  public timeoutAction(player: Player): 'check' | 'fold' | 'bring-in' | 'draw' | 'out' | 'discard' {
+  public timeoutAction(player: Player): 'check' | 'fold' | 'bring-in' | 'draw' | 'out' | 'discard' | 'pass' | 'keep' {
+    // Pass the Trash: the clock passes the lowest cards, or keeps the best five
+    if (this.pendingTrash()?.pending?.includes(player.id)) return this.trashKind() === 'keep' ? 'keep' : 'pass';
     // In Guts, not declaring in counts as out
     if (this.pendingGuts()?.pending?.includes(player.id)) return 'out';
     // In Pineapple's discard, the clock throws away the lowest card
@@ -1018,7 +1032,7 @@ export class PokerEngine {
    * Act for the player whose clock has run out: check when that is free, otherwise fold.
    * The time bank is used up, and enough timeouts in a row sit the player out from the next hand.
    */
-  public handleTimeout(now: number = Date.now()): { playerId: string; action: 'check' | 'fold' | 'bring-in' | 'draw' | 'out' | 'discard'; satOut: boolean } {
+  public handleTimeout(now: number = Date.now()): { playerId: string; action: 'check' | 'fold' | 'bring-in' | 'draw' | 'out' | 'discard' | 'pass' | 'keep'; satOut: boolean } {
     const playerId = this.state.activePlayer;
     const deadline = this.state.turnDeadline;
     if (!playerId || typeof deadline !== 'number' || now < deadline) {
@@ -1033,6 +1047,17 @@ export class PokerEngine {
       p.consecutiveTimeouts = (p.consecutiveTimeouts || 0) + 1;
       if (p.consecutiveTimeouts >= TIMEOUTS_BEFORE_SIT_OUT) p.isSittingOut = true;
     });
+    const trash = this.pendingTrash();
+    if (trash) {
+      const action = this.trashKind() === 'keep' ? 'keep' : 'pass';
+      const late = this.state.players.filter(p => trash.pending!.includes(p.id));
+      late.forEach(p => this.trashAutoPick(p));
+      chargeLate(late);
+      trash.pending = [];
+      this.completeTrashChoice();
+      this.finishDecision(undefined, 'timeout', now);
+      return { playerId, action, satOut: !!player.isSittingOut };
+    }
     const guts = this.pendingGuts();
     if (guts) {
       // Not declaring in counts as out of the hand
@@ -1083,6 +1108,16 @@ export class PokerEngine {
     // Otherwise, mark folded out-of-turn
     player.isFolded = true;
     player.hasActed = true;
+    // Pass the Trash: the others needn't wait for a player who has gone
+    const trash = this.pendingTrash();
+    if (trash?.pending?.includes(playerId)) {
+      trash.pending = trash.pending.filter(id => id !== playerId);
+      if (trash.pending.length > 0) this.state.activePlayer = trash.pending[0];
+      else if (this.state.players.filter(p => !p.isFolded).length > 1) {
+        this.completeTrashChoice();
+        return;
+      }
+    }
     // If only one player remains, end hand immediately
     const active = this.state.players.filter(p => !p.isFolded);
     if (active.length === 1 && this.state.stage !== 'showdown') {
@@ -1200,6 +1235,29 @@ export class PokerEngine {
       return;
     }
     if (action.type === 'draw') throw new Error('There is no draw now');
+    // Pass the Trash: everyone passes, or picks the five to keep, at once and in any order
+    const trash = this.pendingTrash();
+    if (trash) {
+      if (!actor || !trash.pending!.includes(actor.id)) throw new Error('You have already chosen');
+      if (action.type === 'fold' && source === 'player') {
+        actor.isFolded = true;
+        actor.hasActed = true;
+        this.logAction({ playerId: actor.id, action: 'fold', put: 0, stage: this.state.stage });
+        if (this.getActivePlayers().length <= 1) {
+          trash.pending = [];
+          this.determineWinner();
+          this.finishDecision(actor, source, now);
+          return;
+        }
+      } else if (source === 'timeout') this.trashAutoPick(actor);
+      else this.trashPick(actor, action);
+      trash.pending = trash.pending!.filter(id => id !== actor.id);
+      if (trash.pending.length > 0) this.state.activePlayer = trash.pending[0];
+      else this.completeTrashChoice();
+      this.finishDecision(actor, source, now);
+      return;
+    }
+    if (action.type === 'pass' || action.type === 'keep') throw new Error('There is nothing to pass or keep now');
     // Guts: everyone declares in or out at once, in any order
     const guts = this.pendingGuts();
     if (guts) {
@@ -1389,6 +1447,11 @@ export class PokerEngine {
         if (this.state.stage === 'preflop' && isNicaraguaVariant(this.state.variant) && !this.state.nicaragua?.opener) this.endUnopenedNicaragua();
         else if (this.state.stage === 'preflop') this.startDraw();
         else this.determineWinner();
+        return;
+      }
+      // Pass the Trash: on to the next pass, the keep, or the next card turned up
+      if (isPassTheTrashVariant(this.state.variant)) {
+        this.advanceTrash();
         return;
       }
       // Pineapple: everyone throws a card away before the next cards come
@@ -1787,6 +1850,172 @@ export class PokerEngine {
     });
     game.carry = 0;
     game.over = true;
+  }
+
+  // Pass the Trash, step by step: 'pass3' passes three cards, 'bet' is a betting round, 'keep'
+  // keeps five, 'turn' turns everyone's next card up. The fifth card turned shows the whole hand,
+  // so the showdown follows it with no more betting
+  private static readonly TRASH_STEPS = [
+    'pass3', 'bet', 'pass2', 'bet', 'pass1', 'bet', 'keep',
+    'turn', 'bet', 'turn', 'bet', 'turn', 'bet', 'turn', 'bet', 'turn', 'showdown',
+  ] as const;
+
+  /** Pass the Trash: seven cards each, all face down. */
+  private dealTrash(): void {
+    this.ensureStudState();
+    for (let r = 0; r < 7; r++) {
+      for (const p of this.state.players) {
+        if (sitsOutOfHand(p, this.state)) continue;
+        const card = this.deckManager.dealCard();
+        if (!this.state.studState!.playerCards[p.id]) this.state.studState!.playerCards[p.id] = { downCards: [], upCards: [] };
+        if (card) this.state.studState!.playerCards[p.id].downCards.push(card);
+      }
+    }
+  }
+
+  /** The current step of a Pass the Trash hand. */
+  private trashKind(): string | undefined {
+    const step = this.state.trash?.step ?? -1;
+    return PokerEngine.TRASH_STEPS[step];
+  }
+
+  /** Pass the Trash: the pass or keep being chosen, if any. */
+  private pendingTrash(): NonNullable<TableState['trash']> | undefined {
+    const trash = this.state.trash;
+    return isPassTheTrashVariant(this.state.variant) && trash && (trash.pending?.length || 0) > 0 ? trash : undefined;
+  }
+
+  /** Pass the Trash: move on to the next step, running any that need no decisions. */
+  private advanceTrash(): void {
+    const trash = (this.state.trash ||= { step: -1 });
+    for (let guard = 0; guard < 30; guard++) {
+      if (this.getActivePlayers().length <= 1) {
+        this.determineWinner();
+        return;
+      }
+      trash.step += 1;
+      const kind = this.trashKind();
+      if (!kind || kind === 'showdown') {
+        this.state.activePlayer = '';
+        this.determineWinner();
+        return;
+      }
+      if (kind === 'bet') {
+        if (this.openTrashBetting()) return;
+        continue;
+      }
+      if (kind === 'turn') {
+        // Everyone still in turns their next kept card face up
+        for (const p of this.getActivePlayers()) {
+          const cards = this.state.studState?.playerCards[p.id];
+          const next = cards?.downCards.shift();
+          if (cards && next) cards.upCards.push(next);
+        }
+        continue;
+      }
+      // A pass or the keep: everyone still in chooses at once
+      const now = Date.now();
+      const n = this.state.players.length;
+      const pending: string[] = [];
+      for (let i = 1; i <= n; i++) {
+        const p = this.state.players[(this.state.dealerPosition + i) % n];
+        if (p && !p.isFolded && !pending.includes(p.id) && this.state.studState?.playerCards[p.id]) pending.push(p.id);
+      }
+      trash.pending = pending;
+      trash.picks = {};
+      trash.startedAt = now;
+      trash.deadline = now + turnTimeMs(this.state);
+      this.state.activePlayer = pending[0];
+      return;
+    }
+  }
+
+  /** How many cards this pass moves (0 when it is the keep). */
+  private trashPassCount(): number {
+    const kind = this.trashKind();
+    return kind === 'pass3' ? 3 : kind === 'pass2' ? 2 : kind === 'pass1' ? 1 : 0;
+  }
+
+  /** Record a player's pass (exactly the cards for this pass) or keep (five cards, in turning order). */
+  private trashPick(player: Player, action: PlayerAction): void {
+    const trash = this.state.trash!;
+    const hand = this.state.studState?.playerCards[player.id]?.downCards || [];
+    const picks = [...new Set(Array.isArray(action.discards) ? action.discards : [])];
+    if (picks.some(i => !Number.isInteger(i) || i < 0 || i >= hand.length)) throw new Error('Choose cards from your hand');
+    if (this.trashKind() === 'keep') {
+      if (action.type !== 'keep') throw new Error('Choose the five cards to keep');
+      if (picks.length !== 5) throw new Error('Keep exactly five cards');
+    } else {
+      const count = this.trashPassCount();
+      if (action.type !== 'pass') throw new Error(`Choose ${count} card${count === 1 ? '' : 's'} to pass`);
+      if (picks.length !== count) throw new Error(`Pass exactly ${count} card${count === 1 ? '' : 's'}`);
+    }
+    trash.picks = { ...(trash.picks || {}), [player.id]: picks };
+  }
+
+  /** For a player out of time: pass the lowest cards, or keep the best five. */
+  private trashAutoPick(player: Player): void {
+    const trash = this.state.trash!;
+    const hand = this.state.studState?.playerCards[player.id]?.downCards || [];
+    const weight: Record<Card['rank'], number> = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+    let picks: number[];
+    if (this.trashKind() === 'keep') {
+      const best = evaluateWildHigh(hand, () => false).cards;
+      picks = best.map(card => hand.indexOf(card)).filter(i => i >= 0);
+    } else {
+      picks = hand.map((c, i) => i).sort((a, b) => weight[hand[a].rank] - weight[hand[b].rank]).slice(0, this.trashPassCount());
+    }
+    trash.picks = { ...(trash.picks || {}), [player.id]: picks };
+  }
+
+  /** Everyone has chosen: pass the cards to the left (or keep the five), then on to the next step. */
+  private completeTrashChoice(): void {
+    const trash = this.state.trash!;
+    const picks = trash.picks || {};
+    const live = this.state.players.filter(p => !p.isFolded && this.state.studState?.playerCards[p.id]);
+    const cardsOf = (id: string) => this.state.studState!.playerCards[id];
+    if (this.trashKind() === 'keep') {
+      live.forEach(p => {
+        const hand = cardsOf(p.id).downCards;
+        const keep = (picks[p.id] || []).map(i => hand[i]).filter(Boolean);
+        if (keep.length === 5) cardsOf(p.id).downCards = keep;
+        this.logAction({ playerId: p.id, action: 'keep', put: 0, stage: this.state.stage });
+      });
+    } else {
+      const count = this.trashPassCount();
+      // Take everyone's cards out first, so a player never passes on cards they were just passed
+      const outgoing = new Map<string, Card[]>();
+      live.forEach(p => {
+        const hand = cardsOf(p.id).downCards;
+        const chosen = new Set(picks[p.id] || []);
+        outgoing.set(p.id, hand.filter((_, i) => chosen.has(i)));
+        cardsOf(p.id).downCards = hand.filter((_, i) => !chosen.has(i));
+      });
+      live.forEach((p, i) => {
+        const left = live[(i + 1) % live.length];
+        cardsOf(left.id).downCards.push(...(outgoing.get(p.id) || []));
+        this.logAction({ playerId: p.id, action: 'pass', put: 0, drawCount: count, stage: this.state.stage });
+      });
+    }
+    trash.pending = [];
+    delete trash.picks;
+    delete trash.startedAt;
+    delete trash.deadline;
+    this.advanceTrash();
+  }
+
+  /** Open a betting round starting after the button; false when fewer than two can bet. */
+  private openTrashBetting(): boolean {
+    if (this.bettorsLeft() < 2) return false;
+    const dealer = this.state.players[this.state.dealerPosition];
+    const first = this.nextInSeatOrder(dealer?.id, p => !p.isFolded && !p.isAllIn);
+    if (!first) return false;
+    this.state.currentBet = 0;
+    this.state.players.forEach(p => { p.currentBet = 0; p.hasActed = false; });
+    if (this.state.bettingMode === 'fixed-limit') this.state.limitBets = 0;
+    this.state.minRaise = this.state.bigBlind;
+    this.state.activePlayer = first.id;
+    return true;
   }
 
   /** Guts: the declaration in progress, if any. */
@@ -2673,7 +2902,7 @@ export class PokerEngine {
     }
 
   // Stud showdown path: evaluate with stud cards (best 5 from available)
-  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'five-card-stud' || this.state.variant === 'razz' || hasBuiltInWilds(this.state.variant) || isChicagoVariant(this.state.variant)) {
+  if (this.state.variant === 'seven-card-stud' || this.state.variant === 'five-card-stud' || this.state.variant === 'razz' || hasBuiltInWilds(this.state.variant) || isChicagoVariant(this.state.variant) || isPassTheTrashVariant(this.state.variant)) {
       const rankWeight: Record<Card['rank'], number> = {
         '2': 2,'3': 3,'4': 4,'5': 5,'6': 6,'7': 7,'8': 8,'9': 9,'10': 10,'J': 11,'Q': 12,'K': 13,'A': 14,
       };

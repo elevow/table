@@ -21,6 +21,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'five-card-stud',
   'five-card-draw',
   'nicaragua',
+  'pass-the-trash',
   'guts',
   'badugi',
   'follow-the-queen',
@@ -45,6 +46,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'five-card-stud': 'Five-Card Stud',
   'five-card-draw': 'Five-Card Draw',
   'nicaragua': 'Nicaragua',
+  'pass-the-trash': 'Pass the Trash',
   'guts': 'Guts',
   'badugi': 'Badugi',
   'pineapple': 'Pineapple',
@@ -143,6 +145,23 @@ export function isMidnightBaseballVariant(variant?: string | null): boolean {
 export const MIDNIGHT_FLIP_MS = 2000;
 
 /**
+ * Pass the Trash: seven cards each, so at most seven players. Cards are passed and kept face
+ * down, then turned up one at a time.
+ */
+export function isPassTheTrashVariant(variant?: string | null): boolean {
+  return variant === 'pass-the-trash';
+}
+
+/** Pass the Trash: what the step in progress asks for, if it is a pass or the keep. */
+export function trashChoiceAt(step?: number): { kind: 'pass'; count: number } | { kind: 'keep' } | undefined {
+  if (step === 0) return { kind: 'pass', count: 3 };
+  if (step === 2) return { kind: 'pass', count: 2 };
+  if (step === 4) return { kind: 'pass', count: 1 };
+  if (step === 6) return { kind: 'keep' };
+  return undefined;
+}
+
+/**
  * Games where players draw cards: five-card draw and Nicaragua, and Badugi (which has blinds and
  * three draws). There is no board, and hands stay hidden until the showdown.
  */
@@ -172,6 +191,7 @@ export const MAX_BASEBALL_PLAYERS = 6;
 /** The most players a table can seat for this game. */
 export function maxPlayersForGame(variant?: string | null, wildRule?: WildRule): number {
   if (isBaseballVariant(variant)) return MAX_BASEBALL_PLAYERS;
+  if (isPassTheTrashVariant(variant)) return MAX_SEVEN_CARD_WILD_PLAYERS;
   if (isDrawVariant(variant)) return MAX_DRAW_PLAYERS;
   const wild = !!wildRule || hasBuiltInWilds(variant);
   return wild && isSevenCardStudVariant(variant) ? MAX_SEVEN_CARD_WILD_PLAYERS : MAX_TABLE_PLAYERS;
@@ -214,7 +234,7 @@ export function isBettingMode(v: unknown): v is BettingMode {
 
 /** Stud games: no board; each player has their own down and up cards. */
 export function isStudVariant(v?: string | null): boolean {
-  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball' || v === 'midnight-baseball' || v === 'high-chicago' || v === 'low-chicago';
+  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball' || v === 'midnight-baseball' || v === 'high-chicago' || v === 'low-chicago' || v === 'pass-the-trash';
 }
 
 /** Stud games dealt seven cards each (Midnight Baseball deals all seven at once, face down). */

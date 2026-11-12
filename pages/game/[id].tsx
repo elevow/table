@@ -49,7 +49,7 @@ import SplashAnimation, { splashInPlay } from '../../src/components/SplashAnimat
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
 import {
-  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, NICARAGUA_METHOD_LABELS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, hasBuiltInWilds, drawsCards, isDrawVariant, isHiLoVariant, isOmahaHiLoVariant, isOmahaVariant,
+  ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, NICARAGUA_METHOD_LABELS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, hasBuiltInWilds, drawsCards, isDrawVariant, isHiLoVariant, isOmahaHiLoVariant, isOmahaVariant, trashChoiceAt,
   isStudVariant as isStudGame, maxPlayersForGame, variantAllowedFor, wildAllowedFor,
 } from '../../src/lib/poker/variant-rules';
 import { studCardOrder } from '../../src/lib/shared/stud-cards';
@@ -329,13 +329,23 @@ export default function GamePage() {
           // fetch our player-specific state from the API
           // Stud deals the seventh-street card face down, so a broadcast can't carry ours
           const reachedSeventh = gameState.stage === 'seventh' && pokerStageRef.current !== 'seventh';
-          if ((isNewHand || reachedSeventh) && missingMyCards && isParticipant && shouldShowCards && effectivePlayerId && id) {
+          // Pass the Trash: a pass moves everyone's face-down cards at once, and each turn moves one
+          // face up, so a broadcast (which hides face-down cards) never carries our current hand
+          const myTrashCards = effectivePlayerId ? gameState.studState?.playerCards?.[effectivePlayerId] : undefined;
+          const trashCardsHidden = gameState.variant === 'pass-the-trash'
+            && (myTrashCards?.downCards?.length || 0) === 0 && (myTrashCards?.upCards?.length || 0) < 5;
+          if ((((isNewHand || reachedSeventh) && missingMyCards) || trashCardsHidden) && isParticipant && shouldShowCards && effectivePlayerId && id) {
             console.log('🎴 New hand detected without cards, fetching player-specific state...');
             api.get('/api/games/state', { query: { tableId: String(id), playerId: effectivePlayerId } })
               .then(unwrap)
               .then(data => {
                 if (data.gameState) {
-                  setPokerGameState(data.gameState);
+                  // Never step back behind a newer broadcast that arrived while this was loading
+                  setPokerGameState((prev: any) => (
+                    typeof prev?.turnSeq === 'number' && typeof data.gameState.turnSeq === 'number' && data.gameState.turnSeq < prev.turnSeq
+                      ? prev
+                      : data.gameState
+                  ));
                   console.log('🎴 Player-specific state fetched with hole cards');
                 }
               })
@@ -383,8 +393,13 @@ export default function GamePage() {
               const missingDownCards = !Array.isArray(newStudCards?.downCards) || newStudCards.downCards.length === 0;
               const prevUp: any[] = Array.isArray(prevStudCards?.upCards) ? prevStudCards.upCards : [];
               const newUp: any[] = Array.isArray(newStudCards?.upCards) ? newStudCards.upCards : [];
-              const sameHand = prevUp.length > 0 && prevUp.length <= newUp.length
-                && prevUp.every((c: any, i: number) => c?.rank === newUp[i]?.rank && c?.suit === newUp[i]?.suit);
+              // Pass the Trash has no up cards until the turns, and its passes and turns change our
+              // down cards: keep them only while nothing has moved (same hand, same step, same turns)
+              const sameHand = gameState.variant === 'pass-the-trash'
+                ? !!gameState.handId && prevState.handId === gameState.handId
+                  && prevState.trash?.step === gameState.trash?.step && prevUp.length === newUp.length
+                : prevUp.length > 0 && prevUp.length <= newUp.length
+                  && prevUp.every((c: any, i: number) => c?.rank === newUp[i]?.rank && c?.suit === newUp[i]?.suit);
 
               if (hadDownCards && missingDownCards && sameHand) {
                 mergedStudState = {
@@ -958,10 +973,12 @@ export default function GamePage() {
     }
 
     const isFold = action === 'fold';
-    // Guts declarations and Pineapple's discard are made by everyone at once, whoever the clock shows on
+    // Pass the Trash passes and keeps, Guts declarations and Pineapple's discard are made by
+    // everyone at once, whoever the clock shows on
+    const isTogether = action === 'pass' || action === 'keep';
     const isDeclare = action === 'in' || action === 'out';
     const isDiscard = action === 'discard';
-    if (!isFold && !isDeclare && !isDiscard && pokerGameState?.activePlayer && pokerGameState.activePlayer !== playerId) {
+    if (!isFold && !isTogether && !isDeclare && !isDiscard && pokerGameState?.activePlayer && pokerGameState.activePlayer !== playerId) {
       console.warn('Action blocked: not your turn', { action, activePlayer: pokerGameState.activePlayer, playerId });
       return;
     }
@@ -989,12 +1006,12 @@ export default function GamePage() {
           && (action === 'bet' || action === 'raise') ? { method: nicaraguaMethod } : {}),
         ...(splash ? { splash: true } : {}),
         // The decision this click answers; the server refuses it if the game has moved on. Other
-        // players' declarations and discards move the game on too, so neither sends it
-        expectedTurnSeq: !isDeclare && !isDiscard && typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
+        // players' choices move the game on too, so none of these sends it
+        expectedTurnSeq: !isTogether && !isDeclare && !isDiscard && typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
       });
       let response = await send();
       // Another player's choice can land at the same moment; this one is still owed, so send it again
-      if (!response.ok && (isDeclare || isDiscard) && response.data?.code === 'STALE_GAME_STATE') response = await send();
+      if (!response.ok && (isTogether || isDeclare || isDiscard) && response.data?.code === 'STALE_GAME_STATE') response = await send();
 
       if (!response.ok) {
         const err = response.data;
@@ -1003,7 +1020,8 @@ export default function GamePage() {
         if (err?.code === 'STALE_GAME_STATE') {
           // This view was behind the server; refresh it so the next action uses the current state
           try {
-            const latest = await api.get('/api/games/state', { query: { tableId: String(id) } });
+            // Ask for our own view, so our cards stay visible
+            const latest = await api.get('/api/games/state', { query: { tableId: String(id), ...(playerId ? { playerId } : {}) } });
             if (latest.ok && latest.data?.gameState) setPokerGameState(latest.data.gameState);
           } catch (refreshError) {
             console.warn('Failed to refresh game state after a stale action:', refreshError);
@@ -1592,12 +1610,21 @@ export default function GamePage() {
   }, [preAction, isMyTurn, me, myOwed, pokerGameState?.runItTwicePrompt, myBringInPending, myPotMatchPending, myDrawPending, handlePokerAction]);
 
   // Keyboard shortcuts work only while the Your Turn panel is showing (same conditions as the panel)
+  // Pass the Trash: everyone passes, or keeps five, at once
+  const trashPending: string[] = pokerGameState?.variant === 'pass-the-trash' && Array.isArray(pokerGameState?.trash?.pending) ? pokerGameState.trash.pending : [];
+  const trashChoosing = trashPending.length > 0;
+  const myTrashPending = !!playerId && trashPending.includes(playerId);
+  const trashChoice = trashChoosing ? trashChoiceAt(pokerGameState?.trash?.step) : undefined;
+  const trashKey = `${pokerGameState?.handId ?? ''}:${pokerGameState?.trash?.step ?? ''}`;
+  const [trashPickState, setTrashPickState] = useState<{ key: string; picks: number[] }>({ key: '', picks: [] });
+  const trashPicks = trashPickState.key === trashKey ? trashPickState.picks : [];
+  const trashNeeded = trashChoice?.kind === 'keep' ? 5 : trashChoice?.kind === 'pass' ? trashChoice.count : 0;
   // Guts: everyone declares in or out at once
   const gutsPending: string[] = Array.isArray(pokerGameState?.guts?.pending) ? pokerGameState.guts.pending : [];
   const gutsDeclaring = pokerGameState?.variant === 'guts' && gutsPending.length > 0;
   const myGutsChoice: 'in' | 'out' | undefined = playerId ? pokerGameState?.guts?.declared?.[playerId] : undefined;
   const myGutsPending = !!playerId && gutsPending.includes(playerId);
-  const actionPanelOpen = !!(gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && !gutsDeclaring && !discardActive);
+  const actionPanelOpen = !!(gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && !gutsDeclaring && !discardActive && !trashChoosing);
   const shortcuts = useTableShortcuts({
     enabled: actionPanelOpen,
     // The bring-in cannot fold; check/call posts the bring-in
@@ -2994,6 +3021,54 @@ export default function GamePage() {
             )}
           </div>
 
+          {/* Pass the Trash: everyone passes cards to the left, or keeps five, at the same time */}
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && myTrashPending && trashChoice && (
+            <div className="lg:col-span-2 surface max-sm:bg-gray-50! max-sm:dark:bg-gray-800! p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))]">
+              <h3 className="mb-2 text-base font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
+                {trashChoice.kind === 'keep' ? 'Keep five cards' : `Pass ${trashChoice.count} card${trashChoice.count === 1 ? '' : 's'} to the left`}
+              </h3>
+              <TurnClockBar clock={turnClock} />
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                {trashChoice.kind === 'keep'
+                  ? 'Tap the five cards to keep in the order you want to turn them up. If time runs out, your best five are kept.'
+                  : 'Everyone passes at the same time. If time runs out, your lowest cards are passed.'}
+              </p>
+              <div className="flex flex-wrap gap-2 pt-3" role="group" aria-label="Your cards">
+                {(getStudCardsForPlayer(playerId).down as Card[]).map((card, i) => {
+                  const order = trashPicks.indexOf(i);
+                  const picked = order >= 0;
+                  return (
+                    <button
+                      key={`${card.rank}-${card.suit}`}
+                      type="button"
+                      aria-pressed={picked}
+                      aria-label={`${card.rank} of ${card.suit}${picked ? (trashChoice.kind === 'keep' ? `, kept, turned up ${order + 1}` : ', passing') : ''}`}
+                      onClick={() => setTrashPickState({ key: trashKey, picks: picked ? trashPicks.filter(x => x !== i) : trashPicks.length < trashNeeded ? [...trashPicks, i] : trashPicks })}
+                      className={`relative rounded-md transition-transform ${picked ? '-translate-y-2 ring-2 ring-emerald-400' : ''}`}
+                    >
+                      <TableCard card={card} size="sm" highContrast={highContrastCards} />
+                      {picked && trashChoice.kind === 'keep' && (
+                        <span className="absolute -top-2 -right-2 rounded-full bg-emerald-600 px-1.5 text-xs font-bold text-white">{order + 1}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={handleFold} className="btn btn-lg act-fold max-sm:min-h-[48px] max-sm:text-base">
+                  Fold
+                </button>
+                <button
+                  onClick={() => handlePokerAction(trashChoice.kind, undefined, { discards: trashPicks })}
+                  disabled={trashPicks.length !== trashNeeded}
+                  className="btn btn-lg act-call max-sm:flex-1 max-sm:min-h-[48px] max-sm:text-base"
+                >
+                  {trashChoice.kind === 'keep' ? 'Keep these five' : `Pass ${trashNeeded}`}
+                </button>
+              </div>
+            </div>
+          )}
           {/* Guts: everyone declares in or out at the same time */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && myGutsPending && (
             <div className="lg:col-span-2 surface max-sm:bg-gray-50! max-sm:dark:bg-gray-800! p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))]">
@@ -3019,6 +3094,11 @@ export default function GamePage() {
                 </button>
               </div>
             </div>
+          )}
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && trashChoosing && !myTrashPending && (
+            <p className="lg:col-span-2 mt-4 text-sm text-gray-600 dark:text-gray-400" role="status">
+              Waiting for {trashPending.length === 1 ? 'one more player' : `${trashPending.length} players`} to {trashChoice?.kind === 'keep' ? 'keep five' : 'pass'}.
+            </p>
           )}
           {/* Pineapple: everyone still holding three cards throws one away, all at once */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && myDiscardPending && (
@@ -3072,7 +3152,7 @@ export default function GamePage() {
           )}
 
           {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}
-          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && !gutsDeclaring && !discardActive && (
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && !gutsDeclaring && !discardActive && !trashChoosing && (
             <div className="lg:col-span-2 surface max-sm:bg-gray-50! max-sm:dark:bg-gray-800! p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <h3 className="text-base font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">

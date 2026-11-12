@@ -18,7 +18,7 @@ import {
   DEFAULT_HANDS_PER_GAME, HORSE_GAMES, MAX_TABLE_PLAYERS, hasBuiltInWilds, maxPlayersForGame, maxPlayersForMixedGames, supportsWildRule, WILD_RULE_LABELS,
 } from '../../src/lib/poker/variant-rules';
 
-type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'big-o' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'high-chicago' | 'low-chicago' | 'five-card-draw' | 'badugi' | 'pineapple' | 'crazy-pineapple' | 'razz' | 'omaha-5' | 'courchevel' | 'follow-the-queen' | 'baseball' | 'midnight-baseball' | 'dealers-choice' | 'mixed';
+type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'big-o' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'high-chicago' | 'low-chicago' | 'five-card-draw' | 'badugi' | 'pass-the-trash' | 'pineapple' | 'crazy-pineapple' | 'razz' | 'omaha-5' | 'courchevel' | 'follow-the-queen' | 'baseball' | 'midnight-baseball' | 'dealers-choice' | 'mixed';
 
 function readAuthToken(): string | null {
   try {
@@ -264,6 +264,7 @@ export default function CreateGameRoomPage() {
               <option value="seven-card-stud-hi-lo">Seven-Card Stud Hi-Lo (8 or Better)</option>
               <option value="five-card-stud">Five-Card Stud</option>
               <option value="five-card-draw">Five-Card Draw</option>
+              <option value="pass-the-trash">Pass the Trash (pass 3-2-1, keep five, roll them up)</option>
               <option value="badugi">Badugi (four-card lowball, three draws)</option>
               <option value="high-chicago">High Chicago (Seven-Card Stud, high spade in the hole wins half)</option>
               <option value="low-chicago">Low Chicago (Seven-Card Stud, low spade in the hole wins half)</option>
@@ -276,6 +277,11 @@ export default function CreateGameRoomPage() {
               <option value="dealers-choice">Dealer&apos;s Choice (dealer selects each hand)</option>
               <option value="mixed">Mixed Games (rotate every few hands)</option>
             </select>
+            {variant === 'pass-the-trash' && (
+              <p className="hint">
+                Seven cards each, face down. Pass 3 to the left, then 2, then 1, with betting after each; keep five, then turn them up one at a time with betting after each of the first four. The fifth card ends the hand. Seats up to 7.
+              </p>
+            )}
             {variant === 'badugi' && (
               <p className="hint">
                 Four cards each, with blinds and three draws. Your hand is the most cards you hold with no two of the same suit or rank; four beat three, then the lowest wins, aces low.

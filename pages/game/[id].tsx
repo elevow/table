@@ -48,6 +48,7 @@ import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmaha
 import SplashAnimation, { splashInPlay } from '../../src/components/SplashAnimation';
 import FixedLimitControls from '../../src/components/FixedLimitControls';
 import GameRulesBadges, { SevenDeuceBountyBanner } from '../../src/components/GameRulesBadges';
+import GameRulesPanel from '../../src/components/GameRulesPanel';
 import {
   ALL_VARIANTS, MAX_SEVEN_CARD_WILD_PLAYERS, NICARAGUA_METHOD_LABELS, VARIANT_LABELS, WILD_RULE_LABELS, gameLabel, hasBuiltInWilds, drawsCards, isDrawVariant, isHiLoVariant, isOmahaHiLoVariant, isOmahaVariant, trashChoiceAt,
   isStudVariant as isStudGame, maxPlayersForGame, variantAllowedFor, wildAllowedFor,
@@ -244,7 +245,7 @@ export default function GamePage() {
   // Room config (variant, betting mode, blinds)
   const [roomConfig, setRoomConfig] = useState<{
     variant?: string;
-    bettingMode?: 'no-limit' | 'pot-limit';
+    bettingMode?: 'no-limit' | 'pot-limit' | 'fixed-limit';
     sb?: number;
     bb?: number;
     numberOfRebuys?: number | 'unlimited';
@@ -694,7 +695,7 @@ export default function GamePage() {
         const sb = Number(blinds?.sb) || Number(blinds?.smallBlind) || undefined;
         const bb = Number(blinds?.bb) || Number(blinds?.bigBlind) || undefined;
         const variant = cfg?.variant as string | undefined;
-        const bettingMode = (cfg?.bettingMode as any) as ('no-limit' | 'pot-limit' | undefined);
+        const bettingMode = (cfg?.bettingMode as any) as ('no-limit' | 'pot-limit' | 'fixed-limit' | undefined);
         const numberOfRebuys = typeof cfg?.numberOfRebuys === 'number'
           ? cfg.numberOfRebuys
           : 'unlimited';
@@ -4143,6 +4144,19 @@ export default function GamePage() {
                       </div>
                     )}
                   </>
+                ),
+              },
+              {
+                id: 'rules',
+                label: 'Rules',
+                content: (
+                  <GameRulesPanel
+                    variant={(gameStarted && pokerGameState?.variant) || roomConfig?.variant}
+                    bettingMode={(gameStarted && pokerGameState?.bettingMode) || roomConfig?.bettingMode}
+                    wildRule={gameStarted ? pokerGameState?.wildRule : undefined}
+                    tableGame={roomConfig?.variant}
+                    choosing={pokerGameState?.stage === 'awaiting-dealer-choice'}
+                  />
                 ),
               },
               ...(gameStarted && pokerGameState ? [{

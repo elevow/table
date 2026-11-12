@@ -292,6 +292,36 @@
     inset 0 10px 40px rgba(0, 0, 0, 0.35);
 }
 
+/* The table's size. Seats sit at percentages around the oval, so it can grow without moving them */
+.table-size {
+  width: 100%;
+  max-width: 820px;
+  height: 400px;
+}
+
+/* Wide table (desktop only): one column as wide as the table, with the side panel below it. The
+   felt grows wider and taller keeping its shape. Its height is capped by the screen, leaving
+   --wide-table-reserve for the header, the seat hanging below the felt and the betting panel
+   (about 420px on your turn) so you don't scroll to act; it never gets smaller than normal */
+@media (width >= 64rem) {
+  .wide-table {
+    --wide-table-reserve: 37rem;
+    --wide-table-width: max(820px, calc((100dvh - var(--wide-table-reserve)) * 820 / 400));
+  }
+  .wide-table > * {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    justify-self: center;
+    width: 100%;
+    max-width: var(--wide-table-width);
+  }
+  .wide-table .table-size {
+    max-width: none;
+    height: auto;
+    aspect-ratio: 820 / 400;
+  }
+}
+
 @utility card-back {
   /* Face-down card */
   @apply flex items-center justify-center rounded-md shadow-playing ring-1 ring-black/30;

@@ -15,7 +15,7 @@ interface Props {
 export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMuted }: Props) {
   if (muted) {
     return (
-      <div className="lg:mt-0 lg:absolute lg:left-[calc(50%+84px)] lg:top-[384px] flex justify-center">
+      <div className="lg:mt-0 lg:absolute lg:left-[calc(50%+84px)] lg:top-[calc(100%-64px)] flex justify-center">
         <button
           type="button"
           onClick={() => onToggleMuted(false)}
@@ -30,7 +30,7 @@ export default function ReactionPicker({ onReact, coolingDown, muted, onToggleMu
   }
   return (
     // The top margin clears our own seat and its name plate, which hang below the felt
-    <div className="lg:mt-0 lg:absolute lg:left-[calc(50%+84px)] lg:top-[384px] lg:flex-nowrap lg:gap-1.5 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Table reactions">
+    <div className="lg:mt-0 lg:absolute lg:left-[calc(50%+84px)] lg:top-[calc(100%-64px)] lg:flex-nowrap lg:gap-1.5 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Table reactions">
       {TABLE_REACTIONS.map(emote => (
         <button
           key={emote}

@@ -33,6 +33,7 @@ import { useTurnClock } from '../../src/hooks/useTurnClock';
 import { handDelayMs } from '../../src/lib/shared/turn-clock';
 import { useRevealWhen } from '../../src/hooks/useRevealWhen';
 import { useTurnAlerts } from '../../src/hooks/useTurnAlerts';
+import { useWideTable } from '../../src/hooks/useWideTable';
 import TurnClockBar from '../../src/components/TurnClockBar';
 import PreActionBar from '../../src/components/PreActionBar';
 import { resolvePreAction } from '../../src/lib/shared/pre-action';
@@ -634,6 +635,8 @@ export default function GamePage() {
   const dealerChoicePanelRef = useRevealWhen<HTMLDivElement>(amChoosingGame);
   // Nobody is the active player during dealer's choice, but the table is waiting on the dealer
   const turnAlerts = useTurnAlerts(isMyTurn || amChoosingGame, turnClock.remainingMs, myTurnKey);
+  // Desktop only: the table across the full width, with the side panel below it
+  const [wideTable, setWideTable] = useWideTable();
 
   const applyDealerChoicePrompt = useCallback((prompt: { dealerId?: string; allowedVariants?: string[]; current?: string } | null) => {
     if (!prompt) {
@@ -2571,7 +2574,7 @@ export default function GamePage() {
       )}
       {/* Table bar: where you are on the left, what you can do on the right */}
       <header className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/80 backdrop-blur-md dark:border-white/6 dark:bg-gray-900/75">
-        <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-2 lg:py-2.5 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+        <div className={`mx-auto flex max-w-7xl ${wideTable ? 'lg:max-w-none' : ''} flex-col gap-1 px-4 py-2 lg:py-2.5 lg:flex-row lg:items-center lg:justify-between lg:gap-4`}>
           <div className="flex min-w-0 items-center gap-3">
             <Link href="/dashboard" className="btn btn-ghost btn-sm px-2! shrink-0" aria-label="Back to the lobby" title="Back to the lobby">
               <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M12.8 5.2a1 1 0 010 1.4L9.4 10l3.4 3.4a1 1 0 01-1.4 1.4l-4.1-4.1a1 1 0 010-1.4l4.1-4.1a1 1 0 011.4 0z" clipRule="evenodd" /></svg>
@@ -2699,6 +2702,19 @@ export default function GamePage() {
                 )}
               </>
             )}
+            <button
+              onClick={() => setWideTable(!wideTable)}
+              className={`btn btn-ghost btn-sm max-lg:hidden ${wideTable ? 'text-emerald-500! dark:text-emerald-300!' : ''}`}
+              title={wideTable ? 'Back to the table with the side panel beside it' : 'Give the table the full width, with the side panel below it'}
+              aria-pressed={wideTable}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {wideTable
+                  ? <path d="M4 12h6M10 12l-3-3M10 12l-3 3M20 12h-6M14 12l3-3M14 12l3 3" />
+                  : <path d="M3 12h7M3 12l3-3M3 12l3 3M21 12h-7M21 12l-3-3M21 12l-3 3" />}
+              </svg>
+              <span className="whitespace-nowrap">Wide table</span>
+            </button>
             <span className="mx-1 h-5 w-px shrink-0 bg-gray-200 dark:bg-white/10 max-sm:hidden sm:ml-auto" aria-hidden="true" />
             {canStartGame() && !gameStarted && !tableClosed && (
               <button
@@ -2727,8 +2743,8 @@ export default function GamePage() {
           </div>
         </div>
       </header>
-      <div className="mx-auto max-w-7xl px-4 pt-2 pb-6 sm:py-8 lg:pt-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-flow-row-dense gap-6">
+      <div className={`mx-auto max-w-7xl ${wideTable ? 'lg:max-w-none' : ''} px-4 pt-2 pb-6 sm:py-8 lg:pt-6`}>
+        <div className={`grid grid-cols-1 lg:grid-cols-3 lg:grid-flow-row-dense gap-6 ${wideTable ? 'wide-table' : ''}`}>
           {seatNotice && (
             <div className="lg:col-span-3 flex items-center justify-between gap-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg p-3 text-sm text-blue-900 dark:text-blue-100" role="status">
               <span>{seatNotice}</span>
@@ -2923,12 +2939,7 @@ export default function GamePage() {
               The margin under the felt leaves room for the bottom seat's avatar, which hangs below it */}
           <div className="lg:col-span-2 relative">
             {/* Green felt table surface */}
-            <div className="table-rail relative rounded-full mx-auto mb-12 max-sm:mt-7"
-                 style={{
-                   width: '100%',
-                   maxWidth: '820px',
-                   height: '400px',
-                 }}>
+            <div className="table-rail table-size relative rounded-full mx-auto mb-12 max-sm:mt-7">
               {/* Inner felt playing surface */}
               <div className="table-felt absolute inset-[14px] rounded-full">
                 <SplashAnimation

@@ -20,6 +20,8 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   // Dealer's Choice only: five-card draw where the opener picks how the hand is won and, unless
   // they win, refills the pot for another hand
   | 'nicaragua'
+  // Dealer's Choice only: two cards each, everyone declares in or out at once; losers match the pot
+  | 'guts'
   // Four-card lowball with three draws; the best hand has four different suits and ranks
   | 'badugi'
   // Seven-card stud where the highest (or lowest) spade in the hole wins half the pot
@@ -111,6 +113,8 @@ export interface HandActionEntry {
     | 'match-pot'
     // Draw games: swapped drawCount cards (0 = stood pat)
     | 'draw'
+    // Guts: declared in, or out
+    | 'in' | 'out'
     // Pineapple: threw away one hole card
     | 'discard'
     // Paid after the hand, straight to the player in toPlayerId rather than into the pot
@@ -256,6 +260,16 @@ export interface TableState {
   // pot nobody opened). over: an opener won, so the next dealer chooses. players: those dealt
   // into the game's first hand, the only ones dealt into its later hands.
   nicaragua?: { opener?: string; method?: NicaraguaMethod; carry?: number; over?: boolean; players?: string[] };
+  // Guts, one game lasting until exactly one player goes in: carry, over and players as for
+  // Nicaragua. pending: players still to declare, all at once on one clock (startedAt to
+  // deadline); declared: their choices, each shown only to its player until everyone has chosen;
+  // ins: who went in, once revealed.
+  guts?: {
+    carry?: number; over?: boolean; players?: string[];
+    pending?: string[]; declared?: Record<string, 'in' | 'out'>; ins?: string[]; startedAt?: number; deadline?: number;
+  };
+  // Guts: the most a losing player pays into the next pot, in big blinds (the host's setting)
+  gutsCapBB?: number;
   studState?: {
     // downCount replaces downCards for other players: how many they hold, not which
     playerCards: Record<string, { downCards: Card[]; upCards: Card[]; downCount?: number }>;
@@ -290,8 +304,9 @@ export interface PlayerAction {
   // bring-in: the stud bring-in player posting the bring-in rather than completing
   // match-pot: Baseball, a player dealt a face-up 3 paying the size of the pot to stay in
   // draw: a draw game's draw, swapping the cards at the discards positions in holeCards
+  // in, out: Guts, declaring whether to play the hand
   // discard: Pineapple, throwing away the hole card at discards[0]
-  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw' | 'discard';
+  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw' | 'in' | 'out' | 'discard';
   playerId: string;
   tableId: string;
   amount?: number;

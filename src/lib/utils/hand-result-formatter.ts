@@ -4,6 +4,7 @@ import type { HandInterface } from '../../types/poker-engine';
 import { isHiLoVariant as isHiLoGame, isOmahaVariant as isOmahaGame, isStudVariant } from '../poker/variant-rules';
 import { evaluateWildHigh, evaluateWildOmaha, evaluateWildRazz, tableWildMatcher } from '../poker/wild-hands';
 import { describeNicaraguaHand } from '../poker/nicaragua';
+import { describeGutsHand } from '../poker/guts';
 import { evaluateBadugi } from '../poker/badugi';
 
 /**
@@ -211,6 +212,42 @@ function formatNicaraguaResult(state: TableState): FormattedHandResult | null {
   return { message: tail ? `${head} | ${tail}` : head, winners, isWinByFold: byFold };
 }
 
+/**
+ * Guts: nobody in carries the pot; one player in alone takes it and ends the game; otherwise the
+ * best hand wins and the losers' payments into the next pot are listed.
+ */
+function formatGutsResult(state: TableState): FormattedHandResult | null {
+  const players = state.players || [];
+  const guts = state.guts || {};
+  const nameOf = (id: string) => {
+    const player = players.find(p => p.id === id);
+    return player ? getPlayerName(player) : id.slice(0, 6);
+  };
+  const winnings = state.handResult?.winnings || {};
+  const winnerIds = Object.keys(winnings);
+  if (winnerIds.length === 0) {
+    const pot = state.handResult?.pot ?? guts.carry ?? 0;
+    return { message: `Nobody went in: the $${pot} pot carries to the next hand`, winners: [], isWinByFold: false };
+  }
+  const winners: HandWinner[] = winnerIds.map(id => {
+    const player = players.find(p => p.id === id);
+    return { playerId: id, playerName: nameOf(id), amount: winnings[id], handDescription: player?.holeCards?.length ? describeGutsHand(player.holeCards) : undefined };
+  });
+  const alone = (guts.ins || []).length <= 1;
+  if (alone) {
+    return { message: `🏆 ${winners[0].playerName} went in alone and wins the pot | Guts is over`, winners, isWinByFold: true };
+  }
+  const handDesc = winners[0].handDescription ? ` with ${winners[0].handDescription}` : '';
+  const head = winners.length === 1
+    ? `🏆 ${winners[0].playerName} wins${handDesc}`
+    : `🏆 ${winners.map(w => w.playerName).join(', ')} split the pot${handDesc}`;
+  const payers = (state.handActions || []).filter(a => a.action === 'match-pot' && a.stage === 'showdown');
+  const tail = guts.over
+    ? 'Guts is over'
+    : payers.length ? payers.map(a => `${nameOf(a.playerId)} pays $${a.put}`).join(', ') + ' into the next pot' : '';
+  return { message: tail ? `${head} | ${tail}` : head, winners, isWinByFold: false };
+}
+
 /** Badugi: the winners come from the engine, described as badugi hands. */
 function formatBadugiResult(state: TableState): FormattedHandResult | null {
   const players = state.players || [];
@@ -246,6 +283,7 @@ function formatHandResultBase(state: TableState): FormattedHandResult | null {
   const activePlayers = players.filter(p => !p.isFolded);
 
   if (variant === 'nicaragua') return formatNicaraguaResult(state);
+  if (variant === 'guts') return formatGutsResult(state);
   if (variant === 'badugi' && activePlayers.length > 1) return formatBadugiResult(state);
   
   // Win by fold: only one player remains

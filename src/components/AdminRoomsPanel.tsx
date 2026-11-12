@@ -198,6 +198,7 @@ export default function AdminRoomsPanel() {
     'baseball': 'Baseball',
     'five-card-draw': 'Five-Card Draw',
     'nicaragua': 'Nicaragua',
+    'guts': 'Guts',
     'badugi': 'Badugi',
     'high-chicago': 'High Chicago',
     'low-chicago': 'Low Chicago',

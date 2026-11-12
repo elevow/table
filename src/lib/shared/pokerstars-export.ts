@@ -43,6 +43,7 @@ const GAME_NAME: Record<string, string> = {
   'baseball': 'Baseball',
   'five-card-draw': '5 Card Draw',
   'nicaragua': 'Nicaragua',
+  'guts': 'Guts',
   'badugi': 'Badugi',
   'high-chicago': '7 Card Stud High Chicago',
   'low-chicago': '7 Card Stud Low Chicago',
@@ -298,6 +299,11 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
       case 'check':
         lines.push(`${who}: checks`);
         break;
+      case 'in':
+        lines.push(`${who}: goes in`);
+        break;
+      case 'out':
+        lines.push(`${who}: stays out`);
       case 'discard':
         lines.push(`${who}: discards 1 card`);
         break;

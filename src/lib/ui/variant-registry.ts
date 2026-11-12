@@ -193,6 +193,22 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'guts': {
+    variant: 'guts',
+    controls: [commonControls.fold],
+    displays: [{ type: 'hand-info' }],
+    helpContent: {
+      title: 'Guts',
+      summary: "Two cards each; everyone declares in or out at the same time. A Dealer's Choice game that lasts until one player goes in alone.",
+      bullets: [
+        'Only pairs and high cards count, aces high',
+        'The best hand among the players who went in takes the pot; each who lost pays the size of the pot, up to the cap, into the next one',
+        'Nobody in: the pot carries to the next hand',
+        'One player in alone takes the pot and ends the game; then the next player chooses',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'badugi': {
     variant: 'badugi',
     controls: [commonControls.bet, commonControls.check, commonControls.fold],

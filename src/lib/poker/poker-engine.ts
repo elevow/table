@@ -16,6 +16,7 @@ import { builtInWildRule, hasBuiltInWilds, holeCardCount, isBaseballVariant, isD
 import { evaluateWildHigh, evaluateWildLow, evaluateWildOmaha, evaluateWildOmahaLow, evaluateWildRazz, tableWildMatcher } from './wild-hands';
 import { fixedLimitBetSize } from './fixed-limit';
 import { describeNicaraguaHand, nicaraguaScore } from './nicaragua';
+import { DEFAULT_GUTS_CAP_BB, describeGutsHand, gutsScore, isGutsVariant } from './guts';
 import { evaluateBadugi, isBadugiVariant } from './badugi';
 import { chicagoSpade, chicagoSpadeScore, isChicagoVariant } from './chicago';
 import { revealedPlayerIds } from './state-sanitizer';
@@ -299,7 +300,7 @@ export class PokerEngine {
     this.gameStateManager.resetPlayerStates();
     // Nicaragua deals every hand of its game from the same button, so the next player after the
     // dealer who chose it chooses once it is over
-    if (!this.nicaraguaContinues()) this.gameStateManager.rotateDealerButton();
+    if (!this.carryGameContinues()) this.gameStateManager.rotateDealerButton();
     this.dealInWaitingPlayers();
     // Sitting-out (and still waiting) players keep their seat and stack but take no part in the hand
     this.state.players.forEach(p => {
@@ -341,11 +342,18 @@ export class PokerEngine {
         // Stud uses bring-in instead of blinds
         this.openStudStreet('third');
       }
+    } else if (isGutsVariant(this.state.variant)) {
+      // Guts: two cards each and an ante to start the game; later hands play for the pot carried over
+      const carry = this.startCarryGameHand();
+      this.dealHoleCards();
+      if (carry > 0) this.state.pot += carry;
+      else this.postGameAntes('preflop');
+      this.startGutsDeclare();
     } else if (isDrawVariant(this.state.variant)) {
       // Draw games: antes and no blinds; the first player after the button opens
       // Nicaragua: later hands of the game are played for the pot carried over, with no antes,
       // and only by the players who started the game
-      const carry = this.startNicaraguaHand();
+      const carry = this.startCarryGameHand();
       this.dealHoleCards();
       if (carry > 0) this.state.pot += carry;
       else this.postGameAntes('preflop');
@@ -612,7 +620,7 @@ export class PokerEngine {
     const dealerId = players[this.state.dealerPosition]?.id;
     const active = players.filter(p => !sitsOutOfHand(p, this.state));
     const waiting = players.filter(p => p.waitingForBigBlind && !p.isSittingOut);
-    const hasBlinds = !isStudVariant(this.state.variant) && !isDrawVariant(this.state.variant) && !this.state.bombPotNext;
+    const hasBlinds = !isStudVariant(this.state.variant) && !isDrawVariant(this.state.variant) && !isGutsVariant(this.state.variant) && !this.state.bombPotNext;
     const dealIn = (p: Player) => {
       delete p.waitingForBigBlind;
       delete p.missedBigBlind;
@@ -951,11 +959,11 @@ export class PokerEngine {
       return;
     }
     if (this.actForAwayPlayer(player, now)) return;
-    // Pineapple's discard: everyone is on the one clock that started with it
-    const discard = this.pendingDiscard();
-    if (discard && typeof discard.deadline === 'number') {
-      this.state.turnStartedAt = discard.startedAt ?? now;
-      this.state.turnDeadline = discard.deadline;
+    // Guts' declaration and Pineapple's discard: everyone is on the one clock that started with it
+    const together = this.pendingGuts() || this.pendingDiscard();
+    if (together && typeof together.deadline === 'number') {
+      this.state.turnStartedAt = together.startedAt ?? now;
+      this.state.turnDeadline = together.deadline;
       return;
     }
     // The table shows any cards just turned before the decision, so that time is added
@@ -981,7 +989,9 @@ export class PokerEngine {
    * What the table does for a player who doesn't act: check when that is free, otherwise fold.
    * The bring-in cannot fold or check, so it is brought in; a face-up 3 in Baseball folds.
    */
-  public timeoutAction(player: Player): 'check' | 'fold' | 'bring-in' | 'draw' | 'discard' {
+  public timeoutAction(player: Player): 'check' | 'fold' | 'bring-in' | 'draw' | 'out' | 'discard' {
+    // In Guts, not declaring in counts as out
+    if (this.pendingGuts()?.pending?.includes(player.id)) return 'out';
     // In Pineapple's discard, the clock throws away the lowest card
     if (this.pendingDiscard()?.pending.includes(player.id)) return 'discard';
     // In a draw, the clock stands pat
@@ -1008,7 +1018,7 @@ export class PokerEngine {
    * Act for the player whose clock has run out: check when that is free, otherwise fold.
    * The time bank is used up, and enough timeouts in a row sit the player out from the next hand.
    */
-  public handleTimeout(now: number = Date.now()): { playerId: string; action: 'check' | 'fold' | 'bring-in' | 'draw' | 'discard'; satOut: boolean } {
+  public handleTimeout(now: number = Date.now()): { playerId: string; action: 'check' | 'fold' | 'bring-in' | 'draw' | 'out' | 'discard'; satOut: boolean } {
     const playerId = this.state.activePlayer;
     const deadline = this.state.turnDeadline;
     if (!playerId || typeof deadline !== 'number' || now < deadline) {
@@ -1016,17 +1026,29 @@ export class PokerEngine {
     }
     const player = this.state.players.find(p => p.id === playerId);
     if (!player) throw new Error('Player not found');
+    // Everyone still choosing at once is out of time together
+    const chargeLate = (late: Player[]) => late.forEach(p => {
+      p.timeBank = 0;
+      if (typeof p.timeBanks === 'number') p.timeBanks = 0;
+      p.consecutiveTimeouts = (p.consecutiveTimeouts || 0) + 1;
+      if (p.consecutiveTimeouts >= TIMEOUTS_BEFORE_SIT_OUT) p.isSittingOut = true;
+    });
+    const guts = this.pendingGuts();
+    if (guts) {
+      // Not declaring in counts as out of the hand
+      const late = this.state.players.filter(p => guts.pending!.includes(p.id));
+      late.forEach(p => { guts.declared = { ...(guts.declared || {}), [p.id]: 'out' }; });
+      chargeLate(late);
+      guts.pending = [];
+      this.resolveGuts();
+      this.finishDecision(undefined, 'timeout', now);
+      return { playerId, action: 'out', satOut: !!player.isSittingOut };
+    }
     const discard = this.pendingDiscard();
     if (discard) {
-      // Everyone still choosing is out of time together
       const late = this.state.players.filter(p => discard.pending.includes(p.id));
       late.forEach(p => this.discardLowest(p, true));
-      late.forEach(p => {
-        p.timeBank = 0;
-        if (typeof p.timeBanks === 'number') p.timeBanks = 0;
-        p.consecutiveTimeouts = (p.consecutiveTimeouts || 0) + 1;
-        if (p.consecutiveTimeouts >= TIMEOUTS_BEFORE_SIT_OUT) p.isSittingOut = true;
-      });
+      chargeLate(late);
       this.continueDiscard();
       this.finishDecision(undefined, 'timeout', now);
       return { playerId, action: 'discard', satOut: !!player.isSittingOut };
@@ -1075,7 +1097,7 @@ export class PokerEngine {
       this.forceFold(playerId);
     }
     // Between hands, a Nicaragua game can be left without enough players to carry on
-    if (this.state.stage === 'showdown' || this.state.stage === 'awaiting-dealer-choice') this.settleStrandedNicaragua();
+    if (this.state.stage === 'showdown' || this.state.stage === 'awaiting-dealer-choice') this.settleStrandedCarryGame();
   }
 
   private dealHoleCards(): void {
@@ -1178,6 +1200,20 @@ export class PokerEngine {
       return;
     }
     if (action.type === 'draw') throw new Error('There is no draw now');
+    // Guts: everyone declares in or out at once, in any order
+    const guts = this.pendingGuts();
+    if (guts) {
+      if (!actor || !guts.pending!.includes(actor.id)) throw new Error('You have already declared');
+      const choice = source === 'timeout' ? 'out' : action.type;
+      if (choice !== 'in' && choice !== 'out') throw new Error('Go in or stay out');
+      guts.declared = { ...(guts.declared || {}), [actor.id]: choice };
+      guts.pending = guts.pending!.filter(id => id !== actor.id);
+      if (guts.pending.length > 0) this.state.activePlayer = guts.pending[0];
+      else this.resolveGuts();
+      this.finishDecision(actor, source, now);
+      return;
+    }
+    if (action.type === 'in' || action.type === 'out') throw new Error('There is nothing to declare now');
     // Pineapple: everyone still holding three cards throws one away, all at once
     const discard = this.pendingDiscard();
     if (discard) {
@@ -1622,29 +1658,49 @@ export class PokerEngine {
       && (this.state.studState?.playerCards[p.id]?.downCards.length || 0) > 0);
   }
 
-  /** Nicaragua: whether the next hand carries on the game (it has a pot carried over and no winner yet). */
-  private nicaraguaContinues(): boolean {
-    const game = this.state.nicaragua;
-    return isNicaraguaVariant(this.state.variant) && !!game && !game.over && (game.carry || 0) > 0;
+  /**
+   * Games that last several hands, playing for a pot carried from hand to hand until someone wins
+   * the game: Nicaragua and Guts. Their record for the current game, if any.
+   */
+  private carryGame(): { carry?: number; over?: boolean; players?: string[] } | undefined {
+    if (isNicaraguaVariant(this.state.variant)) return this.state.nicaragua;
+    if (isGutsVariant(this.state.variant)) return this.state.guts;
+    return undefined;
+  }
+
+  /** Whether the next hand carries on a Nicaragua or Guts game (a pot carried over and no winner yet). */
+  private carryGameContinues(): boolean {
+    const game = this.carryGame();
+    return !!game && !game.over && (game.carry || 0) > 0;
   }
 
   /**
-   * Nicaragua, as a hand starts: the chips carried into it from earlier hands of the game (none
-   * starts a new game, with antes). Other games drop the record of a finished game.
+   * Nicaragua or Guts, as a hand starts: the chips carried into it from earlier hands of the game
+   * (none starts a new game, with antes). Other games drop the record of a finished game.
    */
-  private startNicaraguaHand(): number {
-    if (!isNicaraguaVariant(this.state.variant)) {
+  private startCarryGameHand(): number {
+    const nicaragua = isNicaraguaVariant(this.state.variant);
+    if (!nicaragua && !isGutsVariant(this.state.variant)) {
       if (!(this.state.nicaragua?.carry)) delete this.state.nicaragua;
+      if (!(this.state.guts?.carry)) delete this.state.guts;
       return 0;
     }
-    if (!this.nicaraguaContinues()) {
+    if (!this.carryGameContinues()) {
       // Everyone dealt into the first hand is in the game
-      this.state.nicaragua = { carry: 0, players: this.state.players.filter(p => !p.isFolded).map(p => p.id) };
+      const fresh = { carry: 0, players: this.state.players.filter(p => !p.isFolded).map(p => p.id) };
+      if (nicaragua) this.state.nicaragua = fresh;
+      else this.state.guts = fresh;
       return 0;
     }
-    const game = this.state.nicaragua!;
-    delete game.opener;
-    delete game.method;
+    const game = this.carryGame()!;
+    if (this.state.nicaragua && nicaragua) {
+      delete this.state.nicaragua.opener;
+      delete this.state.nicaragua.method;
+    }
+    if (this.state.guts && !nicaragua) {
+      delete this.state.guts.declared;
+      delete this.state.guts.ins;
+    }
     // Players who sat down during the game wait for the next one: they put nothing into the pot
     if (Array.isArray(game.players)) {
       this.state.players.forEach(p => {
@@ -1680,7 +1736,7 @@ export class PokerEngine {
     this.state.activePlayer = '';
     this.state.handWinners = [];
     this.state.handResult = { pot, winnings: {} };
-    this.settleStrandedNicaragua();
+    this.settleStrandedCarryGame();
     this.startTurnClock(Date.now());
   }
 
@@ -1706,18 +1762,18 @@ export class PokerEngine {
     opener.stack -= refill;
     game.carry = refill;
     this.logAction({ playerId: opener.id, action: 'match-pot', amount: refill, put: refill, stage: 'showdown' });
-    this.settleStrandedNicaragua();
+    this.settleStrandedCarryGame();
   }
 
   /**
-   * Nicaragua between hands: with fewer than two of the game's players still at the table, the
-   * game can't go on, so the carried pot is paid out and the game ends. It goes to the game's
+   * Nicaragua or Guts between hands: with fewer than two of the game's players still at the table,
+   * the game can't go on, so the carried pot is paid out and the game ends. It goes to the game's
    * player still here, or, if none is, split among everyone still at the table.
    */
-  private settleStrandedNicaragua(): void {
-    const game = this.state.nicaragua;
+  private settleStrandedCarryGame(): void {
+    const game = this.carryGame();
     const carry = game?.carry || 0;
-    if (!isNicaraguaVariant(this.state.variant) || !game || game.over || carry <= 0) return;
+    if (!game || game.over || carry <= 0) return;
     const here = this.state.players.filter(p => !this.removedPlayers.has(p.id));
     const inGame = here.filter(p => !Array.isArray(game.players) || game.players.includes(p.id));
     if (inGame.length >= 2) return;
@@ -1731,6 +1787,115 @@ export class PokerEngine {
     });
     game.carry = 0;
     game.over = true;
+  }
+
+  /** Guts: the declaration in progress, if any. */
+  private pendingGuts(): NonNullable<TableState['guts']> | undefined {
+    const guts = this.state.guts;
+    return isGutsVariant(this.state.variant) && guts && (guts.pending?.length || 0) > 0 ? guts : undefined;
+  }
+
+  /** Guts: everyone dealt in declares in or out, all at once, on one clock. */
+  private startGutsDeclare(): void {
+    const now = Date.now();
+    const guts = (this.state.guts ||= {});
+    this.state.stage = 'preflop';
+    const n = this.state.players.length;
+    const pending: string[] = [];
+    for (let i = 1; i <= n; i++) {
+      const p = this.state.players[(this.state.dealerPosition + i) % n];
+      if (p && !p.isFolded && (p.holeCards?.length || 0) > 0 && !pending.includes(p.id)) pending.push(p.id);
+    }
+    guts.pending = pending;
+    guts.declared = {};
+    delete guts.ins;
+    guts.startedAt = now;
+    guts.deadline = now + turnTimeMs(this.state);
+    if (pending.length < 2) {
+      // Only one player in the game could be dealt in: they take the pot
+      pending.forEach(id => { guts.declared![id] = 'in'; });
+      guts.pending = [];
+      this.resolveGuts();
+      return;
+    }
+    this.state.activePlayer = pending[0];
+  }
+
+  /**
+   * Guts, once everyone has declared: the choices are shown. Nobody in carries the pot to the
+   * next hand; one player in takes it and ends the game; several play it out at a showdown.
+   */
+  private resolveGuts(): void {
+    const guts = this.state.guts!;
+    const declared = guts.declared || {};
+    delete guts.startedAt;
+    delete guts.deadline;
+    const ins: string[] = [];
+    this.state.players.forEach(p => {
+      const choice = declared[p.id];
+      if (!choice || p.isFolded) return;
+      this.logAction({ playerId: p.id, action: choice, put: 0, stage: 'preflop' });
+      if (choice === 'in') ins.push(p.id);
+      else {
+        p.isFolded = true;
+        p.hasActed = true;
+      }
+    });
+    guts.ins = ins;
+    if (ins.length === 0) {
+      // Nobody went in: the pot waits for the next hand
+      const pot = this.state.pot;
+      guts.carry = pot;
+      this.state.pot = 0;
+      this.state.stage = 'showdown';
+      this.state.activePlayer = '';
+      this.state.handWinners = [];
+      this.state.handResult = { pot, winnings: {} };
+      this.settleStrandedCarryGame();
+      this.startTurnClock(Date.now());
+      return;
+    }
+    this.state.activePlayer = '';
+    this.determineWinner();
+  }
+
+  /**
+   * Guts, once the pot is awarded: a player who went in alone has won the game. Otherwise each
+   * player who went in and lost pays the size of the pot, up to the cap (or all they have), into
+   * the next pot, and the game goes on.
+   */
+  private finishGutsHand(pot: number, winnings: Record<string, number>): void {
+    const guts = (this.state.guts ||= {});
+    guts.carry = 0;
+    const ins = guts.ins || [];
+    if (ins.length <= 1) {
+      guts.over = true;
+      return;
+    }
+    const cap = (this.state.gutsCapBB ?? DEFAULT_GUTS_CAP_BB) * this.state.bigBlind;
+    let carry = 0;
+    for (const id of ins) {
+      if ((winnings[id] || 0) > 0 || this.removedPlayers.has(id)) continue;
+      const loser = this.state.players.find(p => p.id === id);
+      if (!loser) continue;
+      const pay = Math.max(0, Math.min(pot, cap, loser.stack));
+      if (pay <= 0) continue;
+      loser.stack -= pay;
+      carry += pay;
+      this.logAction({ playerId: id, action: 'match-pot', amount: pay, put: pay, stage: 'showdown' });
+    }
+    if (carry <= 0) {
+      guts.over = true;
+      return;
+    }
+    guts.carry = carry;
+    this.settleStrandedCarryGame();
+  }
+
+  /** Host setting: the most a losing Guts player pays into the next pot, in big blinds. */
+  public setGutsCap(bigBlinds: number): void {
+    if (!Number.isFinite(bigBlinds) || bigBlinds < 1 || bigBlinds > 1000) throw new Error('The Guts cap must be 1-1000 big blinds');
+    this.state.gutsCapBB = Math.round(bigBlinds);
   }
 
   /** Pineapple: someone still in the hand holds three cards and has a card to throw away. */
@@ -2153,12 +2318,17 @@ export class PokerEngine {
   private determineWinner(): void {
     if (this.state.studState) delete this.state.studState.potMatch;
     delete this.state.drawState;
+    if (this.state.guts) {
+      delete this.state.guts.pending;
+      delete this.state.guts.startedAt;
+      delete this.state.guts.deadline;
+    }
     delete this.state.discardState;
     const stacksBefore = new Map(this.state.players.map(p => [p.id, p.stack]));
     const starts = this.state.handStartStacks;
-    const nicaraguaCarry = this.state.nicaragua?.carry || 0;
+    const carried = this.carryGame()?.carry || 0;
     const potBefore = starts && this.state.players.every(p => typeof starts[p.id] === 'number')
-      ? this.state.players.reduce((sum, p) => sum + Math.max(0, starts[p.id] - p.stack), 0) + nicaraguaCarry
+      ? this.state.players.reduce((sum, p) => sum + Math.max(0, starts[p.id] - p.stack), 0) + carried
       : this.state.pot;
     this.settleHand();
     if (this.state.stage === 'showdown') {
@@ -2172,6 +2342,7 @@ export class PokerEngine {
       });
       this.state.handResult = { pot: potBefore, winnings };
       if (isNicaraguaVariant(this.state.variant)) this.finishNicaraguaHand(potBefore, winnings);
+      if (isGutsVariant(this.state.variant)) this.finishGutsHand(potBefore, winnings);
       // A winner turned face up with 7-2 collects the bounty now
       this.maybeAwardSevenDeuceBounty();
       this.startTurnClock(Date.now());
@@ -2616,6 +2787,11 @@ export class PokerEngine {
     const strengths = new Map<string, number>();
     const handViews = new Map<string, { cards: Card[]; description: string }>();
     activePlayers.forEach(p => {
+      if (isGutsVariant(this.state.variant)) {
+        strengths.set(p.id, gutsScore(p.holeCards || []));
+        handViews.set(p.id, { cards: p.holeCards || [], description: describeGutsHand(p.holeCards || []) });
+        return;
+      }
       if (isBadugiVariant(this.state.variant)) {
         const best = evaluateBadugi(p.holeCards || []);
         strengths.set(p.id, best.score);
@@ -2736,8 +2912,8 @@ export class PokerEngine {
         isFolded: p.isFolded || !activePlayers.some(a => a.id === p.id),
       }));
       const contributedTotal = contributions.reduce((sum, c) => sum + c.contributed, 0);
-      // Nicaragua: the pot carried from earlier hands is in the pot but was put in by nobody this hand
-      const carried = isNicaraguaVariant(this.state.variant) ? this.state.nicaragua?.carry || 0 : 0;
+      // Nicaragua and Guts: the pot carried from earlier hands is in the pot but was put in by nobody this hand
+      const carried = this.carryGame()?.carry || 0;
       if (contributedTotal + carried === potTotal) {
         // Baseball: chips paid to match the pot are dead money that any player still in can win,
         // not a bet the others had to call, so they stay out of the side-pot split

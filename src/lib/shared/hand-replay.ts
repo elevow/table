@@ -31,6 +31,7 @@ const VERB: Record<HandActionEntry['action'], string> = {
   draw: 'draws',
   in: 'goes in',
   out: 'stays out',
+  discard: 'throws away a card',
   fold: 'folds',
   check: 'checks',
   call: 'calls',
@@ -56,6 +57,10 @@ const FIVE_CARD_STUD_STREETS: Partial<Record<GameStage, string>> = {
 export function streetLabel(stage: GameStage, variant?: string | null): string {
   if (variant === 'five-card-stud' && FIVE_CARD_STUD_STREETS[stage]) return FIVE_CARD_STUD_STREETS[stage]!;
   if ((variant === 'five-card-draw' || variant === 'nicaragua') && stage === 'preflop') return 'Before the draw';
+  if (variant === 'badugi') {
+    const badugi: Partial<Record<GameStage, string>> = { preflop: 'Before the first draw', flop: 'First draw', turn: 'Second draw', river: 'Third draw' };
+    if (badugi[stage]) return badugi[stage]!;
+  }
   return STREET_LABELS[stage] || stage;
 }
 
@@ -96,8 +101,10 @@ export function buildReplayFrames(hand: HandRecord, money: (n: number) => string
   let pot = 0;
   let stage: GameStage = stud ? 'third' : 'preflop';
 
+  // Courchevel deals the first flop card before the preflop betting
+  const early = hand.variant === 'courchevel' ? 1 : 0;
   const counts = (s: GameStage) => ({
-    boardCount: stud ? 0 : BOARD_BY_STAGE[s] ?? 0,
+    boardCount: stud ? 0 : Math.max(BOARD_BY_STAGE[s] ?? 0, s === 'preflop' ? early : 0),
     upCount: stud ? UP_BY_STAGE[s] ?? 0 : 0,
   });
 

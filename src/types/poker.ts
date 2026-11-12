@@ -2,7 +2,8 @@
 export type GameStage =
   | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' // Hold'em/Omaha
   | 'third' | 'fourth' | 'fifth' | 'sixth' | 'seventh' // Seven-card Stud
-  // Draw games: 'preflop' is the betting before the draw; 'draw' is the draw and the betting after it
+  // Draw games: 'preflop' is the betting before the draw; 'draw' is the draw and the betting after it.
+  // Badugi's three draws use 'flop', 'turn' and 'river' for the draws and the betting after each
   | 'draw'
   | 'awaiting-dealer-choice'; // Dealer's Choice pre-hand pause
 
@@ -21,6 +22,18 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   | 'nicaragua'
   // Dealer's Choice only: two cards each, everyone declares in or out at once; losers match the pot
   | 'guts'
+  // Four-card lowball with three draws; the best hand has four different suits and ranks
+  | 'badugi'
+  // Seven-card stud where the highest (or lowest) spade in the hole wins half the pot
+  | 'high-chicago' | 'low-chicago'
+  // Five-card Omaha with the first flop card dealt face up before the preflop betting
+  | 'courchevel'
+  // Omaha Hi-Lo (8 or better) dealt with five hole cards
+  | 'big-o'
+  // Hold'em with three hole cards; each player throws one away after the preflop betting
+  | 'pineapple'
+  // Pineapple with the discard after the flop betting instead
+  | 'crazy-pineapple'
   // Baseball dealt all face down: nobody looks, and each player turns cards until they beat the high hand
   | 'midnight-baseball';
 
@@ -102,6 +115,8 @@ export interface HandActionEntry {
     | 'draw'
     // Guts: declared in, or out
     | 'in' | 'out'
+    // Pineapple: threw away one hole card
+    | 'discard'
     // Paid after the hand, straight to the player in toPlayerId rather than into the pot
     | 'bounty'
     // The part of a bet nobody could call, handed back when the betting round ends (put is negative)
@@ -222,6 +237,8 @@ export interface TableState {
   // When true, the prompt for the current hand has been resolved and should not reappear
   runItTwicePromptDisabled?: boolean;
   // US-052/US-054: Hi-Lo last showdown results (optional, present for omaha-hi-lo or seven-card-stud-hi-lo)
+  // High and Low Chicago: who won half a pot with their spade in the hole, and how much
+  chicagoResult?: Array<{ playerId: string; card: Card; amount: number }>;
   lastHiLoResult?: {
     high: Array<{ playerId: string; amount: number }>;
     low: Array<{ playerId: string; amount: number }> | null;
@@ -235,6 +252,9 @@ export interface TableState {
   // the cards thrown away so far, which are shuffled back in if the deck runs out (never sent to
   // players)
   drawState?: { pending: string[]; muck?: Card[] };
+  // Pineapple, while players throw away their third hole card: those still to discard, all
+  // choosing at once against one clock that started at startedAt and runs out at deadline
+  discardState?: { pending: string[]; startedAt?: number; deadline?: number };
   // Nicaragua, one game lasting until an opener wins: the opener and the way they chose this hand
   // is won, and carry, chips in the pot from earlier hands of the game (the opener's refill, or a
   // pot nobody opened). over: an opener won, so the next dealer chooses. players: those dealt
@@ -285,7 +305,8 @@ export interface PlayerAction {
   // match-pot: Baseball, a player dealt a face-up 3 paying the size of the pot to stay in
   // draw: a draw game's draw, swapping the cards at the discards positions in holeCards
   // in, out: Guts, declaring whether to play the hand
-  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw' | 'in' | 'out';
+  // discard: Pineapple, throwing away the hole card at discards[0]
+  type: 'bet' | 'call' | 'raise' | 'fold' | 'check' | 'bring-in' | 'match-pot' | 'draw' | 'in' | 'out' | 'discard';
   playerId: string;
   tableId: string;
   amount?: number;

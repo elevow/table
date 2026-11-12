@@ -13,7 +13,9 @@ export function defaultBettingModeForVariant(variant: PokerVariant): BettingMode
   switch (variant) {
     case 'omaha':
     case 'omaha-hi-lo':
+    case 'big-o':
     case 'omaha-5':
+    case 'courchevel':
       return 'pot-limit';
     case 'razz':
       // Razz is a limit game; it is new, so there is no existing default to keep
@@ -26,6 +28,8 @@ export function defaultBettingModeForVariant(variant: PokerVariant): BettingMode
     case 'seven-card-stud':
     case 'seven-card-stud-hi-lo':
     case 'five-card-stud':
+    case 'high-chicago':
+    case 'low-chicago':
       // Stud is traditionally a limit game, but existing stud rooms and dealer's choice hands
       // have always defaulted to no-limit, so that stays; rooms can pick fixed limit explicitly
       return 'no-limit';

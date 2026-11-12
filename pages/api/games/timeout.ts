@@ -77,7 +77,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     const potMatch = state.studState?.potMatch;
     const action = state.discardState?.pending?.includes(timedOut.id)
       ? 'discard'
-      : state.drawState?.pending?.[0] === timedOut.id && state.stage === 'draw'
+      : state.drawState?.pending?.[0] === timedOut.id
       ? 'stand-pat'
       : potMatch?.queue?.[0] === timedOut.id && potMatch.stage === state.stage
       ? 'fold'

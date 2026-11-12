@@ -2,7 +2,8 @@
 export type GameStage =
   | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' // Hold'em/Omaha
   | 'third' | 'fourth' | 'fifth' | 'sixth' | 'seventh' // Seven-card Stud
-  // Draw games: 'preflop' is the betting before the draw; 'draw' is the draw and the betting after it
+  // Draw games: 'preflop' is the betting before the draw; 'draw' is the draw and the betting after it.
+  // Badugi's three draws use 'flop', 'turn' and 'river' for the draws and the betting after each
   | 'draw'
   | 'awaiting-dealer-choice'; // Dealer's Choice pre-hand pause
 
@@ -19,6 +20,8 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   // Dealer's Choice only: five-card draw where the opener picks how the hand is won and, unless
   // they win, refills the pot for another hand
   | 'nicaragua'
+  // Four-card lowball with three draws; the best hand has four different suits and ranks
+  | 'badugi'
   // Seven-card stud where the highest (or lowest) spade in the hole wins half the pot
   | 'high-chicago' | 'low-chicago'
   // Five-card Omaha with the first flop card dealt face up before the preflop betting

@@ -55,6 +55,10 @@ const FIVE_CARD_STUD_STREETS: Partial<Record<GameStage, string>> = {
 export function streetLabel(stage: GameStage, variant?: string | null): string {
   if (variant === 'five-card-stud' && FIVE_CARD_STUD_STREETS[stage]) return FIVE_CARD_STUD_STREETS[stage]!;
   if ((variant === 'five-card-draw' || variant === 'nicaragua') && stage === 'preflop') return 'Before the draw';
+  if (variant === 'badugi') {
+    const badugi: Partial<Record<GameStage, string>> = { preflop: 'Before the first draw', flop: 'First draw', turn: 'Second draw', river: 'Third draw' };
+    if (badugi[stage]) return badugi[stage]!;
+  }
   return STREET_LABELS[stage] || stage;
 }
 

@@ -43,6 +43,7 @@ const GAME_NAME: Record<string, string> = {
   'baseball': 'Baseball',
   'five-card-draw': '5 Card Draw',
   'nicaragua': 'Nicaragua',
+  'badugi': 'Badugi',
   'high-chicago': '7 Card Stud High Chicago',
   'low-chicago': '7 Card Stud Low Chicago',
   'courchevel': 'Courchevel',
@@ -240,6 +241,11 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
     settleStreet();
     for (const s of streetsBetween(stage, next)) streetHeader(s);
     if (next === 'draw') lines.push('*** FIRST DRAW ***');
+    // Badugi's three draws come where a flop game has its streets
+    if (String(hand.variant) === 'badugi') {
+      const label: Partial<Record<GameStage, string>> = { flop: 'FIRST', turn: 'SECOND', river: 'THIRD' };
+      if (label[next]) lines.push(`*** ${label[next]} DRAW ***`);
+    }
     stage = next;
     streetBets = new Map();
     streetMax = 0;

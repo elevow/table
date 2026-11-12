@@ -21,6 +21,7 @@ export const ALL_VARIANTS: GameVariant[] = [
   'five-card-stud',
   'five-card-draw',
   'nicaragua',
+  'badugi',
   'follow-the-queen',
   'baseball',
   'midnight-baseball',
@@ -43,6 +44,7 @@ export const VARIANT_LABELS: Record<GameVariant, string> = {
   'five-card-stud': 'Five-Card Stud',
   'five-card-draw': 'Five-Card Draw',
   'nicaragua': 'Nicaragua',
+  'badugi': 'Badugi',
   'pineapple': 'Pineapple',
   'crazy-pineapple': 'Crazy Pineapple',
   'follow-the-queen': 'Follow the Queen',
@@ -139,6 +141,14 @@ export function isMidnightBaseballVariant(variant?: string | null): boolean {
 export const MIDNIGHT_FLIP_MS = 2000;
 
 /**
+ * Games where players draw cards: five-card draw and Nicaragua, and Badugi (which has blinds and
+ * three draws). There is no board, and hands stay hidden until the showdown.
+ */
+export function drawsCards(variant?: string | null): boolean {
+  return isDrawVariant(variant) || variant === 'badugi';
+}
+
+/**
  * Pineapple games deal three hole cards and everyone throws one away, all at once, when the
  * betting on this stage is over: Pineapple after the preflop betting, Crazy Pineapple after the
  * flop betting. Undefined for other games.
@@ -180,8 +190,8 @@ export function variantAllowedFor(variant: string | null | undefined, playerCoun
  * Choice picks). Games with their own wild cards can't.
  */
 export function wildAllowedFor(variant: string | null | undefined, playerCount: number): boolean {
-  // Nicaragua's counts and low hands have no place for a wild card
-  return !hasBuiltInWilds(variant) && !isNicaraguaVariant(variant) && playerCount <= maxPlayersForGame(variant, 'deuces');
+  // Nicaragua's counts, low hands and Badugi have no place for a wild card
+  return !hasBuiltInWilds(variant) && !isNicaraguaVariant(variant) && variant !== 'badugi' && playerCount <= maxPlayersForGame(variant, 'deuces');
 }
 
 /**
@@ -234,7 +244,7 @@ export function isHoldemVariant(v?: string | null): boolean {
 export function holeCardCount(v?: string | null): number {
   if (v === 'omaha-5' || v === 'big-o' || v === 'courchevel' || isDrawVariant(v)) return 5;
   if (pineappleDiscardStage(v)) return 3;
-  if (v === 'omaha' || v === 'omaha-hi-lo') return 4;
+  if (v === 'omaha' || v === 'omaha-hi-lo' || v === 'badugi') return 4;
   return 2;
 }
 

@@ -193,6 +193,22 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'badugi': {
+    variant: 'badugi',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }],
+    helpContent: {
+      title: 'Badugi',
+      summary: 'Four-card lowball with three draws. Blinds, then a round of betting before each draw and after the last.',
+      bullets: [
+        'Your hand is the most cards you hold with no two of the same suit or rank',
+        'Four cards (a badugi) beat three, three beat two; then the lowest wins, aces low',
+        'The best hand is A-2-3-4 of four different suits',
+        'Draw any number of cards each time',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'high-chicago': {
     variant: 'high-chicago',
     controls: [commonControls.bet, commonControls.check, commonControls.fold],

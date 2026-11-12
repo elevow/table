@@ -3747,6 +3747,20 @@ export default function GamePage() {
             );
           })()}
 
+          {/* High and Low Chicago: half the pot went to the spade in the hole */}
+          {gameStarted && pokerGameState?.stage === 'showdown' && Array.isArray(pokerGameState?.chicagoResult) && pokerGameState.chicagoResult.length > 0 && (
+            <div className="lg:col-span-2 rounded-2xl border border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-400/25 dark:bg-emerald-400/8 dark:text-emerald-100 px-4 py-2 mt-4 text-sm">
+              {pokerGameState.chicagoResult.map((w: { playerId: string; card: Card; amount: number }) => {
+                const who = pokerGameState.players?.find((p: any) => p.id === w.playerId);
+                return (
+                  <div key={w.playerId}>
+                    <span className="font-semibold">{who?.name || 'Player'}</span> wins ${w.amount} with the {w.card.rank}♠ in the hole
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* Showdown banner when not RIT: compute true winners instead of assuming the first remaining */}
           {gameStarted && pokerGameState && (pokerGameState.stage === 'showdown' || getActiveNonFoldedPlayers().length === 1)
             && !pokerGameState.runItTwice?.enabled

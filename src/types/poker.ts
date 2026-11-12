@@ -19,6 +19,8 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   // Dealer's Choice only: five-card draw where the opener picks how the hand is won and, unless
   // they win, refills the pot for another hand
   | 'nicaragua'
+  // Seven-card stud where the highest (or lowest) spade in the hole wins half the pot
+  | 'high-chicago' | 'low-chicago'
   // Five-card Omaha with the first flop card dealt face up before the preflop betting
   | 'courchevel'
   // Omaha Hi-Lo (8 or better) dealt with five hole cards
@@ -228,6 +230,8 @@ export interface TableState {
   // When true, the prompt for the current hand has been resolved and should not reappear
   runItTwicePromptDisabled?: boolean;
   // US-052/US-054: Hi-Lo last showdown results (optional, present for omaha-hi-lo or seven-card-stud-hi-lo)
+  // High and Low Chicago: who won half a pot with their spade in the hole, and how much
+  chicagoResult?: Array<{ playerId: string; card: Card; amount: number }>;
   lastHiLoResult?: {
     high: Array<{ playerId: string; amount: number }>;
     low: Array<{ playerId: string; amount: number }> | null;

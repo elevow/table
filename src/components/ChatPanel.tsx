@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, memo, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, memo, useCallback } from 'react';
 import type { ChatMessage } from '../types/chat';
 import { useSupabaseChatRealtime } from '../hooks/useSupabaseChatRealtime';
 import { useHydrated } from '../hooks/useHydrated';
@@ -24,6 +24,13 @@ interface ChatPanelProps {
    * it turns false: Midnight Baseball's result waits until its turned cards are all showing.
    */
   holdSystemMessages?: boolean;
+  /** Shown inside a tab that already says "Chat": leave out the heading */
+  embedded?: boolean;
+  /**
+   * Called once for each message that arrives from another player (not hand results, and not
+   * from players this viewer has muted), so a hidden chat can show an unread count.
+   */
+  onIncoming?: () => void;
 }
 
 // Players this viewer has muted, by ID with the name they had, kept in this browser for every table
@@ -37,7 +44,7 @@ function loadMuted(): Record<string, string> {
   }
 }
 
-function ChatPanel({ gameId, playerId, isAdmin = false, holdSystemMessages = false }: ChatPanelProps) {
+function ChatPanel({ gameId, playerId, isAdmin = false, holdSystemMessages = false, embedded = false, onIncoming }: ChatPanelProps) {
   // System messages that arrived while held, not shown yet
   const [held, setHeld] = useState<string[]>([]);
   const holdRef = useLatest(holdSystemMessages);
@@ -51,6 +58,12 @@ function ChatPanel({ gameId, playerId, isAdmin = false, holdSystemMessages = fal
   // The tournament director, if this is a tournament table: always heard, so never mutable
   const [directorId, setDirectorId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // For onIncoming: the latest callback and mutes, and the messages already counted (a message
+  // can be delivered twice)
+  const onIncomingRef = useLatest(onIncoming);
+  const mutedRef = useLatest(muted);
+  const directorRef = useLatest(directorId);
+  const counted = useRef(new Set<string>());
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -107,7 +120,12 @@ function ChatPanel({ gameId, playerId, isAdmin = false, holdSystemMessages = fal
     if (playerId && m.senderId === playerId) return;
     if (holdRef.current && m.senderId === 'system') setHeld(prev => [...prev, m.id]);
     setMessages(prev => (prev.some(x => x.id === m.id) ? prev : [...prev, m]));
-  }, [playerId, holdRef]);
+    const mutedSender = m.senderId in mutedRef.current && m.senderId !== directorRef.current;
+    if (m.senderId !== 'system' && !mutedSender && !counted.current.has(m.id)) {
+      counted.current.add(m.id);
+      onIncomingRef.current?.();
+    }
+  }, [playerId, holdRef, mutedRef, directorRef, onIncomingRef]);
 
   const handleSupabaseReaction = useCallback((payload: { messageId: string; emoji: string; userId: string }) => {
     if (!payload?.messageId || !payload?.emoji) return;
@@ -366,7 +384,7 @@ function ChatPanel({ gameId, playerId, isAdmin = false, holdSystemMessages = fal
 
   return (
     <div className="chat-panel">
-      <h2 className="section-title mb-3">Chat</h2>
+      {!embedded && <h2 className="section-title mb-3">Chat</h2>}
       <div className="messages space-y-2 max-h-80 overflow-auto p-1">
         {visibleMessages.map((m) => (
           <div key={m.id} className="message group relative">

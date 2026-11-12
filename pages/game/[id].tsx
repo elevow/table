@@ -33,6 +33,7 @@ import { useTurnClock } from '../../src/hooks/useTurnClock';
 import { handDelayMs } from '../../src/lib/shared/turn-clock';
 import { useRevealWhen } from '../../src/hooks/useRevealWhen';
 import { useTurnAlerts } from '../../src/hooks/useTurnAlerts';
+import { useWideTable } from '../../src/hooks/useWideTable';
 import TurnClockBar from '../../src/components/TurnClockBar';
 import PreActionBar from '../../src/components/PreActionBar';
 import { resolvePreAction } from '../../src/lib/shared/pre-action';
@@ -70,7 +71,6 @@ import ReactionPicker from '../../src/components/ReactionPicker';
 import SeatReactionBubbles from '../../src/components/SeatReactionBubbles';
 import { useTableReactions } from '../../src/hooks/useTableReactions';
 import TableChipAnimations from '../../src/components/TableChipAnimations';
-import MobileCollapsible from '../../src/components/MobileCollapsible';
 import { useMediaQuery, NARROW_SCREEN_QUERY } from '../../src/hooks/useMediaQuery';
 import { isCentreSeat, seatPlateStyle } from '../../src/lib/shared/seat-layout';
 import { tablePlayerName } from '../../src/utils/table-player-name';
@@ -125,11 +125,6 @@ const ChatPanel = dynamic(() => import('../../src/components/ChatPanel'), {
 const GameSettings = dynamic(() => import('../../src/components/GameSettings'), {
   loading: () => <div className="skeleton-loader settings-loader" />,
   ssr: false,
-});
-
-// Component with granular code splitting
-const CombinedTimerStats = dynamic(() => import('../../src/components/CombinedTimerStats'), {
-  loading: () => <div className="skeleton-loader stats-loader" />,
 });
 
 // Rabbit Hunt Preview panel removed per user request
@@ -634,6 +629,17 @@ export default function GamePage() {
   const dealerChoicePanelRef = useRevealWhen<HTMLDivElement>(amChoosingGame);
   // Nobody is the active player during dealer's choice, but the table is waiting on the dealer
   const turnAlerts = useTurnAlerts(isMyTurn || amChoosingGame, turnClock.remainingMs, myTurnKey);
+  // Desktop only: the table across the full width, with the side panel below it
+  const [wideTable, setWideTable] = useWideTable();
+  // Which side panel tab is showing, and chat messages that arrived while Chat wasn't
+  const [sideTab, setSideTab] = useState<string | null>(null);
+  const [chatUnread, setChatUnread] = useState(0);
+  const sideTabRef = useLatest(sideTab);
+  // Adjusted while rendering: opening Chat reads everything
+  if (sideTab === 'chat' && chatUnread > 0) setChatUnread(0);
+  const countUnreadChat = useCallback(() => {
+    if (sideTabRef.current !== 'chat') setChatUnread(n => n + 1);
+  }, [sideTabRef]);
 
   const applyDealerChoicePrompt = useCallback((prompt: { dealerId?: string; allowedVariants?: string[]; current?: string } | null) => {
     if (!prompt) {
@@ -2571,7 +2577,7 @@ export default function GamePage() {
       )}
       {/* Table bar: where you are on the left, what you can do on the right */}
       <header className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/80 backdrop-blur-md dark:border-white/6 dark:bg-gray-900/75">
-        <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-2 lg:py-2.5 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+        <div className={`mx-auto flex max-w-7xl ${wideTable ? '2xl:max-w-none' : ''} flex-col gap-1 px-4 py-2 lg:py-2.5 lg:flex-row lg:items-center lg:justify-between lg:gap-4`}>
           <div className="flex min-w-0 items-center gap-3">
             <Link href="/dashboard" className="btn btn-ghost btn-sm px-2! shrink-0" aria-label="Back to the lobby" title="Back to the lobby">
               <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M12.8 5.2a1 1 0 010 1.4L9.4 10l3.4 3.4a1 1 0 01-1.4 1.4l-4.1-4.1a1 1 0 010-1.4l4.1-4.1a1 1 0 011.4 0z" clipRule="evenodd" /></svg>
@@ -2699,6 +2705,19 @@ export default function GamePage() {
                 )}
               </>
             )}
+            <button
+              onClick={() => setWideTable(!wideTable)}
+              className={`btn btn-ghost btn-sm max-2xl:hidden ${wideTable ? 'text-emerald-500! dark:text-emerald-300!' : ''}`}
+              title={wideTable ? 'Back to the normal layout' : 'Make the table bigger, with the betting controls beside it and the side panel below'}
+              aria-pressed={wideTable}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {wideTable
+                  ? <path d="M4 12h6M10 12l-3-3M10 12l-3 3M20 12h-6M14 12l3-3M14 12l3 3" />
+                  : <path d="M3 12h7M3 12l3-3M3 12l3 3M21 12h-7M21 12l-3-3M21 12l-3 3" />}
+              </svg>
+              <span className="whitespace-nowrap">Wide table</span>
+            </button>
             <span className="mx-1 h-5 w-px shrink-0 bg-gray-200 dark:bg-white/10 max-sm:hidden sm:ml-auto" aria-hidden="true" />
             {canStartGame() && !gameStarted && !tableClosed && (
               <button
@@ -2727,8 +2746,8 @@ export default function GamePage() {
           </div>
         </div>
       </header>
-      <div className="mx-auto max-w-7xl px-4 pt-2 pb-6 sm:py-8 lg:pt-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-flow-row-dense gap-6">
+      <div className={`mx-auto max-w-7xl ${wideTable ? '2xl:max-w-none' : ''} px-4 pt-2 pb-6 sm:py-8 lg:pt-6`}>
+        <div className={`grid grid-cols-1 lg:grid-cols-3 lg:grid-flow-row-dense gap-6 ${wideTable ? 'wide-table' : ''}`}>
           {seatNotice && (
             <div className="lg:col-span-3 flex items-center justify-between gap-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg p-3 text-sm text-blue-900 dark:text-blue-100" role="status">
               <span>{seatNotice}</span>
@@ -2921,14 +2940,9 @@ export default function GamePage() {
           )}
           {/* Poker Table - Green Felt Design; on wide screens the reaction row sits beside your seat.
               The margin under the felt leaves room for the bottom seat's avatar, which hangs below it */}
-          <div className="lg:col-span-2 relative">
+          <div className="wide-table-felt-area lg:col-span-2 relative">
             {/* Green felt table surface */}
-            <div className="table-rail relative rounded-full mx-auto mb-12 max-sm:mt-7"
-                 style={{
-                   width: '100%',
-                   maxWidth: '820px',
-                   height: '400px',
-                 }}>
+            <div className="table-rail table-size relative rounded-full mx-auto mb-12 max-sm:mt-7">
               {/* Inner felt playing surface */}
               <div className="table-felt absolute inset-[14px] rounded-full">
                 <SplashAnimation
@@ -3026,6 +3040,9 @@ export default function GamePage() {
             )}
           </div>
 
+          {/* The hand in play: choices, betting, status and results. Normally these are grid items like
+              the rest; with Wide table on a desktop they form a column beside the table */}
+          <div className="wide-table-actions">
           {/* Pass the Trash: everyone passes cards to the left, or keeps five, at the same time */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && myTrashPending && trashChoice && (
             <div className="lg:col-span-2 surface max-sm:bg-gray-50! max-sm:dark:bg-gray-800! p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))]">
@@ -3160,7 +3177,7 @@ export default function GamePage() {
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && !gutsDeclaring && !discardActive && !trashChoosing && (
             <div className="lg:col-span-2 surface max-sm:bg-gray-50! max-sm:dark:bg-gray-800! p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
               <div className="flex items-center justify-between gap-2 mb-2">
-                <h3 className="text-base font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                <h3 className="text-base font-semibold text-emerald-700 dark:text-emerald-300 flex shrink-0 items-center gap-2 whitespace-nowrap">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
                   Your turn
                   <TimeBankBadge count={me?.timeBanks} seconds={pokerGameState?.timeBankSeconds} />
@@ -3480,7 +3497,7 @@ export default function GamePage() {
                                 return (
                                   <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
                                     {/* Phones skip the amount added: it's in the box above, and the button is half the screen */}
-                                    {isAllIn ? `All-in ${amt(stack)}` : <>Raise to {amt(sel)}<span className="max-sm:hidden"> (+{amt(add)})</span></>}
+                                    {isAllIn ? `All-in ${amt(stack)}` : <>Raise to {amt(sel)}<span className="max-sm:hidden @max-[32rem]:hidden"> (+{amt(add)})</span></>}
                                   </button>
                                 );
                               })()}
@@ -3603,7 +3620,7 @@ export default function GamePage() {
                                 return (
                                   <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
                                     {/* Phones skip the amount added: it's in the box above, and the button is half the screen */}
-                                    Raise to {amt(sel)}<span className="max-sm:hidden"> (+{amt(add)})</span>
+                                    Raise to {amt(sel)}<span className="max-sm:hidden @max-[32rem]:hidden"> (+{amt(add)})</span>
                                   </button>
                                 );
                               })()}
@@ -4123,31 +4140,48 @@ export default function GamePage() {
               return null;
             }
           })()}
+          </div>
 
-          {/* Right column: statistics, the hand's actions, session, notes and host controls, a tab each */}
+          {/* Right column: your session, chat, rules, the hand's actions, notes and host controls, a tab each */}
           <div className="flex flex-col gap-4 lg:row-span-4">
           <SidePanelTabs
+            onActiveChange={setSideTab}
             tabs={[
-              {
-                id: 'stats',
-                label: 'Stats',
+              ...(playerId ? [{
+                id: 'session',
+                label: 'Session',
                 content: (
                   <>
-                    {id && playerId && (
-                      <CombinedTimerStats
-                        tableId={String(id)}
-                        playerId={playerId}
-                        gameId={String(id)}
-                        onShowSettings={toggleSettings}
-                        gameState={pokerGameState}
-                      />
-                    )}
+                    {isSeated || amInGame
+                      ? <SessionLedgerPanel embedded tableId={tableId} refreshKey={`${pokerGameState?.handNumber ?? 0}:${pokerGameState?.stage === 'showdown'}`} />
+                      : <p className="text-sm text-gray-500 dark:text-gray-400">Take a seat and your session will be tracked here.</p>}
+                    <button type="button" onClick={toggleSettings} className="link mt-3 text-sm" aria-expanded={showSettings}>
+                      {showSettings ? 'Hide settings' : 'Show settings'}
+                    </button>
                     {showSettings && (
                       <div className="mt-4">
                         <GameSettings settings={display.settings} onChange={display.change} hasOverrides={display.hasOverrides} onReset={display.reset} />
                       </div>
                     )}
                   </>
+                ),
+              }] : []),
+              {
+                id: 'chat',
+                label: 'Chat',
+                badge: sideTab === 'chat' ? 0 : chatUnread,
+                content: (
+                  <div ref={chatPanelRef}>
+                    <ChatPanel
+                      embedded
+                      gameId={String(id)}
+                      playerId={playerId}
+                      isAdmin={userRole === 'admin'}
+                      // Midnight Baseball: the hand result waits until the turned cards are all showing
+                      holdSystemMessages={!!serverGameState && pokerGameState?.stage !== serverGameState.stage}
+                      onIncoming={countUnreadChat}
+                    />
+                  </div>
                 ),
               },
               {
@@ -4167,11 +4201,6 @@ export default function GamePage() {
                 id: 'hand',
                 label: 'Hand',
                 content: <HandActionLog embedded actions={pokerGameState.handActions} players={pokerGameState.players || []} handNumber={pokerGameState.handNumber} variant={pokerGameState.variant} />,
-              }] : []),
-              ...(playerId && (isSeated || amInGame) ? [{
-                id: 'session',
-                label: 'Session',
-                content: <SessionLedgerPanel embedded tableId={tableId} refreshKey={`${pokerGameState?.handNumber ?? 0}:${pokerGameState?.stage === 'showdown'}`} />,
               }] : []),
               ...(playerId && otherSeated.length > 0 ? [{
                 id: 'notes',
@@ -4197,19 +4226,6 @@ export default function GamePage() {
             ]}
           />
           </div>
-
-          {/* Less critical component in viewport */}
-          <MobileCollapsible title="Chat" className="lg:col-span-2">
-          <div ref={chatPanelRef} className="lg:col-span-2 surface p-4 max-sm:mt-0">
-            <ChatPanel
-              gameId={String(id)}
-              playerId={playerId}
-              isAdmin={userRole === 'admin'}
-              // Midnight Baseball: the hand result waits until the turned cards are all showing
-              holdSystemMessages={!!serverGameState && pokerGameState?.stage !== serverGameState.stage}
-            />
-          </div>
-          </MobileCollapsible>
 
           {/* Settings panel moved next to stats above; bottom button removed */}
         </div>

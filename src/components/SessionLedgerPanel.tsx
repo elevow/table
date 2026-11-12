@@ -13,26 +13,49 @@ interface LedgerLine {
 interface LedgerResponse {
   lines: LedgerLine[];
   payments: Array<{ from: string; to: string; amount: number }>;
-  session: { handsPlayed: number; handsWon: number; biggestPotWon: number; boughtIn: number; net: number };
+  session: { handsPlayed: number; handsWon: number; biggestPotWon: number; boughtIn: number; net: number; startedAt?: string | null };
 }
 
 const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString()}`;
+// "1h 12m" or "25m" between then and now
+const elapsed = (from: string, now: number) => {
+  const minutes = Math.max(0, Math.floor((now - new Date(from).getTime()) / 60000));
+  return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
+};
+
 const netClass = (n: number) => (n > 0 ? 'text-emerald-600 dark:text-emerald-400' : n < 0 ? 'text-red-600 dark:text-red-400' : '');
 
 /**
- * Your session at this table (hands, wins, biggest pot, net) and the table's chip ledger with
- * the payments that settle it, downloadable as CSV. `refreshKey` changes after each hand.
+ * Your session at this table (time at the table, hands, wins, biggest pot, net), counted by the
+ * server so it's the same on every device, and the table's chip ledger with the payments that
+ * settle it, downloadable as CSV. `refreshKey` changes after each hand.
  */
 export default function SessionLedgerPanel({ tableId, refreshKey, embedded = false }: { tableId: string; refreshKey: unknown; embedded?: boolean }) {
   const [data, setData] = useState<LedgerResponse | null>(null);
   const [open, setOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  // The server only shares the ledger with people who have played here
+  const [notPlaying, setNotPlaying] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   const load = useCallback(() => {
     if (!tableId) return;
     fetch(`/api/games/ledger?tableId=${encodeURIComponent(tableId)}`, { headers: authHeaders() })
-      .then(resp => (resp.ok ? resp.json() : null))
-      .then(d => { if (d) setData(d); })
+      .then(resp => {
+        if (resp.status === 403) setNotPlaying(true);
+        return resp.ok ? resp.json() : null;
+      })
+      .then(d => {
+        if (!d) return;
+        setData(d);
+        setNotPlaying(false);
+        setNow(Date.now());
+      })
       .catch(() => {});
   }, [tableId]);
 
@@ -59,6 +82,9 @@ export default function SessionLedgerPanel({ tableId, refreshKey, embedded = fal
     }
   };
 
+  if (!data && notPlaying) {
+    return embedded ? <p className="text-sm text-gray-500 dark:text-gray-400">Take a seat and your session will be tracked here.</p> : null;
+  }
   if (!data) return embedded ? <p className="text-sm text-gray-500 dark:text-gray-400">Loading your session…</p> : null;
   const s = data.session;
 
@@ -66,11 +92,18 @@ export default function SessionLedgerPanel({ tableId, refreshKey, embedded = fal
     // Inside the side panel tabs the tab names it, so no card or heading of its own
     <div className={embedded ? '' : 'surface p-5'}>
       {!embedded && <h3 className="section-title mb-3">This session</h3>}
+      {s.startedAt && (
+        <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+          At the table {elapsed(s.startedAt, now)}, since {new Date(s.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-2 text-sm mb-3">
         <div className="text-gray-600 dark:text-gray-300">Hands</div>
         <div className="text-right tabular-nums text-gray-900 dark:text-gray-100">{s.handsPlayed}</div>
         <div className="text-gray-600 dark:text-gray-300">Pots won</div>
         <div className="text-right tabular-nums text-gray-900 dark:text-gray-100">{s.handsWon}</div>
+        <div className="text-gray-600 dark:text-gray-300">Win rate</div>
+        <div className="text-right tabular-nums text-gray-900 dark:text-gray-100">{s.handsPlayed > 0 ? Math.round((s.handsWon / s.handsPlayed) * 100) : 0}%</div>
         <div className="text-gray-600 dark:text-gray-300">Biggest pot won</div>
         <div className="text-right tabular-nums text-gray-900 dark:text-gray-100">${s.biggestPotWon.toLocaleString()}</div>
         <div className="text-gray-600 dark:text-gray-300">Bought in</div>

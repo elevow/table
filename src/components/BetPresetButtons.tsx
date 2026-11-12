@@ -26,7 +26,8 @@ const SHORTCUT_KEY: Record<BetPreset, string> = {
   'all-in': 'allin',
 };
 
-const buttonClass = 'btn btn-sm btn-secondary px-2.5! shrink-0 sm:flex-1 max-sm:h-10 max-sm:px-0! max-sm:text-[11px]';
+// Narrow containers (the betting column beside a wide table) get the phone layout too
+const buttonClass = 'btn btn-sm btn-secondary px-2.5! shrink-0 sm:flex-1 max-sm:h-10 max-sm:px-0! max-sm:text-[11px] @max-[32rem]:px-0! @max-[32rem]:text-[11px]';
 
 /**
  * Quick amounts for the bet and raise controls. Hidden for betting modes without free sizing.
@@ -35,7 +36,7 @@ export default function BetPresetButtons({ kind, bettingMode, pot, currentBet, m
   if (!supportsBetPresets(bettingMode)) return null;
   const hasLastBet = !!lastBet && lastBet > 0;
   return (
-    <div className={`flex flex-wrap gap-1.5 sm:flex-1 sm:flex-nowrap max-sm:grid max-sm:w-full max-sm:gap-1 ${hasLastBet ? 'max-sm:grid-cols-8' : 'max-sm:grid-cols-7'}`} role="group" aria-label={kind === 'bet' ? 'Bet size presets' : 'Raise size presets'}>
+    <div className={`flex flex-wrap gap-1.5 sm:flex-1 sm:flex-nowrap max-sm:grid max-sm:w-full max-sm:gap-1 @max-[32rem]:grid @max-[32rem]:w-full @max-[32rem]:basis-full @max-[32rem]:gap-1 ${hasLastBet ? 'max-sm:grid-cols-8 @max-[32rem]:grid-cols-8' : 'max-sm:grid-cols-7 @max-[32rem]:grid-cols-7'}`} role="group" aria-label={kind === 'bet' ? 'Bet size presets' : 'Raise size presets'}>
       {BET_PRESETS.map(({ preset, label, title }) => (
         <button
           key={preset}

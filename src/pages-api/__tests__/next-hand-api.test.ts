@@ -76,7 +76,12 @@ jest.mock('../../../src/lib/auth/auth-utils', () => ({
 }));
 
 // Tournament tables follow the tournament between hands; ordinary rooms have no tournament link
-const mockLoadRoom = jest.fn().mockResolvedValue(null);
+const mockLoadRoom = jest.fn().mockResolvedValue({ createdBy: 'a', maxPlayers: 6, configuration: {} });
+// Closing a table deletes it once the last hand is over
+const mockDeleteClosedTable = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../../src/lib/server/close-table', () => ({
+  deleteClosedTable: (...args: any[]) => mockDeleteClosedTable(...args),
+}));
 jest.mock('../../../src/lib/server/room-config', () => ({
   ...jest.requireActual('../../../src/lib/server/room-config'),
   loadRoom: (...args: any[]) => mockLoadRoom(...args),
@@ -158,7 +163,7 @@ describe('/api/games/next-hand', () => {
     expect(engine.startNewHand).not.toHaveBeenCalled();
   });
 
-  it('deals no new hand once the host has closed the table', async () => {
+  it('deals no new hand once the host has closed the table, and deletes the table', async () => {
     const engine = createEngine('showdown');
     mockGetOrRestoreEngine.mockResolvedValue(engine);
     setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
@@ -168,6 +173,20 @@ describe('/api/games/next-hand', () => {
     expect(res.status).toHaveBeenCalledWith(409);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'TABLE_CLOSED' }));
     expect(engine.startNewHand).not.toHaveBeenCalled();
+    expect(mockDeleteClosedTable).toHaveBeenCalledWith('t1', res);
+  });
+
+  it('deals no new hand at a table that has been deleted, even with its game still in memory', async () => {
+    const engine = createEngine('showdown');
+    mockGetOrRestoreEngine.mockResolvedValue(engine);
+    setRoomConfig({ variant: 'texas-holdem', mode: 'fixed' });
+    mockLoadRoom.mockResolvedValueOnce(null);
+    const res = createRes();
+    await handler(createReq({ tableId: 't1', playerId: 'a' }), res);
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'TABLE_CLOSED' }));
+    expect(engine.startNewHand).not.toHaveBeenCalled();
+    expect(mockDeleteClosedTable).not.toHaveBeenCalled();
   });
 
   it('brings players who sat down between hands into the game before starting it', async () => {

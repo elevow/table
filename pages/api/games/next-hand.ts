@@ -15,6 +15,7 @@ import { autoStandPlayer } from '../../../src/lib/server/rebuy-actions';
 import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '../../../src/lib/poker/engine-persistence';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { standUpPlayersLeavingAfterHand } from '../../../src/lib/server/seat-actions';
+import { deleteClosedTable } from '../../../src/lib/server/close-table';
 import { getDealerChoiceChooserId } from '../../../src/lib/poker/dealer-choice';
 import { getPool } from '../../../src/lib/database/pool';
 import { GameService } from '../../../src/lib/services/game-service';
@@ -156,9 +157,15 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       g.roomConfigs.set(tableId, roomConfig);
     };
 
-    const room = await loadRoom(tableId).catch(() => null);
-    // The host closed the table: the hand in play finished, and no new one is dealt
+    // undefined when the database couldn't be read; null when the room is gone
+    const room = await loadRoom(tableId).catch(() => undefined);
+    // The table was closed and deleted; another server may still hold its game in memory
+    if (room === null) {
+      return res.status(409).json(TABLE_CLOSED_RESPONSE);
+    }
+    // The host closed the table: the hand in play finished, so the table goes now
     if (isTableClosed(room?.configuration)) {
+      await deleteClosedTable(tableId, res).catch(err => console.warn('[next-hand] Could not delete the closed table:', err));
       return res.status(409).json(TABLE_CLOSED_RESPONSE);
     }
 

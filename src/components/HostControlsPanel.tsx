@@ -136,7 +136,7 @@ export default function HostControlsPanel({ tableId, playerId, extras, gameState
           {confirmClose ? (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20" role="alertdialog" aria-label="Close the table?">
               <p className="mb-2 text-red-800 dark:text-red-200">
-                Close the table? Any hand in play finishes, then no more hands are dealt and nobody can sit down. This can&apos;t be undone.
+                Close the table? Any hand in play finishes, then everyone is stood up with their chips and the table is deleted. The hand history and chip ledger are kept. This can&apos;t be undone.
               </p>
               <div className="flex gap-2">
                 <button className="btn btn-sm bg-red-600 text-white hover:bg-red-700" disabled={!!busy} onClick={() => send('close', { action: 'close-table' }).then(() => setConfirmClose(false))}>

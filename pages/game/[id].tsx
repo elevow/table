@@ -275,6 +275,9 @@ export default function GamePage() {
 
   // Host, table settings, waitlist and seat requests
   const { extras: tableExtras, refresh: refreshTableExtras } = useTableExtras(tableId);
+  // The host closed the table. Remembered here, since the table is deleted once no hand is in play
+  const [closedByHost, setClosedByHost] = useState(false);
+  const tableClosed = closedByHost || !!tableExtras?.closed;
   const [seatNotice, setSeatNotice] = useState<string | null>(null);
   
   // Subscribe to Supabase realtime updates
@@ -487,6 +490,7 @@ export default function GamePage() {
       onTableEvent: (payload: any) => {
         // Reactions come often and change nothing the extras panel shows
         if (payload?.type !== 'reaction') refreshTableExtras();
+        if (payload?.type === 'closed') setClosedByHost(true);
         if (payload?.type === 'kicked' && payload.playerId === playerId) {
           setSeatNotice('The host removed you from the table.');
         }
@@ -2695,7 +2699,7 @@ export default function GamePage() {
               </>
             )}
             <span className="mx-1 h-5 w-px shrink-0 bg-gray-200 dark:bg-white/10 max-sm:hidden sm:ml-auto" aria-hidden="true" />
-            {canStartGame() && !gameStarted && !tableExtras?.closed && (
+            {canStartGame() && !gameStarted && !tableClosed && (
               <button
                 onClick={handleStartGame}
                 className="btn btn-primary btn-sm"
@@ -2758,13 +2762,13 @@ export default function GamePage() {
               </button>
             </div>
           )}
-          {tableExtras?.closed && (
+          {tableClosed && (
             <div className="lg:col-span-3 bg-gray-800 text-white rounded-lg p-3 text-center" role="status">
-              <span className="font-semibold">The host closed this table.</span> No more hands will be dealt.{' '}
+              <span className="font-semibold">The host closed this table.</span> No more hands will be dealt, and the table is deleted once any hand in play is over.{' '}
               <Link href="/dashboard" className="underline font-semibold">Back to the lobby</Link>
             </div>
           )}
-          {gameStarted && tableWaitNotice && !tableExtras?.closed && pokerGameState?.stage === 'showdown' && (
+          {gameStarted && tableWaitNotice && !tableClosed && pokerGameState?.stage === 'showdown' && (
             <div className="lg:col-span-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-lg p-3 text-sm text-amber-900 dark:text-amber-100" role="status">
               {tableWaitNotice}
             </div>

@@ -1421,6 +1421,11 @@ export class PokerEngine {
         this.determineWinner();
         return;
       }
+      // Crazy Pineapple: with nobody left to bet on the flop, the discard comes straight away
+      if (this.discardOwed() && nextStage === pineappleDiscardStage(this.state.variant) && this.bettorsLeft() < 2) {
+        this.startDiscard();
+        return;
+      }
       if (isStudVariant(this.state.variant)) this.openStudStreet(nextStage);
       else this.gameStateManager.startBettingRound(nextStage);
     }

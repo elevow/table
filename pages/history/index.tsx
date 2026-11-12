@@ -24,6 +24,10 @@ const VARIANT_LABEL: Record<string, string> = {
   'nicaragua': 'Nicaragua',
   'high-chicago': 'High Chicago',
   'low-chicago': 'Low Chicago',
+  'courchevel': 'Courchevel',
+  'big-o': 'Big O',
+  'pineapple': 'Pineapple',
+  'crazy-pineapple': 'Crazy Pineapple',
   'midnight-baseball': 'Midnight Baseball',
 };
 

@@ -18,7 +18,7 @@ import {
   DEFAULT_HANDS_PER_GAME, HORSE_GAMES, MAX_TABLE_PLAYERS, hasBuiltInWilds, maxPlayersForGame, maxPlayersForMixedGames, supportsWildRule, WILD_RULE_LABELS,
 } from '../../src/lib/poker/variant-rules';
 
-type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'high-chicago' | 'low-chicago' | 'five-card-draw' | 'razz' | 'omaha-5' | 'follow-the-queen' | 'baseball' | 'midnight-baseball' | 'dealers-choice' | 'mixed';
+type Variant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'big-o' | 'seven-card-stud' | 'seven-card-stud-hi-lo' | 'five-card-stud' | 'high-chicago' | 'low-chicago' | 'five-card-draw' | 'pineapple' | 'crazy-pineapple' | 'razz' | 'omaha-5' | 'courchevel' | 'follow-the-queen' | 'baseball' | 'midnight-baseball' | 'dealers-choice' | 'mixed';
 
 function readAuthToken(): string | null {
   try {
@@ -255,8 +255,11 @@ export default function CreateGameRoomPage() {
               }}
             >
               <option value="texas-holdem">Texas Hold&apos;em</option>
+              <option value="pineapple">Pineapple (Hold&apos;em with three hole cards)</option>
+              <option value="crazy-pineapple">Crazy Pineapple (three hole cards through the flop)</option>
               <option value="omaha">Omaha</option>
               <option value="omaha-hi-lo">Omaha Hi-Lo (8 or Better)</option>
+              <option value="big-o">Big O (5-card Omaha Hi-Lo)</option>
               <option value="seven-card-stud">Seven-Card Stud</option>
               <option value="seven-card-stud-hi-lo">Seven-Card Stud Hi-Lo (8 or Better)</option>
               <option value="five-card-stud">Five-Card Stud</option>
@@ -265,12 +268,23 @@ export default function CreateGameRoomPage() {
               <option value="low-chicago">Low Chicago (Seven-Card Stud, low spade in the hole wins half)</option>
               <option value="razz">Razz (Seven-Card Stud, lowest hand wins)</option>
               <option value="omaha-5">5-Card Omaha</option>
+              <option value="courchevel">Courchevel (5-card Omaha, first flop card shown early)</option>
               <option value="follow-the-queen">Follow the Queen (Seven-Card Stud, queens wild)</option>
               <option value="baseball">Baseball (Seven-Card Stud, 3s and 9s wild)</option>
               <option value="midnight-baseball">Midnight Baseball (all face down, 3s and 9s wild)</option>
               <option value="dealers-choice">Dealer&apos;s Choice (dealer selects each hand)</option>
               <option value="mixed">Mixed Games (rotate every few hands)</option>
             </select>
+            {variant === 'pineapple' && (
+              <p className="hint">
+                Hold&apos;em dealt with three hole cards. After the betting before the flop, everyone throws one card away at the same time; from then on it plays like Hold&apos;em.
+              </p>
+            )}
+            {variant === 'crazy-pineapple' && (
+              <p className="hint">
+                Hold&apos;em dealt with three hole cards, kept through the flop. After the flop betting, everyone throws one card away at the same time; the turn and river play like Hold&apos;em.
+              </p>
+            )}
             {variant === 'five-card-draw' && (
               <p className="hint">
                 Everyone antes and gets five cards. After a round of betting, each player can swap up to 3 cards (4 if they keep an ace), then there is a final round of betting. Seats up to 7.

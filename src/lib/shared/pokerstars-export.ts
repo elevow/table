@@ -45,6 +45,10 @@ const GAME_NAME: Record<string, string> = {
   'nicaragua': 'Nicaragua',
   'high-chicago': '7 Card Stud High Chicago',
   'low-chicago': '7 Card Stud Low Chicago',
+  'courchevel': 'Courchevel',
+  'big-o': 'Big O Hi/Lo',
+  'pineapple': 'Pineapple',
+  'crazy-pineapple': 'Crazy Pineapple',
   'midnight-baseball': 'Midnight Baseball',
 };
 
@@ -287,6 +291,9 @@ export function formatPokerStarsHand(hand: HandRecord, opts: PokerStarsOptions):
         break;
       case 'check':
         lines.push(`${who}: checks`);
+        break;
+      case 'discard':
+        lines.push(`${who}: discards 1 card`);
         break;
       case 'draw':
         lines.push(a.drawCount ? `${who}: discards ${a.drawCount} card${a.drawCount === 1 ? '' : 's'}` : `${who}: stands pat`);

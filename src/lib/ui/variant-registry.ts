@@ -208,6 +208,51 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'big-o': {
+    variant: 'big-o',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }, { type: 'pot-split' }],
+    helpContent: {
+      title: 'Big O',
+      summary: 'Omaha Hi-Lo dealt with five hole cards.',
+      bullets: [
+        'Use exactly two of your five hole cards and three from the board',
+        'The pot splits between the best high hand and the best 8-or-better low',
+        'With no qualifying low, the high hand takes it all',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
+  'pineapple': {
+    variant: 'pineapple',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }],
+    helpContent: {
+      title: 'Pineapple',
+      summary: "Hold'em dealt with three hole cards.",
+      bullets: [
+        'Bet before the flop holding three cards',
+        'Then everyone throws one away at the same time; running out of time throws away your lowest card',
+        "From the flop on it plays like Hold'em",
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
+  'crazy-pineapple': {
+    variant: 'crazy-pineapple',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }],
+    helpContent: {
+      title: 'Crazy Pineapple',
+      summary: "Hold'em dealt with three hole cards, kept through the flop.",
+      bullets: [
+        'Bet before the flop and on the flop holding three cards',
+        'Then everyone throws one away at the same time; running out of time throws away your lowest card',
+        "The turn and river play like Hold'em",
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'razz': {
     variant: 'razz',
     controls: [commonControls.bet, commonControls.check, commonControls.fold],

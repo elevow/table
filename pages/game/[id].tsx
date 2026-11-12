@@ -956,7 +956,9 @@ export default function GamePage() {
     }
 
     const isFold = action === 'fold';
-    if (!isFold && pokerGameState?.activePlayer && pokerGameState.activePlayer !== playerId) {
+    // Pineapple's discard is made by everyone at once, whoever the clock shows on
+    const isDiscard = action === 'discard';
+    if (!isFold && !isDiscard && pokerGameState?.activePlayer && pokerGameState.activePlayer !== playerId) {
       console.warn('Action blocked: not your turn', { action, activePlayer: pokerGameState.activePlayer, playerId });
       return;
     }
@@ -973,7 +975,7 @@ export default function GamePage() {
     if (splash) setSplashArmed(false);
 
     try {
-      const response = await api.post('/api/games/action', {
+      const send = () => api.post('/api/games/action', {
         tableId: id,
         playerId,
         action,
@@ -983,9 +985,13 @@ export default function GamePage() {
         ...(pokerGameState.variant === 'nicaragua' && pokerGameState.stage === 'preflop' && !pokerGameState.nicaragua?.opener
           && (action === 'bet' || action === 'raise') ? { method: nicaraguaMethod } : {}),
         ...(splash ? { splash: true } : {}),
-        // The decision this click answers; the server refuses it if the game has moved on
-        expectedTurnSeq: typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
+        // The decision this click answers; the server refuses it if the game has moved on. Other
+        // players' discards move the game on too, so a discard doesn't send it
+        expectedTurnSeq: !isDiscard && typeof pokerGameState.turnSeq === 'number' ? pokerGameState.turnSeq : undefined,
       });
+      let response = await send();
+      // Another player's discard can land at the same moment; this one is still owed, so send it again
+      if (!response.ok && isDiscard && response.data?.code === 'STALE_GAME_STATE') response = await send();
 
       if (!response.ok) {
         const err = response.data;
@@ -1527,6 +1533,13 @@ export default function GamePage() {
   const potMatchIsAllIn = (Number(me?.stack) || 0) <= (Number(pokerGameState?.pot) || 0);
   // Draw games: in the draw, pick the cards to throw away (up to 3, or 4 keeping an ace)
   const myDrawPending = !!(isMyTurn && pokerGameState?.stage === 'draw' && pokerGameState?.drawState?.pending?.[0] === playerId);
+  // Pineapple: everyone throws a card away at once
+  const discardPending: string[] = Array.isArray(pokerGameState?.discardState?.pending) ? pokerGameState.discardState.pending : [];
+  const discardActive = discardPending.length > 0;
+  const myDiscardPending = !!playerId && discardPending.includes(playerId);
+  const discardKey = `${pokerGameState?.handId ?? ''}:${pokerGameState?.stage ?? ''}`;
+  const [discardPickState, setDiscardPickState] = useState<{ key: string; pick: number | null }>({ key: '', pick: null });
+  const discardPick = discardPickState.key === discardKey ? discardPickState.pick : null;
   const myHoleCards: Card[] = Array.isArray(me?.holeCards) ? me.holeCards : [];
   // Picks belong to one decision, so a new hand or turn starts with none
   const drawKey = `${pokerGameState?.handId ?? ''}:${pokerGameState?.turnSeq ?? ''}`;
@@ -1572,7 +1585,7 @@ export default function GamePage() {
   }, [preAction, isMyTurn, me, myOwed, pokerGameState?.runItTwicePrompt, myBringInPending, myPotMatchPending, myDrawPending, handlePokerAction]);
 
   // Keyboard shortcuts work only while the Your Turn panel is showing (same conditions as the panel)
-  const actionPanelOpen = !!(gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt);
+  const actionPanelOpen = !!(gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && !discardActive);
   const shortcuts = useTableShortcuts({
     enabled: actionPanelOpen,
     // The bring-in cannot fold; check/call posts the bring-in
@@ -1831,6 +1844,9 @@ export default function GamePage() {
 
           // Compute position offset based on seat location (push cards slightly further from table center)
           let cardStyle: React.CSSProperties | undefined = undefined;
+          // A row that starts just past the seat and grows away from it, so it never runs back
+          // under the name plate however many cards it holds
+          let edgeStyle: React.CSSProperties | undefined = undefined;
           if (style && style.left && style.top) {
             const leftStr = style.left.toString();
             const topStr = style.top.toString();
@@ -1847,16 +1863,14 @@ export default function GamePage() {
               top: `calc(${topStr} + ${dy}px)`,
               transform: 'translate(-50%, -50%)'
             };
-            // A stud hand grows to seven cards or more: start the row just past the seat and grow
-            // away from it, so it never runs back under the name plate
-            if (isStudVariant()) {
-              const edge = isNarrowScreen ? 34 : 36;
-              cardStyle = {
-                ...cardStyle,
-                left: `calc(${leftStr} + ${dx > 0 ? edge : -edge}px)`,
-                transform: dx > 0 ? 'translate(0, -50%)' : 'translate(-100%, -50%)',
-              };
-            }
+            const edge = isNarrowScreen ? 34 : 36;
+            edgeStyle = {
+              ...cardStyle,
+              left: `calc(${leftStr} + ${dx > 0 ? edge : -edge}px)`,
+              transform: dx > 0 ? 'translate(0, -50%)' : 'translate(-100%, -50%)',
+            };
+            // A stud hand grows to seven cards or more
+            if (isStudVariant()) cardStyle = edgeStyle;
           }
 
           if (isStudVariant()) {
@@ -1897,8 +1911,9 @@ export default function GamePage() {
           }
           if (showFaceUp) {
             const holes = gamePlayer.holeCards as any[];
+            // Two face-up cards fit centred beside the seat; Omaha's four or more would reach back under it
             return (
-              <div className="absolute z-0 pointer-events-none" style={cardStyle} aria-label="Opponent cards (revealed)">
+              <div className="absolute z-0 pointer-events-none" style={holes.length > 2 ? edgeStyle : cardStyle} aria-label="Opponent cards (revealed)">
                 <div className="flex gap-1">
                   {holes.map((card: any, index: number) => (
                     <TableCard key={index} card={card} size="sm" highContrast={highContrastCards} />
@@ -2963,8 +2978,54 @@ export default function GamePage() {
             )}
           </div>
 
+          {/* Pineapple: everyone still holding three cards throws one away, all at once */}
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && myDiscardPending && (
+            <div className="lg:col-span-2 surface max-sm:bg-gray-50! max-sm:dark:bg-gray-800! p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))]">
+              <h3 className="mb-2 text-base font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
+                Throw away a card
+              </h3>
+              <TurnClockBar clock={turnClock} />
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Everyone throws one card away at the same time. If time runs out, your lowest card goes.
+              </p>
+              <div className="flex flex-wrap gap-2 pt-3" role="radiogroup" aria-label="Card to throw away">
+                {(Array.isArray(me?.holeCards) ? (me.holeCards as Card[]) : []).map((card, i) => {
+                  const picked = discardPick === i;
+                  return (
+                    <button
+                      key={`${card.rank}-${card.suit}`}
+                      type="button"
+                      role="radio"
+                      aria-checked={picked}
+                      aria-label={`${card.rank} of ${card.suit}${picked ? ', throwing away' : ''}`}
+                      onClick={() => setDiscardPickState({ key: discardKey, pick: picked ? null : i })}
+                      className={`rounded-md transition-transform ${picked ? '-translate-y-2 opacity-60 ring-2 ring-red-400' : ''}`}
+                    >
+                      <TableCard card={card} size="sm" highContrast={highContrastCards} />
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-3">
+                <button
+                  onClick={() => { if (discardPick !== null) handlePokerAction('discard', undefined, { discards: [discardPick] }); }}
+                  disabled={discardPick === null}
+                  className="btn btn-lg act-call max-sm:w-full max-sm:min-h-[48px] max-sm:text-base"
+                >
+                  Throw away
+                </button>
+              </div>
+            </div>
+          )}
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && discardActive && !myDiscardPending && (
+            <p className="lg:col-span-2 mt-4 text-sm text-gray-600 dark:text-gray-400" role="status">
+              Waiting for {discardPending.length === 1 ? 'one more player' : `${discardPending.length} players`} to throw away a card.
+            </p>
+          )}
+
           {/* Poker Action Panel (only before showdown); hide if only one non-folded remains */}
-          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && (
+          {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && !discardActive && (
             <div className="lg:col-span-2 surface max-sm:bg-gray-50! max-sm:dark:bg-gray-800! p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <h3 className="text-base font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">

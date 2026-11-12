@@ -80,6 +80,8 @@ export default apiHandler({ methods: 'GET' }, async (req, res) => {
         boughtIn: myLine?.boughtIn ?? 0,
         net: myLine?.net ?? 0,
         since,
+        // When the caller first bought in here, or null if they never have
+        startedAt: myFirst?.createdAt ?? null,
       },
     });
   } catch (err) {

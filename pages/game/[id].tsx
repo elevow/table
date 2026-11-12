@@ -127,11 +127,6 @@ const GameSettings = dynamic(() => import('../../src/components/GameSettings'), 
   ssr: false,
 });
 
-// Component with granular code splitting
-const CombinedTimerStats = dynamic(() => import('../../src/components/CombinedTimerStats'), {
-  loading: () => <div className="skeleton-loader stats-loader" />,
-});
-
 // Rabbit Hunt Preview panel removed per user request
 
 export default function GamePage() {
@@ -4147,25 +4142,22 @@ export default function GamePage() {
           })()}
           </div>
 
-          {/* Right column: statistics, the hand's actions, session, notes and host controls, a tab each */}
+          {/* Right column: your session, chat, rules, the hand's actions, notes and host controls, a tab each */}
           <div className="flex flex-col gap-4 lg:row-span-4">
           <SidePanelTabs
             onActiveChange={setSideTab}
             tabs={[
-              {
-                id: 'stats',
-                label: 'Stats',
+              ...(playerId ? [{
+                id: 'session',
+                label: 'Session',
                 content: (
                   <>
-                    {id && playerId && (
-                      <CombinedTimerStats
-                        tableId={String(id)}
-                        playerId={playerId}
-                        gameId={String(id)}
-                        onShowSettings={toggleSettings}
-                        gameState={pokerGameState}
-                      />
-                    )}
+                    {isSeated || amInGame
+                      ? <SessionLedgerPanel embedded tableId={tableId} refreshKey={`${pokerGameState?.handNumber ?? 0}:${pokerGameState?.stage === 'showdown'}`} />
+                      : <p className="text-sm text-gray-500 dark:text-gray-400">Take a seat and your session will be tracked here.</p>}
+                    <button type="button" onClick={toggleSettings} className="link mt-3 text-sm" aria-expanded={showSettings}>
+                      {showSettings ? 'Hide settings' : 'Show settings'}
+                    </button>
                     {showSettings && (
                       <div className="mt-4">
                         <GameSettings settings={display.settings} onChange={display.change} hasOverrides={display.hasOverrides} onReset={display.reset} />
@@ -4173,7 +4165,7 @@ export default function GamePage() {
                     )}
                   </>
                 ),
-              },
+              }] : []),
               {
                 id: 'chat',
                 label: 'Chat',
@@ -4209,11 +4201,6 @@ export default function GamePage() {
                 id: 'hand',
                 label: 'Hand',
                 content: <HandActionLog embedded actions={pokerGameState.handActions} players={pokerGameState.players || []} handNumber={pokerGameState.handNumber} variant={pokerGameState.variant} />,
-              }] : []),
-              ...(playerId && (isSeated || amInGame) ? [{
-                id: 'session',
-                label: 'Session',
-                content: <SessionLedgerPanel embedded tableId={tableId} refreshKey={`${pokerGameState?.handNumber ?? 0}:${pokerGameState?.stage === 'showdown'}`} />,
               }] : []),
               ...(playerId && otherSeated.length > 0 ? [{
                 id: 'notes',

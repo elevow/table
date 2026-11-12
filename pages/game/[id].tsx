@@ -2574,7 +2574,7 @@ export default function GamePage() {
       )}
       {/* Table bar: where you are on the left, what you can do on the right */}
       <header className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/80 backdrop-blur-md dark:border-white/6 dark:bg-gray-900/75">
-        <div className={`mx-auto flex max-w-7xl ${wideTable ? 'lg:max-w-none' : ''} flex-col gap-1 px-4 py-2 lg:py-2.5 lg:flex-row lg:items-center lg:justify-between lg:gap-4`}>
+        <div className={`mx-auto flex max-w-7xl ${wideTable ? '2xl:max-w-none' : ''} flex-col gap-1 px-4 py-2 lg:py-2.5 lg:flex-row lg:items-center lg:justify-between lg:gap-4`}>
           <div className="flex min-w-0 items-center gap-3">
             <Link href="/dashboard" className="btn btn-ghost btn-sm px-2! shrink-0" aria-label="Back to the lobby" title="Back to the lobby">
               <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M12.8 5.2a1 1 0 010 1.4L9.4 10l3.4 3.4a1 1 0 01-1.4 1.4l-4.1-4.1a1 1 0 010-1.4l4.1-4.1a1 1 0 011.4 0z" clipRule="evenodd" /></svg>
@@ -2704,8 +2704,8 @@ export default function GamePage() {
             )}
             <button
               onClick={() => setWideTable(!wideTable)}
-              className={`btn btn-ghost btn-sm max-lg:hidden ${wideTable ? 'text-emerald-500! dark:text-emerald-300!' : ''}`}
-              title={wideTable ? 'Back to the table with the side panel beside it' : 'Give the table the full width, with the side panel below it'}
+              className={`btn btn-ghost btn-sm max-2xl:hidden ${wideTable ? 'text-emerald-500! dark:text-emerald-300!' : ''}`}
+              title={wideTable ? 'Back to the normal layout' : 'Make the table bigger, with the betting controls beside it and the side panel below'}
               aria-pressed={wideTable}
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -2743,7 +2743,7 @@ export default function GamePage() {
           </div>
         </div>
       </header>
-      <div className={`mx-auto max-w-7xl ${wideTable ? 'lg:max-w-none' : ''} px-4 pt-2 pb-6 sm:py-8 lg:pt-6`}>
+      <div className={`mx-auto max-w-7xl ${wideTable ? '2xl:max-w-none' : ''} px-4 pt-2 pb-6 sm:py-8 lg:pt-6`}>
         <div className={`grid grid-cols-1 lg:grid-cols-3 lg:grid-flow-row-dense gap-6 ${wideTable ? 'wide-table' : ''}`}>
           {seatNotice && (
             <div className="lg:col-span-3 flex items-center justify-between gap-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg p-3 text-sm text-blue-900 dark:text-blue-100" role="status">
@@ -2937,7 +2937,7 @@ export default function GamePage() {
           )}
           {/* Poker Table - Green Felt Design; on wide screens the reaction row sits beside your seat.
               The margin under the felt leaves room for the bottom seat's avatar, which hangs below it */}
-          <div className="lg:col-span-2 relative">
+          <div className="wide-table-felt-area lg:col-span-2 relative">
             {/* Green felt table surface */}
             <div className="table-rail table-size relative rounded-full mx-auto mb-12 max-sm:mt-7">
               {/* Inner felt playing surface */}
@@ -3037,6 +3037,9 @@ export default function GamePage() {
             )}
           </div>
 
+          {/* The hand in play: choices, betting, status and results. Normally these are grid items like
+              the rest; with Wide table on a desktop they form a column beside the table */}
+          <div className="wide-table-actions">
           {/* Pass the Trash: everyone passes cards to the left, or keeps five, at the same time */}
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && myTrashPending && trashChoice && (
             <div className="lg:col-span-2 surface max-sm:bg-gray-50! max-sm:dark:bg-gray-800! p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))]">
@@ -3171,7 +3174,7 @@ export default function GamePage() {
           {gameStarted && pokerGameState && pokerGameState.stage !== 'showdown' && getActiveNonFoldedPlayers().length > 1 && pokerGameState.activePlayer === playerId && !runItTwicePrompt && !gutsDeclaring && !discardActive && !trashChoosing && (
             <div className="lg:col-span-2 surface max-sm:bg-gray-50! max-sm:dark:bg-gray-800! p-4 sm:p-5 mt-4 ring-1 ring-emerald-400/25 max-sm:sticky max-sm:bottom-0 max-sm:z-30 max-sm:-mx-4 max-sm:rounded-none max-sm:max-h-[60vh] max-sm:overflow-y-auto max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
               <div className="flex items-center justify-between gap-2 mb-2">
-                <h3 className="text-base font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                <h3 className="text-base font-semibold text-emerald-700 dark:text-emerald-300 flex shrink-0 items-center gap-2 whitespace-nowrap">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
                   Your turn
                   <TimeBankBadge count={me?.timeBanks} seconds={pokerGameState?.timeBankSeconds} />
@@ -3491,7 +3494,7 @@ export default function GamePage() {
                                 return (
                                   <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
                                     {/* Phones skip the amount added: it's in the box above, and the button is half the screen */}
-                                    {isAllIn ? `All-in ${amt(stack)}` : <>Raise to {amt(sel)}<span className="max-sm:hidden"> (+{amt(add)})</span></>}
+                                    {isAllIn ? `All-in ${amt(stack)}` : <>Raise to {amt(sel)}<span className="max-sm:hidden @max-[32rem]:hidden"> (+{amt(add)})</span></>}
                                   </button>
                                 );
                               })()}
@@ -3614,7 +3617,7 @@ export default function GamePage() {
                                 return (
                                   <button onClick={onClick} data-shortcut-submit="true" className="max-sm:min-h-[48px] btn btn-lg act-raise absolute bottom-0 right-0 w-1/2 sm:w-[40%]">
                                     {/* Phones skip the amount added: it's in the box above, and the button is half the screen */}
-                                    Raise to {amt(sel)}<span className="max-sm:hidden"> (+{amt(add)})</span>
+                                    Raise to {amt(sel)}<span className="max-sm:hidden @max-[32rem]:hidden"> (+{amt(add)})</span>
                                   </button>
                                 );
                               })()}
@@ -4134,6 +4137,7 @@ export default function GamePage() {
               return null;
             }
           })()}
+          </div>
 
           {/* Right column: statistics, the hand's actions, session, notes and host controls, a tab each */}
           <div className="flex flex-col gap-4 lg:row-span-4">

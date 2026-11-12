@@ -299,26 +299,49 @@
   height: 400px;
 }
 
-/* Wide table (desktop only): one column as wide as the table, with the side panel below it. The
-   felt grows wider and taller keeping its shape. Its height is capped by the screen, leaving
-   --wide-table-reserve for the header, the seat hanging below the felt and the betting panel
-   (about 420px on your turn) so you don't scroll to act; it never gets smaller than normal */
-@media (width >= 64rem) {
+/* The panels for the hand in play (choices, betting, game status, results). Normally they act as
+   grid items of the page, as if this wrapper weren't there */
+.wide-table-actions {
+  display: contents;
+}
+
+/* Wide table (wide screens only, from 1536px, where it beats the normal layout): the table takes
+   all the width it can, the hand's panels form a column beside it, and everything else (side
+   panel tabs, chat, notices) spans the full width. The felt grows wider and taller keeping its
+   shape, up to the window height left after the header and the seat hanging below the felt.
+   It never gets shorter than the normal table. The header button shows from the same width */
+@media (width >= 96rem) {
   .wide-table {
-    --wide-table-reserve: 37rem;
-    --wide-table-width: max(820px, calc((100dvh - var(--wide-table-reserve)) * 820 / 400));
+    grid-template-columns: minmax(0, 1fr) 28rem;
   }
   .wide-table > * {
     grid-column: 1 / -1;
     grid-row: auto;
-    justify-self: center;
-    width: 100%;
-    max-width: var(--wide-table-width);
+  }
+  .wide-table > .wide-table-felt-area {
+    grid-column: 1;
+    /* Room for the seats at the ends, which hang outside the felt */
+    padding-inline: 4rem;
+  }
+  .wide-table > .wide-table-actions {
+    grid-column: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-self: start;
+    min-width: 0;
+    /* Lets the betting controls switch to their compact layout (@max-[32rem]: variants) */
+    container-type: inline-size;
+  }
+  .wide-table > .wide-table-actions > * {
+    margin-top: 0;
   }
   .wide-table .table-size {
     max-width: none;
     height: auto;
+    min-height: 400px;
     aspect-ratio: 820 / 400;
+    width: min(100%, calc((100dvh - 9rem) * 820 / 400));
   }
 }
 

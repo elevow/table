@@ -71,7 +71,6 @@ import ReactionPicker from '../../src/components/ReactionPicker';
 import SeatReactionBubbles from '../../src/components/SeatReactionBubbles';
 import { useTableReactions } from '../../src/hooks/useTableReactions';
 import TableChipAnimations from '../../src/components/TableChipAnimations';
-import MobileCollapsible from '../../src/components/MobileCollapsible';
 import { useMediaQuery, NARROW_SCREEN_QUERY } from '../../src/hooks/useMediaQuery';
 import { isCentreSeat, seatPlateStyle } from '../../src/lib/shared/seat-layout';
 import { tablePlayerName } from '../../src/utils/table-player-name';
@@ -637,6 +636,15 @@ export default function GamePage() {
   const turnAlerts = useTurnAlerts(isMyTurn || amChoosingGame, turnClock.remainingMs, myTurnKey);
   // Desktop only: the table across the full width, with the side panel below it
   const [wideTable, setWideTable] = useWideTable();
+  // Which side panel tab is showing, and chat messages that arrived while Chat wasn't
+  const [sideTab, setSideTab] = useState<string | null>(null);
+  const [chatUnread, setChatUnread] = useState(0);
+  const sideTabRef = useLatest(sideTab);
+  // Adjusted while rendering: opening Chat reads everything
+  if (sideTab === 'chat' && chatUnread > 0) setChatUnread(0);
+  const countUnreadChat = useCallback(() => {
+    if (sideTabRef.current !== 'chat') setChatUnread(n => n + 1);
+  }, [sideTabRef]);
 
   const applyDealerChoicePrompt = useCallback((prompt: { dealerId?: string; allowedVariants?: string[]; current?: string } | null) => {
     if (!prompt) {
@@ -4142,6 +4150,7 @@ export default function GamePage() {
           {/* Right column: statistics, the hand's actions, session, notes and host controls, a tab each */}
           <div className="flex flex-col gap-4 lg:row-span-4">
           <SidePanelTabs
+            onActiveChange={setSideTab}
             tabs={[
               {
                 id: 'stats',
@@ -4163,6 +4172,24 @@ export default function GamePage() {
                       </div>
                     )}
                   </>
+                ),
+              },
+              {
+                id: 'chat',
+                label: 'Chat',
+                badge: sideTab === 'chat' ? 0 : chatUnread,
+                content: (
+                  <div ref={chatPanelRef}>
+                    <ChatPanel
+                      embedded
+                      gameId={String(id)}
+                      playerId={playerId}
+                      isAdmin={userRole === 'admin'}
+                      // Midnight Baseball: the hand result waits until the turned cards are all showing
+                      holdSystemMessages={!!serverGameState && pokerGameState?.stage !== serverGameState.stage}
+                      onIncoming={countUnreadChat}
+                    />
+                  </div>
                 ),
               },
               {
@@ -4212,19 +4239,6 @@ export default function GamePage() {
             ]}
           />
           </div>
-
-          {/* Less critical component in viewport */}
-          <MobileCollapsible title="Chat" className="lg:col-span-2">
-          <div ref={chatPanelRef} className="lg:col-span-2 surface p-4 max-sm:mt-0">
-            <ChatPanel
-              gameId={String(id)}
-              playerId={playerId}
-              isAdmin={userRole === 'admin'}
-              // Midnight Baseball: the hand result waits until the turned cards are all showing
-              holdSystemMessages={!!serverGameState && pokerGameState?.stage !== serverGameState.stage}
-            />
-          </div>
-          </MobileCollapsible>
 
           {/* Settings panel moved next to stats above; bottom button removed */}
         </div>

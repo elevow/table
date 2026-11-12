@@ -38,6 +38,8 @@ jest.mock('../../lib/server/seat-actions', () => ({
   syncWaitlist: jest.fn(),
 }));
 jest.mock('../../lib/shared/game-seats', () => ({ loadPersistedRoomSeats: async () => ({}), getRoomSeats: () => ({}) }));
+const mockDeleteIfIdle = jest.fn().mockResolvedValue(true);
+jest.mock('../../lib/server/close-table', () => ({ deleteClosedTableIfIdle: (...args: any[]) => mockDeleteIfIdle(...args) }));
 jest.mock('../../lib/server/chip-ledger', () => ({
   loadLedger: async () => [],
   summarizeLedger: () => [],
@@ -123,11 +125,13 @@ describe('POST /api/games/host', () => {
     expect(mockLog).toHaveBeenCalledWith('staff', 'table.kick', 'room', 't1', { action: 'kick', targetId: 'p2' });
   });
 
-  test('the owner can close the table with room.start, which marks it closed', async () => {
+  test('the owner can close the table with room.start, which marks it closed and deletes it if no hand is in play', async () => {
     mockCaller.current = caller('owner', ['room.start']);
     const r = await call(hostHandler, 'POST', { tableId: 't1', action: 'close-table' });
     expect(r.status).toBe(200);
+    expect(r.body).toEqual({ ok: true, deleted: true });
     expect(mockUpdateRoomConfig).toHaveBeenCalledWith('t1', { closed: true, closedAt: expect.any(Number) });
+    expect(mockDeleteIfIdle).toHaveBeenCalledWith('t1', expect.anything());
   });
 
   test('closing the table needs room.start', async () => {

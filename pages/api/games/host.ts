@@ -5,6 +5,7 @@ import { getOrRestoreEngine, persistEngineState, STALE_STATE_RESPONSE } from '..
 import { sanitizeStateForPlayer } from '../../../src/lib/poker/state-sanitizer';
 import { broadcastGameState } from '../../../src/lib/server/game-action-pipeline';
 import { leaveTable, performSeatClaim, syncWaitlist } from '../../../src/lib/server/seat-actions';
+import { deleteClosedTableIfIdle } from '../../../src/lib/server/close-table';
 import { loadRoom, updateRoomConfig, type TableExtrasConfig } from '../../../src/lib/server/room-config';
 import {
   addRoomMember, formatInviteCode, isPrivateRoom, newInviteCode, removeRoomMember, type RoomPrivacyConfig,
@@ -92,11 +93,13 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
     // Settings that live on the room rather than in a running game
     switch (body.action) {
       case 'close-table': {
-        // The hand in play finishes; next-hand refuses to deal another, and nobody can sit down
+        // The hand in play finishes and nobody can sit down; the table is deleted once no hand
+        // is being played (now, or when next-hand is asked for after the last one)
         await updateRoomConfig(tableId, { closed: true, closedAt: Date.now() });
         await getPool().query(`UPDATE game_rooms SET status = 'closed' WHERE id = $1`, [tableId]);
         await publishTableEvent(tableId, { type: 'closed' }).catch(() => {});
-        return res.status(200).json({ ok: true });
+        const deleted = await deleteClosedTableIfIdle(tableId, res);
+        return res.status(200).json({ ok: true, deleted });
       }
       case 'set-visibility': {
         const makePrivate = !!body.private;

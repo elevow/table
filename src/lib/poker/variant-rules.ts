@@ -1,4 +1,4 @@
-import type { BettingMode, GameVariant, MixedGameEntry, NicaraguaMethod, WildRule } from '../../types/poker';
+import type { BettingMode, GameStage, GameVariant, MixedGameEntry, NicaraguaMethod, WildRule } from '../../types/poker';
 
 /**
  * Facts about each game variant, in one place so the engine, the server routes and the table
@@ -10,9 +10,13 @@ export const ALL_VARIANTS: GameVariant[] = [
   'texas-holdem',
   'omaha',
   'omaha-5',
+  'courchevel',
   'omaha-hi-lo',
+  'big-o',
   'seven-card-stud',
   'seven-card-stud-hi-lo',
+  'high-chicago',
+  'low-chicago',
   'razz',
   'five-card-stud',
   'five-card-draw',
@@ -21,20 +25,28 @@ export const ALL_VARIANTS: GameVariant[] = [
   'follow-the-queen',
   'baseball',
   'midnight-baseball',
+  'pineapple',
+  'crazy-pineapple',
 ];
 
 export const VARIANT_LABELS: Record<GameVariant, string> = {
   'texas-holdem': "Texas Hold'em",
   'omaha': 'Omaha',
   'omaha-5': '5-Card Omaha',
+  'courchevel': 'Courchevel',
   'omaha-hi-lo': 'Omaha Hi-Lo',
+  'big-o': 'Big O',
   'seven-card-stud': 'Seven-Card Stud',
   'seven-card-stud-hi-lo': 'Seven-Card Stud Hi-Lo',
+  'high-chicago': 'High Chicago',
+  'low-chicago': 'Low Chicago',
   'razz': 'Razz',
   'five-card-stud': 'Five-Card Stud',
   'five-card-draw': 'Five-Card Draw',
   'nicaragua': 'Nicaragua',
   'badugi': 'Badugi',
+  'pineapple': 'Pineapple',
+  'crazy-pineapple': 'Crazy Pineapple',
   'follow-the-queen': 'Follow the Queen',
   'baseball': 'Baseball',
   'midnight-baseball': 'Midnight Baseball',
@@ -136,6 +148,17 @@ export function drawsCards(variant?: string | null): boolean {
   return isDrawVariant(variant) || variant === 'badugi';
 }
 
+/**
+ * Pineapple games deal three hole cards and everyone throws one away, all at once, when the
+ * betting on this stage is over: Pineapple after the preflop betting, Crazy Pineapple after the
+ * flop betting. Undefined for other games.
+ */
+export function pineappleDiscardStage(variant?: string | null): GameStage | undefined {
+  if (variant === 'pineapple') return 'preflop';
+  if (variant === 'crazy-pineapple') return 'flop';
+  return undefined;
+}
+
 export const MAX_TABLE_PLAYERS = 9;
 // Five cards each for seven players is 35; the draw reshuffles the discards if the deck runs out
 export const MAX_DRAW_PLAYERS = 7;
@@ -189,17 +212,27 @@ export function isBettingMode(v: unknown): v is BettingMode {
 
 /** Stud games: no board; each player has their own down and up cards. */
 export function isStudVariant(v?: string | null): boolean {
-  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball' || v === 'midnight-baseball';
+  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'five-card-stud' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball' || v === 'midnight-baseball' || v === 'high-chicago' || v === 'low-chicago';
 }
 
 /** Stud games dealt seven cards each (Midnight Baseball deals all seven at once, face down). */
 export function isSevenCardStudVariant(v?: string | null): boolean {
-  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball' || v === 'midnight-baseball';
+  return v === 'seven-card-stud' || v === 'seven-card-stud-hi-lo' || v === 'razz' || v === 'follow-the-queen' || v === 'baseball' || v === 'midnight-baseball' || v === 'high-chicago' || v === 'low-chicago';
 }
 
 /** Omaha games: the best hand uses exactly two hole cards and three board cards. */
 export function isOmahaVariant(v?: string | null): boolean {
-  return v === 'omaha' || v === 'omaha-hi-lo' || v === 'omaha-5';
+  return v === 'omaha' || v === 'omaha-hi-lo' || v === 'omaha-5' || v === 'big-o' || v === 'courchevel';
+}
+
+/** Omaha played high-low with an 8-or-better low: Omaha Hi-Lo, and Big O with five hole cards. */
+export function isOmahaHiLoVariant(v?: string | null): boolean {
+  return v === 'omaha-hi-lo' || v === 'big-o';
+}
+
+/** Games whose pot is split between the best high hand and the best 8-or-better low. */
+export function isHiLoVariant(v?: string | null): boolean {
+  return isOmahaHiLoVariant(v) || v === 'seven-card-stud-hi-lo';
 }
 
 /** Hold'em, including tables saved before the variant was recorded. */
@@ -209,7 +242,8 @@ export function isHoldemVariant(v?: string | null): boolean {
 
 /** Hole cards dealt in a board game (Hold'em or Omaha), or a draw game's hand. */
 export function holeCardCount(v?: string | null): number {
-  if (v === 'omaha-5' || isDrawVariant(v)) return 5;
+  if (v === 'omaha-5' || v === 'big-o' || v === 'courchevel' || isDrawVariant(v)) return 5;
+  if (pineappleDiscardStage(v)) return 3;
   if (v === 'omaha' || v === 'omaha-hi-lo' || v === 'badugi') return 4;
   return 2;
 }

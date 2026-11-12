@@ -12,7 +12,7 @@ import {
 import { publishTableEvent } from '../../../src/lib/realtime/publisher';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import { MIN_TURN_SECONDS, MAX_TURN_SECONDS, MIN_HAND_DELAY_SECONDS, MAX_HAND_DELAY_SECONDS } from '../../../src/lib/shared/turn-clock';
-import { drawsCards, isStudVariant, parseWildRule } from '../../../src/lib/poker/variant-rules';
+import { drawsCards, isStudVariant, parseWildRule, pineappleDiscardStage } from '../../../src/lib/poker/variant-rules';
 import { apiHandler } from '../../../src/lib/api/handler';
 
 type HostAction =
@@ -248,7 +248,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       else if (body.action === 'adjust-time-banks') engine.adjustTimeBanks(body.targetId, Number(body.delta));
       else if (body.action === 'bomb-pot') {
         const variant = engine.getState().variant;
-        if (body.anteBB !== null && (isStudVariant(variant) || drawsCards(variant))) {
+        if (body.anteBB !== null && (isStudVariant(variant) || drawsCards(variant) || pineappleDiscardStage(variant))) {
           return res.status(409).json({ error: 'Bomb pots are for Hold\'em and Omaha' });
         }
         engine.setBombPotNext(body.anteBB === null ? null : Number(body.anteBB));

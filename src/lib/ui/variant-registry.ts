@@ -209,6 +209,95 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
     },
     mobileLayout: { compactControls: true, stackHelpBelow: true },
   },
+  'high-chicago': {
+    variant: 'high-chicago',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }, { type: 'stud-exposed-cards' }],
+    helpContent: {
+      title: 'High Chicago',
+      summary: 'Seven-card stud where the highest spade in the hole wins half the pot.',
+      bullets: [
+        'The best hand wins the other half',
+        'With no spade in the hole among the players left, the best hand takes it all',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
+  'courchevel': {
+    variant: 'courchevel',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }],
+    helpContent: {
+      title: 'Courchevel',
+      summary: 'Five-card Omaha with the first flop card dealt face up before the preflop betting.',
+      bullets: [
+        'Five hole cards; use exactly two of them and three from the board',
+        'One board card is showing before anyone bets; the other two flop cards come after',
+        'Pot limit by default',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
+  'low-chicago': {
+    variant: 'low-chicago',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }, { type: 'stud-exposed-cards' }],
+    helpContent: {
+      title: 'Low Chicago',
+      summary: 'Seven-card stud where the lowest spade in the hole wins half the pot.',
+      bullets: [
+        'Aces are high, so the 2 of spades is the best spade',
+        'The best hand wins the other half',
+        'With no spade in the hole among the players left, the best hand takes it all',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
+  'big-o': {
+    variant: 'big-o',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }, { type: 'pot-split' }],
+    helpContent: {
+      title: 'Big O',
+      summary: 'Omaha Hi-Lo dealt with five hole cards.',
+      bullets: [
+        'Use exactly two of your five hole cards and three from the board',
+        'The pot splits between the best high hand and the best 8-or-better low',
+        'With no qualifying low, the high hand takes it all',
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
+  'pineapple': {
+    variant: 'pineapple',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }],
+    helpContent: {
+      title: 'Pineapple',
+      summary: "Hold'em dealt with three hole cards.",
+      bullets: [
+        'Bet before the flop holding three cards',
+        'Then everyone throws one away at the same time; running out of time throws away your lowest card',
+        "From the flop on it plays like Hold'em",
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
+  'crazy-pineapple': {
+    variant: 'crazy-pineapple',
+    controls: [commonControls.bet, commonControls.check, commonControls.fold],
+    displays: [{ type: 'hand-info' }],
+    helpContent: {
+      title: 'Crazy Pineapple',
+      summary: "Hold'em dealt with three hole cards, kept through the flop.",
+      bullets: [
+        'Bet before the flop and on the flop holding three cards',
+        'Then everyone throws one away at the same time; running out of time throws away your lowest card',
+        "The turn and river play like Hold'em",
+      ],
+    },
+    mobileLayout: { compactControls: true, stackHelpBelow: true },
+  },
   'razz': {
     variant: 'razz',
     controls: [commonControls.bet, commonControls.check, commonControls.fold],

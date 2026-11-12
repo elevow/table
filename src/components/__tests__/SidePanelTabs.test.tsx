@@ -57,4 +57,14 @@ describe('SidePanelTabs', () => {
     rerender(<SidePanelTabs tabs={[...tabs, { id: 'chat', label: 'Chat', content: <p>chat body</p>, badge: 0 }]} />);
     expect(screen.getByRole('tab', { name: 'Chat' })).toBeTruthy();
   });
+
+  it('marks a tab with something new until it is opened', () => {
+    render(<SidePanelTabs tabs={[...tabs, { id: 'chat', label: 'Chat', content: <p>chat body</p>, badge: 2 }]} />);
+    const chat = screen.getByRole('tab', { name: 'Chat 2 unread' });
+    expect(chat.hasAttribute('data-unread')).toBe(true);
+    expect(chat.className).toContain('font-bold');
+    fireEvent.click(chat);
+    expect(chat.hasAttribute('data-unread')).toBe(false);
+    expect(chat.className).not.toContain('font-bold');
+  });
 });

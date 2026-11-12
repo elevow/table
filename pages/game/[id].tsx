@@ -329,13 +329,23 @@ export default function GamePage() {
           // fetch our player-specific state from the API
           // Stud deals the seventh-street card face down, so a broadcast can't carry ours
           const reachedSeventh = gameState.stage === 'seventh' && pokerStageRef.current !== 'seventh';
-          if ((isNewHand || reachedSeventh) && missingMyCards && isParticipant && shouldShowCards && effectivePlayerId && id) {
+          // Pass the Trash: a pass moves everyone's face-down cards at once, and each turn moves one
+          // face up, so a broadcast (which hides face-down cards) never carries our current hand
+          const myTrashCards = effectivePlayerId ? gameState.studState?.playerCards?.[effectivePlayerId] : undefined;
+          const trashCardsHidden = gameState.variant === 'pass-the-trash'
+            && (myTrashCards?.downCards?.length || 0) === 0 && (myTrashCards?.upCards?.length || 0) < 5;
+          if ((((isNewHand || reachedSeventh) && missingMyCards) || trashCardsHidden) && isParticipant && shouldShowCards && effectivePlayerId && id) {
             console.log('🎴 New hand detected without cards, fetching player-specific state...');
             api.get('/api/games/state', { query: { tableId: String(id), playerId: effectivePlayerId } })
               .then(unwrap)
               .then(data => {
                 if (data.gameState) {
-                  setPokerGameState(data.gameState);
+                  // Never step back behind a newer broadcast that arrived while this was loading
+                  setPokerGameState((prev: any) => (
+                    typeof prev?.turnSeq === 'number' && typeof data.gameState.turnSeq === 'number' && data.gameState.turnSeq < prev.turnSeq
+                      ? prev
+                      : data.gameState
+                  ));
                   console.log('🎴 Player-specific state fetched with hole cards');
                 }
               })
@@ -383,8 +393,13 @@ export default function GamePage() {
               const missingDownCards = !Array.isArray(newStudCards?.downCards) || newStudCards.downCards.length === 0;
               const prevUp: any[] = Array.isArray(prevStudCards?.upCards) ? prevStudCards.upCards : [];
               const newUp: any[] = Array.isArray(newStudCards?.upCards) ? newStudCards.upCards : [];
-              const sameHand = prevUp.length > 0 && prevUp.length <= newUp.length
-                && prevUp.every((c: any, i: number) => c?.rank === newUp[i]?.rank && c?.suit === newUp[i]?.suit);
+              // Pass the Trash has no up cards until the turns, and its passes and turns change our
+              // down cards: keep them only while nothing has moved (same hand, same step, same turns)
+              const sameHand = gameState.variant === 'pass-the-trash'
+                ? !!gameState.handId && prevState.handId === gameState.handId
+                  && prevState.trash?.step === gameState.trash?.step && prevUp.length === newUp.length
+                : prevUp.length > 0 && prevUp.length <= newUp.length
+                  && prevUp.every((c: any, i: number) => c?.rank === newUp[i]?.rank && c?.suit === newUp[i]?.suit);
 
               if (hadDownCards && missingDownCards && sameHand) {
                 mergedStudState = {
@@ -1005,7 +1020,8 @@ export default function GamePage() {
         if (err?.code === 'STALE_GAME_STATE') {
           // This view was behind the server; refresh it so the next action uses the current state
           try {
-            const latest = await api.get('/api/games/state', { query: { tableId: String(id) } });
+            // Ask for our own view, so our cards stay visible
+            const latest = await api.get('/api/games/state', { query: { tableId: String(id), ...(playerId ? { playerId } : {}) } });
             if (latest.ok && latest.data?.gameState) setPokerGameState(latest.data.gameState);
           } catch (refreshError) {
             console.warn('Failed to refresh game state after a stale action:', refreshError);

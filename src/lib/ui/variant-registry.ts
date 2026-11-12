@@ -203,7 +203,7 @@ export const VARIANT_UI_REGISTRY: Record<GameVariant, VariantUI> = {
       bullets: [
         'Pass 3 cards to the left, bet; pass 2, bet; pass 1, bet',
         'Keep five cards, picking the order you will turn them up',
-        'Turn one card up at a time, with betting after each; the best hand wins',
+        'Turn one card up at a time, with betting after each of the first four; once the fifth is up, the best hand wins',
         'Everyone passes and keeps at the same time; running out of time passes your lowest cards or keeps your best five',
       ],
     },

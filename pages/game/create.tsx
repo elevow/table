@@ -279,7 +279,7 @@ export default function CreateGameRoomPage() {
             </select>
             {variant === 'pass-the-trash' && (
               <p className="hint">
-                Seven cards each, face down. Pass 3 to the left, then 2, then 1, with betting after each; keep five, then turn them up one at a time with betting after each. Seats up to 7.
+                Seven cards each, face down. Pass 3 to the left, then 2, then 1, with betting after each; keep five, then turn them up one at a time with betting after each of the first four. The fifth card ends the hand. Seats up to 7.
               </p>
             )}
             {variant === 'badugi' && (

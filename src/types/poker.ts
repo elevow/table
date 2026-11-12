@@ -21,7 +21,7 @@ export type GameVariant = 'texas-holdem' | 'omaha' | 'omaha-hi-lo' | 'seven-card
   // they win, refills the pot for another hand
   | 'nicaragua'
   // Seven cards; pass 3, 2 and 1 to the left with betting after each, keep five, then turn them up
-  // one at a time with betting after each
+  // one at a time with betting after each of the first four; the fifth goes straight to the showdown
   | 'pass-the-trash'
   // Dealer's Choice only: two cards each, everyone declares in or out at once; losers match the pot
   | 'guts'

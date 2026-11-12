@@ -78,7 +78,7 @@ describe('Pass the Trash', () => {
     expect(engine.getState().activePlayer).toBe('a');
   });
 
-  test('a whole hand: passes of 3, 2 and 1, keep five, then five cards turned up with betting', () => {
+  test('a whole hand: passes of 3, 2 and 1, keep five, then five cards turned up, betting after the first four', () => {
     stackDeck(A, B);
     const engine = trash();
     engine.startNewHand();
@@ -95,11 +95,13 @@ describe('Pass the Trash', () => {
     // The first kept card is turned up straight away
     expect(up(engine, 'a')).toEqual(['Ah']);
     expect(down(engine, 'a').slice(0, 3)).toEqual(['Ac', 'Ad', 'As']);
-    for (let turn = 1; turn <= 5; turn++) {
+    for (let turn = 1; turn <= 4; turn++) {
       expect(up(engine, 'a')).toHaveLength(turn);
       checkRound(engine);
     }
+    // The fifth card shows the whole hand: straight to the showdown, with no more betting
     const s = engine.getState();
+    expect(up(engine, 'a')).toHaveLength(5);
     expect(s.stage).toBe('showdown');
     expect(s.handResult?.winnings).toEqual({ a: 2 });
     expect(s.players.reduce((sum, p) => sum + p.stack, 0)).toBe(200);

@@ -1853,10 +1853,11 @@ export class PokerEngine {
   }
 
   // Pass the Trash, step by step: 'pass3' passes three cards, 'bet' is a betting round, 'keep'
-  // keeps five, 'turn' turns everyone's next card up, then the showdown
+  // keeps five, 'turn' turns everyone's next card up. The fifth card turned shows the whole hand,
+  // so the showdown follows it with no more betting
   private static readonly TRASH_STEPS = [
     'pass3', 'bet', 'pass2', 'bet', 'pass1', 'bet', 'keep',
-    'turn', 'bet', 'turn', 'bet', 'turn', 'bet', 'turn', 'bet', 'turn', 'bet', 'showdown',
+    'turn', 'bet', 'turn', 'bet', 'turn', 'bet', 'turn', 'bet', 'turn', 'showdown',
   ] as const;
 
   /** Pass the Trash: seven cards each, all face down. */

@@ -101,8 +101,42 @@ describe('chip ledger', () => {
 
   it('exports CSV with names quoted when needed', () => {
     const csv = ledgerToCsv(summarizeLedger(entries, onTable));
-    expect(csv.split('\n')[0]).toBe('Player,Bought in,Cashed out,On table,Net');
-    expect(csv).toContain('"Cy, Jr",100,40,0,-60');
+    expect(csv.split('\n')[0]).toBe('Player,Bought in,Cashed out,On table,Poker net,Side bets,Total');
+    expect(csv).toContain('"Cy, Jr",100,40,0,-60,0,-60');
+  });
+
+  describe('with side bets', () => {
+    // Side bets: Bob won $12.50 from Ann ($10) and Cy ($2.50)
+    const sideBets = [
+      { playerId: 'b', playerName: 'Bob', amount: 12.5 },
+      { playerId: 'a', playerName: 'Ann', amount: -10 },
+      { playerId: 'c', playerName: 'Cy, Jr', amount: -2.5 },
+    ];
+
+    it('keeps poker and side bets apart and totals them', () => {
+      const lines = summarizeLedger(entries, onTable, sideBets);
+      const bob = lines.find(l => l.playerId === 'b')!;
+      expect(bob).toMatchObject({ net: -100, sideBets: 12.5, total: -87.5 });
+      expect(lines.find(l => l.playerId === 'a')).toMatchObject({ net: 160, sideBets: -10, total: 150 });
+      expect(lines.reduce((sum, l) => sum + l.total, 0)).toBe(0);
+    });
+
+    it('settles poker and side bets together, in cents', () => {
+      const payments = settlementPayments(summarizeLedger(entries, onTable, sideBets));
+      expect(payments).toEqual([
+        { from: 'Bob', to: 'Ann', amount: 87.5 },
+        { from: 'Cy, Jr', to: 'Ann', amount: 62.5 },
+      ]);
+    });
+
+    it('adds a player who only played side bets', () => {
+      const lines = summarizeLedger(entries, onTable, [...sideBets, { playerId: 'd', playerName: 'Dee', amount: 0.1 }, { playerId: 'a', playerName: 'Ann', amount: -0.1 }]);
+      expect(lines.find(l => l.playerId === 'd')).toMatchObject({ playerName: 'Dee', net: 0, sideBets: 0.1, total: 0.1 });
+    });
+
+    it('shows the side bets in the CSV', () => {
+      expect(ledgerToCsv(summarizeLedger(entries, onTable, sideBets))).toContain('Bob,200,0,100,-100,12.5,-87.5');
+    });
   });
 });
 

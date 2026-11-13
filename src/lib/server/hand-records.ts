@@ -9,6 +9,8 @@ import type { HandExtras, PastHand } from './achievement-checks';
 import { revealedPlayerIds } from '../poker/state-sanitizer';
 import { postHandResultToChat, postSystemChatMessage } from '../utils/post-hand-result';
 import { formatSevenDeuceBounty } from '../utils/hand-result-formatter';
+import { loadRoom } from './room-config';
+import { settleHandSideBets } from './side-bets';
 import type { TableState } from '../../types/poker';
 import { HandRank } from '../../types/poker';
 import type { HandRecord, HandRecordCards, HandRecordPlayer, HandSummary } from '../../types/hand-record';
@@ -275,11 +277,15 @@ export async function finishHand(tableId: string, state: TableState): Promise<vo
 
   const record = buildHandRecord(tableId, state);
   let firstToFinish = true;
+  let sideBetLines: string[] = [];
   if (record) {
     try {
       const pool = getPool();
       firstToFinish = await saveHandRecord(pool, record);
-      if (firstToFinish) await applyHandToStatistics(pool, record, handExtras(state));
+      if (firstToFinish) {
+        await applyHandToStatistics(pool, record, handExtras(state));
+        sideBetLines = await settleSideBetsForHand(pool, record, state);
+      }
     } catch (err) {
       // No database (e.g. local runs): still post to chat from this instance
       console.warn('[hand-records] Could not store hand:', err);
@@ -290,6 +296,25 @@ export async function finishHand(tableId: string, state: TableState): Promise<vo
     await postHandResultToChat(tableId, state);
   } catch (chatError) {
     console.warn('Failed to post hand result to chat:', chatError);
+  }
+  for (const line of sideBetLines) {
+    try {
+      await postSystemChatMessage(tableId, `Side bet · ${line}`);
+    } catch (err) {
+      console.warn('Failed to post a side bet result to chat:', err);
+    }
+  }
+}
+
+/** Settle the hand's side bets; a failure costs only the side bets, never the hand. */
+async function settleSideBetsForHand(pool: Pool, record: HandRecord, state: TableState): Promise<string[]> {
+  try {
+    const room = await loadRoom(record.roomId);
+    return await settleHandSideBets(pool, record, state, room?.configuration ?? null);
+  } catch (err: any) {
+    // Database without the side-bet tables yet: nothing to settle
+    if (err?.code !== '42P01') console.warn('[hand-records] Could not settle side bets:', err);
+    return [];
   }
 }
 

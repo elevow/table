@@ -13,9 +13,10 @@ export function handInPlay(state: Pick<TableState, 'stage'> | null | undefined):
   return !!state && state.stage !== 'showdown' && state.stage !== 'awaiting-dealer-choice';
 }
 
-// Rows tied to the room that go with it. Hand records and the chip ledger stay: they belong to
-// the players' history, and the ledger still settles the night after the table is gone
-const DEPENDENT_TABLES = ['chat_messages', 'friend_game_invites', 'active_games'];
+// Rows tied to the room that go with it. Hand records, the chip ledger and side-bet results stay:
+// they belong to the players' history, and still settle the night after the table is gone. Who
+// was in each side bet goes, and so do unwon side-bet pots, which nobody owes once the night ends
+const DEPENDENT_TABLES = ['chat_messages', 'friend_game_invites', 'active_games', 'side_bet_players', 'side_bet_pools'];
 
 /**
  * Delete a closed table. Everyone still seated stands up first, so the chips in front of them are

@@ -37,3 +37,33 @@ describe('SessionLedgerPanel', () => {
     expect(screen.getByText(/Take a seat/)).toBeTruthy();
   });
 });
+
+describe('SessionLedgerPanel with side bets', () => {
+  beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-11-12T20:30:00')));
+  afterEach(() => jest.useRealTimers());
+
+  it('splits the night into poker and side bets, lists your side bets and settles both together', async () => {
+    respond(200, {
+      lines: [
+        { playerId: 'me', playerName: 'Me', boughtIn: 100, cashedOut: 0, onTable: 140, net: 40, sideBets: -2.5, total: 37.5 },
+        { playerId: 'b', playerName: 'Bo', boughtIn: 100, cashedOut: 0, onTable: 60, net: -40, sideBets: 2.5, total: -37.5 },
+      ],
+      payments: [{ from: 'Bo', to: 'Me', amount: 37.5 }],
+      session: { handsPlayed: 3, handsWon: 1, biggestPotWon: 40, boughtIn: 100, net: 40, sideBets: -2.5, total: 37.5 },
+      mySideBets: [{ handNumber: 3, bet: 'flop-color', note: 'Flop color (red)', amount: -2.5 }],
+    });
+    render(<SessionLedgerPanel embedded tableId="t1" refreshKey={0} />);
+    await load();
+    expect(screen.getByText('Poker net')).toBeTruthy();
+    expect(screen.getByText('Night total')).toBeTruthy();
+    expect(screen.getAllByText('+$37.50').length).toBeGreaterThan(0);
+
+    await act(async () => { screen.getByRole('button', { name: 'Side bets net' }).click(); });
+    expect(screen.getByText('Hand 3 · Flop color (red)')).toBeTruthy();
+
+    await act(async () => { screen.getByRole('button', { name: 'Show table ledger' }).click(); });
+    expect(screen.getByText('Side')).toBeTruthy();
+    expect(screen.getByText(/poker and side bets together/)).toBeTruthy();
+    expect(screen.getByText('Bo pays Me $37.50')).toBeTruthy();
+  });
+});

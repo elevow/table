@@ -42,6 +42,7 @@ import { useTableExtras } from '../../src/hooks/useTableExtras';
 import { usePolling } from '../../src/hooks/usePolling';
 import TimeBankBadge from '../../src/components/TimeBankBadge';
 import SessionLedgerPanel from '../../src/components/SessionLedgerPanel';
+import SideBetsPanel from '../../src/components/SideBetsPanel';
 import SidePanelTabs from '../../src/components/SidePanelTabs';
 import HandActionLog from '../../src/components/HandActionLog';
 import EquityPanel from '../../src/components/EquityPanel';
@@ -487,6 +488,7 @@ export default function GamePage() {
         // Reactions come often and change nothing the extras panel shows
         if (payload?.type !== 'reaction') refreshTableExtras();
         if (payload?.type === 'closed') setClosedByHost(true);
+        if (payload?.type === 'side_bets') setSideBetsVersion(v => v + 1);
         if (payload?.type === 'kicked' && payload.playerId === playerId) {
           setSeatNotice('The host removed you from the table.');
         }
@@ -633,6 +635,8 @@ export default function GamePage() {
   const [wideTable, setWideTable] = useWideTable();
   // Which side panel tab is showing, and chat messages that arrived while Chat wasn't
   const [sideTab, setSideTab] = useState<string | null>(null);
+  // Bumped when someone joins, leaves or the host changes side bets, so the Side bets tab reloads
+  const [sideBetsVersion, setSideBetsVersion] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
   const sideTabRef = useLatest(sideTab);
   // Adjusted while rendering: opening Chat reads everything
@@ -4142,7 +4146,7 @@ export default function GamePage() {
           })()}
           </div>
 
-          {/* Right column: your session, chat, rules, the hand's actions, notes and host controls, a tab each */}
+          {/* Right column: your session, side bets, chat, rules, the hand's actions, notes and host controls, a tab each */}
           <div className="flex flex-col gap-4 lg:row-span-4">
           <SidePanelTabs
             onActiveChange={setSideTab}
@@ -4164,6 +4168,17 @@ export default function GamePage() {
                       </div>
                     )}
                   </>
+                ),
+              }] : []),
+              ...(playerId ? [{
+                id: 'side-bets',
+                label: 'Side bets',
+                content: (
+                  <SideBetsPanel
+                    tableId={tableId}
+                    handNumber={gameStarted ? pokerGameState?.handNumber : undefined}
+                    refreshKey={`${pokerGameState?.handNumber ?? 0}:${pokerGameState?.stage === 'showdown'}:${sideBetsVersion}`}
+                  />
                 ),
               }] : []),
               {

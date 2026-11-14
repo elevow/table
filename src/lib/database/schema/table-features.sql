@@ -48,6 +48,58 @@ CREATE TABLE IF NOT EXISTS chip_ledger (
 );
 CREATE INDEX IF NOT EXISTS idx_chip_ledger_room ON chip_ledger (room_id, created_at);
 
+-- Side bets: separate money from the chips on the table, settled with the poker at the end of the night.
+-- Who is in each side bet at a table and their pick. prev_active/prev_pick are how the row stood
+-- when the hand in play started, so a change made mid-hand counts from the next hand.
+CREATE TABLE IF NOT EXISTS side_bet_players (
+  room_id TEXT NOT NULL,
+  player_id TEXT NOT NULL,
+  bet TEXT NOT NULL,
+  player_name TEXT,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  pick TEXT,
+  prev_active BOOLEAN NOT NULL DEFAULT FALSE,
+  prev_pick TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (room_id, player_id, bet)
+);
+-- Each player's unpaid share of a side-bet pot (high card bingo, bad beat jackpot), until it is won
+CREATE TABLE IF NOT EXISTS side_bet_pools (
+  room_id TEXT NOT NULL,
+  bet TEXT NOT NULL,
+  player_id TEXT NOT NULL,
+  player_name TEXT,
+  amount NUMERIC NOT NULL DEFAULT 0,
+  PRIMARY KEY (room_id, bet, player_id)
+);
+-- What each player won (positive) or lost (negative) on a side bet in a hand
+CREATE TABLE IF NOT EXISTS side_bet_entries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id TEXT NOT NULL,
+  hand_id TEXT NOT NULL,
+  hand_number INTEGER NOT NULL DEFAULT 0,
+  bet TEXT NOT NULL,
+  player_id TEXT NOT NULL,
+  player_name TEXT,
+  amount NUMERIC NOT NULL,
+  note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (hand_id, bet, player_id)
+);
+CREATE INDEX IF NOT EXISTS idx_side_bet_entries_room ON side_bet_entries (room_id, created_at);
+ALTER TABLE side_bet_players ENABLE ROW LEVEL SECURITY;
+ALTER TABLE side_bet_pools ENABLE ROW LEVEL SECURITY;
+ALTER TABLE side_bet_entries ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON side_bet_players, side_bet_pools, side_bet_entries FROM anon;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON side_bet_players, side_bet_pools, side_bet_entries FROM authenticated;
+  END IF;
+END $$;
+
 -- Private notes a player keeps about other players; only the owner ever sees them.
 CREATE TABLE IF NOT EXISTS player_notes (
   owner_id TEXT NOT NULL,

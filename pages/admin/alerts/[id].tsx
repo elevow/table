@@ -27,7 +27,7 @@ export default function AlertDetailPage() {
     if (!id || typeof id !== 'string') return;
     try {
       setLoading(true);
-      const res = await fetch(`/api/admin/alerts/${id}`, { headers: authHeaders() });
+      const res = await fetch(`/api/admin/alerts/${encodeURIComponent(id)}`, { headers: authHeaders() });
       if (res.status === 401 || res.status === 403) throw new Error('Sign in with an admin account to view this alert.');
       const json = await res.json();
       setAlert(json.alert || null);
@@ -45,7 +45,7 @@ export default function AlertDetailPage() {
     if (!id || typeof id !== 'string') return;
     setUpdating(true);
     try {
-      const res = await fetch(`/api/admin/alerts/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ status }) });
+      const res = await fetch(`/api/admin/alerts/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ status }) });
       const json = await res.json();
       setAlert(json.alert || null);
     } catch (e: any) {

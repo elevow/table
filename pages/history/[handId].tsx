@@ -25,7 +25,7 @@ export default function HandReplayPage() {
 
   useEffect(() => {
     if (!handId) return;
-    fetch(`/api/history/hands/${handId}`, { headers: authHeaders() })
+    fetch(`/api/history/hands/${encodeURIComponent(handId)}`, { headers: authHeaders() })
       .then(async resp => {
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(resp.status === 401 ? 'Sign in to see this hand.' : data?.error || 'Could not load hand');

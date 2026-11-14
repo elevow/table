@@ -166,11 +166,15 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       if (!clientSeatedPlayers.some(p => p.playerId === playerId)) {
         return res.status(403).json({ error: 'Only a seated player can start the game' });
       }
+      // Seat numbers become keys of the seat map, so only real seats (1-9) are accepted
+      if (!clientSeatedPlayers.every(p => Number.isInteger(p.seatNumber) && p.seatNumber >= 1 && p.seatNumber <= 9)) {
+        return res.status(400).json({ error: 'Invalid seat number' });
+      }
       seatedPlayers = clientSeatedPlayers;
       // Update the in-memory store with client seats for consistency
       const newSeats: any = {};
       clientSeatedPlayers.forEach(p => {
-        newSeats[p.seatNumber] = {
+        newSeats[Number(p.seatNumber)] = {
           playerId: p.playerId,
           playerName: p.playerName,
           chips: p.chips

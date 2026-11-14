@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { validateTournamentConfig } from './tournament-utils';
+import { isUnsafeKey } from '../shared/safe-key';
 import { bountyEnabled, collectWinnerBounty, forfeitBounty, payoutTable, postBounty, prizePool, remainingPlayers, settleKnockout } from './tournament-money';
 import type { TournamentStore } from './tournament-store';
 import { DEFAULT_SEATS_PER_TABLE, Random, balanceTables, drawSeats, seatLatePlayer, seatedPlayers, unseatPlayer } from './tournament-seating';
@@ -649,7 +650,7 @@ function withdraw(t: TournamentState, userId: string): void {
 
 /** Chips a player bought that their table will hand them before its next hand. */
 function addPendingChips(t: TournamentState, userId: string, amount: number): void {
-  if (!(amount > 0)) return;
+  if (!(amount > 0) || isUnsafeKey(userId)) return;
   const pending = (t.pendingChips = t.pendingChips || {});
   pending[userId] = (pending[userId] ?? 0) + amount;
 }

@@ -1,4 +1,5 @@
 import type { SecuritySystemConfig } from '../../types';
+import { isUnsafeKey } from '../shared/safe-key';
 
 // In-memory runtime overrides for security config. Not persisted.
 let overrides: Partial<SecuritySystemConfig> = {};
@@ -23,6 +24,7 @@ function isObject(v: any): v is Record<string, any> {
 export function deepMerge<T extends Record<string, any>>(base: Partial<T>, patch: Partial<T>): Partial<T> {
   const out: any = { ...base };
   for (const [k, v] of Object.entries(patch || {})) {
+    if (isUnsafeKey(k)) continue;
     if (isObject(v)) {
       out[k] = deepMerge(isObject(out[k]) ? out[k] : {}, v as any);
     } else if (v !== undefined) {

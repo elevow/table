@@ -42,8 +42,9 @@ export default apiHandler({ methods: 'GET' }, async (req, res) => {
       list.push({ actions: Array.isArray(actions) ? actions : [], variant: row.variant, kind: row.kind });
       bySubject.set(row.subject, list);
     }
-    const stats: Record<string, HudStats> = {};
-    for (const id of subjects) stats[id] = computeHudStats(bySubject.get(id) || [], id);
+    const stats: Record<string, HudStats> = Object.fromEntries(
+      subjects.map(id => [id, computeHudStats(bySubject.get(id) || [], id)])
+    );
     return res.status(200).json({ stats });
   } catch (err) {
     console.error('Error computing HUD stats:', err);

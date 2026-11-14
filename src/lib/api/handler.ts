@@ -110,7 +110,7 @@ export function apiHandler(
       if (mapped) return res.status(mapped).json({ error: e?.message || 'Request failed' });
       if (options.onError) return options.onError(res, e);
       // Unexpected: log the details here and keep them out of the response
-      console.error(`${req.method} ${(req.url || '').split('?')[0]} failed:`, e);
+      console.error('%s %s failed:', req.method, (req.url || '').split('?')[0], e);
       return res.status(500).json({ error: 'Internal server error' });
     }
   };

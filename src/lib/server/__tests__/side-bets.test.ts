@@ -262,3 +262,82 @@ describe('settling a stored hand', () => {
     expect(client.release).toHaveBeenCalled();
   });
 });
+
+describe('flop over/under', () => {
+  const players = [player('a', 1, '2c 3c'), player('b', 2, '4c 5c'), player('c', 3, '6c 7c')];
+  const participants = { 'flop-over-under': [p('a', 'over'), p('b', 'under'), p('c', 'over')] };
+
+  it('pays the right call against the line of 24', () => {
+    // K + Q + 2 = 27
+    const out = settle({ record: record(players, 'Kh Qd 2s 3c'), stakes: { 'flop-over-under': 2 }, participants });
+    expect(amounts(out.entries)).toEqual({ a: 1, c: 1, b: -2 });
+    expect(out.messages[0]).toBe('Flop over 24 (27): A, C split $2');
+  });
+
+  it('pays under', () => {
+    const out = settle({ record: record(players, '2h 3d 4s'), stakes: { 'flop-over-under': 1 }, participants });
+    expect(amounts(out.entries)).toEqual({ a: -1, b: 2, c: -1 });
+  });
+
+  it('is a push on exactly 24 and without a flop', () => {
+    // A + 8 + 2 = 24
+    expect(settle({ record: record(players, 'Ah 8d 2s'), stakes: { 'flop-over-under': 1 }, participants }).entries).toEqual([]);
+    expect(settle({ record: record(players, ''), stakes: { 'flop-over-under': 1 }, participants }).entries).toEqual([]);
+  });
+});
+
+describe('pocket pair bonus', () => {
+  const participants = { 'pocket-pair': [p('a'), p('b'), p('c')] };
+
+  it('has everyone in without a pair pay the player with one', () => {
+    const players = [player('a', 1, '9c 9d'), player('b', 2, '4c 5c'), player('c', 3, 'Kc 7d', { folded: true })];
+    const out = settle({ record: record(players), stakes: { 'pocket-pair': 1 }, participants });
+    expect(amounts(out.entries)).toEqual({ a: 2, b: -1, c: -1 });
+    expect(out.messages).toEqual(['Pocket pair bonus: A had pocket 9s and collects $2']);
+  });
+
+  it('pays double for pocket aces, and pairs don\'t pay each other', () => {
+    const players = [player('a', 1, 'Ac Ad'), player('b', 2, '4c 4d'), player('c', 3, 'Kc 7d')];
+    const out = settle({ record: record(players), stakes: { 'pocket-pair': 1 }, participants });
+    expect(amounts(out.entries)).toEqual({ a: 2, b: 1, c: -3 });
+  });
+
+  it('only counts games with two hole cards, and is a push when nobody or everybody has a pair', () => {
+    const omaha = [player('a', 1, '9c 9d 2s 3s'), player('b', 2, '4c 5c 6d 7d')];
+    expect(settle({ record: record(omaha, '', { variant: 'omaha' }), stakes: { 'pocket-pair': 1 }, participants }).entries).toEqual([]);
+    const none = [player('a', 1, '2c 3d'), player('b', 2, '4c 5c')];
+    expect(settle({ record: record(none), stakes: { 'pocket-pair': 1 }, participants }).entries).toEqual([]);
+    const both = [player('a', 1, '2c 2d'), player('b', 2, '4c 4h')];
+    expect(settle({ record: record(both), stakes: { 'pocket-pair': 1 }, participants }).entries).toEqual([]);
+  });
+});
+
+describe('next hand winner', () => {
+  const players = [player('a', 1, '2c 3c', { won: 30 }), player('b', 2, '4c 5c'), player('c', 3, '6c 7c')];
+
+  it('pays players who picked the winner from those who didn\'t', () => {
+    const participants = { 'next-hand-winner': [p('a', 'b'), p('b', 'a'), p('c', 'a')] };
+    const out = settle({ record: record(players), stakes: { 'next-hand-winner': 1 }, participants });
+    expect(amounts(out.entries)).toEqual({ b: 0.5, c: 0.5, a: -1 });
+    expect(out.messages[0]).toBe('Next hand winner (A): B, C split $1');
+  });
+
+  it('counts a pick of either player in a split pot', () => {
+    const split = [player('a', 1, '', { won: 15 }), player('b', 2, '', { won: 15 }), player('c', 3, '')];
+    const participants = { 'next-hand-winner': [p('a', 'b'), p('b', 'c'), p('c', 'a')] };
+    const out = settle({ record: record(split), stakes: { 'next-hand-winner': 1 }, participants });
+    expect(amounts(out.entries)).toEqual({ a: 0.5, c: 0.5, b: -1 });
+  });
+
+  it('leaves out picks of players who weren\'t dealt in', () => {
+    const participants = { 'next-hand-winner': [p('a', 'a'), p('b', 'gone'), p('c', 'b')] };
+    const out = settle({ record: record(players), stakes: { 'next-hand-winner': 1 }, participants });
+    expect(amounts(out.entries)).toEqual({ a: 1, c: -1 });
+  });
+
+  it('only takes picks of players at the table', () => {
+    expect(isValidPick('next-hand-winner', 'player-1')).toBe(true);
+    expect(isValidPick('next-hand-winner', '')).toBe(false);
+    expect(isValidPick('next-hand-winner', null)).toBe(false);
+  });
+});

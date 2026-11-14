@@ -150,7 +150,8 @@ export default function SessionLedgerPanel({ tableId, refreshKey, embedded = fal
               <ul className="text-xs text-gray-700 dark:text-gray-200 space-y-0.5" aria-label="Your side bets">
                 {mySideBets.map((b, i) => (
                   <li key={i} className="flex justify-between gap-2">
-                    <span>Hand {b.handNumber} · {b.note}</span>
+                    {/* Head to head isn't tied to a hand */}
+                    <span>{b.handNumber > 0 ? `Hand ${b.handNumber} · ` : ''}{b.note}</span>
                     <span className={`tabular-nums ${netClass(b.amount)}`}>{signed(b.amount)}</span>
                   </li>
                 ))}

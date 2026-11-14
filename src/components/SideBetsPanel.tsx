@@ -14,11 +14,25 @@ interface BetView {
   pot?: number;
 }
 
+interface ChallengeView {
+  id: string;
+  challengerId: string;
+  challengerName: string;
+  opponentId: string;
+  opponentName: string;
+  stake: number;
+  status: 'pending' | 'active';
+}
+
 interface SideBetsResponse {
   bets: BetView[];
   stakes: SideBetStakes;
   canConfigure: boolean;
   seated: boolean;
+  // Seated players, for picking one (next hand winner) or challenging one (head to head)
+  players?: Array<{ id: string; name: string }>;
+  me?: string;
+  challenges?: ChallengeView[];
 }
 
 interface Props {
@@ -38,6 +52,7 @@ export default function SideBetsPanel({ tableId, handNumber, refreshKey }: Props
   const [data, setData] = useState<SideBetsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [opponentId, setOpponentId] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -94,6 +109,70 @@ export default function SideBetsPanel({ tableId, handNumber, refreshKey }: Props
     if (await send('configure', { action: 'configure', stakes })) setEditing(false);
   };
 
+  // Head to head: challenge a player, answer challenges, and see the matchups under way
+  const renderHeadToHead = (b: BetView) => {
+    const info = SIDE_BET_INFO[b.bet];
+    const challenges = data.challenges || [];
+    const me = data.me;
+    const busyWith = (other: string) => challenges.some(c =>
+      (c.challengerId === me && c.opponentId === other) || (c.opponentId === me && c.challengerId === other));
+    const others = (data.players || []).filter(p => p.id !== me && !busyWith(p.id));
+    return (
+      <section key={b.bet} className="rounded-lg border border-gray-200 p-3 dark:border-gray-700" aria-label={info.name}>
+        <div className="flex items-baseline justify-between gap-2">
+          <h4 className="font-semibold text-gray-900 dark:text-gray-100">{info.name}</h4>
+          <span className="tabular-nums text-gray-600 dark:text-gray-300">{formatMoney(b.stake)} a challenge</span>
+        </div>
+        <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{info.summary}</p>
+        {challenges.length > 0 && (
+          <ul className="mt-2 space-y-1 text-xs text-gray-700 dark:text-gray-200" aria-label="Head to head challenges">
+            {challenges.map(c => {
+              const mine = c.challengerId === me || c.opponentId === me;
+              const toMe = c.status === 'pending' && c.opponentId === me;
+              return (
+                <li key={c.id} className="flex flex-wrap items-center gap-2">
+                  <span>
+                    {c.challengerName} vs {c.opponentName} · {formatMoney(c.stake)}
+                    {c.status === 'pending' ? (toMe ? ' · challenged you' : ' · waiting for an answer') : ' · under way'}
+                  </span>
+                  {toMe && data.seated && (
+                    <button type="button" className="btn btn-primary btn-sm" disabled={!!busy} onClick={() => send(c.id, { action: 'accept', challengeId: c.id })}>
+                      Accept
+                    </button>
+                  )}
+                  {mine && c.status === 'pending' && (
+                    <button type="button" className="btn btn-secondary btn-sm" disabled={!!busy} onClick={() => send(c.id, { action: 'cancel', challengeId: c.id })}>
+                      {toMe ? 'Decline' : 'Withdraw'}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {data.seated && others.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1 text-xs text-gray-700 dark:text-gray-200">
+              Challenge
+              <select className="input h-9! px-2! text-xs" value={opponentId} disabled={!!busy} onChange={e => setOpponentId(e.target.value)}>
+                <option value="">Choose a player…</option>
+                {others.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={!!busy || !opponentId}
+              onClick={async () => { if (await send('challenge', { action: 'challenge', opponentId })) setOpponentId(''); }}
+            >
+              Send challenge
+            </button>
+          </div>
+        )}
+      </section>
+    );
+  };
+
   return (
     <div className="space-y-4 text-sm">
       <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -108,7 +187,11 @@ export default function SideBetsPanel({ tableId, handNumber, refreshKey }: Props
 
       {!editing && data.bets.map(b => {
         const info = SIDE_BET_INFO[b.bet];
+        if (info.challenge) return renderHeadToHead(b);
         const suit = b.bet === 'best-suit' && typeof handNumber === 'number' ? bestSuitForHand(handNumber) : null;
+        const options = info.pick?.fromPlayers
+          ? (data.players || []).map(p => ({ value: p.id, label: p.id === data.me ? `${p.name} (you)` : p.name }))
+          : info.pick?.options || [];
         return (
           <section key={b.bet} className="rounded-lg border border-gray-200 p-3 dark:border-gray-700" aria-label={info.name}>
             <div className="flex items-baseline justify-between gap-2">
@@ -137,7 +220,7 @@ export default function SideBetsPanel({ tableId, handNumber, refreshKey }: Props
                       onChange={e => e.target.value && send(b.bet, { action: 'join', bet: b.bet, pick: e.target.value })}
                     >
                       <option value="">Choose…</option>
-                      {info.pick.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </label>
                 )}

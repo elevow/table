@@ -7,7 +7,9 @@
  */
 import type { Card } from '../../types/poker';
 
-export const SIDE_BETS = ['best-suit', 'flop-color', 'high-card-bingo', 'bad-beat'] as const;
+export const SIDE_BETS = [
+  'best-suit', 'flop-color', 'flop-over-under', 'pocket-pair', 'next-hand-winner', 'high-card-bingo', 'bad-beat', 'head-to-head',
+] as const;
 export type SideBetKey = typeof SIDE_BETS[number];
 
 /** Side bets whose stakes build up in a pot over several hands until someone wins it. */
@@ -15,6 +17,10 @@ export const POOL_BETS = ['high-card-bingo', 'bad-beat'] as const;
 export type PoolBetKey = typeof POOL_BETS[number];
 
 export const FLOP_COLORS = ['red', 'black', 'mixed'] as const;
+
+// Flop over/under: the three flop cards add up to more or less than this (J 11, Q 12, K 13, A 14).
+// The average flop adds up to exactly 24, so over and under are even; a flop of exactly 24 is a push
+export const FLOP_LINE = 24;
 export const BINGO_RANKS: Card['rank'][] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 
 // Bad beat jackpot: the player who lost with four of a kind or better gets this share, the winner the rest
@@ -26,8 +32,11 @@ export interface SideBetInfo {
   key: SideBetKey;
   name: string;
   summary: string;
-  // Bets where each player makes a choice, kept until they change it
-  pick?: { label: string; options: Array<{ value: string; label: string }> };
+  // Bets where each player makes a choice, kept until they change it. With fromPlayers the
+  // choices are the players at the table (their ids), so there are no fixed options
+  pick?: { label: string; options: Array<{ value: string; label: string }>; fromPlayers?: boolean };
+  // Head to head: one player challenges another rather than joining, and it settles when one leaves
+  challenge?: boolean;
 }
 
 const RANK_LABELS: Record<string, string> = { J: 'Jack', Q: 'Queen', K: 'King', A: 'Ace' };
@@ -51,6 +60,29 @@ export const SIDE_BET_INFO: Record<SideBetKey, SideBetInfo> = {
       ],
     },
   },
+  'flop-over-under': {
+    key: 'flop-over-under',
+    name: 'Flop over/under',
+    summary: `Call whether the three flop cards add up to over or under ${FLOP_LINE} (J 11, Q 12, K 13, A 14). Players who called it split the stakes of those who didn't. Exactly ${FLOP_LINE} is a push; hands without a flop don't count.`,
+    pick: {
+      label: 'Your call',
+      options: [
+        { value: 'over', label: `Over ${FLOP_LINE}` },
+        { value: 'under', label: `Under ${FLOP_LINE}` },
+      ],
+    },
+  },
+  'pocket-pair': {
+    key: 'pocket-pair',
+    name: 'Pocket pair bonus',
+    summary: 'Get dealt a pair as your two hole cards and everyone in without one pays you the stake; pocket aces pay double. Games with two hole cards only.',
+  },
+  'next-hand-winner': {
+    key: 'next-hand-winner',
+    name: 'Next hand winner',
+    summary: 'Pick who you think wins the pot; you can pick yourself. Players whose pick won any of the pot split the stakes of those whose pick didn\'t. Your pick stays until you change it and only counts in hands that player is dealt into.',
+    pick: { label: 'Your pick', options: [], fromPlayers: true },
+  },
   'high-card-bingo': {
     key: 'high-card-bingo',
     name: 'High card bingo',
@@ -64,6 +96,12 @@ export const SIDE_BET_INFO: Record<SideBetKey, SideBetInfo> = {
     key: 'bad-beat',
     name: 'Bad beat jackpot',
     summary: 'Each Hold\'em, Omaha or stud hand, players in put the stake in the jackpot. Lose at showdown with four of a kind or better and you take 75%, the winner 25%. Not played with wild cards. Never hit by the end of the night, nobody pays.',
+  },
+  'head-to-head': {
+    key: 'head-to-head',
+    name: 'Head to head',
+    summary: 'Challenge another player. Once they accept, whoever does better at poker from then on (chips won or lost, not side bets) wins the stake from the other. It settles when either of you leaves the table or the table closes; a tie is a push.',
+    challenge: true,
   },
 };
 
@@ -98,9 +136,16 @@ export function parseSideBetStakes(v: unknown): SideBetStakes {
 
 /** Whether a pick is valid for a side bet; bets without picks take none. */
 export function isValidPick(bet: SideBetKey, pick: unknown): boolean {
-  const options = SIDE_BET_INFO[bet].pick?.options;
-  if (!options) return pick == null;
-  return typeof pick === 'string' && options.some(o => o.value === pick);
+  const info = SIDE_BET_INFO[bet].pick;
+  if (!info) return pick == null;
+  // A player at the table: the caller checks who is seated
+  if (info.fromPlayers) return typeof pick === 'string' && pick.length > 0 && pick.length <= 100;
+  return typeof pick === 'string' && info.options.some(o => o.value === pick);
+}
+
+/** The value of a card for best suit and flop over/under: 2–10 as marked, J 11, Q 12, K 13, A 14. */
+export function cardValue(rank: string): number {
+  return ({ J: 11, Q: 12, K: 13, A: 14 } as Record<string, number>)[rank] ?? (Number(rank) || 0);
 }
 
 const SUIT_ORDER: Card['suit'][] = ['spades', 'hearts', 'diamonds', 'clubs'];

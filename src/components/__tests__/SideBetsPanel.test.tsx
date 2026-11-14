@@ -79,3 +79,50 @@ describe('SideBetsPanel', () => {
     expect(posts()).toEqual([{ tableId: 't1', action: 'configure', stakes: { 'flop-color': 2, 'bad-beat': 0.25 } }]);
   });
 });
+
+describe('SideBetsPanel picks and challenges', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  const players = [{ id: 'me', name: 'Me' }, { id: 'bo', name: 'Bo' }, { id: 'cy', name: 'Cy' }];
+
+  it('picks the next hand winner from the players at the table', async () => {
+    serve(view({
+      bets: [{ bet: 'next-hand-winner', stake: 1, players: [], joined: false, pick: null }],
+      players,
+      me: 'me',
+    }));
+    render(<SideBetsPanel tableId="t1" refreshKey={0} />);
+    await load();
+    expect(screen.getByRole('option', { name: 'Me (you)' })).toBeTruthy();
+    await act(async () => { fireEvent.change(screen.getByRole('combobox'), { target: { value: 'bo' } }); });
+    expect(posts()).toEqual([{ tableId: 't1', action: 'join', bet: 'next-hand-winner', pick: 'bo' }]);
+  });
+
+  it('challenges a player, and answers and withdraws challenges', async () => {
+    serve(view({
+      bets: [{ bet: 'head-to-head', stake: 20, players: [], joined: false, pick: null }],
+      players,
+      me: 'me',
+      challenges: [
+        { id: 'c1', challengerId: 'bo', challengerName: 'Bo', opponentId: 'me', opponentName: 'Me', stake: 20, status: 'pending' },
+      ],
+    }));
+    render(<SideBetsPanel tableId="t1" refreshKey={0} />);
+    await load();
+    expect(screen.getByText('$20 a challenge')).toBeTruthy();
+    expect(screen.getByText(/Bo vs Me · \$20 · challenged you/)).toBeTruthy();
+    // Bo already has a challenge with me, so only Cy can be challenged
+    expect(screen.queryByRole('option', { name: 'Bo' })).toBeNull();
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Accept' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Decline' })); });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'cy' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send challenge' })); });
+    expect(posts()).toEqual([
+      { tableId: 't1', action: 'accept', challengeId: 'c1' },
+      { tableId: 't1', action: 'cancel', challengeId: 'c1' },
+      { tableId: 't1', action: 'challenge', opponentId: 'cy' },
+    ]);
+  });
+});

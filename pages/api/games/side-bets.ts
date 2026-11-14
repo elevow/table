@@ -5,29 +5,34 @@ import { getOrRestoreEngine } from '../../../src/lib/poker/engine-persistence';
 import { handInPlay } from '../../../src/lib/server/close-table';
 import { loadRoom, updateRoomConfig } from '../../../src/lib/server/room-config';
 import { loadPools, setSideBetPlayer } from '../../../src/lib/server/side-bets';
+import { acceptChallenge, cancelChallenge, createChallenge, loadOpenChallenges, type Challenge } from '../../../src/lib/server/head-to-head';
 import { publishTableEvent } from '../../../src/lib/realtime/publisher';
 import * as GameSeats from '../../../src/lib/shared/game-seats';
 import {
-  SIDE_BETS, isSideBetKey, isValidPick, parseSideBetStakes, type SideBetKey,
+  SIDE_BETS, SIDE_BET_INFO, isSideBetKey, isValidPick, parseSideBetStakes, type SideBetKey,
 } from '../../../src/lib/shared/side-bets';
 import { apiHandler } from '../../../src/lib/api/handler';
 
 type SideBetAction =
   | { action: 'join'; bet: SideBetKey; pick?: string | null }
   | { action: 'leave'; bet: SideBetKey }
-  | { action: 'configure'; stakes: Record<string, unknown> };
+  | { action: 'configure'; stakes: Record<string, unknown> }
+  | { action: 'challenge'; opponentId: string }
+  | { action: 'accept'; challengeId: string }
+  | { action: 'cancel'; challengeId: string };
 
 const MISSING_TABLES = '42P01';
 
 /**
  * GET  /api/games/side-bets?tableId=
- * POST /api/games/side-bets { tableId, action: 'join' | 'leave' | 'configure', ... }
+ * POST /api/games/side-bets { tableId, action: 'join' | 'leave' | 'configure' | 'challenge' | 'accept' | 'cancel', ... }
  *
  * Side bets at a table: which are on and for how much, who is in each, what is in the pots, and
  * the caller's own entries and picks. Seated players join (with a pick where the bet takes one)
  * and leave; a change made during a hand counts from the next hand. Whoever may configure the
- * table turns side bets on and off and sets their stakes. Side bets are separate money: nothing
- * here touches chips.
+ * table turns side bets on and off and sets their stakes. Head to head works by challenge: a
+ * seated player challenges another, who accepts or declines; either can withdraw it until then.
+ * Side bets are separate money: nothing here touches chips.
  */
 export default apiHandler({ methods: ['GET', 'POST'] }, async (req, res) => {
   const body = (req.body || {}) as { tableId?: string; playerId?: string } & SideBetAction;
@@ -45,18 +50,21 @@ export default apiHandler({ methods: ['GET', 'POST'] }, async (req, res) => {
     const stakes = parseSideBetStakes(room.configuration.sideBets);
     const canConfigure = canOnTable(access, room, 'room.configure').allowed;
     const seats = await GameSeats.loadPersistedRoomSeats(tableId) || GameSeats.getRoomSeats(tableId);
-    const mySeat = Object.values(seats || {}).find(s => s?.playerId === userId) || null;
+    const seated = Object.values(seats || {}).filter((s): s is NonNullable<typeof s> => !!s?.playerId);
+    const mySeat = seated.find(s => s.playerId === userId) || null;
     const pool = getPool();
 
     if (req.method === 'GET') {
       let rows: any[] = [];
       let pools = { 'high-card-bingo': [] as Array<{ amount: number }>, 'bad-beat': [] as Array<{ amount: number }> };
+      let challenges: Challenge[] = [];
       try {
         rows = (await pool.query(
           `SELECT player_id, player_name, bet, pick FROM side_bet_players WHERE room_id = $1 AND active ORDER BY player_name`,
           [tableId]
         )).rows;
         pools = await loadPools(pool, tableId);
+        challenges = await loadOpenChallenges(pool, tableId);
       } catch (err: any) {
         if (err?.code !== MISSING_TABLES) throw err;
       }
@@ -73,7 +81,24 @@ export default apiHandler({ methods: ['GET', 'POST'] }, async (req, res) => {
           pot: bet === 'high-card-bingo' || bet === 'bad-beat' ? sum(pools[bet]) : undefined,
         };
       });
-      return res.status(200).json({ bets, stakes, canConfigure, seated: !!mySeat });
+      return res.status(200).json({
+        bets,
+        stakes,
+        canConfigure,
+        seated: !!mySeat,
+        // For picking a player (next hand winner) and challenging one (head to head)
+        players: seated.map(s => ({ id: s.playerId, name: s.playerName })),
+        me: userId,
+        challenges: challenges.map(c => ({
+          id: c.id,
+          challengerId: c.challengerId,
+          challengerName: c.challengerName,
+          opponentId: c.opponentId,
+          opponentName: c.opponentName,
+          stake: c.stake,
+          status: c.status,
+        })),
+      });
     }
 
     if (body.action === 'configure') {
@@ -89,9 +114,38 @@ export default apiHandler({ methods: ['GET', 'POST'] }, async (req, res) => {
       return res.status(200).json({ ok: true, stakes: next });
     }
 
+    if (body.action === 'challenge') {
+      const stake = stakes['head-to-head'];
+      if (!stake) return res.status(409).json({ error: 'Head to head is not on at this table' });
+      if (!mySeat) return res.status(403).json({ error: 'Take a seat to challenge a player' });
+      const opponent = seated.find(s => s.playerId === body.opponentId);
+      if (!opponent) return res.status(400).json({ error: 'Choose a player at the table' });
+      const created = await createChallenge(pool, {
+        roomId: tableId, challengerId: userId, challengerName: mySeat.playerName,
+        opponentId: opponent.playerId, opponentName: opponent.playerName, stake,
+      });
+      if (!created.ok) return res.status(409).json({ error: created.error });
+      await publishTableEvent(tableId, { type: 'side_bets' }).catch(() => {});
+      return res.status(200).json({ ok: true });
+    }
+    if (body.action === 'accept' || body.action === 'cancel') {
+      const challengeId = typeof body.challengeId === 'string' ? body.challengeId : '';
+      if (!challengeId) return res.status(400).json({ error: 'Missing challengeId' });
+      if (body.action === 'accept') {
+        if (!mySeat) return res.status(403).json({ error: 'Take a seat to accept a challenge' });
+        const accepted = await acceptChallenge(pool, tableId, challengeId, userId);
+        if (!accepted.ok) return res.status(409).json({ error: accepted.error });
+      } else if (!await cancelChallenge(pool, tableId, challengeId, userId)) {
+        return res.status(409).json({ error: 'That challenge can no longer be withdrawn' });
+      }
+      await publishTableEvent(tableId, { type: 'side_bets' }).catch(() => {});
+      return res.status(200).json({ ok: true });
+    }
+
     if (body.action !== 'join' && body.action !== 'leave') return res.status(400).json({ error: 'Unknown side bet action' });
     const bet = body.bet;
     if (!isSideBetKey(bet)) return res.status(400).json({ error: 'Unknown side bet' });
+    if (SIDE_BET_INFO[bet].challenge) return res.status(400).json({ error: 'Head to head is played by challenging a player' });
 
     const engine = await getOrRestoreEngine(tableId).catch(() => null);
     const state = engine?.getState();
@@ -102,6 +156,9 @@ export default apiHandler({ methods: ['GET', 'POST'] }, async (req, res) => {
       if (!mySeat) return res.status(403).json({ error: 'Take a seat to join side bets' });
       const pick = body.pick ?? null;
       if (!isValidPick(bet, pick)) return res.status(400).json({ error: 'Choose a valid pick for this side bet' });
+      if (SIDE_BET_INFO[bet].pick?.fromPlayers && !seated.some(s => s.playerId === pick)) {
+        return res.status(400).json({ error: 'Pick a player at the table' });
+      }
       await setSideBetPlayer(pool, { roomId: tableId, playerId: userId, playerName: mySeat.playerName, bet, active: true, pick, handStartedAt });
     } else {
       // Off the table, the name already stored is kept

@@ -1,7 +1,6 @@
 import { StateDelta, StateConflict } from '../../types/state';
 import { TableState } from '../../types/poker';
 import { IConflictManager, VersionedState, StateSyncOptions } from './types';
-import { isUnsafeKey } from '../shared/safe-key';
 
 export class ConflictManager implements IConflictManager {
   constructor(
@@ -166,12 +165,13 @@ export class ConflictManager implements IConflictManager {
     if (!path) return;
 
     const parts = Array.isArray(path) ? path : path.split('.');
-    // A path through __proto__ and the like would change every object, not this one
-    if (parts.some(isUnsafeKey)) return;
+    // A path through __proto__ and the like would change every object, not this one. Each key is
+    // checked inline, right before it is used, so code scanning recognizes the guard.
     let current: any = obj;
 
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
+      if (part === '__proto__' || part === 'constructor' || part === 'prototype') return;
       if (!(part in current)) {
         current[part] = {};
       }
@@ -179,6 +179,7 @@ export class ConflictManager implements IConflictManager {
     }
 
     const lastPart = parts[parts.length - 1];
+    if (lastPart === '__proto__' || lastPart === 'constructor' || lastPart === 'prototype') return;
     current[lastPart] = value;
   }
 }

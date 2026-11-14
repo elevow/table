@@ -5,6 +5,7 @@ import { fetchRoomRebuyLimit } from '../shared/rebuy-limit';
 import { fetchRoomBuyIn } from '../shared/buyin-amount';
 import { getPlayerRebuyInfo, recordBuyin } from '../shared/rebuy-tracker';
 import { getOrRestoreEngine, persistEngineState } from '../poker/engine-persistence';
+import { settleChallengesFor } from './head-to-head';
 import { recordLedger } from './chip-ledger';
 import { advanceSeatOffer, freeSeatNumbers, loadRoom, updateRoomConfig, type TableExtrasConfig } from './room-config';
 import { broadcastGameState } from './game-action-pipeline';
@@ -147,6 +148,8 @@ export async function leaveTable(opts: {
       console.warn('Seat vacate Supabase publish failed:', pubErr);
     }
     await recordLedger({ roomId, playerId, playerName: assignment?.playerName, kind: 'cash_out', amount: cashedOut });
+    // With their chips cashed out, any head to head they were in can be decided
+    await settleChallengesFor(roomId, playerId);
   }
 
   await syncWaitlist(roomId);

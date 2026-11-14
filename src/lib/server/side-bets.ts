@@ -16,7 +16,7 @@ import type { HandRecord, HandRecordPlayer } from '../../types/hand-record';
 import { hasBuiltInWilds } from '../poker/variant-rules';
 import { showdownRanking } from './achievement-checks';
 import {
-  BAD_BEAT_LOSER_SHARE, POOL_BETS, SIDE_BET_INFO, SUIT_SYMBOLS, bestSuitForHand, formatMoney,
+  BAD_BEAT_LOSER_SHARE, FLOP_LINE, POOL_BETS, SIDE_BET_INFO, SUIT_SYMBOLS, bestSuitForHand, cardValue, formatMoney,
   isSideBetKey, parseSideBetStakes,
   type PoolBetKey, type SideBetKey, type SideBetStakes,
 } from '../shared/side-bets';
@@ -62,8 +62,6 @@ export interface SideBetOutcome {
   messages: string[];
 }
 
-const RANK_VALUES: Record<string, number> = { J: 11, Q: 12, K: 13, A: 14 };
-const rankValue = (rank: string) => RANK_VALUES[rank] ?? (Number(rank) || 0);
 const RED = new Set(['hearts', 'diamonds']);
 const cents = (dollars: number) => Math.round(dollars * 100);
 const dollars = (c: number) => c / 100;
@@ -168,7 +166,7 @@ export function settleSideBets(input: SideBetHandInput): SideBetOutcome {
     const byId = new Map(record.players.map(p => [p.id, p]));
     const scores = bestSuitPlayers.map(p => ({
       p,
-      score: cardsOf(byId.get(p.playerId)!).filter(c => c.suit === suit).reduce((sum, c) => sum + rankValue(c.rank), 0),
+      score: cardsOf(byId.get(p.playerId)!).filter(c => c.suit === suit).reduce((sum, c) => sum + cardValue(c.rank), 0),
     }));
     const top = Math.max(...scores.map(s => s.score));
     if (top > 0) {
@@ -196,6 +194,73 @@ export function settleSideBets(input: SideBetHandInput): SideBetOutcome {
     if (settled.length) {
       entries.push(...settled);
       messages.push(`${label}: ${names(winners)} ${winners.length > 1 ? 'split' : 'wins'} ${formatMoney(flopStake * losers.length)}`);
+    }
+  }
+
+  // Flop over/under: the flop's total against the line; exactly on the line is a push
+  const overUnderStake = stakes['flop-over-under'];
+  const overUnderPlayers = inBet('flop-over-under').filter(p => p.pick);
+  if (overUnderStake && overUnderPlayers.length >= 2 && board.length >= 3) {
+    const total = board.slice(0, 3).reduce((sum, c) => sum + cardValue(c.rank), 0);
+    if (total !== FLOP_LINE) {
+      const call = total > FLOP_LINE ? 'over' : 'under';
+      const winners = overUnderPlayers.filter(p => p.pick === call);
+      const losers = overUnderPlayers.filter(p => p.pick !== call);
+      const label = `Flop ${call} ${FLOP_LINE} (${total})`;
+      const settled = settleStraightUp('flop-over-under', winners, losers, overUnderStake, label);
+      if (settled.length) {
+        entries.push(...settled);
+        messages.push(`${label}: ${names(winners)} ${winners.length > 1 ? 'split' : 'wins'} ${formatMoney(overUnderStake * losers.length)}`);
+      }
+    }
+  }
+
+  // Pocket pair bonus: each player dealt a pair collects the stake (double for aces) from each
+  // player in without one
+  const pairStake = stakes['pocket-pair'];
+  const pairPlayers = inBet('pocket-pair');
+  if (pairStake && pairPlayers.length >= 2) {
+    const byId = new Map(record.players.map(p => [p.id, p]));
+    const pairRank = (p: SideBetParticipant): string | null => {
+      const hole = byId.get(p.playerId)?.cards?.hole || [];
+      return hole.length === 2 && hole[0]?.rank && hole[0].rank === hole[1]?.rank ? hole[0].rank : null;
+    };
+    const holders = pairPlayers.filter(p => pairRank(p));
+    const payers = pairPlayers.filter(p => !pairRank(p));
+    if (holders.length && payers.length) {
+      const net = new Map<string, number>();
+      const add = (id: string, c: number) => net.set(id, (net.get(id) || 0) + c);
+      for (const h of holders) {
+        const each = cents(pairStake) * (pairRank(h) === 'A' ? 2 : 1);
+        add(h.playerId, each * payers.length);
+        for (const payer of payers) add(payer.playerId, -each);
+      }
+      for (const p of pairPlayers) {
+        const c = net.get(p.playerId) || 0;
+        const rank = pairRank(p);
+        if (c !== 0) entries.push({ bet: 'pocket-pair', playerId: p.playerId, name: p.name, amount: dollars(c), note: rank ? `Pocket ${rank}s` : 'Pocket pair bonus' });
+      }
+      for (const h of holders) {
+        const won = dollars(cents(pairStake) * (pairRank(h) === 'A' ? 2 : 1) * payers.length);
+        messages.push(`Pocket pair bonus: ${h.name} had pocket ${pairRank(h)}s and collects ${formatMoney(won)}`);
+      }
+    }
+  }
+
+  // Next hand winner: players whose pick won any of the pot split the stakes of those whose pick
+  // didn't. A pick only counts when that player was dealt in
+  const pickStake = stakes['next-hand-winner'];
+  const pickPlayers = inBet('next-hand-winner').filter(p => p.pick && seatOf.has(p.pick));
+  if (pickStake && pickPlayers.length >= 2) {
+    const winnerIds = new Set(record.players.filter(p => p.won > 0).map(p => p.id));
+    const winners = pickPlayers.filter(p => winnerIds.has(p.pick!));
+    const losers = pickPlayers.filter(p => !winnerIds.has(p.pick!));
+    const potWinners = record.players.filter(p => winnerIds.has(p.id));
+    const label = `Next hand winner (${names(potWinners)})`;
+    const settled = settleStraightUp('next-hand-winner', winners, losers, pickStake, label);
+    if (settled.length) {
+      entries.push(...settled);
+      messages.push(`${label}: ${names(winners)} ${winners.length > 1 ? 'split' : 'wins'} ${formatMoney(pickStake * losers.length)}`);
     }
   }
 

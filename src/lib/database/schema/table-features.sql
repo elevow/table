@@ -87,16 +87,35 @@ CREATE TABLE IF NOT EXISTS side_bet_entries (
   UNIQUE (hand_id, bet, player_id)
 );
 CREATE INDEX IF NOT EXISTS idx_side_bet_entries_room ON side_bet_entries (room_id, created_at);
+-- Head to head: one player challenges another; once accepted, whoever does better at poker from
+-- then on wins the stake. The *_start columns are each player's poker result when it was accepted.
+CREATE TABLE IF NOT EXISTS side_bet_challenges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id TEXT NOT NULL,
+  challenger_id TEXT NOT NULL,
+  challenger_name TEXT,
+  opponent_id TEXT NOT NULL,
+  opponent_name TEXT,
+  stake NUMERIC NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'settled', 'cancelled')),
+  challenger_start NUMERIC,
+  opponent_start NUMERIC,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  accepted_at TIMESTAMPTZ,
+  settled_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_side_bet_challenges_room ON side_bet_challenges (room_id, status);
 ALTER TABLE side_bet_players ENABLE ROW LEVEL SECURITY;
 ALTER TABLE side_bet_pools ENABLE ROW LEVEL SECURITY;
 ALTER TABLE side_bet_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE side_bet_challenges ENABLE ROW LEVEL SECURITY;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
-    REVOKE ALL ON side_bet_players, side_bet_pools, side_bet_entries FROM anon;
+    REVOKE ALL ON side_bet_players, side_bet_pools, side_bet_entries, side_bet_challenges FROM anon;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
-    REVOKE ALL ON side_bet_players, side_bet_pools, side_bet_entries FROM authenticated;
+    REVOKE ALL ON side_bet_players, side_bet_pools, side_bet_entries, side_bet_challenges FROM authenticated;
   END IF;
 END $$;
 

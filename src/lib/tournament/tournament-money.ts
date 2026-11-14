@@ -1,6 +1,7 @@
 import { buildPayouts, scaledPayoutStructure } from './tournament-utils';
 import type { TournamentConfig } from '../../types/tournament';
 import type { TournamentState } from '../../types/tournament-management';
+import { isUnsafeKey } from '../shared/safe-key';
 
 /*
  * Money and chips in a tournament. Each entry puts its buy-in into the prize pool (the entry fee
@@ -65,7 +66,7 @@ export function bountyEnabled(config: TournamentConfig): boolean {
 
 /** Put a bounty on a player who entered or rebought; a rebuy while still in adds to their bounty. */
 export function postBounty(t: TournamentState, userId: string): void {
-  if (!bountyEnabled(t.config)) return;
+  if (!bountyEnabled(t.config) || isUnsafeKey(userId)) return;
   const bounties = (t.bounties = t.bounties || {});
   bounties[userId] = round2((bounties[userId] ?? 0) + t.config.bounty!.amount);
 }
@@ -76,7 +77,7 @@ export function postBounty(t: TournamentState, userId: string): void {
  * Returns the cash won.
  */
 export function settleKnockout(t: TournamentState, eliminated: string, by: string): number {
-  if (!bountyEnabled(t.config)) return 0;
+  if (!bountyEnabled(t.config) || isUnsafeKey(eliminated) || isUnsafeKey(by)) return 0;
   const bounties = (t.bounties = t.bounties || {});
   const winnings = (t.bountyWinnings = t.bountyWinnings || {});
   const bounty = bounties[eliminated] ?? 0;

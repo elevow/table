@@ -1,6 +1,7 @@
 import { StateDelta, StateConflict } from '../../types/state';
 import { TableState } from '../../types/poker';
 import { IConflictManager, VersionedState, StateSyncOptions } from './types';
+import { isUnsafeKey } from '../shared/safe-key';
 
 export class ConflictManager implements IConflictManager {
   constructor(
@@ -165,6 +166,8 @@ export class ConflictManager implements IConflictManager {
     if (!path) return;
 
     const parts = Array.isArray(path) ? path : path.split('.');
+    // A path through __proto__ and the like would change every object, not this one
+    if (parts.some(isUnsafeKey)) return;
     let current: any = obj;
 
     for (let i = 0; i < parts.length - 1; i++) {

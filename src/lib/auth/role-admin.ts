@@ -24,7 +24,9 @@ export function canManageRank(actor: UserAccess, rank: number): boolean {
 
 /** A role key made from its name: "Floor Manager" -> "floor_manager". */
 export function roleKeyFromName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
+  // The first replace leaves at most one underscore at each end, so trim just one (a run-matching
+  // trim is slow on long underscore strings)
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 50);
 }
 
 /** The requested permission list, deduplicated, or an error message. */

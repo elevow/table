@@ -1,6 +1,7 @@
 import { emailService } from '../../../src/lib/services/email-service';
 import { getEmailConfig } from '../../../src/lib/config/email-config';
 import { apiHandler } from '../../../src/lib/api/handler';
+import { isValidEmail } from '../../../src/lib/shared/email';
 
 interface TestEmailRequest {
   email: string;
@@ -41,8 +42,7 @@ export default apiHandler({ methods: 'POST' }, async (req, res) => {
       return res.status(400).json({ error: 'Email and type are required' });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!isValidEmail(email)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 

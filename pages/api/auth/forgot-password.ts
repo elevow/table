@@ -5,6 +5,7 @@ import { createUserService } from '../../../src/lib/services/user-service';
 import { createSafeAudit } from '../../../src/lib/api/audit';
 import { emailService } from '../../../src/lib/services/email-service';
 import { apiHandler } from '../../../src/lib/api/handler';
+import { isValidEmail } from '../../../src/lib/shared/email';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -37,8 +38,7 @@ export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60 * 60 * 10
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!isValidEmail(email)) {
       await safeLog('anonymous', 'forgot_password', 'invalid_email', false, {
         ip,
         email: email.substring(0, 3) + '***' // Log partial email for debugging

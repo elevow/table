@@ -64,7 +64,7 @@ export async function fetchRoomBuyIn(roomId: string): Promise<number> {
       const rawBuyIn = (room?.configuration as any)?.buyIn;
       buyIn = normalizeBuyIn(rawBuyIn);
     } catch (err) {
-      console.warn(`[buyin-amount] Failed to fetch room ${roomId} configuration:`, (err as any)?.message || err);
+      console.warn('[buyin-amount] Failed to fetch room %s configuration:', roomId, (err as any)?.message || err);
     }
   }
 

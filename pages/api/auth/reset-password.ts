@@ -4,6 +4,7 @@ import { UserManager } from '../../../src/lib/database/user-manager';
 import { createUserService } from '../../../src/lib/services/user-service';
 import { createSafeAudit } from '../../../src/lib/api/audit';
 import { apiHandler } from '../../../src/lib/api/handler';
+import { isValidEmail } from '../../../src/lib/shared/email';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -65,8 +66,7 @@ export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60 * 60 * 10
       return res.status(400).json({ error: 'Passwords do not match' });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!isValidEmail(email)) {
       await safeLog('anonymous', 'reset_password', 'invalid_email_format', false, {
         ip,
         email: email.substring(0, 3) + '***'

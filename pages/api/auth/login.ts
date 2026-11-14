@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { generateSessionToken, hashSessionToken } from '../../../src/lib/auth/session-token';
 import { describeSanction, getUserAccess } from '../../../src/lib/auth/access-control';
 import { apiHandler } from '../../../src/lib/api/handler';
+import { isValidEmail } from '../../../src/lib/shared/email';
 
 function getClientIp(req: NextApiRequest): string {
   const fwd = (req.headers['x-forwarded-for'] as string) || '';
@@ -46,8 +47,7 @@ export default apiHandler({ methods: 'POST', rateLimit: { windowMs: 60_000, max:
     }
 
     // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!isValidEmail(email)) {
       return res.status(400).json({ error: 'Please enter a valid email address' });
     }
 
